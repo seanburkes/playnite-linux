@@ -46,6 +46,10 @@ jobs:
             /verbosity:minimal `
             /binaryLogger:legacy-build.binlog
 
+      - name: Restore legacy oracle harness
+        shell: pwsh
+        run: dotnet restore tools/LegacyOracle/LegacyOracle.csproj
+
       - name: Build legacy oracle harness
         shell: pwsh
         run: |
