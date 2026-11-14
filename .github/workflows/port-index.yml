@@ -2,13 +2,14 @@ name: port-index
 
 # Parent-owned single writer for the generated port aggregates. Pull requests
 # validate shards only; this workflow regenerates docs/port/queue.tsv and
-# docs/port/ledger.tsv on main and commits the result. It never runs on pull
-# requests and never edits a unit shard.
+# docs/port/ledger.tsv on main and commits the result. It runs only for a push
+# to refs/heads/main and never edits a unit shard. There is deliberately no
+# manual-dispatch path: a dispatched run has no "previous main" history to
+# validate against and must never be able to write main.
 
 on:
   push:
     branches: [main]
-  workflow_dispatch:
 
 permissions:
   contents: write
@@ -19,34 +20,68 @@ concurrency:
 
 jobs:
   regenerate:
-    # The commit this workflow creates carries the marker, so it cannot start
-    # another regeneration run. GITHUB_TOKEN pushes do not re-trigger workflows,
-    # but the explicit guard keeps the loop closed if that ever changes.
-    if: >-
-      github.event_name == 'workflow_dispatch' ||
-      !contains(github.event.head_commit.message, '[skip port-index]')
+    # Parent-only: the push event is the only trigger. A manually dispatched run
+    # does not exist, and this guard makes the invariant explicit if a trigger is
+    # ever added by mistake.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
 
-      - name: Regenerate aggregates from unit shards
-        run: python3 scripts/port/build_port_index.py build
-
-      - name: Verify the regenerated aggregates are reproducible
-        run: python3 scripts/port/build_port_index.py check
-
-      - name: Commit aggregate changes
+      - name: Regenerate, validate, and commit aggregates
+        env:
+          BASE_SHA: ${{ github.event.before }}
         run: |
-          if git diff --quiet -- docs/port/queue.tsv docs/port/ledger.tsv; then
-            echo "Aggregates already current; nothing to commit."
-            exit 0
+          set -euo pipefail
+
+          if [ "${GITHUB_EVENT_NAME:-}" != "push" ] || [ "${GITHUB_REF:-}" != "refs/heads/main" ]; then
+            echo "::error::the aggregate writer only runs from a push to refs/heads/main"
+            exit 1
           fi
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add docs/port/queue.tsv docs/port/ledger.tsv
-          git commit -m "chore(port-index): regenerate aggregates from unit shards [skip port-index]"
-          git push origin HEAD:main
+          if [ -z "${BASE_SHA:-}" ] || printf '%s' "$BASE_SHA" | grep -Eq '^0+$'; then
+            echo "::error::refusing to regenerate without a previous main commit to validate against"
+            exit 1
+          fi
+
+          attempt=1
+          while [ "$attempt" -le 2 ]; do
+            git fetch --quiet origin main
+            if [ "$(git rev-parse HEAD)" != "$(git rev-parse origin/main)" ]; then
+              echo "::warning::main advanced during regeneration; retrying against the new main"
+              git checkout -q -B port-index-regen origin/main
+            fi
+
+            # Validate before writing. A bad shard tree must fail here, not be
+            # committed by the bot and thereby launder a deletion through main.
+            python3 scripts/port/build_port_index.py check --shards-only --against "$BASE_SHA"
+
+            python3 scripts/port/build_port_index.py build
+            python3 scripts/port/build_port_index.py check
+
+            if git diff --quiet -- docs/port/queue.tsv docs/port/ledger.tsv; then
+              echo "Aggregates already current; nothing to commit."
+              exit 0
+            fi
+
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add docs/port/queue.tsv docs/port/ledger.tsv
+            git commit -m "chore(port-index): regenerate aggregates from unit shards"
+
+            # No force. A rejected push means main moved; retry once from the
+            # new main, otherwise fail visibly and leave main unchanged.
+            if git push origin HEAD:main; then
+              exit 0
+            fi
+            echo "::warning::push to main was rejected (main advanced)"
+            attempt=$((attempt + 1))
+          done
+
+          echo "::error::could not update main after a concurrent update; main was left unchanged"
+          exit 1

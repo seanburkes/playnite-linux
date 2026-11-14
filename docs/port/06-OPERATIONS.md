@@ -116,10 +116,14 @@ a descendant, and an unrelated commit are refused. CI passes the pull request's 
 the previous commit on `main`) with `--shards-only`, and on a pull request also passes
 `--forbid-aggregate-changes`, which fails if either aggregate file was modified.
 
-The post-merge `port-index` workflow runs `build` on `main`, verifies the result with `check`,
-and commits only `docs/port/queue.tsv` and `docs/port/ledger.tsv` with a bot-style message. It
-does not run on pull requests and never writes a shard. A PR already in flight that regenerated
-the aggregates should drop those two file changes and keep only its shards.
+The post-merge `port-index` workflow runs only on a push to `main`. It first validates the
+shard tree and history against the previous `main` commit; an invalid shard fails the run with
+no commit. It then runs `build`, verifies the result with `check`, and commits only
+`docs/port/queue.tsv` and `docs/port/ledger.tsv` with a bot-style message. It has no
+manual-dispatch path, never accepts a branch/ref input, never force-pushes, and retries once
+against the new `main` if a concurrent update rejects the first push. It never writes a shard.
+A PR already in flight that regenerated the aggregates should drop those two file changes and
+keep only its shards.
 
 The migration PR that first adds `docs/port/units` is the only legitimate base without shards.
 It must pass `--allow-pre-migration-base`, which prints an explicit skip notice; ordinary runs
