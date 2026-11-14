@@ -7,7 +7,7 @@ because the fairness assumptions need to be refined per action; do not claim the
 
 | Model | Invariants checked | Status |
 | --- | --- | --- |
-| `LibraryImport.tla` | `SourceUnchanged`, `NoCommitWithoutVerify`, `ReaderNeverPartial`, `AtomicLive`, `BackupBeforeWrite` | TLC: no error, 12 distinct states; concurrent reader action |
+| `LibraryImport.tla` | `SourceUnchanged`, `NoCommitWithoutVerify`, `ReaderNeverPartial`, `AtomicLive`, `BackupBeforeWrite` | TLC: no error, 15 distinct states; crash mid-swap is reachable, `AtomicLive` checks rollback |
 | `GameSession.tla` | `OneSessionPerGame`, `NoOrphanProcess`; property `PlaytimeNonDecreasing` | TLC: no error, 400 distinct states (bounded playtime); design spec, not a falsifiable concurrency model |
 | `SettingsMigration.tla` | `OldFileUntouched`, `NoUnknownLoss`, `AtomicWrite`, `RollbackAvailable`, `BackupBeforeWrite` | TLC: no error, 11 distinct states |
 

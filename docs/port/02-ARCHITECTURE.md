@@ -30,8 +30,9 @@
 ```
 
 `Playnite.Cli` is a headless host over Core for acceptance tests, migration, diagnostics, and
-CI. `Playnite.LegacyImport` is a separate executable: Desktop invokes it and consumes a
-neutral schema/asset directory, so LiteDB is never linked into the app.
+CI. `Playnite.LegacyImport` is a separate executable: Desktop/Cli invoke it and consume a
+neutral schema/asset directory defined by the tiny `Playnite.LegacyImport.Contracts` assembly.
+LiteDB is never linked into the app or the CLI.
 
 ## 2. Projects and dependency rules
 
@@ -43,9 +44,10 @@ neutral schema/asset directory, so LiteDB is never linked into the app.
 | `Playnite.Platform` | `net11.0` | Core, Abstractions | Desktop |
 | `Playnite.Platform.Linux` | `net11.0` | Platform, Core, Avalonia (platform UI services only) | Desktop |
 | `Playnite.Steam` | `net11.0` | Core, Platform | Desktop |
-| `Playnite.LegacyImport` | `net11.0` exec | LiteDB 4.1.4, neutral schema | Core, Desktop, SDK |
-| `Playnite.Desktop` | `net11.0` | Core, SDK, Platform, Steam, Avalonia | Microsoft.Win32, `DllImport` |
-| `Playnite.Cli` | `net11.0` | Core, Platform, Steam, LegacyImport | Desktop |
+| `Playnite.LegacyImport.Contracts` | `net11.0` | nothing but BCL | LiteDB, Core, Desktop, SDK |
+| `Playnite.LegacyImport` | `net11.0` exec | Contracts, LiteDB 4.1.4 | Core, Desktop, SDK |
+| `Playnite.Desktop` | `net11.0` | Core, SDK, Platform, Steam, LegacyImport.Contracts, Avalonia | Microsoft.Win32, `DllImport` |
+| `Playnite.Cli` | `net11.0` | Core, Platform, Steam, LegacyImport.Contracts | Desktop, LiteDB |
 | Tests | `net11.0` | anything | — |
 
 Enforced by `BannedApiAnalyzers` + architecture tests. A project reference that violates the
@@ -186,7 +188,6 @@ public interface IGameSessionTracker {
     Task TrackAsync(IGameProcess process, SessionOptions options, CancellationToken ct);
 }
 
-public interface IWebViewFactory { IWebView CreateOffscreen(WebViewOptions options); IWebView CreateEmbedded(WebViewOptions options); } // v1.1
 public interface IImageService { Task<ImageHandle> LoadAsync(string path, int decodeWidth, CancellationToken ct); }
 public interface IIconService { Task<ImageHandle?> GetIconAsync(string appOrFile, CancellationToken ct); }
 public interface INotificationService { Task ShowAsync(Notification notification, CancellationToken ct); }
@@ -255,6 +256,8 @@ Preserve the v6 contract shape:
 
 Changes:
 - UI types become Avalonia (`Control`, `Window`, `IImage`, `IWebView`).
+- `IWebViewFactory` is defined in `Playnite.SDK` (UI extension point, v1.1) and implemented by
+  `Playnite.Platform.Linux`; it is not a `Playnite.Platform` interface.
 - `PluginUserControl` hosts an Avalonia `Control`.
 - Dispatcher types become Avalonia dispatcher abstractions.
 - File/process APIs use the platform interfaces.

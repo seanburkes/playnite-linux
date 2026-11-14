@@ -71,8 +71,10 @@ steam -applaunch <appid>
 ```
 
 - Use an argument list, never a shell string.
-- If `steam` is not on `PATH`, try the Flatpak host path:
+- If `steam` is not on `PATH`, try the host path:
   `flatpak-spawn --host steam -applaunch <appid>`.
+- If Steam itself is installed as a Flatpak, try:
+  `flatpak-spawn --host flatpak run com.valvesoftware.Steam -applaunch <appid>`.
 - If that fails, try `xdg-open steam://rungameid/<appid>`.
 - A launch command returning 0 does **not** mean the game started; the session tracker decides.
 

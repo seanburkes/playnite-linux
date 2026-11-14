@@ -10,6 +10,7 @@ src/
   Playnite.Platform/
   Playnite.Platform.Linux/
   Playnite.Steam/
+  Playnite.LegacyImport.Contracts/
   Playnite.LegacyImport/
   Playnite.Desktop/
   Playnite.Cli/

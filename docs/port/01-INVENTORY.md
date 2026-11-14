@@ -100,11 +100,10 @@ instance, protocol handler, tray/notifications, input.** That is the platform in
 | `Playnite.DesktopApp.Tests` | 8 | 5 | Games editor, main view API, skins, two ViewModels |
 | `Playnite.FullscreenApp.Tests` | 1 | 1 | One control layout test |
 | `Playnite.Toolbox.Tests` | 3 | 2 | Paths, themes, extensions |
-| **Total** | **204** | **78** | 8,895 LOC |
+| **Total** | **204** | **77** | 8,901 LOC |
 
-There are no `[TestCase]`/`[TestCaseSource]` attributes in the snapshot, so the executed case
-count is close to 204. There is **no** end-to-end suite, no UI automation, no golden corpus,
-no property-based testing, no fuzzing, and no coverage gate.
+There is **no** end-to-end suite, no UI automation, no golden corpus, no property-based
+testing, no fuzzing, and no coverage gate.
 
 At ~204 test methods (82 parameterised cases) for 143k LOC, the existing suite is an **inner-loop** oracle, not a port oracle.
 It cannot prove omission or cross-process behaviour. The parity ledger and the frozen app are
@@ -151,13 +150,14 @@ is a Windows-only build.
 | PowerShell | `Scripting/PowerShell` | **Replace** with PowerShell 7 SDK | Medium |
 | Input | `Input`, `SDL2*` | **Reuse** SDL2 via cross-platform binding | Low/medium |
 | Updater/installer | `App/Updater`, `Tools/PlayniteInstaller` | **Replace** with AppImage/Flatpak | Medium |
+| Steam | not in `legacy/` | **Greenfield**; spec + recorded fixture corpus + real-install acceptance | High |
 | Tests | `Tests` | **Reuse** portable unit tests; rewrite WPF-bound tests | Medium |
 
 ## 9. Risk hotspots found in inventory
 
 1. **UI is half the code and has almost no tests.** The Avalonia shell is the long pole and
    the weakest oracle.
-2. **Core is not cleanly separated from WPF.** 130 of 300 core files touch WPF/System.Drawing;
+2. **Core is not cleanly separated from WPF.** 134 of 300 core files touch WPF/System.Drawing;
    extraction is a real refactor, not a copy.
 3. **Win32 capability cluster is broad.** Process trees, icon extraction, screen info, power,
    tray, protocol registration, and shell integration all need Linux equivalents.

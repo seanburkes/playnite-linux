@@ -10,7 +10,8 @@ permissions:
 
 env:
   PROTECTED_PATHS: >-
-    legacy tests/golden tests/fixtures tests/baseline.json docs/formal oracle-lock
+    tests/golden tests/fixtures tests/baseline.json docs/formal
+    docs/port/surface-parity.tsv
 
 jobs:
   inventory-and-parity:
@@ -24,7 +25,18 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Oracle paths are immutable in a porting change
+      - name: Frozen snapshot and dependency pin are unconditionally immutable
+        if: github.event_name == 'pull_request'
+        run: |
+          changed=$(git diff --name-only \
+            "${{ github.event.pull_request.base.sha }}" HEAD -- legacy oracle-lock)
+          if [ -n "$changed" ]; then
+            echo "::error::legacy/ and oracle-lock/ are frozen; no label overrides this."
+            printf '%s\n' "$changed"
+            exit 1
+          fi
+
+      - name: Oracle artifacts require an explicit oracle-change PR
         if: >-
           github.event_name == 'pull_request' &&
           !contains(github.event.pull_request.labels.*.name, 'oracle-change')
@@ -32,7 +44,7 @@ jobs:
           changed=$(git diff --name-only \
             "${{ github.event.pull_request.base.sha }}" HEAD -- $PROTECTED_PATHS)
           if [ -n "$changed" ]; then
-            echo "::error::Protected oracle paths changed. Use a separate oracle-change PR with a second reviewer."
+            echo "::error::Protected oracle artifacts changed. Use a separate oracle-change PR with a second reviewer."
             printf '%s\n' "$changed"
             exit 1
           fi

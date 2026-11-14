@@ -144,11 +144,12 @@ reviewer. Replaced tests must be replaced one-for-one or better.
 ### 4.3 Oracle independence
 
 Structural, not cultural:
-- `tests/`, `tests/fixtures/`, `tests/golden/`, `tests/baseline.json`, `legacy/`,
-  `docs/formal/`, and `oracle-lock/` are protected paths. CI diffs **all seven** on every PR;
-  CODEOWNERS names the oracle owner.
-- A porting PR that touches them fails unless labelled `oracle-change` and approved by a
-  second owner.
+- `tests/fixtures/`, `tests/golden/`, `tests/baseline.json`, `legacy/`, `docs/formal/`,
+  `oracle-lock/`, and `docs/port/surface-parity.tsv` are protected paths. CI diffs all of them
+  on every PR; CODEOWNERS names the oracle owner.
+- `legacy/` and `oracle-lock/` are **unconditionally** immutable; no label overrides them.
+  Fixtures/goldens/baseline/formal/parity changes need an `oracle-change` label and a second
+  reviewer.
 - There is no auto-accept/update-snapshot command in the repo. Regeneration is a separate
   script run by a human, with the diff reviewed.
 - Escape hatches (`Skip`, `Explicit`, `[Ignore]`, category filters) are counted; a non-zero
@@ -242,8 +243,9 @@ partial live database. Invariants:
 - `BackupBeforeWrite`: a backup manifest exists before the first live write.
 - `OneImport`: at most one import runs at a time.
 Crash recovery: from any state, a restart reaches `Committed` or `RolledBack`, never a partial
-live DB. This is the model that must be able to fail; a reader action is part of the state
-space.
+live DB. `AtomicLive` is the falsifiable one: a crash during the swap leaves `Partial` until
+`Rollback` restores `Old`, so removing rollback fails TLC. `ReaderNeverPartial` is a design
+invariant over the published database, not a claim that every interleaving was tested.
 
 ### 9.2 `GameSession.tla` (design spec)
 This model is a **design specification**, not a falsifiable concurrency model. Its safety
@@ -276,8 +278,8 @@ design, not a proof of the C# implementation.
 | Build | any project fails | every PR |
 | Unit tests | any test fails or is skipped | every PR |
 | Architecture | Core references Avalonia/Win32/System.Drawing; Platform.Linux leaks into Core | every PR |
-| Banned APIs | `System.Windows`, `Microsoft.Win32`, `DllImport` outside platform, `BinaryFormatter`, `Thread.Abort`, `AppDomain` | every PR |
-| Oracle guard | protected paths changed without label | every PR |
+| Banned APIs | `System.Windows` (except `ICommand`), `Microsoft.Win32`, `DllImport` outside platform, `BinaryFormatter`, `Thread.Abort`, `AppDomain` | every PR |
+| Oracle guard | protected artifacts changed without label; `legacy/`/`oracle-lock/` always | every PR |
 | Golden diff | bytes differ | every PR |
 | Test counts | executed cases fall or skips > 0 | every PR |
 | Public API | SDK surface removed/changed without an API report update | every PR |

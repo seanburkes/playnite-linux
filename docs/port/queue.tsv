@@ -6,7 +6,7 @@ p0-004	W0	repo	Firstmate project registration	p0-003	todo	captain	-	-	local-only
 p1-001	W1	oracle	Windows oracle CI	p0-002	todo	oracle	golden:baseline	-	build legacy + NUnit
 p1-002	W1	oracle	Oracle harness v0 (settings/manifests)	p1-001	todo	oracle	golden:settings	golden:settings	deterministic bytes
 p1-003	W1	oracle	Fixture v10 library + Steam root	p1-001	todo	oracle	fixtures	-	synthetic only
-p1-004	W1	oracle	UI screenshot baseline	p1-001	todo	oracle	screens	-	few stable screens
+p1-004	W1	oracle	UI reference images (human only)	p1-001	todo	oracle	screens-reference	-	not a pixel gate
 p1-005	W1	spike	LiteDB 4 read on net11	p1-003	todo	core	spike	-	fallback Windows exporter
 p1-006	W1	spike	WebView feasibility (v1.1)	p1-002	todo	platform	spike	-	not a v1 gate; WebKitGTK/WPE
 p1-007	W1	spike	Steam process tracking	p1-003	todo	steam	spike	-	native + Proton
@@ -65,3 +65,4 @@ p7-009	W7	ui	Import transport/fresh-install wizard	p4-002,p7-002	todo	ui	screens
 p8-006	W8	pack	Flatpak host launch/tracking	p5-008,p8-002	todo	release	manual	test:pack	flatpak-spawn --host; ADR-020
 p8-007	W8	sdk	Freeze SDK UI extension points	p7-001,p6-004	todo	sdk	api-compat	test:sdk	ADR-023; after shell pilot
 p8-008	W8	sdk	WebView service (v1.1)	p8-007	todo	platform	http-stub	test:webview	ADR-019; not v1
+p1-010	W1	spike	Flatpak host launch/tracking	p1-003	todo	platform	spike	-	flatpak-spawn --host; PID visibility; ADR-020

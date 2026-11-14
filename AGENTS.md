@@ -13,8 +13,10 @@ oracle. New code is in `src/` (Phase 1 onward). Do not modify the Windows app.
 1. **`legacy/` is read-only.** Never edit, format, or delete anything under it. CI fails if it
    changes.
 2. **Oracle paths are protected.** Do not edit `tests/golden/`, `tests/fixtures/`,
-   `tests/baseline.json`, or `docs/formal/` unless the task explicitly says `oracle-change`
-   and a second reviewer approves. A porting change may not redefine correctness.
+   `tests/baseline.json`, `docs/formal/`, or `docs/port/surface-parity.tsv` unless the task
+   explicitly says `oracle-change` and a second reviewer approves. `legacy/` and
+   `oracle-lock/` are unconditionally immutable; no label overrides them. A porting change may
+   not redefine correctness.
 3. **Do not weaken tests.** No `[Skip]`, `[Ignore]`, `--filter` exclusions, snapshot
    re-acceptance, or deleting a failing test. Executed test cases must not fall; skips must stay zero.
 4. **No stubs.** No `TODO`, placeholder constants, `NotImplementedException` on a reachable
