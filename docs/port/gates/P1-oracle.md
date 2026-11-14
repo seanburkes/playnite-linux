@@ -15,6 +15,8 @@
 - VSTest ran the v10 NUnit suite: **282 executed, 282 passed, 0 failed, 0 skipped**.
 - TRX and build binlog uploaded as the `legacy-oracle` artifact.
 - `tests/baseline.json` records the executed count.
+- `tools/LegacyOracle` builds on Windows and emits v10 serialized manifest bytes; goldens are
+  checked in under `tests/golden/manifests/` (run 43605036209).
 
 ## Exceptions
 
@@ -30,7 +32,7 @@ editing `legacy/`; see `tests/legacy-exclusions.md`.
 
 - [x] Old app builds and tests run on Windows CI.
 - [x] Executed cases recorded from a TRX file.
-- [ ] Oracle harness constrained to v10 APIs emits deterministic bytes.
+- [x] Oracle harness constrained to v10 APIs emits deterministic bytes (manifest v0).
 - [ ] Fixture v10 library migrated and verified.
 - [ ] UI reference images captured (human only).
 - [ ] Steam real-artifact corpus captured/redacted.

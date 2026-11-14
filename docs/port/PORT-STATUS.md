@@ -26,6 +26,8 @@
       exclusions (run 43604176690).
 - [x] LiteDB 4.1.4 read/write spike on `net11.0` passed (`spikes/litedb-net11`).
 - [x] Synthetic Steam fixture corpus (`tests/fixtures/steam/`).
+- [x] Windows-only oracle harness (`tools/LegacyOracle`) and v10 manifest goldens
+      (`tests/golden/manifests/`).
 - [x] Independent plan review; findings incorporated: Steam is greenfield, oracle harness
       constrained to v10 APIs, Playnite.Deps pinned by SHA-256, Flatpak host launch/tracking,
       LiteDB importer is a separate process, WebView deferred to v1.1, SDK split into
@@ -33,7 +35,7 @@
 
 ## In flight
 
-- [ ] Oracle harness constrained to v10 APIs (settings/manifests first).
+- [ ] Oracle harness: settings bytes + library export (manifest v0 done).
 - [ ] Fixture v10 library for migration; real Steam artifact capture.
 - [ ] UI reference images (human only, not pixel gates).
 - [ ] Steam process/Flatpak tracking spike.
