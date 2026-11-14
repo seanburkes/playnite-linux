@@ -1,7 +1,9 @@
 # Port unit shards
 
-`docs/port/queue.tsv` and `docs/port/ledger.tsv` are generated aggregates. Do not edit them
-by hand. Each unit owns a shard in this directory:
+`docs/port/queue.tsv` and `docs/port/ledger.tsv` are generated aggregates with a single writer:
+the post-merge `port-index` workflow on `main`. A pull request owns only the per-unit shards in
+this directory and must not change either aggregate, even to its freshly generated content.
+Each unit owns a shard in this directory:
 
 | File | Contents |
 | --- | --- |
@@ -27,18 +29,20 @@ aggregates.
 
 ## Add or update a unit
 
-Add or update only your unit's shards, then regenerate and verify:
+Add or update only your unit's shards, then validate the shard tree against the base branch:
 
 ```sh
-python3 scripts/port/build_port_index.py build
-python3 scripts/port/build_port_index.py check --against origin/main
+python3 scripts/port/build_port_index.py check --shards-only --against origin/main
 ```
 
-`build` writes the aggregates; never patch them. `check` regenerates in memory, byte-compares
-both aggregates, and prints the differing lines. The generator also rejects a missing or
-reordered header, ragged or blank rows, invalid UTF-8, more than one queue row per shard,
-duplicate unit ids, duplicate ledger rows, filename/id disagreement, ledger rows for a unit
-without a queue shard, and unexpected entries in this directory.
+Never commit `docs/port/queue.tsv` or `docs/port/ledger.tsv` in a pull request. `build` is the
+parent-owned post-merge step; do not run it to produce a PR diff. `check --shards-only`
+validates every shard in memory and prints any error, without requiring the committed
+aggregates to match. The generator rejects a missing or reordered header, ragged or blank rows,
+invalid UTF-8, more than one queue row per shard, duplicate unit ids, duplicate ledger rows,
+filename/id disagreement, ledger rows for a unit without a queue shard, and unexpected entries
+in this directory. To inspect what main will generate, run `build` in a scratch checkout and
+discard the two aggregate files; never include them in the PR.
 
 ## Ledger history is append-only
 
@@ -78,10 +82,37 @@ authority boundary, not a signature scheme or a second approval file.
 
 ## CI
 
-CI runs `check --against <base>` and rejects a pull request that changes either aggregate
-without changing a contract shard or `removed.tsv` once this directory exists on its base.
+On a pull request, CI validates the shard tree itself:
+
+- `check --shards-only --against <base>` parses the shards (schema, one row per unit id,
+  filename/id agreement, duplicate rejection, strict enumeration) and enforces the ledger
+  prefix/append-only and retirement history against the pull request base.
+- `--forbid-aggregate-changes` fails the pull request when it changes
+  `docs/port/queue.tsv` or `docs/port/ledger.tsv`, even when the new content is exactly what
+  `build` would produce. Edit only your unit shard and leave the aggregates to the parent step.
+
+CI does not require the committed aggregates to equal freshly generated output. The
+`port-index` workflow runs only on pushes to `main`: it runs `build`, verifies the generated
+bytes, and commits only `docs/port/queue.tsv` and `docs/port/ledger.tsv` with a bot commit. That
+single writer is what keeps `main` current and what removes the shared-file conflict from every
+merge.
+
 The history check is what prevents a shard or ledger row from being deleted and regenerated
-with every other check green.
+with every other check green. Deletions, renames, unrecorded retirements, and edited ledger
+rows still fail on a pull request.
+
+### PRs already in flight
+
+If an open pull request already regenerated the aggregates, drop those two file changes and
+keep only its shards:
+
+```sh
+git restore --source=origin/main -- docs/port/queue.tsv docs/port/ledger.tsv
+git commit --amend
+```
+
+Then re-run `check --shards-only --against origin/main`. No shard content needs to change; the
+parent step regenerates the aggregates after merge.
 
 The migration PR that first adds this directory is the one legitimate pre-migration base. Its
 base has no `docs/port/units` tree, so the CI job passes `--allow-pre-migration-base`, which

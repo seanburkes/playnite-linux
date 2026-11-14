@@ -142,6 +142,41 @@ class PortIndexTests(unittest.TestCase):
             )
         return status, stdout.getvalue() + stderr.getvalue()
 
+    def git(self, *args):
+        completed = subprocess.run(
+            ["git", "-C", str(self.root), *args],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        return completed.stdout.strip()
+
+    def start_git_history(self):
+        self.git("init", "-q")
+        self.git("config", "user.email", "port-index@example.invalid")
+        self.git("config", "user.name", "Port Index Test")
+        self.git("add", "docs")
+        self.git("commit", "-q", "-m", "base")
+        return self.git("rev-parse", "HEAD")
+
+    def commit(self, message):
+        self.git("add", "docs")
+        self.git("commit", "-q", "-m", message)
+        return self.git("rev-parse", "HEAD")
+
+    def check_with_git(self, *args):
+        stdout = io.StringIO()
+        stderr = io.StringIO()
+        with redirect_stdout(stdout), redirect_stderr(stderr):
+            status = port_index.main(
+                ["check", *args],
+                units=self.units,
+                queue=self.queue,
+                ledger=self.ledger,
+                root=self.root,
+            )
+        return status, stdout.getvalue() + stderr.getvalue()
+
     def test_queue_is_sorted_by_wave_then_id_and_headers_are_exact(self):
         self.write_queue_shard("p2-001", queue_row("p2-001", wave="W2"))
         self.write_queue_shard("p1-002", queue_row("p1-002", wave="W1"))
@@ -741,6 +776,118 @@ class PortIndexTests(unittest.TestCase):
         self.assertIn("notice:", output)
         self.assertIn("history check skipped for the migration PR", output)
         self.assertIn("port index is current", output)
+
+    def test_shard_only_change_passes_without_regenerated_aggregates(self):
+        self.write_queue_shard("p1-001", queue_row("p1-001"))
+        self.build()
+        base = self.start_git_history()
+        self.write_queue_shard("p1-001", queue_row("p1-001", status="in-progress"))
+        self.commit("shard only")
+
+        stale_status, stale_output = self.check_with_git()
+
+        self.assertEqual(stale_status, 1)
+        self.assertIn("is not generated output", stale_output)
+
+        status, output = self.check_with_git("--shards-only", "--against", base)
+
+        self.assertEqual(status, 0, output)
+        self.assertIn("shards are valid", output)
+        self.assertIn(f"history matches {base}", output)
+
+    def test_pull_request_with_only_a_shard_change_passes_the_ownership_gate(self):
+        self.write_queue_shard("p1-001", queue_row("p1-001"))
+        self.build()
+        base = self.start_git_history()
+        self.write_queue_shard("p1-001", queue_row("p1-001", status="in-progress"))
+        self.commit("shard only")
+
+        status, output = self.check_with_git(
+            "--shards-only",
+            "--against",
+            base,
+            "--forbid-aggregate-changes",
+        )
+
+        self.assertEqual(status, 0, output)
+        self.assertIn("shards are valid", output)
+
+    def test_pull_request_that_edits_an_aggregate_fails(self):
+        self.write_queue_shard("p1-001", queue_row("p1-001"))
+        self.build()
+        base = self.start_git_history()
+        self.queue.write_text(
+            QUEUE_HEADER + "\n" + queue_row("p1-001", status="done") + "\n"
+        )
+        self.commit("aggregate only")
+
+        status, output = self.check_with_git(
+            "--shards-only",
+            "--against",
+            base,
+            "--forbid-aggregate-changes",
+        )
+
+        self.assertEqual(status, 1)
+        self.assertIn("must not modify the generated aggregates", output)
+        self.assertIn("changed: docs/port/queue.tsv", output)
+
+    def test_pull_request_that_regenerates_aggregates_still_fails_the_ownership_gate(self):
+        self.write_queue_shard("p1-001", queue_row("p1-001"))
+        self.build()
+        base = self.start_git_history()
+        self.write_queue_shard("p1-001", queue_row("p1-001", status="in-progress"))
+        self.build()
+        self.commit("shard plus regenerated aggregates")
+
+        status, output = self.check_with_git(
+            "--shards-only",
+            "--against",
+            base,
+            "--forbid-aggregate-changes",
+        )
+
+        self.assertEqual(status, 1)
+        self.assertIn("must not modify the generated aggregates", output)
+        self.assertIn("changed: docs/port/queue.tsv", output)
+
+    def test_shards_only_still_rejects_an_invalid_shard(self):
+        self.write_queue_shard("p1-001", queue_row("p1-001"))
+        self.build()
+        base = self.start_git_history()
+        self.write_queue_shard(
+            "p1-001", "\t".join(queue_row("p1-001").split("\t")[:-1])
+        )
+        self.commit("broken shard")
+
+        status, output = self.check_with_git("--shards-only", "--against", base)
+
+        self.assertEqual(status, 1)
+        self.assertIn("expected 10 columns", output)
+
+    def test_shards_only_still_rejects_a_deleted_queue_shard(self):
+        self.write_queue_shard("p1-001", queue_row("p1-001"))
+        self.write_queue_shard("p1-002", queue_row("p1-002"))
+        self.build()
+        base = self.start_git_history()
+        self.git("rm", "-q", "docs/port/units/p1-002.queue.tsv")
+        self.git("add", "docs")
+        self.git("commit", "-q", "-m", "delete a shard")
+
+        status, output = self.check_with_git("--shards-only", "--against", base)
+
+        self.assertEqual(status, 1)
+        self.assertIn("queue shard 'p1-002'", output)
+        self.assertIn("missing at head", output)
+
+    def test_forbid_aggregate_changes_requires_a_base_ref(self):
+        self.write_queue_shard("p1-001", queue_row("p1-001"))
+        self.build()
+
+        status, output = self.check_with_git("--forbid-aggregate-changes")
+
+        self.assertEqual(status, 1)
+        self.assertIn("--forbid-aggregate-changes requires --against", output)
 
 
 if __name__ == "__main__":

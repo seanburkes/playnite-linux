@@ -4,12 +4,21 @@
 Usage:
     python3 scripts/port/build_port_index.py build
     python3 scripts/port/build_port_index.py check [--against <ref>]
+    python3 scripts/port/build_port_index.py check --shards-only [--against <ref>]
+    python3 scripts/port/build_port_index.py check --shards-only --against <ref> \
+        --forbid-aggregate-changes
 
 `check --against <ref>` additionally verifies history: base ledger rows must be
 an exact prefix of the head rows, queue shards and ledger rows must survive
 unless a unit is explicitly retired in `docs/port/units/removed.tsv`, and <ref>
 must be a strict ancestor of HEAD. CI passes the ref with `--against`; the
 PORT_INDEX_BASE_REF environment variable is only a local convenience fallback.
+
+Pull requests validate the shard tree only. `--shards-only` skips the byte
+comparison against the committed aggregates, which are generated on main by the
+post-merge `port-index` workflow. `--forbid-aggregate-changes` fails when the
+change against `--against` edits either aggregate, so a pull request owns only
+its unit shards.
 
 The migration PR that first adds `docs/port/units` is the one legitimate
 pre-migration base: `--allow-pre-migration-base` acknowledges the history skip
@@ -464,6 +473,33 @@ def _git(root: Path, *args: str) -> bytes:
     return completed.stdout
 
 
+def _repo_relative(path: Path, root: Path) -> str:
+    try:
+        return path.resolve().relative_to(root.resolve()).as_posix()
+    except ValueError:
+        return path.as_posix()
+
+
+def changed_aggregates(root: Path, ref: str, queue: Path, ledger: Path) -> list[str]:
+    """Paths of the generated aggregate files changed between `ref` and HEAD."""
+    resolved = _git(root, "rev-parse", "--verify", "--quiet", f"{ref}^{{commit}}").strip()
+    commit = resolved.decode("ascii", "replace")
+    if not commit:
+        raise PortIndexError(f"cannot resolve base ref {ref!r}")
+    listing = _git(
+        root,
+        "diff",
+        "--name-only",
+        "-z",
+        commit,
+        "HEAD",
+        "--",
+        _repo_relative(queue, root),
+        _repo_relative(ledger, root),
+    )
+    return [name for name in listing.decode("utf-8", "replace").split("\0") if name]
+
+
 def _is_strict_ancestor(root: Path, ref: str) -> bool:
     """True only when `ref` resolves to a commit strictly before HEAD."""
     try:
@@ -704,6 +740,22 @@ def main(
             "(migration PR only; prints a skip notice)"
         ),
     )
+    parser.add_argument(
+        "--shards-only",
+        action="store_true",
+        help=(
+            "validate the shard tree and history without requiring the committed "
+            "aggregates to equal freshly generated output (the pull request gate)"
+        ),
+    )
+    parser.add_argument(
+        "--forbid-aggregate-changes",
+        action="store_true",
+        help=(
+            "fail when the change against --against edits docs/port/queue.tsv or "
+            "docs/port/ledger.tsv (the pull request ownership gate)"
+        ),
+    )
     args = parser.parse_args(argv)
 
     try:
@@ -719,10 +771,35 @@ def main(
         print(f"wrote {queue} and {ledger}")
         return 0
 
-    queue_ok = _check_file(queue, queue_bytes)
-    ledger_ok = _check_file(ledger, ledger_bytes)
-    if not (queue_ok and ledger_ok):
-        return 1
+    if args.forbid_aggregate_changes:
+        if not args.against:
+            print(
+                "error: --forbid-aggregate-changes requires --against",
+                file=sys.stderr,
+            )
+            return 1
+        try:
+            changed = changed_aggregates(root, args.against, queue, ledger)
+        except PortIndexError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 1
+        if changed:
+            print(
+                "error: pull requests must not modify the generated aggregates. "
+                "Edit only your unit shard under docs/port/units/ and leave "
+                "docs/port/queue.tsv and docs/port/ledger.tsv to the post-merge "
+                "port-index workflow; drop those file changes from this PR.",
+                file=sys.stderr,
+            )
+            for name in changed:
+                print(f"  changed: {name}", file=sys.stderr)
+            return 1
+
+    if not args.shards_only:
+        queue_ok = _check_file(queue, queue_bytes)
+        ledger_ok = _check_file(ledger, ledger_bytes)
+        if not (queue_ok and ledger_ok):
+            return 1
 
     ref = args.against or os.environ.get("PORT_INDEX_BASE_REF", "").strip()
     if args.allow_pre_migration_base and not ref:
@@ -769,7 +846,10 @@ def main(
                 return 1
             print(f"port index history matches {ref}")
 
-    print("port index is current")
+    if args.shards_only:
+        print("port index shards are valid; aggregates are generated on main")
+    else:
+        print("port index is current")
     return 0
 
 
