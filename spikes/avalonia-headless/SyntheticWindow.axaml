@@ -1,0 +1,28 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="HeadlessSpike.SyntheticWindow"
+        Width="640" Height="480" CanResize="False" SystemDecorations="None"
+        Title="Synthetic library spike" FontFamily="avares://Avalonia.Fonts.Inter/Assets#Inter"
+        AutomationProperties.AutomationId="library">
+  <Border Padding="24" Background="{DynamicResource ThemeBackgroundBrush}">
+    <StackPanel Spacing="12">
+      <TextBlock Text="Synthetic library — not the application shell" FontSize="20" />
+      <TextBox x:Name="Search" Watermark="Search games" Text="Orbit"
+               AutomationProperties.AutomationId="search" AutomationProperties.Name="Search games" />
+      <CheckBox x:Name="Installed" Content="Installed only" IsChecked="True"
+                AutomationProperties.AutomationId="installed" AutomationProperties.Name="Installed only" />
+      <ListBox x:Name="Games" Height="112" SelectedIndex="0"
+               AutomationProperties.AutomationId="games" AutomationProperties.Name="Games">
+        <ListBoxItem Content="Orbit — synthetic game" AutomationProperties.Name="Orbit — synthetic game" />
+        <ListBoxItem Content="Meadow — synthetic game" AutomationProperties.Name="Meadow — synthetic game" />
+      </ListBox>
+      <StackPanel Orientation="Horizontal" Spacing="12">
+        <Button x:Name="Play" Content="Play Orbit" AutomationProperties.AutomationId="play"
+                AutomationProperties.Name="Play Orbit" />
+        <Button Content="Details unavailable" IsEnabled="False" AutomationProperties.AutomationId="details"
+                AutomationProperties.Name="Details unavailable" />
+      </StackPanel>
+      <TextBlock x:Name="Status" Text="Ready: synthetic data only" AutomationProperties.AutomationId="status" />
+    </StackPanel>
+  </Border>
+</Window>
