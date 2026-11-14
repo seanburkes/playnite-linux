@@ -104,3 +104,5 @@ try {
 }
 if ($failure) { throw $failure }
 Write-Host $outcome
+# Expected-failure oracle invocations leave LASTEXITCODE nonzero; do not leak it as this script's exit.
+exit 0

@@ -167,3 +167,5 @@ if ($Exe) {
 
 Assert-Goldens $emitted $golden
 Write-Host "PASS: $checks bounded comparator/safety checks on synthetic unit data only; no v10 fixture, golden, or Windows acceptance claim."
+# Expected-failure oracle invocations leave LASTEXITCODE nonzero; do not leak it as this script's exit.
+exit 0
