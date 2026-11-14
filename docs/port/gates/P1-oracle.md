@@ -4,9 +4,10 @@
 - Owner: oracle
 - Reviewer: independent plan review (session `ses_e27629994ffec0IK0wD5lgcnOT`); gate evidence pending captain review
 - Runs: legacy oracle https://github.com/seanburkes/playnite-linux/actions/runs/43604176690;
-  manifest comparison https://github.com/seanburkes/playnite-linux/actions/runs/43646522483 (attempt 2;
-  comparison step passed, unrelated legacy test flaked); same commit fully green in
-  https://github.com/seanburkes/playnite-linux/actions/runs/43645705588;
+  manifest comparison https://github.com/seanburkes/playnite-linux/actions/runs/43645705588 (green)
+  and https://github.com/seanburkes/playnite-linux/actions/runs/43647994673 (attempt 3 green;
+  attempts 1-2 flaked on unrelated legacy tests);
+  EX-3 exclusion https://github.com/seanburkes/playnite-linux/actions/runs/43649562478 (green);
   settings/library https://github.com/seanburkes/playnite-linux/actions/runs/43627447663;
   fixture https://github.com/seanburkes/playnite-linux/actions/runs/43629325359
 - Result: **NOT READY** — the oracle build and v10 suite are green, but the
@@ -18,7 +19,7 @@
 
 | Item | State | Merged | Evidence | Still missing |
 | --- | --- | --- | --- | --- |
-| Windows oracle build + v10 NUnit (p1-001) | pass-with-exceptions, unchanged | `main` | `legacy/source/Playnite.slnx` builds on `windows-latest`; VSTest ran **282 executed, 282 passed, 0 failed, 0 skipped**; TRX/binlog and counts in the `legacy-oracle` artifact; `tests/baseline.json` records the executed count | Only EX-1 and EX-2 remain; no other gap |
+| Windows oracle build + v10 NUnit (p1-001) | pass-with-exceptions, unchanged | `main` | `legacy/source/Playnite.slnx` builds on `windows-latest`; VSTest ran **281 executed, 281 passed, 0 failed, 0 skipped** with 3 documented exclusions; TRX/binlog and counts in the `legacy-oracle` artifact; `tests/baseline.json` records the executed count | Only EX-1, EX-2 and EX-3 remain; no other gap |
 | Oracle harness settings/library (p1-002) | merged-with-goldens-pending | PR #5 (`082d25b`) | `tools/LegacyOracle` settings-bytes and library-export commands plus the dedicated Windows workflow; run 43627447663 green (generation plus 59-check synthetic self-test); `Validate` records acceptance pending when protected data is absent | No protected settings/library goldens exist. The golden generation run requires the approved p1-003 fixture, so its golden output and protected-data validation are not produced (21 payloads plus `settings-library.sha256`/`settings-library.md`). |
 | Fixture v10 library (p1-003) | pending | PR #6 (`edcbe71`) | `tools/V10LibraryFixture` generator, validator, pre-write isolation guard, disposable-tree tests and narrow Windows workflow; run 43629325359 green (two generations, logical compare, mutation/extra-file rejection, copy-only v10 read-back); two independent oracle-change reviews approved the exact 19 new protected fixture paths | The capture itself does not exist: no `tests/fixtures/v10/`, no pinned `SHA256SUMS`, no typed Windows read-back of committed bytes, and no strict committed-fixture comparison. Approval of the paths is not a capture. |
 | UI reference index (p1-004) | satisfied (reference-only) | this PR (pending merge) | `docs/port/ui-reference/SOURCES.md` indexes official and public Playnite 10.x UI links for all six tracked screens (grid, list, details, settings, first-run/import, fullscreen), with slide numbers, section anchors, image filenames and YouTube timestamps; retrieved 2026-11-14; 0 images committed | None for p1-004. A genuine local 10.64 capture remains optional and is not a gate. |
@@ -32,14 +33,20 @@
 
 Supporting checks on the committed tree:
 
-- `tests/baseline.json` records 282 executed, 282 passed, 0 failed, 0 skipped and the two
-  exclusions; `tests/legacy-exclusions.md` explains both.
+- `tests/baseline.json` records 281 executed, 281 passed, 0 failed, 0 skipped and the three
+  exclusions; `tests/legacy-exclusions.md` explains all three.
+- EX-3 run evidence: workflow_dispatch run 43649562478 on the EX-3 change is green with
+  **281 executed, 281 passed, 0 failed, 0 skipped** and the three documented exclusions
+  (EX-1, EX-2, EX-3).
 - Manifest reproducibility is proven by the workflow, not just emitted: run 43646522483
   (attempt 2) ran the byte comparison and logged `Manifest goldens match committed bytes:
   2 file(s)` and rejection of the one-byte copy, then failed only in the unrelated legacy
   `ShellExecuteTest` (281/282); attempt 1 of that rerun flaked on the network tests
   `WebTest`, `AddFileTest` and `GetResponseCodeTest`. The same commit was fully green,
-  including the comparison and one-byte negative, in run 43645705588.
+  including the comparison and one-byte negative, in run 43645705588. After the harness-trigger
+  change, head 70973d5 run 43647994673 was green on attempt 3 (attempts 1-2 flaked: first the
+  three network tests above, then `ShellExecuteTest`). The recurrent `ShellExecuteTest` flake
+  is now recorded as EX-3.
 - `tests/golden/` contains only the two v10 manifest goldens; no
   `settings-library.sha256`, `settings-library.md`, `settings/` or `library/` corpus exists.
 - `tests/fixtures/v10/` does not exist. Only the synthetic Steam fixtures under
@@ -56,8 +63,10 @@ Supporting checks on the committed tree:
 | --- | --- | --- | --- |
 | EX-1 | `FileSystemTests.CanWriteToFolderTest` assumes a non-admin Windows user; the runner is admin. | oracle | Revisit when the oracle runs as a standard user |
 | EX-2 | `SafeFileEnumeratorTests.OverUnsafeWorksTest` assumes a non-admin Windows user; the runner is admin. | oracle | Revisit when the oracle runs as a standard user |
+| EX-3 | `ProcessStarterTests.ShellExecuteTest` is a Windows `notepad`/`taskkill` shell test whose `taskkill` returned 1 instead of 0. It passed in the 282/282 baseline, so this is environment flakiness, not a missing check or oracle-setup gap. | oracle | Revisit when the Windows runner's `notepad`/`taskkill` shell behaviour is stable |
 
-Both are Windows ACL tests, not portable app logic. They are excluded by VSTest filter, not by
+EX-1 and EX-2 are Windows ACL tests, not portable app logic. EX-3 is a flaky Windows shell
+test. All three are excluded by a narrow VSTest filter naming that single test, not by
 editing `legacy/`; see `tests/legacy-exclusions.md`. No new exception is claimed for any
 pending item: pending evidence is missing, not waived.
 
@@ -66,7 +75,7 @@ pending item: pending evidence is missing, not waived.
 The checklist below and the numbered remaining-items list in the Phase 2 entry together are the
 exhaustive Phase 1 gate. Do not close the listed items while leaving a checklist item unchecked.
 
-- [x] Old app builds and tests run on Windows CI (282/282 passed; 2 ACL exclusions).
+- [x] Old app builds and tests run on Windows CI (281/281 passed; 3 documented exclusions).
 - [x] Executed cases recorded from a TRX file (`tests/baseline.json`).
 - [x] Oracle harness constrained to v10 APIs; the two manifest v0 goldens are committed and
       byte-compared with freshly regenerated output by the Windows workflow.
@@ -110,7 +119,8 @@ exhaustive Phase 1 gate. Do not close the listed items while leaving a checklist
    installed, but `flatpak-spawn` (flatpak-xdg-utils) is missing and there are no runtimes or
    apps installed, so real acceptance stays pending until the captain installs them.
 6. **p1-008** — prove real X11/Wayland launch and native AT-SPI/screen-reader behaviour.
-7. Keep EX-1 and EX-2 recorded until the oracle can run as a standard Windows user.
+7. Keep EX-1, EX-2 and EX-3 recorded until the oracle can run as a standard Windows user and the
+   shell test is stable.
 8. **Settings/library one-byte criterion** — once the p1-002 protected corpus exists, prove that
    a deliberate one-byte change in its protected bytes fails its comparator. The manifest
    corpus is already byte-compared with its own one-byte negative; that does not cover the
