@@ -59,8 +59,10 @@ operating model, formal model drafts.
   artifact corpus** (`libraryfolders.vdf`, `appmanifest_*.acf`, `shortcuts.vdf`,
   `librarycache` images, captured app-details JSON).
 - `tests/golden/` checked-in outputs with a manifest and a human-run regeneration procedure.
-- UI reference images (main library, details, settings) captured on Windows as **human
-  comparison only**, not pixel gates.
+- UI reference index of official/public screenshots and videos (main library grid/list/details,
+  settings, first-run/import, fullscreen) in [`ui-reference/SOURCES.md`](ui-reference/SOURCES.md),
+  as **human comparison only**, not pixel gates. A local Windows capture is optional and not a
+  Phase 1 gate.
 - Executed-test-case baseline from a JUnit result file (`tests/baseline.json`), not a regex.
 **Exit gate:**
 - Old app builds and tests run on Windows CI; executed cases are recorded.
@@ -69,6 +71,8 @@ operating model, formal model drafts.
 - All protected oracle paths are covered by CODEOWNERS and CI: `legacy/`, `tests/golden/`,
   `tests/fixtures/`, `tests/baseline.json`, `docs/formal/`, `oracle-lock/`.
 - The Steam fixture corpus exists and a written Steam spec is reviewed.
+- UI references are curated official/public links (p1-004, reference-only); a local capture
+  is optional, and no screenshot comparison is ever a test gate.
 
 **Spikes (time-boxed, in parallel):**
 1. LiteDB 4.1.4 read on `net11.0` (isolated console). If it fails, the importer is a Windows
