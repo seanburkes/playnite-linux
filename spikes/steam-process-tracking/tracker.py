@@ -93,9 +93,13 @@ class Session:
                 raise RuntimeError("session disposed")
             if cancel.is_set():
                 return "cancelled"
+            if time.monotonic() >= deadline:
+                return "timeout"
             sample = read()
             if cancel.is_set():
                 return "cancelled"
+            if time.monotonic() >= deadline:
+                return "timeout"
             state = self.update(sample)
             if state == "stopped":
                 return state

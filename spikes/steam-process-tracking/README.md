@@ -52,8 +52,11 @@ not the normal cleanup mechanism; children also exit on pipe EOF.
   proof a Steam game ended. A stopped observer cannot reattach.
 - `wait(read, cancel, timeout)`: bounded polling with a caller-provided **bounded,
   synchronous** reader. Cancellation before or after a read returns `cancelled`,
-  not stopped. Expiry returns `timeout`, not stopped. It cannot interrupt a blocked
-  reader; a remote host transport must enforce its own I/O timeout/cancellation.
+  not stopped, and takes precedence over expiry. The monotonic deadline is checked
+  before each read and after it, before applying the observation. At or after the
+  deadline, return `timeout` without changing prior identities or observation state.
+  It cannot interrupt a blocked reader; a remote host transport must enforce its
+  own I/O timeout/cancellation.
   `close()` is idempotent and prevents further use; it never signals a game.
 
 The local `snapshot(pids)` adapter takes a **predeclared controlled PID set**. It
@@ -77,8 +80,9 @@ handoff only: no cross-spike integration or real sandbox result was executed her
 ## Evidence (2026-11-14)
 
 Executed locally with `/usr/bin/python3` 3.14.10 on Linux 7.3.0-3-cachyos:
-**16 tests passed, zero skipped** with the command above. Full command output is
-retained by the worker under `/home/sean/src/firstmate/data/p1-007/tests.txt`.
+**21 tests passed, zero skipped** with the command above. Full revised command output
+is retained under `/home/sean/src/firstmate/data/p1-007-fix/tests.txt`; the original
+16-test run is under `/home/sean/src/firstmate/data/p1-007/tests.txt`.
 The test source is the reproducible, repository-contained evidence.
 
 | Scenario | Evidence kind | Observation |
@@ -93,6 +97,19 @@ The test source is the reproducible, repository-contained evidence.
 | Launch handed to an existing Steam broker | Synthetic snapshots | An unrelated game tree is unobserved; launch completion cannot establish a session |
 | Short-lived wrapper missed between polls | Synthetic snapshots | Demonstrates a false stop: reparented, never-seen game cannot be reconstructed |
 | Cancellation, timeout, repeated disposal | Synthetic and owned live trees | No fake stopped result or game termination; disposed observation fails explicitly |
+| Final sleep exhausts budget | Deterministic clock/reader | No read after expiry; prior identities retained; cancellation on wake takes precedence |
+| Bounded read reaches/crosses deadline | Deterministic clock/reader | Expired stopped/running observations are discarded without mutating known identities or first-observation state; cancellation after read takes precedence |
+
+Deadline regression reproduction: with a one-second budget, a bounded reader
+returning an empty complete sample at 1.0 or 1.25 seconds previously returned
+`stopped`; a final sleep consuming the budget also allowed an extra empty read.
+Expiry is the trigger; the empty sample after an observed live tree makes the
+wrong result visible. Expired live samples instead exposed identity mutation even
+when the old result was already `timeout`. Changing only read duration to 0.5
+seconds makes the same empty observation timely: `stopped` and cleared identities
+are then correct. These comparisons are preserved as regressions. Before the fix,
+the expanded 21-test suite reported five failing cases; after the fix all pass.
+No test asserts that synchronous reads can be interrupted.
 
 ### Observations versus assumptions
 

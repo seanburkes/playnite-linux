@@ -6,12 +6,24 @@ import sys
 import tempfile
 from threading import Event
 import unittest
+from unittest.mock import Mock, patch
 
 from tracker import Identity, Process, Session, Snapshot, parse_stat, snapshot
 
 
 def process(pid, parent=1, ticks=10, state="S"):
     return Process(Identity(pid, ticks), parent, state)
+
+
+class Clock:
+    def __init__(self):
+        self.now = 0.0
+
+    def monotonic(self):
+        return self.now
+
+    def advance(self, seconds):
+        self.now += seconds
 
 
 class TrackingTests(unittest.TestCase):
@@ -106,6 +118,84 @@ class TrackingTests(unittest.TestCase):
             return Snapshot(())
         self.assertEqual(session.wait(exit_and_cancel, cancel, 1), "cancelled")
         self.assertEqual(session.known, {Identity(10, 10)})
+
+    def test_final_sleep_exhausts_budget_without_another_read(self):
+        for cancel_on_wake in (False, True):
+            with self.subTest(cancel_on_wake=cancel_on_wake):
+                clock = Clock()
+                cancel = Event()
+                sample = Snapshot((process(10), process(11, 10)))
+                session = Session(Identity(10, 10))
+                session.update(sample)
+                known = session.known.copy()
+                read = Mock(side_effect=[sample, Snapshot(())])
+                def sleep(seconds):
+                    clock.advance(seconds)
+                    if cancel_on_wake:
+                        cancel.set()
+                with patch("tracker.time.monotonic", clock.monotonic), \
+                        patch.object(cancel, "wait", side_effect=sleep) as wait:
+                    result = session.wait(read, cancel, timeout=1, interval=2)
+                self.assertEqual(result, "cancelled" if cancel_on_wake else "timeout")
+                self.assertEqual(read.call_count, 1)
+                wait.assert_called_once_with(1)
+                self.assertEqual(session.known, known)
+                self.assertTrue(session.observed)
+
+    def test_only_timely_stopped_observation_clears_known_identities(self):
+        for duration in (0.5, 1, 1.25):
+            with self.subTest(duration=duration):
+                clock = Clock()
+                session = Session(Identity(10, 10))
+                session.update(Snapshot((process(10), process(11, 10))))
+                known = session.known.copy()
+                def read():
+                    clock.advance(duration)
+                    return Snapshot(())
+                with patch("tracker.time.monotonic", clock.monotonic):
+                    result = session.wait(read, Event(), timeout=1)
+                self.assertEqual(result, "stopped" if duration < 1 else "timeout")
+                self.assertEqual(session.known, set() if duration < 1 else known)
+                self.assertTrue(session.observed)
+
+    def test_expired_running_observation_does_not_replace_known_identities(self):
+        clock = Clock()
+        session = Session(Identity(10, 10))
+        session.update(Snapshot((process(10), process(11, 10))))
+        known = session.known.copy()
+        def read():
+            clock.advance(1.25)
+            return Snapshot((process(11), process(12, 11)))
+        with patch("tracker.time.monotonic", clock.monotonic):
+            self.assertEqual(session.wait(read, Event(), timeout=1), "timeout")
+        self.assertEqual(session.known, known)
+        self.assertTrue(session.observed)
+
+    def test_expired_first_observation_does_not_mark_root_observed(self):
+        clock = Clock()
+        session = Session(Identity(10, 10))
+        def read():
+            clock.advance(1.25)
+            return Snapshot((process(10), process(11, 10)))
+        with patch("tracker.time.monotonic", clock.monotonic):
+            self.assertEqual(session.wait(read, Event(), timeout=1), "timeout")
+        self.assertEqual(session.known, {Identity(10, 10)})
+        self.assertFalse(session.observed)
+
+    def test_cancellation_during_expired_read_precedes_timeout(self):
+        clock = Clock()
+        cancel = Event()
+        session = Session(Identity(10, 10))
+        session.update(Snapshot((process(10), process(11, 10))))
+        known = session.known.copy()
+        def read():
+            clock.advance(1.25)
+            cancel.set()
+            return Snapshot(())
+        with patch("tracker.time.monotonic", clock.monotonic):
+            self.assertEqual(session.wait(read, cancel, timeout=1), "cancelled")
+        self.assertEqual(session.known, known)
+        self.assertTrue(session.observed)
 
     def test_disposed_session_rejects_observation(self):
         session = Session(Identity(10, 10))
