@@ -23,3 +23,23 @@ Run:
 cd spikes/litedb-net11
 dotnet run -c Release
 ```
+
+## `avalonia-headless`
+
+Question: can a Linux test process drive Avalonia's headless platform with real Skia rendering,
+capture a deterministic frame, and exercise the managed automation-peer and keyboard semantics the
+port depends on?
+
+Result (2026-11-14): **yes** for a synthetic 640×480 window: three xunit v3 facts pass with zero
+skips (three byte-identical Skia captures, a managed automation-peer tree, and Tab/Space keyboard
+activation). The PNG and automation-tree artifacts are described in
+[`avalonia-headless/README.md`](avalonia-headless/README.md); they do not prove real-window,
+AT-SPI/Linux accessibility, Windows, or Playnite-shell parity.
+
+Run:
+
+```sh
+rm -rf /tmp/playnite-spike-evidence
+DISPLAY= WAYLAND_DISPLAY= SPIKE_EVIDENCE_DIR=/tmp/playnite-spike-evidence \
+  dotnet run --project spikes/avalonia-headless/HeadlessSpike.csproj -c Release
+```
