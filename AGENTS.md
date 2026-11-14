@@ -16,17 +16,19 @@ oracle. New code is in `src/` (Phase 1 onward). Do not modify the Windows app.
    `tests/baseline.json`, or `docs/formal/` unless the task explicitly says `oracle-change`
    and a second reviewer approves. A porting change may not redefine correctness.
 3. **Do not weaken tests.** No `[Skip]`, `[Ignore]`, `--filter` exclusions, snapshot
-   re-acceptance, or deleting a failing test. Test and assertion counts must not fall.
+   re-acceptance, or deleting a failing test. Executed test cases must not fall; skips must stay zero.
 4. **No stubs.** No `TODO`, placeholder constants, `NotImplementedException` on a reachable
    path, or fake success. If it is not implemented, mark the parity row `deferred`.
 5. **No banned APIs outside the platform project:**
-   - `System.Windows.*`, `System.Drawing.*`, `Microsoft.Win32.*`
+   - `System.Windows.*` except `System.Windows.Input.ICommand` (cross-platform)
+   - `System.Drawing.*`, `Microsoft.Win32.*`
    - `System.Management`, `ServiceController`, `BinaryFormatter`, `Thread.Abort`
    - `DllImport`/`LibraryImport` outside `Playnite.Platform.Linux`
    - shell-string `Process.Start`; use argument lists.
 6. **Dependency direction** (see `docs/port/02-ARCHITECTURE.md`):
-   `SDK ← Core ← Desktop`; `Platform`/`Platform.Linux` below Core; `Desktop` never references
-   `Microsoft.Win32`.
+   `SDK.Abstractions ← Core ← Desktop`; `SDK` (Avalonia UI) references Abstractions;
+   `Platform`/`Platform.Linux` below Core; `Core`/`SDK.Abstractions` never reference Avalonia,
+   directly or transitively; `Desktop` never references `Microsoft.Win32`.
 7. **One unit, one commit.** Keep diffs reviewable. Update `docs/port/queue.tsv` and
    `docs/port/ledger.tsv` with the unit id and evidence.
 8. **No destructive git.** No `stash`, `reset --hard`, `clean -fdx`, `checkout -- .`, or

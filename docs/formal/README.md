@@ -7,8 +7,8 @@ because the fairness assumptions need to be refined per action; do not claim the
 
 | Model | Invariants checked | Status |
 | --- | --- | --- |
-| `LibraryImport.tla` | `SourceUnchanged`, `NoCommitWithoutVerify`, `AtomicLive`, `BackupBeforeWrite` | TLC: no error, 11 distinct states |
-| `GameSession.tla` | `OneSessionPerGame`, `NoOrphanProcess`; property `PlaytimeNonDecreasing` | TLC: no error, 400 distinct states (bounded playtime) |
+| `LibraryImport.tla` | `SourceUnchanged`, `NoCommitWithoutVerify`, `ReaderNeverPartial`, `AtomicLive`, `BackupBeforeWrite` | TLC: no error, 12 distinct states; concurrent reader action |
+| `GameSession.tla` | `OneSessionPerGame`, `NoOrphanProcess`; property `PlaytimeNonDecreasing` | TLC: no error, 400 distinct states (bounded playtime); design spec, not a falsifiable concurrency model |
 | `SettingsMigration.tla` | `OldFileUntouched`, `NoUnknownLoss`, `AtomicWrite`, `RollbackAvailable`, `BackupBeforeWrite` | TLC: no error, 11 distinct states |
 
 ## Run
@@ -28,11 +28,14 @@ scripts/formal/run_tlc.sh
 ## What the models do not cover
 
 - Data transformation correctness (that is the migration test corpus).
+- That the C# implementation matches the model; that is what the invariant-tagged tests are
+  for, and it is not a proof.
 - UI behaviour (that is the headless test suite).
 - WebKit, DB, or filesystem implementation details.
 - Liveness under real scheduling. `CancelTerminates` and `SessionTerminates` are stated in
   `GameSession.tla` as design intent; checking them needs per-action fairness that made the
-  two-game model intractable. A one-game refinement is a later task.
+  two-game model intractable. A one-game refinement is a later task. Do not claim liveness as
+  verified.
 
 ## Implementation linkage
 

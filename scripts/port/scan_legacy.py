@@ -49,6 +49,17 @@ WINDOWS_PATTERNS = [
 
 WPF_PATTERN = re.compile(r"System\.Windows|System\.Drawing")
 
+NON_WPF_WINDOWS_PATTERNS = [
+    re.compile(r"System\.Drawing"),
+    re.compile(r"Microsoft\.Win32"),
+    re.compile(r"System\.Management(?!\.Automation)"),
+    re.compile(r"ServiceController"),
+    re.compile(r"\bDllImport\b"),
+    re.compile(r"\bLibraryImport\b"),
+    re.compile(r"WindowsAPICodePack"),
+    re.compile(r"System\.Windows\.Forms"),
+]
+
 PACKAGE_RE = re.compile(
     r'<PackageReference\s+Include="([^"]+)"\s+[Vv]ersion="([^"]+)"', re.IGNORECASE
 )
@@ -93,6 +104,21 @@ def collect_project(project: str) -> dict:
         if any(pat.search(text) for pat in WINDOWS_PATTERNS):
             windows_files.append(str(p.relative_to(LEGACY)))
     wpf_files = [str(p.relative_to(LEGACY)) for p in cs if WPF_PATTERN.search(read_text(p))]
+    windows_only_files = []
+    drawing_files = []
+    wmi_files = []
+    powershell_files = []
+    for p in cs:
+        text = read_text(p)
+        rel = str(p.relative_to(LEGACY))
+        if any(pat.search(text) for pat in NON_WPF_WINDOWS_PATTERNS):
+            windows_only_files.append(rel)
+        if "System.Drawing" in text:
+            drawing_files.append(rel)
+        if "System.Management" in text or "ServiceController" in text:
+            wmi_files.append(rel)
+        if "System.Management.Automation" in text or "PowerShell" in text:
+            powershell_files.append(rel)
     test_attrs = Counter()
     for p in cs:
         for m in TEST_ATTR_RE.finditer(read_text(p)):
@@ -103,7 +129,11 @@ def collect_project(project: str) -> dict:
         "xaml_files": len(xaml) + len(axaml),
         "xaml_loc": xaml_loc,
         "windows_files": sorted(windows_files),
+        "windows_only_files": sorted(windows_only_files),
         "wpf_files": sorted(wpf_files),
+        "drawing_files": sorted(drawing_files),
+        "wmi_files": sorted(wmi_files),
+        "powershell_files": sorted(powershell_files),
         "test_attrs": dict(test_attrs),
     }
 
@@ -147,11 +177,29 @@ def collect_counts() -> dict:
     cs = list(iter_files(LEGACY, ".cs"))
     xaml = list(iter_files(LEGACY, ".xaml"))
     axaml = list(iter_files(LEGACY, ".axaml"))
+    tests = list(iter_files(LEGACY / "Tests", ".cs"))
+    test_text = "\n".join(read_text(p) for p in tests)
+    localization = LEGACY / "Playnite" / "Localization"
+    loc_source = localization / "LocSource.xaml"
+    loc_keys = 0
+    if loc_source.exists():
+        loc_keys = len(re.findall(r'x:Key="([^"]+)"', read_text(loc_source)))
+    language_files = 0
+    if localization.exists():
+        language_files = len([
+            p for p in localization.glob("*.xaml")
+            if p.name != "LocSource.xaml" and "_" in p.stem
+        ])
     return {
         "cs_files": len(cs),
         "cs_loc": sum(line_count(p) for p in cs),
         "xaml_files": len(xaml) + len(axaml),
         "xaml_loc": sum(line_count(p) for p in xaml + axaml),
+        "test_cases": len(re.findall(r"\[TestCase(?:Source)?\s*\(", test_text)),
+        "test_methods": len(re.findall(r"\[Test\]", test_text)),
+        "test_fixtures": len(re.findall(r"\[TestFixture\]", test_text)),
+        "localization_keys": loc_keys,
+        "language_files": language_files,
     }
 
 
@@ -174,6 +222,8 @@ def to_markdown(data: dict) -> str:
     c = data["counts"]
     out.append(f"- C#: **{c['cs_files']}** files, **{c['cs_loc']:,}** lines")
     out.append(f"- XAML/AXAML: **{c['xaml_files']}** files, **{c['xaml_loc']:,}** lines")
+    out.append(f"- Tests: **{c['test_methods']}** `[Test]` methods, **{c['test_cases']}** `[TestCase*]` attributes, **{c['test_fixtures']}** fixtures")
+    out.append(f"- Localisation: **{c['localization_keys']}** keys, **{c['language_files']}** language files")
     s = data["sdk"]
     out.append(f"- SDK: **{s['files']}** files, **{s['loc']:,}** lines, "
                f"**{s['interfaces']}** interfaces, **{s['public_types']}** public types")

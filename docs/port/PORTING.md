@@ -157,7 +157,7 @@ language/framework change makes implicit behaviour explicit; an unanswered row i
 
 | Banned | Why | Allowed |
 | --- | --- | --- |
-| `System.Windows.*` | WPF, Windows-only | None in the new app |
+| `System.Windows.*` | WPF, Windows-only | `System.Windows.Input.ICommand` only (cross-platform) |
 | `System.Drawing.*` | Windows-only in .NET 7+ | None |
 | `Microsoft.Win32.*` | Registry, Windows-only | None |
 | `DllImport`/`LibraryImport` | OS boundary | Only `Playnite.Platform.Linux` with a reviewed allow-list |

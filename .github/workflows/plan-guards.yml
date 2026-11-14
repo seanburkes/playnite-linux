@@ -8,6 +8,10 @@ on:
 permissions:
   contents: read
 
+env:
+  PROTECTED_PATHS: >-
+    legacy tests/golden tests/fixtures tests/baseline.json docs/formal oracle-lock
+
 jobs:
   inventory-and-parity:
     runs-on: ubuntu-latest
@@ -20,17 +24,23 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Legacy snapshot is immutable
-        if: github.event_name == 'pull_request'
+      - name: Oracle paths are immutable in a porting change
+        if: >-
+          github.event_name == 'pull_request' &&
+          !contains(github.event.pull_request.labels.*.name, 'oracle-change')
         run: |
-          git diff --name-only "${{ github.event.pull_request.base.sha }}" HEAD -- legacy
-          if [ -n "$(git diff --name-only "${{ github.event.pull_request.base.sha }}" HEAD -- legacy)" ]; then
-            echo "::error::legacy/ is the frozen oracle and must not change"
+          changed=$(git diff --name-only \
+            "${{ github.event.pull_request.base.sha }}" HEAD -- $PROTECTED_PATHS)
+          if [ -n "$changed" ]; then
+            echo "::error::Protected oracle paths changed. Use a separate oracle-change PR with a second reviewer."
+            printf '%s\n' "$changed"
             exit 1
           fi
 
-      - name: Inventory scanner still works
-        run: python3 scripts/port/scan_legacy.py --format json > /tmp/inventory.json
+      - name: Inventory is reproducible
+        run: |
+          python3 scripts/port/scan_legacy.py --format md > /tmp/inventory.md
+          diff -u docs/port/01-INVENTORY.generated.md /tmp/inventory.md
 
       - name: Parity ledger is valid
         run: python3 scripts/port/check_parity.py

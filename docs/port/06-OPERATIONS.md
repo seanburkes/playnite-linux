@@ -75,16 +75,20 @@ for a reviewer. The reviewer should use a different model from the implementer w
 
 The durable contract is a TSV, not a conversation.
 
-`docs/port/queue/<wave>.tsv`:
+`docs/port/queue.tsv` is the single queue (one row per unit):
 ```
-id	area	path	status	attempts	owner	oracle	test	notes
-w1-001	util	Playnite.Core/Common/StringExtensions.cs	todo	0	-	golden:StringExtensions	-	-
+id	wave	area	unit	depends	status	owner	oracle	test	notes
+p3-003	W3	leaves	JSON/YAML/TOML/INI helpers	p2-001	todo	core	golden:serialization	test:serialization	PILOT
 ```
 
 `docs/port/ledger.tsv` is the append-only status record:
 ```
 timestamp	unit	from	to	actor	evidence
 ```
+
+Wave numbers in the queue are offset from the phase numbers: W0 = planning, W1 = oracle,
+W2 = scaffolding, W3 = leaves, W4 = data, W5 = Steam/platform, W6 = core/SDK, W7 = UI,
+W8 = packaging, W9 = release. Do not use the phase number as the wave number.
 
 Rules:
 - One line per unit. Update status atomically before/after work.

@@ -46,14 +46,34 @@ printf 'tmux\n' > ~/src/firstmate/config/backend
 ```
 
 Current environment fact: the Herdr **server is not running** (`herdr status` shows only the
-client), so a firstmate launched now will not auto-detect Herdr. This is an environment fact,
-not a plan blocker.
+client). However, firstmate's bootstrap auto-detected a Herdr-app-projected terminal
+(`default:t14` carries a `herdr.space` label) and would spawn into the experimental `hc`
+backend with Herdr app presentation. That is a firstmate environment fact, not a port
+decision. Pin the backend explicitly if you want reproducible behaviour:
+
+```sh
+printf 'tmux\n' > ~/src/firstmate/config/backend   # or 'herdr' once its server is running
+```
 
 ## Missing tools
 
-Firstmate bootstrap checks for `treehouse`, `gh-axi`, `no-mistakes`, and related tools. It will
-offer to install missing tools; install only after the captain approves. `gh` is authenticated
-as `seanburkes`.
+Bootstrap detect-only currently reports:
+
+```text
+MISSING: treehouse
+MISSING: no-mistakes
+MISSING: gh-axi
+MISSING: chrome-devtools-axi
+MISSING: tasks-axi
+MISSING: quota-axi
+PRESENTATION_UNAVAILABLE: lavish-axi
+```
+
+`gh` is authenticated as `seanburkes`. Install only after the captain approves; the install
+commands are the ones bootstrap prints. `treehouse` is needed for the default worktree
+backend; `tasks-axi` is the default backlog backend; `no-mistakes` is only needed if the
+project moves to the `no-mistakes` posture. v1 can start with `local-only` + tmux and add tools
+as needed.
 
 ## When the GitHub repo exists
 

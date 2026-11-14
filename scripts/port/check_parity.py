@@ -15,12 +15,25 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 PARITY = ROOT / "docs" / "port" / "surface-parity.tsv"
+LEGACY_SOURCE = ROOT / "legacy" / "source"
 
 COLUMNS = [
     "id", "area", "surface", "v10_ref", "v1_status",
     "test_id", "oracle", "owner", "notes",
 ]
-STATUSES = {"planned", "ported", "adapted", "deferred", "out-of-scope-v1"}
+STATUSES = {
+    "planned", "ported", "adapted", "greenfield",
+    "deferred", "out-of-scope-v1", "removed",
+}
+
+
+def resolve_ref(ref: str) -> Path | None:
+    ref = ref.strip()
+    if ref in {"", "—", "-"}:
+        return None
+    if ref.startswith("legacy/"):
+        ref = ref[len("legacy/"):]
+    return LEGACY_SOURCE / ref
 
 
 def main() -> int:
@@ -48,14 +61,18 @@ def main() -> int:
         if status not in STATUSES:
             errors.append(f"line {lineno} ({rid}): bad status {status!r}")
 
-        if status in {"ported", "adapted"} and not row.get("test_id"):
+        if status in {"ported", "adapted", "greenfield"} and not row.get("test_id"):
             errors.append(f"line {lineno} ({rid}): {status} row has no test_id")
 
-        if status in {"deferred", "out-of-scope-v1"} and not row.get("notes"):
+        if status in {"deferred", "out-of-scope-v1", "removed"} and not row.get("notes"):
             errors.append(f"line {lineno} ({rid}): {status} row needs a reason in notes")
 
         if not row.get("owner"):
             errors.append(f"line {lineno} ({rid}): missing owner")
+
+        ref = resolve_ref(row.get("v10_ref", ""))
+        if ref is not None and not ref.exists():
+            errors.append(f"line {lineno} ({rid}): v10_ref does not exist: {ref.relative_to(ROOT)}")
 
     if errors:
         for e in errors:

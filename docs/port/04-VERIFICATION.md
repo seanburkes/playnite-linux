@@ -89,9 +89,11 @@ Columns:
 ```
 id  area  surface  v10_ref  v1_status  test_id  oracle  owner  notes
 ```
-`v1_status`: `ported`, `adapted`, `out-of-scope-v1`, `deferred`, `removed` (with reason).
-CI checks that every `ported`/`adapted` row has a non-empty `test_id` that exists, and that no
-row is silently deleted. A new public member without a row fails `PublicApiAnalyzers`.
+`v1_status`: `planned`, `ported`, `adapted`, `greenfield`, `deferred`, `out-of-scope-v1`, `removed` (with reason). `greenfield` means there is no v10 reference (Steam); it still needs a test id and oracle.
+CI checks that every `ported`/`adapted`/`greenfield` row has a non-empty `test_id`, that every
+non-placeholder `v10_ref` resolves under `legacy/source/`, and that no row is silently deleted.
+A new public member without a row fails `PublicApiAnalyzers`. Full test-file existence
+checking activates once the test projects exist (Phase 2).
 
 ### Layer 5 — Resource steady state
 
@@ -120,15 +122,15 @@ gate.
 
 ## 4. Meta-checks
 
-### 4.1 Test counts and assertions never fall
+### 4.1 Executed test cases never fall
 
-`tests/baseline.json` records, per project:
-- test count,
-- assertion count (via a Roslyn analyzer or a test-run hook),
-- skip count (must be zero),
-- coverage percentage (informational, not a gate at first).
+`tests/baseline.json` records, per project, the **executed case count from a JUnit result
+file** (not a regex over source), plus skip count (must be zero) and coverage percentage
+(informational at first). Assertion count is not a gate: neither xUnit nor NUnit exposes it
+reliably, and a loop can game it.
 
-A PR that lowers a count fails unless it carries an `oracle-change` label and a second
+The new-suite baseline is recorded at **Phase 2 exit**, not from the legacy suite. A PR that
+lowers the executed-case count fails unless it carries an `oracle-change` label and a second
 reviewer. Replaced tests must be replaced one-for-one or better.
 
 ### 4.2 Verify the harness itself
@@ -142,8 +144,9 @@ reviewer. Replaced tests must be replaced one-for-one or better.
 ### 4.3 Oracle independence
 
 Structural, not cultural:
-- `tests/`, `tests/fixtures/`, `tests/golden/`, `legacy/`, and `docs/formal/` are protected
-  paths.
+- `tests/`, `tests/fixtures/`, `tests/golden/`, `tests/baseline.json`, `legacy/`,
+  `docs/formal/`, and `oracle-lock/` are protected paths. CI diffs **all seven** on every PR;
+  CODEOWNERS names the oracle owner.
 - A porting PR that touches them fails unless labelled `oracle-change` and approved by a
   second owner.
 - There is no auto-accept/update-snapshot command in the repo. Regeneration is a separate
@@ -151,7 +154,10 @@ Structural, not cultural:
 - Escape hatches (`Skip`, `Explicit`, `[Ignore]`, category filters) are counted; a non-zero
   skip count fails.
 - The implementer cannot approve its own oracle change. With one human, the second reviewer
-  is a different agent/model with a diff-only prompt; the human signs the final gate.
+  is a different agent/model with a diff-only prompt; the human signs the final gate. Record
+  the residual risk: model independence is weaker than a second human. For an oracle change,
+  prefer a human external reviewer or a second machine/owner; if neither exists, the change is
+  `pass-with-exception` and is called out in the gate artifact.
 
 ## 5. Process-level differential harness
 
@@ -163,11 +169,15 @@ Linux CI:    playnite-cli export --library fixtures/v10 --out artifacts/new
 compare:     python3 scripts/verify/compare.py artifacts/old artifacts/new --mode bytes
 ```
 
-`legacy-oracle` is built from `legacy/` on Windows. It must not change the fixture. It can:
-- call legacy assemblies directly for pure functions;
-- drive the legacy app with a fixed data dir and CLI flags for app-level behaviour;
-- read LiteDB files and export a neutral JSONL;
+`legacy-oracle` is built from `legacy/` on Windows. It must not change the fixture. It is
+constrained to **existing v10 public APIs and raw bytes**:
+- call existing legacy assemblies for pure functions and emit raw output;
+- drive the legacy app with a fixed data dir and CLI flags;
 - run the v10 NUnit suite and emit a JUnit result file.
+
+It may **not** introduce a new export schema, re-serialise objects, normalise output, or
+"helpfully" sort/format. Otherwise the comparator tests two new implementations, not the old
+one.
 
 The new CLI exposes the same operations headlessly. Both write to a fixed clock, fixed temp
 paths, and redacted logs. The comparator is the only code allowed to interpret differences;
@@ -178,15 +188,17 @@ it has its own tests.
 Avalonia makes UI testable in ways WPF v10 was not:
 
 - **Headless rendering:** `Avalonia.Headless.XUnit` + Skia; render a view to a bitmap at fixed
-  size/DPI/theme/culture.
+  size/DPI/theme/culture. This is the screenshot gate; it uses neither X11 nor Wayland.
 - **Baseline screenshots:** checked in under `tests/golden/ui/`; pixel diff with a small
   tolerance for antialiasing; fail on layout/size changes beyond tolerance.
 - **Semantic tree assertions:** query the visual/logical tree for names, roles, text, enabled
   state, and focus order. More stable than pixels and better for accessibility.
 - **Interaction tests:** simulate keyboard/pointer input, assert ViewModel state and navigation.
 - **Theme matrix:** default dark/light, 100%/150% scaling, LTR/RTL for a few screens.
-- **Old-app screenshots:** a small set captured on Windows CI for human comparison; not a
-  pixel gate (WPF vs Avalonia rendering differs).
+- **Old-app screenshots:** a small set captured on Windows CI as **reference images only**,
+  for human comparison. They are not reproducible across DPI/theme/font/ClearType and are
+  never a pixel gate.
+- **X11/Wayland:** an app-launch and input smoke test, not a screenshot gate.
 
 Accessibility is a gate: every interactive control has an accessible name/role; tab order is
 tested for the main flows; high-contrast theme is smoke-tested.
@@ -216,20 +228,27 @@ Fuzzing (`SharpFuzz` + libFuzzer or AFL):
 
 ## 9. Formal models
 
-Three TLA+ models, checked by TLC in CI (nightly and on changes to `docs/formal/`):
+Three TLA+ models, checked by TLC in CI (nightly and on changes to `docs/formal/`). They are
+**safety models**: invariants over reachable states. Liveness is documented but not
+machine-checked in v1 (the per-action fairness assumptions need refinement). Do not claim
+liveness as verified.
 
 ### 9.1 `LibraryImport.tla`
-Invariants:
+The model writes to a temp database and atomically swaps; a concurrent reader must never see a
+partial live database. Invariants:
 - `SourceUnchanged`: the source path is never written.
 - `NoCommitWithoutVerify`: `state = Committed` implies verification passed.
-- `AtomicLive`: the live DB is either the old one or the fully verified new one.
+- `ReaderNeverPartial`: a reader sees `Old` or `New`, never a temp/partial database.
+- `BackupBeforeWrite`: a backup manifest exists before the first live write.
 - `OneImport`: at most one import runs at a time.
-- `BackupBeforeWrite`: a backup manifest exists before the first write.
 Crash recovery: from any state, a restart reaches `Committed` or `RolledBack`, never a partial
-live DB.
+live DB. This is the model that must be able to fail; a reader action is part of the state
+space.
 
-### 9.2 `GameSession.tla`
-Invariants:
+### 9.2 `GameSession.tla` (design spec)
+This model is a **design specification**, not a falsifiable concurrency model. Its safety
+invariants are useful for the implementation and tests, but several are re-established by every
+action; do not overclaim. Invariants:
 - `OneSessionPerGame`: no two active sessions for the same game id.
 - `StopOnlyFromRunning`: a stop request is valid only in `Running`.
 - `NoOrphanProcess`: every terminal state has released the tracked process handle.
@@ -246,8 +265,9 @@ Invariants:
 - `RollbackAvailable`: on failure, the old file remains usable.
 
 Each invariant has a C# test that cites it, e.g.
-`[Trait("Invariant", "LibraryImport.NoCommitWithoutVerify")]`. A model change requires an ADR
-and a test update in the same PR (oracle-change path).
+`[Trait("Invariant", "LibraryImport.ReaderNeverPartial")]`. A model change requires an ADR
+and a test update in the same PR (oracle-change path). The TLA+ result is evidence about the
+design, not a proof of the C# implementation.
 
 ## 10. CI gates (mechanical, cheap, layered)
 
@@ -259,7 +279,7 @@ and a test update in the same PR (oracle-change path).
 | Banned APIs | `System.Windows`, `Microsoft.Win32`, `DllImport` outside platform, `BinaryFormatter`, `Thread.Abort`, `AppDomain` | every PR |
 | Oracle guard | protected paths changed without label | every PR |
 | Golden diff | bytes differ | every PR |
-| Test counts | count/assertions fall or skips > 0 | every PR |
+| Test counts | executed cases fall or skips > 0 | every PR |
 | Public API | SDK surface removed/changed without an API report update | every PR |
 | Dependency audit | vulnerable/denied package, license change | every PR + nightly |
 | SBOM | missing/unsigned artifact | release |

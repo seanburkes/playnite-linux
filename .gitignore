@@ -16,3 +16,10 @@ docs/port/.cache/
 # TLC
 states/
 *.tla.out
+
+# Pinned oracle package (fetched, not vendored)
+oracle-lock/packages/
+
+# Python
+__pycache__/
+*.pyc

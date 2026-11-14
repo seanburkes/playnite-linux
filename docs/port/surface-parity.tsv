@@ -3,29 +3,29 @@ sdk-001	SDK	IPlayniteAPI	PlayniteSDK/IPlayniteAPI.cs	planned			core	Host API fac
 sdk-002	SDK	IDialogsFactory	PlayniteSDK/IDialogsFactory.cs	planned			core	Avalonia dialogs; v6 WPF types replaced
 sdk-003	SDK	IMainViewAPI	PlayniteSDK/IMainViewAPI.cs	planned			core	Avalonia dispatcher
 sdk-004	SDK	INotificationsAPI	PlayniteSDK/INotificationsAPI.cs	planned			core	Linux notifications
-sdk-005	SDK	IPlayniteSettingsAPI	PlayniteSDK/IPlayniteSettingsAPI.cs	planned			core	
+sdk-005	SDK	IPlayniteSettingsAPI	PlayniteSDK/IPlayniteSettingsAPI.cs	planned			core	-
 sdk-006	SDK	IWebView	PlayniteSDK/IWebView.cs	planned			core	New WebView abstraction
-sdk-007	SDK	IGameDatabaseAPI	PlayniteSDK/Database/IGameDatabaseAPI.cs	planned			core	
-sdk-008	SDK	LibraryPlugin contract	PlayniteSDK/Plugins/LibraryPlugin.cs	planned			core	
-sdk-009	SDK	MetadataPlugin contract	PlayniteSDK/Plugins/MetadataPlugin.cs	planned			core	
-sdk-010	SDK	GenericPlugin contract	PlayniteSDK/Plugins/Plugin.cs	planned			core	
-sdk-011	SDK	Models (Game, Platform, Genre, ...)	PlayniteSDK/Models	planned			core	201 public types; API compat report
-sdk-012	SDK	Events (game started/stopped, selection)	PlayniteSDK/Events	planned			core	
+sdk-007	SDK	IGameDatabaseAPI	PlayniteSDK/Database/IGameDatabaseAPI.cs	planned			core	-
+sdk-008	SDK	LibraryPlugin contract	PlayniteSDK/Plugins/LibraryPlugin.cs	planned			core	-
+sdk-009	SDK	MetadataPlugin contract	PlayniteSDK/Plugins/MetadataPlugin.cs	planned			core	-
+sdk-010	SDK	GenericPlugin contract	PlayniteSDK/Plugins/Plugin.cs	planned			core	-
+sdk-011	SDK	Models (Game, Platform, Genre, ...)	PlayniteSDK/Models	planned			core	225 public types; API compat report
+sdk-012	SDK	Events (game started/stopped, selection)	PlayniteSDK/Events	planned			core	-
 sdk-013	SDK	Menu/sidebar/top-panel items	PlayniteSDK/Plugins	planned			core	Avalonia controls
-sdk-014	SDK	SDK v6→v7 breaking-change report	legacy/source/PlayniteSDK	planned			core	ApiCompat
-sdk-015	SDK	Sample plugin (hello/library/metadata)	source/Tests/TestPlugin	planned			core	Compile + load
-core-001	Core	Game model and equality	PlayniteSDK/Models/Game.cs	planned			core	
-core-002	Core	DatabaseObject identity/timestamps	PlayniteSDK/Models/DatabaseObject.cs	planned			core	
+sdk-014	SDK	SDK v6→v7 breaking-change report	PlayniteSDK	planned			core	ApiCompat
+sdk-015	SDK	Sample plugin (hello/library/metadata)	Tests/TestPlugin	planned			core	Compile + load
+core-001	Core	Game model and equality	PlayniteSDK/Models/Game.cs	planned			core	-
+core-002	Core	DatabaseObject identity/timestamps	PlayniteSDK/Models/DatabaseObject.cs	planned			core	-
 core-003	Core	ItemCollection add/update/remove/events	Playnite/Database/Collections/ItemCollection.cs	planned			core	SQLite-backed
-core-004	Core	Buffered/batch updates	Playnite/Database/Collections/ItemCollection.cs	planned			core	
+core-004	Core	Buffered/batch updates	Playnite/Database/Collections/ItemCollection.cs	planned			core	-
 core-005	Core	GameDatabase open/close/corruption handling	Playnite/Database/GameDatabase.cs	planned			core	SQLite
-core-006	Core	GameDatabase filters/presets	Playnite/Database/GameDatabase_Filters.cs	planned			core	
+core-006	Core	GameDatabase filters/presets	Playnite/Database/GameDatabase_Filters.cs	planned			core	-
 core-007	Core	Library export/import	Playnite/Database	planned			core	v10 fixture
-core-008	Core	Settings model/defaults	Playnite/Settings/PlayniteSettings.cs	planned			core	
+core-008	Core	Settings model/defaults	Playnite/Settings/PlayniteSettings.cs	planned			core	-
 core-009	Core	Settings JSON round-trip	Playnite/Settings/PlayniteSettings.cs	planned			core	Newtonsoft 13
-core-010	Core	Settings migration/unknown preservation	legacy/source/Playnite/Settings	planned			core	v10 config.json
+core-010	Core	Settings migration/unknown preservation	Playnite/Settings	planned			core	v10 config.json
 core-011	Core	Manifest parsing (extension/theme)	Playnite/Manifests	planned			core	YamlDotNet 18
-core-012	Core	Serialization helpers (JSON/YAML/TOML/INI)	Playnite/Common/Serialization.cs	planned			core	
+core-012	Core	Serialization helpers (JSON/YAML/TOML/INI)	Playnite/Common/Serialization.cs	planned			core	-
 core-013	Core	Search/filter/sort/group	Playnite/Database/GameFieldComparer.cs	planned			core	property tests
 core-014	Core	Date/time and playtime formatting	Playnite/Common/Extensions	planned			core	culture matrix
 core-015	Core	Localisation keys/lookup	Playnite/Localization	planned			core	38 languages
@@ -35,24 +35,24 @@ core-018	Core	Diagnostics bundle	Playnite/Diagnostic.cs	planned			core	redaction
 core-019	Core	Logging (NLog)	Playnite/Settings/PlayniteSettings.cs	planned			core	line compatibility
 core-020	Core	Process starter/launch primitives	Playnite/Common/ProcessStarter.cs	planned			core	Linux launcher
 import-001	Import	Read v10 LiteDB 4 library	Playnite/Database/Collections/ItemCollection.cs	planned			import	isolated dependency
-import-002	Import	Copy source + backup manifest	legacy/source/Playnite/Backup.cs	planned			import	never write source
-import-003	Import	Transform + write SQLite	legacy/source/Playnite/Database	planned			import	
-import-004	Import	Verify counts/ids/assets	legacy/source/Playnite/Database	planned			import	invariant pairs
-import-005	Import	Atomic swap/rollback	legacy/source/Playnite/Database	planned			import	TLA+ model
-import-006	Import	Skip report for non-Steam rows	legacy/source/Playnite/Database	planned			import	explicit, not silent
-import-007	Import	Asset copy by hash	legacy/source/Playnite/Common/Images.cs	planned			import	
-steam-001	Steam	Find Steam roots (native/Flatpak)	—	planned			steam	XDG + STEAM_ROOT
-steam-002	Steam	Parse libraryfolders.vdf	—	planned			steam	fuzz
-steam-003	Steam	Parse appmanifest ACF	—	planned			steam	fuzz
-steam-004	Steam	Enumerate installed apps	—	planned			steam	
-steam-005	Steam	Detect Proton prefixes	—	planned			steam	
-steam-006	Steam	Artwork/librarycache/CDN	—	planned			steam	cache + rate limit
-steam-007	Steam	App details metadata	—	planned			steam	HTTP stub
-steam-008	Steam	Launch native game	—	planned			steam	steam -applaunch
-steam-009	Steam	Launch Proton game	—	planned			steam	same path
-steam-010	Steam	Session start/stop tracking	—	planned			steam	/proc tree; TLA+
-steam-011	Steam	Playtime recording	—	planned			steam	monotonic invariant
-steam-012	Steam	Manual stop tracking fallback	—	planned			steam	
+import-002	Import	Copy source + backup manifest	Playnite/Backup.cs	planned			import	never write source
+import-003	Import	Transform + write SQLite	Playnite/Database	planned			import	-
+import-004	Import	Verify counts/ids/assets	Playnite/Database	planned			import	invariant pairs
+import-005	Import	Atomic swap/rollback	Playnite/Database	planned			import	TLA+ model
+import-006	Import	Skip report for non-Steam rows	Playnite/Database	planned			import	explicit, not silent
+import-007	Import	Asset copy by hash	Playnite/Common/Images.cs	planned			import	-
+steam-001	Steam	Find Steam roots (native/Flatpak)	—	greenfield	test:steam-001	steam-spec/fixtures	steam	XDG + STEAM_ROOT
+steam-002	Steam	Parse libraryfolders.vdf	—	greenfield	test:steam-002	steam-spec/fixtures	steam	fuzz
+steam-003	Steam	Parse appmanifest ACF	—	greenfield	test:steam-003	steam-spec/fixtures	steam	fuzz
+steam-004	Steam	Enumerate installed apps	—	greenfield	test:steam-004	steam-spec/fixtures	steam	-
+steam-005	Steam	Detect Proton prefixes	—	greenfield	test:steam-005	steam-spec/fixtures	steam	-
+steam-006	Steam	Artwork/librarycache/CDN	—	greenfield	test:steam-006	steam-spec/fixtures	steam	cache + rate limit
+steam-007	Steam	App details metadata	—	greenfield	test:steam-007	steam-spec/fixtures	steam	HTTP stub
+steam-008	Steam	Launch native game	—	greenfield	test:steam-008	steam-spec/fixtures	steam	steam -applaunch
+steam-009	Steam	Launch Proton game	—	greenfield	test:steam-009	steam-spec/fixtures	steam	same path
+steam-010	Steam	Session start/stop tracking	—	greenfield	test:steam-010	steam-spec/fixtures	steam	/proc tree; TLA+
+steam-011	Steam	Playtime recording	—	greenfield	test:steam-011	steam-spec/fixtures	steam	monotonic invariant
+steam-012	Steam	Manual stop tracking fallback	—	greenfield	test:steam-012	steam-spec/fixtures	steam	-
 platform-001	Platform	XDG paths	—	planned			platform	IPaths
 platform-002	Platform	Open URL/folder via xdg-open	—	planned			platform	no shell
 platform-003	Platform	Single instance	—	planned			platform	Unix socket + lock
@@ -63,33 +63,35 @@ platform-007	Platform	Sleep inhibit	—	planned			platform	logind/systemd-inhibi
 platform-008	Platform	Screen info	—	planned			platform	X11/Wayland
 platform-009	Platform	Icon lookup	—	planned			platform	freedesktop + Steam
 platform-010	Platform	Image decode/cache	—	planned			platform	Magick/Skia
-platform-011	Platform	WebView (WebKitGTK/WPE)	—	planned			platform	Avalonia.Controls.WebView
+platform-011	Platform	WebView (WebKitGTK/WPE)	—	deferred			platform	v1.1 (ADR-019); Avalonia.Controls.WebView
 platform-012	Platform	Gamepad (SDL2)	—	deferred			platform	desktop navigation later
 platform-013	Platform	Secret store	—	planned			platform	libsecret or 0600 fallback
-ui-001	UI	App bootstrap/DI/logging	—	planned			ui	
-ui-002	UI	Main window/shell	DesktopApp/Windows/MainWindow.xaml	planned			ui	
-ui-003	UI	Sidebar/top panel	DesktopApp/Themes/Default/Views/Sidebar.xaml	planned			ui	
-ui-004	UI	Library grid	DesktopApp/Themes/Default/Views/LibraryGridView.xaml	planned			ui	
-ui-005	UI	Library list	DesktopApp/Themes/Default/Views/LibraryListView.xaml	planned			ui	
-ui-006	UI	Details view	DesktopApp/Themes/Default/Views/LibraryDetailsView.xaml	planned			ui	
-ui-007	UI	Search	DesktopApp/Windows/SearchWindow.xaml	planned			ui	
-ui-008	UI	Filters/sort/group	DesktopApp/Themes/Default/Views/FilterPanelView.xaml	planned			ui	
-ui-009	UI	Game edit	DesktopApp/Windows/GameEditWindow.xaml	planned			ui	
-ui-010	UI	Settings shell/sections	DesktopApp/Windows/SettingsWindow.xaml	planned			ui	essential sections first
-ui-011	UI	First-run/import wizard	DesktopApp/Windows/FirstTimeStartupWindow.xaml	planned			ui	
-ui-012	UI	Progress/dialogs	DesktopApp/Windows/ProgressWindow.xaml	planned			ui	
-ui-013	UI	Notifications panel	DesktopApp/Themes/Default/Views/NotificationPanel.xaml	planned			ui	
-ui-014	UI	Tray menu	DesktopApp/Controls	planned			ui	
-ui-015	UI	Default theme (functional)	DesktopApp/Themes/Desktop/Default	planned			ui	not pixel parity
-ui-016	UI	Localisation	DesktopApp/Localization	planned			ui	reuse keys
-ui-017	UI	Keyboard shortcuts	DesktopApp	planned			ui	
+ui-001	UI	App bootstrap/DI/logging	—	planned			ui	-
+ui-002	UI	Main window/shell	Playnite.DesktopApp/Windows/MainWindow.xaml	planned			ui	-
+ui-003	UI	Sidebar/top panel	Playnite.DesktopApp/Themes/Desktop/Default/Views/Sidebar.xaml	planned			ui	-
+ui-004	UI	Library grid	Playnite.DesktopApp/Themes/Desktop/Default/Views/LibraryGridView.xaml	planned			ui	-
+ui-005	UI	Library list	Playnite.DesktopApp/Themes/Desktop/Default/Views/LibraryListView.xaml	planned			ui	-
+ui-006	UI	Details view	Playnite.DesktopApp/Themes/Desktop/Default/Views/LibraryDetailsView.xaml	planned			ui	-
+ui-007	UI	Search	Playnite.DesktopApp/Windows/SearchWindow.xaml	planned			ui	-
+ui-008	UI	Filters/sort/group	Playnite.DesktopApp/Themes/Desktop/Default/Views/FilterPanelView.xaml	planned			ui	-
+ui-009	UI	Game edit	Playnite.DesktopApp/Windows/GameEditWindow.xaml	planned			ui	-
+ui-010	UI	Settings shell/sections	Playnite.DesktopApp/Windows/SettingsWindow.xaml	planned			ui	essential sections first
+ui-011	UI	First-run/import wizard	Playnite.DesktopApp/Windows/FirstTimeStartupWindow.xaml	planned			ui	-
+ui-012	UI	Progress/dialogs	Playnite.DesktopApp/Windows/ProgressWindow.xaml	planned			ui	-
+ui-013	UI	Notifications panel	Playnite.DesktopApp/Themes/Desktop/Default/Views/NotificationPanel.xaml	planned			ui	-
+ui-014	UI	Tray menu	Playnite.DesktopApp/Controls	planned			ui	-
+ui-015	UI	Default theme (functional)	Playnite.DesktopApp/Themes	planned			ui	not pixel parity
+ui-016	UI	Localisation	Playnite/Localization	planned			ui	reuse keys
+ui-017	UI	Keyboard shortcuts	Playnite.DesktopApp	planned			ui	-
 ui-018	UI	Accessibility names/roles	—	planned			ui	headless assertions
-ui-019	UI	Fullscreen shell	FullscreenApp	out-of-scope-v1			fullscreen	fast-follow
-ui-020	UI	Emulation UI	DesktopApp/Windows/EmulatorsWindow.xaml	out-of-scope-v1			emulation	out of v1 scope (ADR-008)
-ui-021	UI	Add-on store/browser	DesktopApp/Windows/AddonsWindow.xaml	out-of-scope-v1			addons	v1.1; ADR-006
-pack-001	Packaging	AppImage x64/ARM64	—	planned			release	
-pack-002	Packaging	Flatpak x64/ARM64	—	planned			release	
-pack-003	Packaging	Desktop entry/icons/MIME	—	planned			release	
-pack-004	Packaging	SBOM/checksums/provenance	—	planned			release	
-pack-005	Packaging	Diagnostics/crash bundle	—	planned			release	
+ui-019	UI	Fullscreen shell	Playnite.FullscreenApp	out-of-scope-v1			fullscreen	fast-follow
+ui-020	UI	Emulation UI	Playnite.DesktopApp/Windows/EmulatorsWindow.xaml	out-of-scope-v1			emulation	out of v1 scope (ADR-008)
+ui-021	UI	Add-on store/browser	Playnite.DesktopApp/Windows/AddonsWindow.xaml	out-of-scope-v1			addons	v1.1; ADR-006
+pack-001	Packaging	AppImage x64/ARM64	—	planned			release	-
+pack-002	Packaging	Flatpak x64/ARM64	—	planned			release	-
+pack-003	Packaging	Desktop entry/icons/MIME	—	planned			release	-
+pack-004	Packaging	SBOM/checksums/provenance	—	planned			release	-
+pack-005	Packaging	Diagnostics/crash bundle	—	planned			release	-
 pack-006	Packaging	Self-updater	—	out-of-scope-v1			release	v1.1; manual download in v1
+sdk-016	SDK	SDK Abstractions (models, events, non-UI contracts)	PlayniteSDK	planned		api-compat	sdk	ADR-018; Avalonia-free
+sdk-017	SDK	SDK UI extension points (Avalonia)	PlayniteSDK/Plugins	planned		api-compat	sdk	ADR-023; freeze after shell pilot

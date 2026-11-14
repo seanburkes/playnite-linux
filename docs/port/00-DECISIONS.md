@@ -36,13 +36,16 @@ upstream v10.64.
 ## ADR-002 — Target `net11.0` (STS), pin SDK 11.0.100
 
 **Context.** .NET 11 shipped 2026-11-10 as a Standard Term Support release (supported to
-2028-11-14). .NET 10 is LTS. The request is explicitly ".NET 11".
+2028-11-14). .NET 10 is LTS and currently has the same end-of-support date. The request is
+explicitly ".NET 11".
 
 **Decision.** All new projects target `net11.0` and pin `11.0.100` in `global.json` with
 `rollForward: latestPatch`. Use C# 15.
 
 **Consequences.**
-- We accept a shorter support window and a planned upgrade to the next LTS.
+- The support end date is the same as .NET 10 LTS today; the real trade-off is STS release
+  cadence, newer-tooling risk, and a planned upgrade to the next LTS. It is not a shorter
+  support window.
 - Package versions must support `net11.0`; Avalonia 12 supports .NET 8+ and is validated on
   .NET 10/11.
 - We do not multi-target unless a concrete consumer needs it. A second TFM doubles CI and
@@ -55,24 +58,24 @@ upstream v10.64.
 
 ---
 
-## ADR-003 — Avalonia 12 with the official WebView
+## ADR-003 — Avalonia 12; WebView deferred to v1.1
 
 **Context.** 68k lines of XAML and 275 XAML files are WPF. Avalonia is the closest XAML model
 with mature Linux support. Avalonia 12.1.6 is current; `Avalonia.Controls.WebView` 12.1.2 is
 official and uses WebView2 (Windows), WKWebView (macOS), WebKitGTK/WPE (Linux).
 `Avalonia.HtmlRenderer` 12.0.0 covers simple HTML descriptions without a browser process.
 
-**Decision.** Build the desktop shell on Avalonia 12. Use `Avalonia.Controls.WebView` behind
-an `IWebView` abstraction; WebKitGTK is the baseline, WPE is optional. Use
-`Avalonia.HtmlRenderer` for non-interactive descriptions where it is sufficient.
+**Decision.** Build the desktop shell on Avalonia 12. Use `Avalonia.HtmlRenderer` for the
+v1 description surface. Keep `IWebView` in the SDK, with `Avalonia.Controls.WebView`
+(WebKitGTK baseline, WPE optional) as the v1.1 engine (ADR-019). v1 does not ship a browser
+engine dependency.
 
 **Consequences.**
 - WPF controls, behaviours, converters, resource dictionaries, and themes need Avalonia
   equivalents. This is the largest single workstream.
-- CefSharp is removed. Chromium-specific rendering quirks in metadata scraping must be
-  re-tested against WebKit.
-- `NativeWebView` on Linux prefers WPE when installed and falls back to WebKitGTK. Ubuntu does
-  not package WPE, so WebKitGTK is the must-pass path; WPE is an optimisation.
+- CefSharp is removed. v1 has no JavaScript-capable scraper; Steam metadata uses HTTP/JSON.
+- v1.1's `NativeWebView` on Linux prefers WPE when installed and falls back to WebKitGTK.
+  Ubuntu does not package WPE, so WebKitGTK is the must-pass path; WPE is an optimisation.
 - UI tests run headless with Avalonia.Headless + Skia.
 
 **Rejected.**
@@ -136,9 +139,10 @@ exporter), never by the application.
 **Context.** The v6 SDK is `net462` + WPF. Existing plugin binaries cannot load on Linux, and
 WPF types do not exist. The plugin ecosystem is a major reason Playnite exists.
 
-**Decision.** Ship `Playnite.SDK` v7 targeting `net11.0` and Avalonia. Preserve the v6 API
-shape for models, events, library/metadata contracts, and host services. Replace UI extension
-points with Avalonia types. Provide a migration guide, sample plugins, and an API-compatibility
+**Decision.** Ship `Playnite.SDK` v7 targeting `net11.0`, split into Avalonia-free
+`Playnite.SDK.Abstractions` and an Avalonia UI layer (ADR-018). Preserve the v6 API shape for
+models, events, library/metadata contracts, and host services. Replace UI extension points with
+Avalonia types. Provide a migration guide, sample plugins, and an API-compatibility
 report. Do not promise binary compatibility or a WPF shim.
 
 **Consequences.**
@@ -186,12 +190,15 @@ once would make the first release unbounded.
 - Avalonia **desktop** shell.
 - **Steam** library discovery and launch (native + Proton via Steam).
 - v10 library import (Steam games and user metadata preserved).
-- Settings, search, filters, grid/list/details, game launch, notifications, tray.
-- New SDK v7 preview + one sample plugin.
-- x64 + ARM64 AppImage + Flatpak.
+- Settings, search, filters, grid/list/details, game edit, game launch, notifications, tray.
+- v10 library import with a clear transport/fresh-install path (ADR-021).
+- Localisation key reuse and a partial-locale report (ADR-022).
+- New SDK Abstractions + UI preview + one sample plugin.
+- x64 + ARM64 AppImage + Flatpak (Flatpak must launch and track Steam; ADR-020).
 
 Out of v1: fullscreen shell, emulation, non-Steam launchers (Heroic/Lutris/itch), add-on
-store, metadata provider plugins, controller-first UI, HDR, Windows compatibility.
+store, metadata provider plugins, controller-first/gamepad UI, WebView/JavaScript metadata
+(v1.1), HDR, Windows compatibility.
 
 **Consequences.**
 - The architecture must still support these as plugins/frontends; scope is deferred, not
@@ -265,19 +272,23 @@ WPF/Win32 reappears in "temporary" helpers.
 **Decision.** Enforce this dependency direction:
 
 ```
-Playnite.SDK  ←  Playnite.Core  ←  Playnite.Desktop
-                       ↑
-                Playnite.Platform  ←  Playnite.Platform.Linux
-                       ↑
-                Playnite.Steam / Playnite.LegacyImport
+Playnite.SDK.Abstractions  ←  Playnite.Core  ←  Playnite.Desktop
+        ↑                           ↑
+Playnite.SDK (Avalonia UI)     Playnite.Platform  ←  Playnite.Platform.Linux
+                                    ↑
+                          Playnite.Steam / Playnite.LegacyImport (separate exec)
 ```
 
 Rules:
-- `Playnite.Core` may not reference Avalonia, `System.Windows`, `System.Drawing`,
-  `Microsoft.Win32`, or `DllImport`.
-- `Playnite.Platform.Linux` is the only project allowed OS-specific P/Invoke.
-- `Playnite.Desktop` may reference Avalonia and Core, never `Microsoft.Win32`.
+- `Playnite.Core` references `Playnite.SDK.Abstractions` only. It may not reference Avalonia,
+  `System.Windows` (except `ICommand`), `System.Drawing`, `Microsoft.Win32`, or `DllImport`.
+- `Playnite.SDK.Abstractions` may not reference Avalonia, Platform, Win32, or Core.
 - `Playnite.SDK` may reference Avalonia types at UI extension points, never platform APIs.
+- `Playnite.Platform.Linux` is the only project allowed OS-specific P/Invoke. It may reference
+  Avalonia base/control types for inherently UI-shaped platform services (tray, screens,
+  web view); it may not reference Desktop.
+- `Playnite.Desktop` may reference Avalonia, Core, SDK, and Platform, never
+  `Microsoft.Win32`.
 - Tests may reference anything.
 
 Enforcement: `BannedApiAnalyzers`, `NetArchTest`/`ArchUnitNET`, and a CI grep gate.
@@ -327,7 +338,8 @@ launch. Defer bespoke animations, custom chrome, and pixel parity.
 **Consequences.**
 - Faster path to a usable release; visual polish is a separate, parallel workstream.
 - Theme authors get a simpler reference theme.
-- Screenshot tests use layout/semantic assertions first, pixel tolerance later.
+- Headless Skia screenshot tests use layout/semantic assertions first, pixel tolerance later.
+  Old-app screenshots are reference images only.
 
 **Rejected.**
 - *Pixel parity v1.* Delays the port and couples it to WPF rendering quirks.
@@ -344,13 +356,14 @@ equivalents, is a multi-release effort.
 
 **Decision.** Implement Steam discovery and launch in the app (not as a plugin) for v1.
 Design the library-provider interface so other sources can be added as plugins later.
-Manual/local/emulation libraries are out of v1 scope.
+Manual/local/emulation libraries are out of v1 scope. Steam is a **greenfield subsystem**
+(ADR-017), not a v10 port: the v10 Steam plugin is not in this repository.
 
 **Consequences.**
 - v1 is aimed at the large Steam-on-Linux audience, including Steam Deck.
-- The importer preserves non-Steam games from a v10 library as read-only metadata? **No** —
-  v1 imports only Steam-linked games plus user metadata attached to them. Non-Steam rows are
-  reported as skipped, not silently dropped.
+- v1 imports only Steam-linked games plus user metadata attached to them. Non-Steam rows are
+  reported as `skipped` with a reason, not silently dropped. A user whose library is mostly
+  GOG/Epic will see those rows missing from v1; the migration report says so before commit.
 - Heroic/Lutris/itch are post-v1 plugins or built-ins.
 - Metadata enrichment is limited to Steam's public app details in v1; IGDB comes later.
 
@@ -366,15 +379,18 @@ Manual/local/emulation libraries are out of v1 scope.
 goldens and the ability to run the old test suite.
 
 **Decision.** Add a Windows CI workflow that builds `legacy/` with .NET Framework MSBuild,
-runs the NUnit suite, and executes a headless oracle harness that exports/serialises fixture
-data. Store goldens in `tests/golden/`. Local Windows is a convenience, not a requirement.
+runs the NUnit suite, and executes an oracle harness that calls **existing v10 public APIs**
+and emits raw bytes — no new export format, no re-serialisation, no normalisation. Store
+goldens in `tests/golden/`. Pin `Playnite.Deps` by SHA-256 (see `oracle-lock/`). Local Windows
+is a convenience, not a requirement.
 
 **Consequences.**
 - CI must handle COM references (`IWshRuntimeLibrary`), the GAC PowerShell reference, and the
-  `Playnite.Deps` NuGet feed.
-- GUI screenshots are captured only for a small, stable set of screens; most goldens are
-  data/HTTP/log level.
-- The oracle harness is versioned with the frozen snapshot.
+  `Playnite.Deps` feed. A feed outage is an oracle outage; the checksum-pinned fallback is
+  documented in `oracle-lock/README.md`.
+- GUI screenshots are **reference images only**, not pixel gates. They are not reproducible on
+  a hosted runner across DPI/theme/font/ClearType.
+- The oracle harness is versioned with the frozen snapshot and constrained to existing APIs.
 
 **Rejected.**
 - *Local Windows VM only.* Not reproducible for future contributors.
@@ -402,3 +418,188 @@ harness.
 **Rejected.**
 - *One agent in one worktree.* Too slow for the UI and platform tracks.
 - *Unsupervised fan-out.* Build contention and merge conflicts; the doctrine is explicit.
+
+---
+
+## ADR-017 — Steam is a new subsystem, not a port
+
+**Context.** Playnite v10's Steam library is a separate built-in plugin, not part of the
+`legacy/` source. There is no v10 Steam discovery, ACF/VDF parser, Proton detection, launch,
+or session tracker to compare against. The plan originally labelled Steam work as a port.
+
+**Decision.** Treat Steam as a **greenfield subsystem** with its own specification and oracle:
+
+- recorded real-world artifacts: `libraryfolders.vdf`, `appmanifest_*.acf`, `shortcuts.vdf`,
+  `librarycache` images, and a captured HTTP corpus for app details;
+- a synthetic fixture corpus checked in, plus a redacted fixture captured from a real install;
+- acceptance on a real Steam install (native + Proton) as a release gate;
+- no claim of v10 behavioural parity for Steam rows; the parity ledger marks them
+  `greenfield` with a spec/test reference, not a `v10_ref`.
+
+**Consequences.**
+- Steam gets an explicit spec and estimate, not a borrowed "port" estimate.
+- The fixture corpus is the oracle; it must be captured before the implementation.
+- Steam bugs are new-product bugs, not port regressions, but they still block release.
+
+**Rejected.**
+- *Find and port the v10 Steam plugin source.* It is not in this repository and depends on
+  Windows APIs; vendoring it would not help Linux.
+- *Treat Steam as out of scope.* Then v1 has no library source.
+
+---
+
+## ADR-018 — Split the SDK into Avalonia-free abstractions and an Avalonia UI layer
+
+**Context.** `Playnite.Core` must not depend on Avalonia, but it needs the SDK's models and
+non-UI contracts. If the SDK references Avalonia, Core transitively does too, and the
+"Core has no Avalonia" rule is false. `BannedApiAnalyzers` checks API use, not transitive
+references.
+
+**Decision.** Split:
+
+- `Playnite.SDK.Abstractions` — models, events, non-UI interfaces, `IDataSerializer`,
+  library/metadata contracts, versioning. **No Avalonia, no platform APIs.**
+- `Playnite.SDK` — the UI extension points (`PluginUserControl`, dialogs, main view, web view,
+  menu items) and Avalonia types. References Abstractions.
+
+`Playnite.Core` references **Abstractions only**. `Playnite.Desktop` references both. Plugin
+authors reference `Playnite.SDK` (which brings Abstractions transitively).
+
+**Consequences.**
+- The dependency graph is enforceable: Core cannot see Avalonia even transitively.
+- The v6→v7 API report is split into "abstractions" (strong compatibility claim) and "UI
+  extension points" (adapted, documented breaking changes).
+- More projects and a slightly more complex package graph; worth it for a real boundary.
+
+**Rejected.**
+- *Core references the SDK and we rely on analyzers.* Transitive Avalonia leaks.
+- *Move all models into Core and have the SDK reference Core.* Inverts the plugin contract;
+  plugins would depend on app internals.
+
+---
+
+## ADR-019 — WebView is v1.1; v1 uses HTML rendering and HTTP
+
+**Context.** v1 has no metadata plugins, no add-on store, and Steam metadata is fetched over
+HTTP. The only v1 HTML need is game descriptions. WebKitGTK/WPE is the most fragile host
+dependency (Ubuntu lacks WPE, Flatpak runtime coupling, offscreen rendering variance), and it
+was the largest packaging risk in the plan.
+
+**Decision.** Keep WebKitGTK/WPE as the chosen engine for `IWebView`, but **defer the WebView
+service and offscreen scraping to v1.1**. v1 uses `Avalonia.HtmlRenderer` for non-interactive
+descriptions and plain HTTP for metadata. The `IWebView` abstraction remains in the SDK so
+plugins can target it later.
+
+**Consequences.**
+- v1 packaging does not require `webkit2gtk-4.1`/`libsoup-3` or a WPE runtime.
+- The Phase 1 WebView spike becomes a bounded feasibility study, not a gate.
+- Metadata scraping that requires JavaScript is out of v1; Steam's JSON API is the v1 path.
+- v1.1 adds WebView with a real consumer (metadata plugins / auth flows).
+
+**Rejected.**
+- *Ship WebView in v1 with no consumer.* Adds the largest dependency and test matrix for a
+  feature nothing in v1 calls.
+
+---
+
+## ADR-020 — Flatpak launches and observes Steam through the host
+
+**Context.** A Flatpak sandbox cannot see the host's `steam` binary on `PATH` or observe host
+processes as children. The plan originally granted filesystem access and assumed `/proc`
+tracking would work. That is false, and `--filesystem=home` is also a Flathub review problem.
+
+**Decision.**
+- Launch host Steam with `flatpak-spawn --host steam -applaunch <appid>` (and
+  `flatpak-spawn --host xdg-open` for URLs).
+- Session tracking uses the host PID namespace via `flatpak-spawn --host` probes, or a small
+  host-side helper if PID visibility is insufficient. The decision is recorded as part of the
+  Phase 5 spike.
+- Request the narrowest filesystem permissions that work: Steam library paths via
+  `--filesystem` entries or portals, not `home` by default.
+- Gate 5 requires launch **and** session tracking to work inside the Flatpak build, not just
+  reading the library.
+
+**Consequences.**
+- Flatpak is a first-class target, not an afterthought.
+- The host helper is an extra binary and a security surface; it must be minimal and audited.
+- AppImage remains the simplest path; Flatpak may ship slightly later if the helper is needed.
+
+**Rejected.**
+- *Assume `/proc` works inside the sandbox.* It does not for host processes.
+- *Require `--filesystem=home`.* Broad permission, Flathub review risk.
+
+---
+
+## ADR-021 — The importer is a separate process; v1 has an explicit transport story
+
+**Context.** ADR-005 promised LiteDB 4 is never in the application, but the first-run wizard is
+a Desktop feature. A project reference is not isolation, and a Windows-library-to-Linux path
+was unspecified.
+
+**Decision.**
+- `Playnite.LegacyImport` is a **separate executable** with a schema-only handoff (neutral
+  JSONL/zip + assets). Desktop invokes it as a subprocess and never references LiteDB.
+- v1 supports:
+  - copy from a mounted Windows partition / USB / SMB path chosen by the user;
+  - a one-way migration with backup and report;
+  - a fresh install with no v10 library (Steam-only setup).
+- Windows path settings are rewritten to Linux equivalents where a mapping is obvious;
+  otherwise preserved in a `legacy` bag and reported as unmapped.
+- The importer is sandbox-friendly: it reads a path, writes a temp output dir, and exits.
+
+**Consequences.**
+- Desktop never ships LiteDB; the importer can be audited and fuzzed separately.
+- The wizard has a clear "source library" step and a "no library" path.
+- A user with no Windows machine can start fresh from Steam.
+
+**Rejected.**
+- *Reference the importer from Desktop.* Ships the CVE-bearing reader in the main app.
+- *Require a Windows export step.* Blocks Steam Deck and fresh Linux users.
+
+---
+
+## ADR-022 — Localisation reuses the v10 key set, with a migration report
+
+**Context.** v10 has 1,134 localisation keys and 35 language files. The plan treated this as a
+small Phase 3 bullet. It is a real workstream and a product decision.
+
+**Decision.**
+- Preserve the v10 key names and English source strings.
+- Load existing translations where the key exists; report missing/changed keys.
+- v1 ships English plus whatever existing translations map cleanly; no machine translation is
+  shipped without review.
+- A locale can be marked `partial` in the UI; do not silently fall back without a report.
+
+**Consequences.**
+- Translators can reuse Crowdin work.
+- The key migration is mechanical and testable (key-set diff, placeholder validation).
+- Some locales will be partial at v1; that is visible, not hidden.
+
+**Rejected.**
+- *New key scheme.* Breaks translation reuse for no user benefit.
+- *Drop non-English locales in v1.* Unnecessary loss; the keys are reusable.
+
+---
+
+## ADR-023 — SDK UI surface freezes after the shell pilot; compatibility is scoped
+
+**Context.** The SDK's UI extension points describe Avalonia shapes the shell has not designed
+yet. Freezing them in Phase 6, before Phase 7, guarantees churn. "Source-compatible" against
+zero third-party plugins is a claim without a corpus.
+
+**Decision.**
+- Freeze `Playnite.SDK.Abstractions` early (Phase 3/4), because models and non-UI contracts
+  are stable.
+- Freeze `Playnite.SDK` UI extension points at the **end of Phase 7**, after the shell pilot
+  and the first real views exist.
+- The compatibility claim is scoped: "abstractions are API-compatible (ApiCompat report);
+  UI extension points are adapted with a documented migration guide." Do not claim proven
+  source compatibility for arbitrary third-party plugins until a named corpus of real plugins
+  compiles.
+- Build a corpus of at least three representative v10 plugin sources (one library, one
+  metadata, one UI-heavy generic) as part of v1.1, not v1.
+
+**Consequences.**
+- Less SDK churn; the UI informs the contract.
+- v1 ships a preview SDK with honest claims.
+- The add-on ecosystem migration is a post-v1 project.

@@ -15,10 +15,11 @@
 └───────┬───────────────────────────────┬──────────────────────┘
         │                               │
 ┌───────▼──────────────┐      ┌─────────▼──────────────────────┐
-│ Playnite.SDK (v7)    │      │ Playnite.Platform              │
-│  Plugin contracts    │      │  IPaths, IProcessLauncher, ... │
-│  Models, events      │      │  Linux implementation          │
-│  Avalonia UI points  │      │  (XDG, proc, tray, webview)    │
+│ Playnite.SDK         │      │ Playnite.Platform              │
+│  Abstractions:       │      │  IPaths, IProcessLauncher, ... │
+│   models, events,    │      │  Linux implementation          │
+│   non-UI contracts   │      │  (XDG, proc, tray, screens)    │
+│  UI: Avalonia points │      │                                │
 └──────────────────────┘      └────────────────────────────────┘
         │
 ┌───────▼──────────────┐      ┌────────────────────────────────┐
@@ -29,24 +30,33 @@
 ```
 
 `Playnite.Cli` is a headless host over Core for acceptance tests, migration, diagnostics, and
-CI. It is not a user-facing product, but it is what makes process-level oracles cheap.
+CI. `Playnite.LegacyImport` is a separate executable: Desktop invokes it and consumes a
+neutral schema/asset directory, so LiteDB is never linked into the app.
 
 ## 2. Projects and dependency rules
 
 | Project | TFM | May reference | Must not reference |
 | --- | --- | --- | --- |
-| `Playnite.SDK` | `net11.0` | Avalonia (UI contracts only) | Platform, Win32, Core |
-| `Playnite.Core` | `net11.0` | SDK, Microsoft.Data.Sqlite, Dapper, Newtonsoft.Json, YamlDotNet, NLog | Avalonia, System.Windows, System.Drawing, Microsoft.Win32, DllImport |
-| `Playnite.Platform` | `net11.0` | Core, SDK | Avalonia controls, Win32 |
-| `Playnite.Platform.Linux` | `net11.0` | Platform, Core | Desktop |
+| `Playnite.SDK.Abstractions` | `net11.0` | nothing UI/platform | Avalonia, Platform, Win32, Core |
+| `Playnite.SDK` | `net11.0` | Abstractions, Avalonia (UI contracts only) | Platform, Win32, Core |
+| `Playnite.Core` | `net11.0` | Abstractions, Microsoft.Data.Sqlite, Dapper, Newtonsoft.Json, YamlDotNet, NLog | Avalonia, `System.Windows`, `System.Drawing`, `Microsoft.Win32`, `DllImport` |
+| `Playnite.Platform` | `net11.0` | Core, Abstractions | Desktop |
+| `Playnite.Platform.Linux` | `net11.0` | Platform, Core, Avalonia (platform UI services only) | Desktop |
 | `Playnite.Steam` | `net11.0` | Core, Platform | Desktop |
-| `Playnite.LegacyImport` | `net11.0` | Core, LiteDB 4.1.4 (isolated) | Desktop |
+| `Playnite.LegacyImport` | `net11.0` exec | LiteDB 4.1.4, neutral schema | Core, Desktop, SDK |
 | `Playnite.Desktop` | `net11.0` | Core, SDK, Platform, Steam, Avalonia | Microsoft.Win32, `DllImport` |
 | `Playnite.Cli` | `net11.0` | Core, Platform, Steam, LegacyImport | Desktop |
 | Tests | `net11.0` | anything | — |
 
 Enforced by `BannedApiAnalyzers` + architecture tests. A project reference that violates the
 graph fails CI before a human sees it.
+
+**Avalonia rule, precisely:** `Playnite.SDK.Abstractions` and `Playnite.Core` may not reference
+Avalonia at all. `Playnite.Platform`/`Playnite.Platform.Linux` may reference Avalonia base and
+control types where a platform service is inherently UI-shaped (tray, screens, web view);
+`Playnite.Desktop` owns the views. `System.Windows.Input.ICommand` is the sole allowed
+`System.Windows` type because it is cross-platform; every other `System.Windows` type is
+banned.
 
 ## 3. Core modules
 
@@ -98,7 +108,11 @@ Rules:
   half-written live database.
 - Non-Steam games are reported as `skipped` with a reason; they are not silently dropped.
 
-### 3.4 Steam
+### 3.4 Steam (greenfield subsystem)
+
+Steam is **not a v10 port**: the v10 Steam implementation lives in a separate built-in plugin
+that is not in `legacy/`. This subsystem has its own spec and oracle (recorded real artifacts
+plus a real-install acceptance test), not a v10 behavioural reference.
 
 Discovery is pure and testable:
 - Locate roots: `STEAM_ROOT`, `~/.steam/steam`, `~/.local/share/Steam`,
@@ -122,6 +136,8 @@ Metadata:
 - v1 uses Steam's public app details endpoint with a local cache and a rate limiter.
 - Failures degrade to name/artwork from the ACF/library cache.
 - Provider abstraction is in place for IGDB/others later.
+- The v1 description view uses `Avalonia.HtmlRenderer`; JavaScript-rendered pages and the
+  `IWebView` service are v1.1 (ADR-019).
 
 ### 3.5 Settings
 
@@ -132,6 +148,9 @@ settings. Migration:
 - Write a new settings file atomically, keeping the v10 file untouched.
 - Unknown properties are preserved in a `legacy` bag, not discarded.
 - Secrets (API keys, cookies) go to the platform secret store, not plain JSON, if present.
+- Windows path settings (install dirs, backups, extension paths, database path) are rewritten
+  to Linux equivalents where a mapping is obvious; otherwise they are preserved in the
+  `legacy` bag and reported as unmapped. Silent path rewriting is forbidden.
 
 ### 3.6 Search, filter, sort
 
@@ -167,7 +186,7 @@ public interface IGameSessionTracker {
     Task TrackAsync(IGameProcess process, SessionOptions options, CancellationToken ct);
 }
 
-public interface IWebViewFactory { IWebView CreateOffscreen(WebViewOptions options); IWebView CreateEmbedded(WebViewOptions options); }
+public interface IWebViewFactory { IWebView CreateOffscreen(WebViewOptions options); IWebView CreateEmbedded(WebViewOptions options); } // v1.1
 public interface IImageService { Task<ImageHandle> LoadAsync(string path, int decodeWidth, CancellationToken ct); }
 public interface IIconService { Task<ImageHandle?> GetIconAsync(string appOrFile, CancellationToken ct); }
 public interface INotificationService { Task ShowAsync(Notification notification, CancellationToken ct); }
@@ -192,8 +211,10 @@ Linux implementations:
 - `systemd-inhibit`/logind for sleep inhibition.
 - X11/Wayland screen enumeration; no HDR in v1.
 - Freedesktop icon theme lookup; Steam artwork for Steam games.
-- WebKitGTK/WPE through Avalonia WebView.
-- SDL2 for gamepad; no global hotkeys in v1 on Wayland (portal limitations documented).
+- WebKitGTK/WPE through Avalonia WebView is v1.1 (ADR-019). v1 uses `Avalonia.HtmlRenderer`
+  and HTTP for descriptions/metadata.
+- SDL2 for gamepad is deferred; no global hotkeys in v1 on Wayland (portal limitations
+  documented).
 
 ## 5. UI architecture
 
@@ -212,8 +233,10 @@ Linux implementations:
   off the UI thread; cache with size limits.
 - **Theme:** `ThemeManager` loads `.axaml` dictionaries from the built-in theme and optional
   user theme directories. Theme API version is checked. No WPF XAML loader.
-- **Localisation:** port `LocSource.xaml` keys into Avalonia resource dictionaries or a
-  generated strongly typed accessor. Keep the same key names so translations can be reused.
+- **Localisation:** preserve the v10 key names (1,134 keys, 35 language files) and the English
+  source strings. Load existing translations where keys match; report missing/changed keys.
+  v1 ships English plus cleanly mapped translations; partial locales are marked as such
+  (ADR-022).
 - **Accessibility:** AutomationProperties, keyboard navigation, focus order, high contrast.
   Headless tests assert names/roles for key controls.
 - **Fullscreen fast-follow:** shared ViewModels; a separate shell with 10-foot layout, gamepad
@@ -277,10 +300,14 @@ Design rules:
 
 - **AppImage:** self-contained `linux-x64`/`linux-arm64`; includes .NET runtime, managed
   assemblies, native libs, default theme, localisation.
-- **Flatpak:** `org.playnite.PlayniteLinux` (final ID TBD); runtime with WebKitGTK/WPE or
-  bundled; permissions: `--share=network`, `--socket=wayland`, `--socket=fallback-x11`,
-  `--device=input`, `--filesystem=home` (or portals for game libraries), `--talk-name=org.freedesktop.Notifications`.
-  Steam library access requires host filesystem permission; document the tradeoff.
+- **Flatpak:** final ID `io.github.seanburkes.PlayniteLinux` (or the captain's chosen
+  namespace). v1 uses `--share=network`, `--socket=wayland`, `--socket=fallback-x11`,
+  `--device=input`, `--talk-name=org.freedesktop.Notifications`, and narrow `--filesystem`
+  entries for Steam library paths. **Host launch and process observation use
+  `flatpak-spawn --host`; `/proc` inside the sandbox cannot see host Steam processes**
+  (ADR-020). A minimal host helper is allowed only if `flatpak-spawn` cannot provide PID
+  visibility. `--filesystem=home` is not a default. Gate 5 requires launch + session tracking
+  inside the Flatpak build.
 - **Updates:** v1 is manual download. A self-updater (AppImage zsync / Flatpak remote) is a
   later project. No silent updater in v1.
 - **Crash reporting:** local logs + a diagnostics bundle; no automatic upload.
@@ -291,5 +318,18 @@ Design rules:
 - Fullscreen/Steam Deck UI.
 - Emulation, non-Steam launchers, add-on store, metadata plugins.
 - Binary plugin compatibility or WPF theme compatibility.
+- WebView/JavaScript-rendered metadata (v1.1; ADR-019).
 - HDR, global hotkeys on Wayland, streaming, cloud sync.
 - Redesign of Playnite's data model or information architecture.
+
+## 10. Import UX and library transport
+
+v1 supports three entry paths:
+1. **Existing v10 library on a mounted Windows partition / USB / SMB path**: the user picks the
+   source directory; the importer copies it, migrates, verifies, and reports.
+2. **Existing v10 library copied to Linux**: same flow, no Windows required at migration time.
+3. **Fresh install**: no v10 library; discover Steam and start.
+
+The wizard never writes to the source. It shows a summary of imported/skipped/unmapped rows
+and keeps the source path for rollback. A user with no Windows machine is a first-class path,
+not an error.

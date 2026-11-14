@@ -8,7 +8,7 @@ in [`01-INVENTORY.generated.md`](01-INVENTORY.generated.md).
 
 | Project | C# files | C# LOC | XAML files | XAML LOC | Notes |
 | --- | ---: | ---: | ---: | ---: | --- |
-| `Playnite` (core) | 300 | 77,841 | 40 | 48,061 | Includes 38 localisation dictionaries |
+| `Playnite` (core) | 300 | 77,841 | 40 | 48,061 | Includes 37 localisation files, 1,134 keys |
 | `PlayniteSDK` | 83 | 14,967 | 0 | 0 | 225 public types, 26 interfaces |
 | `Playnite.DesktopApp` | 150 | 28,104 | 154 | 14,482 | 33 windows, 33 control views |
 | `Playnite.FullscreenApp` | 71 | 10,287 | 66 | 4,892 | 21 windows, 6 control views |
@@ -63,16 +63,16 @@ fast-follow.
 | Signal | Count | Where |
 | --- | ---: | --- |
 | Core files referencing `System.Windows` / `System.Drawing` | 134 of 300 | converters, behaviours, controls, ViewModels, imaging |
-| Files with P/Invoke or Windows-only APIs | 70 | core, desktop, fullscreen |
+| Files with P/Invoke or Windows-only APIs (excluding WPF-only files) | 72 | core, desktop, fullscreen, tests |
 | Native interop files | 17 | `Playnite/Native/*` |
 | Registry use | 4 files | settings, system integration, PowerShell detection |
 | COM interop | 20 files | shell, WMI, Windows API Code Pack |
-| `System.Management` (WMI) | 6 files | installed programs, process info |
+| `System.Management` (WMI) / `ServiceController` | 8 files | installed programs, process info |
 | `ServiceController` | 1 file | service integration |
-| `System.Drawing` | 43 files | icons, screenshots, image conversion |
+| `System.Drawing` | 46 files | icons, screenshots, image conversion |
 | Windows Forms | core + shells | tray icon, dialogs, screen APIs |
 | SDL2 P/Invoke | 6 files | controller input |
-| PowerShell 5.1 | 16 files | script extensions, module loading |
+| PowerShell 5.1 / Automation | 21 files | script extensions, module loading |
 
 The Win32 surface clusters into a small number of capabilities: **files/paths, processes,
 windows/screens, icons/images, registry/WMI, services, power, shell, clipboard, single
@@ -85,7 +85,7 @@ instance, protocol handler, tray/notifications, input.** That is the platform in
 | Game library | LiteDB 4, one `.db` per collection (`games.db`, `platforms.db`, …) | Copy, one-way migrate to SQLite |
 | Settings | JSON via Newtonsoft, `config.json` | Deserialize with v10-compatible settings; migrate |
 | Add-on manifests | YAML (`extension.yaml`, `theme.yaml`) | Reuse parser with YamlDotNet 18 |
-| Localisation | 38 XAML `ResourceDictionary` files | Port keys to Avalonia dictionaries/resources |
+| Localisation | 37 language files + `LocSource.xaml` (1,134 keys) | Port keys to Avalonia dictionaries/resources |
 | Game controller DB | `gamecontrollerdb.txt` | Reuse; SDL2 mapping format |
 | Emulator definitions | YAML (`Platforms.yaml`, `Regions.yaml`, `Emulation/*.yaml`) | Out of v1 scope; keep files for later |
 | Themes | WPF `ResourceDictionary` XAML | New Avalonia theme format |
@@ -106,7 +106,7 @@ There are no `[TestCase]`/`[TestCaseSource]` attributes in the snapshot, so the 
 count is close to 204. There is **no** end-to-end suite, no UI automation, no golden corpus,
 no property-based testing, no fuzzing, and no coverage gate.
 
-At ~204 tests for 143k LOC, the existing suite is an **inner-loop** oracle, not a port oracle.
+At ~204 test methods (82 parameterised cases) for 143k LOC, the existing suite is an **inner-loop** oracle, not a port oracle.
 It cannot prove omission or cross-process behaviour. The parity ledger and the frozen app are
 therefore load-bearing (see [`04-VERIFICATION.md`](04-VERIFICATION.md)).
 

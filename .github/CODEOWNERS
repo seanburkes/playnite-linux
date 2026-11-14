@@ -1,0 +1,8 @@
+# Oracle and plan ownership. A porting change may not approve its own oracle change.
+legacy/                    @seanburkes
+tests/golden/              @seanburkes
+tests/fixtures/            @seanburkes
+tests/baseline.json        @seanburkes
+docs/formal/               @seanburkes
+oracle-lock/               @seanburkes
+docs/port/surface-parity.tsv @seanburkes

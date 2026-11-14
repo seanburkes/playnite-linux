@@ -25,6 +25,7 @@ and `net11.0` assemblies cannot coexist in one process.
 | [`05-DEPENDENCIES.md`](05-DEPENDENCIES.md) | What replaces every v10 package, and what are the risks? |
 | [`06-OPERATIONS.md`](06-OPERATIONS.md) | How do agents, worktrees, review, and firstmate run this? |
 | [`07-FIRSTMATE.md`](07-FIRSTMATE.md) | What was actually configured, and how do I launch it? |
+| [`08-STEAM-SPEC.md`](08-STEAM-SPEC.md) | What exactly is the greenfield Steam subsystem, and what is its oracle? |
 | [`PORTING.md`](PORTING.md) | What are the coding rules for every ported unit? |
 | [`RISKS.md`](RISKS.md) | What can kill this, and what is the mitigation? |
 | [`PORT-STATUS.md`](PORT-STATUS.md) | Where are we right now? |
@@ -44,8 +45,8 @@ Formal models live in [`../formal/`](../formal/). Deterministic inventory toolin
    then Steam discovery, then platform services, then the Avalonia shell.
 4. **Cut over per surface, not per file.** A feature is "ported" only when its public surface
    row has a passing acceptance test, a golden, and a ledger entry.
-5. **Ratchet.** Test count and assertion count never fall. Skip count stays zero. Oracle paths
-   are protected. Shim/legacy-reference count only falls.
+5. **Ratchet.** Executed test cases never fall; skip count stays zero; oracle paths are
+   protected. Shim/legacy-reference count only falls.
 6. **Release continuously.** Nightly AppImage and Flatpak from the first runnable shell; a
    pre-release channel before the first stable.
 

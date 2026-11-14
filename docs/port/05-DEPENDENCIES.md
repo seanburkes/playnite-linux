@@ -10,19 +10,19 @@ Versions are the current stable lines observed on 2026-11-13. Pin exact versions
 | Avalonia | — | UI | **Avalonia** | 12.1.6 | Core UI; Skia renderer |
 | Avalonia.Desktop | — | App host | **Avalonia.Desktop** | 12.1.6 | |
 | Avalonia.Themes.Fluent | — | Base theme | **Avalonia.Themes.Fluent** | 12.1.6 | We layer a functional default theme on it |
-| Avalonia.Controls.DataGrid | — | Grid view | **Avalonia.Controls.DataGrid** | 12.1.x | Official package |
-| Avalonia.Controls.WebView | — | Embedded browser | **Avalonia.Controls.WebView** | 12.1.2 | Official; WebKitGTK/WPE on Linux |
+| Avalonia.Controls.DataGrid | — | Grid view | **Avalonia.Controls.DataGrid** | 12.1.2 | Official package |
+| Avalonia.Controls.WebView | — | Embedded browser | **Avalonia.Controls.WebView** | 12.1.2 | **v1.1 only** (ADR-019); WebKitGTK/WPE on Linux |
 | Avalonia.HtmlRenderer | — | Description HTML | **Avalonia.HtmlRenderer** | 12.0.0 | Official; use for non-interactive HTML |
 | Avalonia.Headless.XUnit | — | UI tests | **Avalonia.Headless.XUnit** | 12.1.6 | Headless render + input |
 | Prism.Core / Prism.Wpf | 6.3.0 | Referenced but **unused** in code | **Remove** | — | No Prism references found |
 | CommonServiceLocator | 1.3 | Unused | **Remove** | — | |
-| Expression.Blend.Sdk | 1.0.2 | WPF behaviours | **Remove** | — | Avalonia.Xaml.Behaviors instead |
-| Microsoft.Xaml.Behaviors.Wpf | 1.1.39 | WPF behaviours | **Avalonia.Xaml.Behaviors** | 11.3.0.6 | Verify Avalonia 12 compatibility before pinning |
+| Expression.Blend.Sdk | 1.0.2 | WPF behaviours | **Remove** | — | Local Avalonia behaviours |
+| Microsoft.Xaml.Behaviors.Wpf | 1.1.39 | WPF behaviours | **Local behaviours** | — | `Avalonia.Xaml.Behaviors` has no Avalonia 12 line; do not pin an Avalonia-11 package |
 | Hardcodet.NotifyIcon.Wpf | 1.0.8 | Tray icon | **Avalonia TrayIcon** | in-box | Linux StatusNotifierItem/AppIndicator |
 | VirtualizingWrapPanel | 2.5.4 | Grid virtualization | **ItemsRepeater + UniformGridLayout** | in-box | Or a maintained Avalonia virtualizing wrap panel; benchmark first |
 | MathConverter | 2.2.1 | XAML math | **Remove / local converter** | — | |
 | LargeAddressAware | 1.0.6 | x86 address space | **Remove** | — | x64/ARM64 only |
-| CefSharp.OffScreen / Wpf | 152.0.100 | Chromium | **Avalonia.Controls.WebView** | 12.1.2 | WebKitGTK baseline; WPE optional; no CEF |
+| CefSharp.OffScreen / Wpf | 152.0.100 | Chromium | **Avalonia.Controls.WebView** | 12.1.2 | v1.1; WebKitGTK baseline; WPE optional; no CEF |
 | AngleSharp | 0.9.9 | HTML parsing | **AngleSharp** | 1.10.3 | Upgrade; API changes |
 | HtmlRenderer / HtmlRenderer.WPF | via Deps | HTML render | **Avalonia.HtmlRenderer** | 12.0.0 | WPF version cannot run |
 | LiteDB | 4.1.4 | Library storage | **Microsoft.Data.Sqlite + Dapper** | 11.0.0 / 2.1.89 | One-way migration; LiteDB 4 only in importer |
@@ -36,11 +36,11 @@ Versions are the current stable lines observed on 2026-11-13. Pin exact versions
 | NLog | 4.7.6 | Logging | **NLog** | 6.2.2 | Keep log format; config changes |
 | Flurl | 2.7.1 | HTTP | **HttpClient / Microsoft.Extensions.Http** | 11.0.0 | Remove Flurl; use a typed client |
 | Polly | 5.1.0 | Retry | **Polly** | 8.9.1 | Resilience pipelines; API rewrite |
-| protobuf-net | 2.0.0.668 | Serialization | **protobuf-net** | 3.4.40 | Check whether still used; likely drop |
+| protobuf-net | 2.0.0.668 | Serialization | **Remove** | — | No code references; drop |
 | NSec.Cryptography | 20.2.0 | Ed25519 signatures | **NSec.Cryptography** | 26.4.0 | Cross-platform libsodium; updater only |
 | CommandLineParser | 2.8.0 | CLI | **System.CommandLine** or keep | 2.9.1 / 2.0 | Choose one; no shell parsing |
 | Crc32.NET | 1.2.0 | CRC | **System.IO.Hashing** | in-box | `Crc32` |
-| DynamicLanguageRuntime | 1.2.1 | Unused? | **Remove** | — | Verify no `Microsoft.Scripting` use |
+| DynamicLanguageRuntime | 1.2.1 | One stray `Microsoft.Scripting` using | **Remove** | — | Delete the using; no runtime use |
 | System.Buffers / Memory / Numerics.Vectors / Unsafe / ValueTuple / Tasks.Extensions / RuntimeInformation | various | Framework backports | **Remove** | — | In-box on net11 |
 | System.IO.Abstractions | 2.1.0.227 | Testable FS | **System.IO.Abstractions** | 23.0.0 | Upgrade, or use temp dirs; API changes |
 | System.IO.Abstractions.TestingHelpers | 2.1.0.227 | Test FS | **same** | 23.0.0 | |
@@ -58,8 +58,7 @@ Versions are the current stable lines observed on 2026-11-13. Pin exact versions
 | PublicApiAnalyzers | — | SDK surface | **Microsoft.CodeAnalysis.PublicApiAnalyzers** | latest | |
 | ApiCompat | — | v6→v7 report | **Microsoft.DotNet.ApiCompat.Tool** | latest | CI report |
 | Microsoft.PowerShell.SDK | GAC 5.1 | Script plugins | **Microsoft.PowerShell.SDK** | 7.7.0 | Cross-platform `pwsh`; not v1 required |
-| Tmds.DBus | — | Notifications/tray | **Tmds.DBus.Protocol** | latest | If not using Avalonia tray/notify |
-| Tmds.DBus.Protocol | — | D-Bus | latest | | |
+| Tmds.DBus.Protocol | — | Notifications/tray | **Tmds.DBus.Protocol** | 0.95.2 | Only if Avalonia tray/notification APIs are insufficient |
 
 ## 2. Removed without replacement
 
@@ -73,7 +72,7 @@ Versions are the current stable lines observed on 2026-11-13. Pin exact versions
 | MathConverter | Trivial local converter |
 | WindowsAPICodePack | Linux platform services |
 | Playnite.Deps | Split into source packages |
-| CefSharp.* | Avalonia WebView |
+| CefSharp.* | Avalonia WebView (v1.1) |
 | Magick.NET-Q8-x86 | Replace with AnyCPU |
 | Magick.NET.SystemWindowsMedia | Windows-only codec path |
 | PhotoSauce.MagicScaler | WIC/Windows-only |
@@ -87,7 +86,7 @@ Versions are the current stable lines observed on 2026-11-13. Pin exact versions
 | Need | Linux choice | Packaging | ARM64 | Notes |
 | --- | --- | --- | --- | --- |
 | Rendering | Skia (Avalonia) | bundled by Avalonia | yes | |
-| Web view | WebKitGTK 4.1 + libsoup 3; WPE optional | Flatpak runtime/bundled | distro-dependent | Ubuntu no WPE; WebKitGTK needs XWayland for embedded |
+| Web view | WebKitGTK 4.1 + libsoup 3; WPE optional | v1.1 only | distro-dependent | Not a v1 dependency (ADR-019); Ubuntu no WPE; WebKitGTK needs XWayland for embedded |
 | SQLite | `SQLitePCLRaw` bundled by Microsoft.Data.Sqlite | bundled | yes | Use bundled `e_sqlite3` |
 | Images | Magick.NET-Q8-AnyCPU | bundled native libs | verify | Covers/convert; no WIC |
 | Gamepad | SDL2 2.x | system or bundled | yes | `Silk.NET.SDL` or `SDL2-CS` |

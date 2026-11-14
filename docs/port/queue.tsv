@@ -1,5 +1,5 @@
 id	wave	area	unit	depends	status	owner	oracle	test	notes
-p0-001	W0	plan	ADRs and inventory	-	done	captain	legacy/	-	16 ADRs; generated inventory
+p0-001	W0	plan	ADRs and inventory	-	done	captain	legacy/	-	23 ADRs; generated inventory
 p0-002	W0	plan	Plan review	-	todo	captain	-	-	gate to Phase 1
 p0-003	W0	repo	Create public repo + first commit	p0-002	todo	captain	-	-	seanburkes/playnite-linux
 p0-004	W0	repo	Firstmate project registration	p0-003	todo	captain	-	-	local-only until origin
@@ -8,7 +8,7 @@ p1-002	W1	oracle	Oracle harness v0 (settings/manifests)	p1-001	todo	oracle	golde
 p1-003	W1	oracle	Fixture v10 library + Steam root	p1-001	todo	oracle	fixtures	-	synthetic only
 p1-004	W1	oracle	UI screenshot baseline	p1-001	todo	oracle	screens	-	few stable screens
 p1-005	W1	spike	LiteDB 4 read on net11	p1-003	todo	core	spike	-	fallback Windows exporter
-p1-006	W1	spike	WebKitGTK/WPE offscreen	p1-002	todo	platform	spike	-	Ubuntu/Fedora/Arch
+p1-006	W1	spike	WebView feasibility (v1.1)	p1-002	todo	platform	spike	-	not a v1 gate; WebKitGTK/WPE
 p1-007	W1	spike	Steam process tracking	p1-003	todo	steam	spike	-	native + Proton
 p1-008	W1	spike	Avalonia headless screenshot	p1-002	todo	ui	spike	-	a11y tree too
 p2-001	W2	scaffold	Solution/projects/props	p1-001	todo	core	-	build	no warnings
@@ -58,3 +58,10 @@ p8-004	W8	hard	Fuzz/security review	p5-001,p4-002	todo	oracle	fuzz	test:security
 p8-005	W8	hard	Diagnostics/redaction	p7-001	todo	core	smoke	test:diag	
 p9-001	W9	release	Pre-release soak	p8-001,p8-002	todo	captain	-	-	7 days
 p9-002	W9	release	v1 release	p9-001	todo	captain	-	-	notes/migration guide
+p1-009	W1	steam	Steam spec + real artifact corpus	p1-003	todo	steam	steam-spec/fixtures	test:steam-spec	greenfield; ADR-017
+p2-006	W2	scaffold	SDK Abstractions project + PublicAPI	p2-001	todo	sdk	api-compat	build	ADR-018
+p3-009	W3	leaves	Localisation key migration (1,134 keys)	p3-001	todo	ui	golden:loc	test:loc	ADR-022; 37 files
+p7-009	W7	ui	Import transport/fresh-install wizard	p4-002,p7-002	todo	ui	screens	test:ui	ADR-021
+p8-006	W8	pack	Flatpak host launch/tracking	p5-008,p8-002	todo	release	manual	test:pack	flatpak-spawn --host; ADR-020
+p8-007	W8	sdk	Freeze SDK UI extension points	p7-001,p6-004	todo	sdk	api-compat	test:sdk	ADR-023; after shell pilot
+p8-008	W8	sdk	WebView service (v1.1)	p8-007	todo	platform	http-stub	test:webview	ADR-019; not v1

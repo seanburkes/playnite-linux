@@ -1,11 +1,12 @@
 ---------------- MODULE LibraryImport ----------------
 \* Formal model for the v10 -> SQLite library migration.
 \*
-\* The implementation must preserve these invariants:
-\*   SourceUnchanged, NoCommitWithoutVerify, AtomicLive, BackupBeforeWrite.
+\* The implementation writes a temp database, verifies it, then atomically
+\* swaps the live database. A concurrent reader must never observe a partial
+\* live database.
 \*
-\* The model is intentionally small: it captures the ordering and crash
-\* recovery that matter, not the data transformation itself.
+\* The model is intentionally small: it captures the ordering, the atomic
+\* swap, and crash recovery that matter, not the data transformation itself.
 EXTENDS Naturals
 
 VARIABLES
@@ -14,9 +15,11 @@ VARIABLES
     sourceHash,     \* constant identity of the source library
     backupExists,   \* backup manifest written before any live write
     verified,       \* verification passed
-    liveDb          \* "Old" | "Partial" | "New"
+    liveDb,         \* "Old" | "New"
+    tempDb,         \* "None" | "Partial" | "Verified"
+    readerSees      \* last value a concurrent reader observed
 
-vars == <<state, sourceHash, backupExists, verified, liveDb>>
+vars == <<state, sourceHash, backupExists, verified, liveDb, tempDb, readerSees>>
 
 Init ==
     /\ state = "Idle"
@@ -24,6 +27,8 @@ Init ==
     /\ backupExists = FALSE
     /\ verified = FALSE
     /\ liveDb = "Old"
+    /\ tempDb = "None"
+    /\ readerSees = "Old"
 
 Start ==
     /\ state = "Idle"
@@ -31,47 +36,54 @@ Start ==
     /\ backupExists' = FALSE
     /\ verified' = FALSE
     /\ liveDb' = "Old"
+    /\ tempDb' = "None"
+    /\ readerSees' = "Old"
     /\ UNCHANGED <<sourceHash>>
 
 Copy ==
     /\ state = "Copying"
     /\ state' = "Reading"
     /\ backupExists' = TRUE
-    /\ UNCHANGED <<sourceHash, verified, liveDb>>
+    /\ UNCHANGED <<sourceHash, verified, liveDb, tempDb, readerSees>>
 
 Read ==
     /\ state = "Reading"
     /\ state' = "Writing"
-    /\ UNCHANGED <<sourceHash, backupExists, verified, liveDb>>
+    /\ UNCHANGED <<sourceHash, backupExists, verified, liveDb, tempDb, readerSees>>
 
 Write ==
     /\ state = "Writing"
     /\ state' = "Verifying"
-    /\ liveDb' = "Partial"
-    /\ UNCHANGED <<sourceHash, backupExists, verified>>
+    /\ tempDb' = "Partial"
+    /\ UNCHANGED <<sourceHash, backupExists, verified, liveDb, readerSees>>
 
 VerifyPass ==
     /\ state = "Verifying"
+    /\ tempDb = "Partial"
     /\ state' = "Committed"
     /\ verified' = TRUE
+    /\ tempDb' = "Verified"
     /\ liveDb' = "New"
-    /\ UNCHANGED <<sourceHash, backupExists>>
+    /\ UNCHANGED <<sourceHash, backupExists, readerSees>>
 
 VerifyFail ==
     /\ state = "Verifying"
     /\ state' = "Failed"
-    /\ UNCHANGED <<sourceHash, backupExists, verified, liveDb>>
+    /\ tempDb' = "None"
+    /\ UNCHANGED <<sourceHash, backupExists, verified, liveDb, readerSees>>
 
 Fail ==
     /\ state \in {"Copying", "Reading", "Writing"}
     /\ state' = "Failed"
-    /\ UNCHANGED <<sourceHash, backupExists, verified, liveDb>>
+    /\ tempDb' = "None"
+    /\ UNCHANGED <<sourceHash, backupExists, verified, liveDb, readerSees>>
 
 Rollback ==
     /\ state = "Failed"
     /\ state' = "RolledBack"
     /\ liveDb' = "Old"
-    /\ UNCHANGED <<sourceHash, backupExists, verified>>
+    /\ tempDb' = "None"
+    /\ UNCHANGED <<sourceHash, backupExists, verified, readerSees>>
 
 Reset ==
     /\ state \in {"Committed", "RolledBack"}
@@ -79,11 +91,18 @@ Reset ==
     /\ backupExists' = FALSE
     /\ verified' = FALSE
     /\ liveDb' = "Old"
-    /\ UNCHANGED <<sourceHash>>
+    /\ tempDb' = "None"
+    /\ UNCHANGED <<sourceHash, readerSees>>
+
+\* A reader can observe the live database at any time.
+ReadLive ==
+    /\ readerSees' = liveDb
+    /\ UNCHANGED <<state, sourceHash, backupExists, verified, liveDb, tempDb>>
 
 Next ==
     \/ Start \/ Copy \/ Read \/ Write
     \/ VerifyPass \/ VerifyFail \/ Fail \/ Rollback \/ Reset
+    \/ ReadLive
 
 Spec == Init /\ [][Next]_vars /\ WF_vars(Next)
 
@@ -95,11 +114,13 @@ SourceUnchanged == sourceHash = "v10-fixture"
 \* A committed database implies verification passed.
 NoCommitWithoutVerify == state = "Committed" => verified
 
-\* Observers never see a partial live database in an idle/terminal state.
-AtomicLive ==
-    state \in {"Idle", "Committed", "RolledBack"} => liveDb \in {"Old", "New"}
+\* A concurrent reader never sees a partial database.
+ReaderNeverPartial == readerSees \in {"Old", "New"}
 
-\* A backup exists before the first write to the live database.
+\* The live database is only ever the old one or the verified new one.
+AtomicLive == liveDb \in {"Old", "New"}
+
+\* A backup exists before the first live write / verification.
 BackupBeforeWrite ==
     state \in {"Writing", "Verifying", "Committed"} => backupExists
 

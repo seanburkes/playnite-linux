@@ -4,7 +4,7 @@ Scored: likelihood × impact, 1–5 each. Owner is the role that must act, not t
 
 | # | Risk | L | I | Score | Mitigation | Trigger / early warning |
 | --- | --- | ---: | ---: | ---: | --- | --- |
-| R1 | **Thin oracle**: 204 tests for 143k LOC; UI untested | 5 | 5 | 25 | Phase 1 goldens + process-level differential + parity ledger; do not start bulk porting before they exist | A unit cannot be compared to v10 without a manual side-by-side |
+| R1 | **Thin oracle**: 204 test methods for 143k LOC; UI untested | 5 | 5 | 25 | Phase 1 goldens + process-level differential + parity ledger; do not start bulk porting before they exist | A unit cannot be compared to v10 without a manual side-by-side |
 | R2 | **UI port is the long pole**: 68k XAML, 275 files, WPF-specific behaviours | 5 | 4 | 20 | Functional default theme; desktop only; reuse ViewModels; pilot 3 views; buy/borrow a mature Avalonia theme if needed | A single view takes >1 week or needs custom control rewrites |
 | R3 | **Steam session detection** is heuristic on Linux (Steam returns immediately; Proton layers) | 4 | 4 | 16 | Formal `GameSession.tla`; process-tree watcher + manual stop; spike in Phase 1; fallback to time-based tracking | Orphan processes or games never marked stopped in the spike |
 | R4 | **WebKitGTK/WPE variance** across Ubuntu/Fedora/Arch/SteamOS/Flatpak | 4 | 4 | 16 | WebKitGTK baseline; WPE optional; `NativeWebDialog` fallback; distro matrix in CI; abstraction at `IWebView` | A page loads in one distro and not another, or offscreen extraction fails |
@@ -40,3 +40,15 @@ Scored: likelihood × impact, 1–5 each. Owner is the role that must act, not t
 - Add a row when a new failure mode appears twice.
 - Close a row only with evidence (a test, a spike report, or a shipped mitigation).
 - Do not delete rows; mark them `retired` with the evidence.
+
+## Added after the independent plan review
+
+| # | Risk | L | I | Score | Mitigation | Trigger / early warning |
+| --- | --- | ---: | ---: | ---: | --- | --- |
+| R21 | **Steam is greenfield**: no v10 implementation to port, so "parity" is undefined | 5 | 4 | 20 | Written Steam spec + recorded real artifacts + real-install acceptance (ADR-017); mark Steam rows `greenfield`, not ported | The Steam fixture cannot reproduce a real library's app set |
+| R22 | **Flatpak cannot see host Steam** by default; launch/`/proc` tracking fail in the sandbox | 4 | 4 | 16 | `flatpak-spawn --host`, PID-visibility spike, minimal host helper if needed, Gate 5 includes launch+tracking (ADR-020) | Flatpak opens the library but cannot launch or stop a game |
+| R23 | **Oracle harness becomes a second implementation** and tests itself | 4 | 5 | 20 | Constrain harness to existing v10 public APIs + raw bytes; no new export schema/normalisation; human reviews harness (ADR-015) | The harness starts producing "nice" output instead of bytes |
+| R24 | **Localisation is a real workstream**, not a bullet: 1,134 keys, 37 files | 4 | 3 | 12 | Key-set diff, placeholder validation, partial-locale report (ADR-022); estimate it explicitly | Missing keys or broken placeholders in a locale |
+| R25 | **CI cost/queueing** for the nightly distro/mutation/fuzz/soak matrix | 3 | 3 | 9 | Price Actions minutes (5k–8k/month); self-host heavy nightly work if needed | Nightly jobs queue for hours or exceed budget |
+| R26 | **SDK UI surface frozen before the shell exists** | 4 | 3 | 12 | Freeze Abstractions early, UI points after shell pilot (ADR-023); scoped compatibility claim | Repeated SDK-breaking changes during UI work |
+| R27 | **No Windows-machine/export path** for a user's v10 library | 3 | 3 | 9 | Support mounted Windows/USB/SMB copy and fresh install (ADR-021); importer is a separate exec | Users cannot get their library into v1 |

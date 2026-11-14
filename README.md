@@ -10,11 +10,13 @@ app is not migrated to .NET 11 and is not modified.
 
 ## Target, in one paragraph
 
-A desktop Linux application that discovers and launches Steam games, reads a copy of an
-existing Playnite v10 library, migrates it one-way to SQLite, and presents Playnite's library
-organisation in a functional Avalonia 12 desktop shell. It runs on x64 and ARM64, ships as an
-AppImage and a Flatpak, and exposes a new plugin SDK for source-level recompilation. Fullscreen,
-emulation, non-Steam launchers, and the v10 theme/plugin binaries are explicitly out of v1 scope.
+A desktop Linux application that discovers and launches Steam games, imports the Steam-linked
+part of an existing Playnite v10 library, migrates it one-way to SQLite, and presents
+Playnite's library organisation in a functional Avalonia 12 desktop shell. It runs on x64 and
+ARM64, ships as an AppImage and a Flatpak, and exposes a new plugin SDK for source-level
+recompilation. Fullscreen, emulation, non-Steam launchers, WebView/JavaScript metadata, and the
+v10 theme/plugin binaries are explicitly out of v1 scope. Non-Steam rows in a v10 library are
+reported as skipped, not silently dropped.
 
 ## Decisions already made
 
@@ -23,7 +25,7 @@ emulation, non-Steam launchers, and the v10 theme/plugin binaries are explicitly
 | Platform | Linux-first; Windows v10 frozen as oracle |
 | Runtime | `net11.0` (STS, supported to Nov 2028) |
 | UI | Avalonia 12, desktop shell first |
-| Web | Official `Avalonia.Controls.WebView`, WebKitGTK/WPE |
+| Web | `Avalonia.HtmlRenderer` in v1; `Avalonia.Controls.WebView` (WebKitGTK/WPE) in v1.1 |
 | Storage | Copy v10 library, one-way migration to SQLite |
 | Plugins | New SDK v7; source-compatible recompile, no binary compatibility |
 | Themes | New Avalonia theme format; functional default theme only in v1 |
@@ -37,6 +39,7 @@ emulation, non-Steam launchers, and the v10 theme/plugin binaries are explicitly
 legacy/                 Frozen Playnite 10.64 source (read-only oracle)
 src/                    New .NET 11 projects (created in Phase 1)
 tests/                  New tests, fixtures, golden corpus
+oracle-lock/            SHA-256 pin + fetch script for Playnite.Deps
 scripts/port/           Deterministic inventory and queue generators
 docs/port/              Decisions, inventory, architecture, execution, verification, operations
 docs/formal/            TLA+ models for critical state machines
