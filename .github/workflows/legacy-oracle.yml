@@ -46,15 +46,32 @@ jobs:
             /verbosity:minimal `
             /binaryLogger:legacy-build.binlog
 
-      - name: Run legacy NUnit suite
+      - name: Locate legacy test assembly
         shell: pwsh
         run: |
-          dotnet test legacy/source/Tests/Playnite.Tests/Playnite.Tests.csproj `
-            -c Release `
-            --no-restore `
-            -p:NuGetAudit=false `
-            --logger "trx;LogFileName=playnite-tests.trx" `
-            --results-directory "${{ runner.temp }}/test-results"
+          Get-ChildItem legacy/source/Tests/Playnite.Tests/bin -Recurse -Filter Playnite.Tests.dll |
+            ForEach-Object { Write-Host $_.FullName }
+
+      - name: Run legacy NUnit suite (VSTest)
+        shell: pwsh
+        run: |
+          $dll = Get-ChildItem legacy/source/Tests/Playnite.Tests/bin -Recurse -Filter Playnite.Tests.dll |
+            Sort-Object LastWriteTime -Descending | Select-Object -First 1
+          if (!$dll) { throw "Playnite.Tests.dll not found" }
+
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          $vstest = & $vswhere -latest -products * -find "Common7\IDE\Extensions\TestPlatform\vstest.console.exe" |
+            Select-Object -First 1
+          if (!$vstest) {
+            $vstest = Get-ChildItem "C:\Program Files\Microsoft Visual Studio" -Recurse -Filter vstest.console.exe -ErrorAction SilentlyContinue |
+              Select-Object -First 1 -ExpandProperty FullName
+          }
+          if (!$vstest) { throw "vstest.console.exe not found" }
+
+          & $vstest $dll.FullName `
+            /Logger:trx `
+            /ResultsDirectory:"${{ runner.temp }}/test-results" `
+            /TestAdapterPath:"$($dll.DirectoryName)"
 
       - name: Record executed test counts
         if: always()
