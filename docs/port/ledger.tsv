@@ -1,2 +1,3 @@
 timestamp	unit	from	to	actor	evidence
 2026-11-13T22:30:00-05:00	p0-001	todo	done	captain	docs/port/00-DECISIONS.md; docs/port/01-INVENTORY.generated.md
+2026-11-14T17:04:00Z	p1-010	todo	in-progress	platform	spikes/flatpak-host/README.md; 13 local/synthetic tests pass, zero skips; controlled local PID/start-time/namespace and exit 23 observed; Flatpak tools/sandbox absent; host/native/Proton unrun; p1-003 not complete; two blind reviews pending
