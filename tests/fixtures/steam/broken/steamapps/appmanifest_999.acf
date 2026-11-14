@@ -1,0 +1,7 @@
+"AppState"
+{
+	"appid" "999"
+	"name" "Missing Install"
+	"StateFlags" "4"
+	"installdir" "does-not-exist"
+}
