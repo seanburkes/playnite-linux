@@ -1,2 +1,2 @@
 id	wave	area	unit	depends	status	owner	oracle	test	notes
-p1-007	W1	spike	Steam process tracking	p1-003	in-progress	steam	spike	spikes/steam-process-tracking/test_tracking.py	candidate: 21 synthetic/owned-process tests; deadline ordering P2 corrected; real native/Proton acceptance and two revised-diff reviews pending; p1-003 unsatisfied
+p1-007	W1	spike	Steam process tracking	p1-003	in-progress	steam	spike	spikes/steam-process-tracking/test_tracking.py	spike merged in PR #3 (9396d45); 21 synthetic/owned-process tests, zero skips; deadline ordering P2 corrected; real native/Proton game acceptance not run; p1-003 fixture still incomplete

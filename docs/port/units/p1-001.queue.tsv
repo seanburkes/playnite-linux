@@ -1,2 +1,2 @@
 id	wave	area	unit	depends	status	owner	oracle	test	notes
-p1-001	W1	oracle	Windows oracle CI	p0-002	done	oracle	golden:baseline	-	282/282 pass; 2 ACL exclusions
+p1-001	W1	oracle	Windows oracle CI	p0-002	done	oracle	golden:baseline	-	282/282 pass; 2 ACL exclusions; manifest v0 goldens byte-compared by the Windows workflow with a one-byte negative
