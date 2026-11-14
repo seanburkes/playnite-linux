@@ -1,0 +1,2 @@
+id	wave	area	unit	depends	status	owner	oracle	test	notes
+p5-004	W5	platform	Process launcher/session tracker	p2-002	todo	platform	formal:GameSession	test:session	PILOT

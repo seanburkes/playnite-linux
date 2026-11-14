@@ -1,0 +1,2 @@
+id	wave	area	unit	depends	status	owner	oracle	test	notes
+p6-004	W6	sdk	SDK v7 contracts	p3-004	todo	sdk	api-compat	test:sdk	surface parity

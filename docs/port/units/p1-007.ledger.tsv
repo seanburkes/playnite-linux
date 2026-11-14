@@ -1,0 +1,2 @@
+timestamp	unit	from	to	actor	evidence
+2026-11-14T17:14:59Z	p1-007	in-progress	in-progress	fm/p1-007-fix	spikes/steam-process-tracking/README.md; deadline ordering P2 reproduced with deterministic sleep/read cases and corrected; 21 tests pass, zero skips; prior identities and cancellation precedence preserved; real native/Proton acceptance, p1-003 and two independent revised-diff reviews pending

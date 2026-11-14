@@ -1,0 +1,2 @@
+id	wave	area	unit	depends	status	owner	oracle	test	notes
+p2-002	W2	scaffold	Analyzers + architecture tests	p2-001	todo	core	-	arch	BannedApi/NetArchTest

@@ -1,0 +1,2 @@
+id	wave	area	unit	depends	status	owner	oracle	test	notes
+p2-004	W2	scaffold	Empty Avalonia app + CLI smoke	p2-001	todo	ui	-	smoke	Xvfb/headless

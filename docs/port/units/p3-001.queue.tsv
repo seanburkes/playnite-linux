@@ -1,0 +1,2 @@
+id	wave	area	unit	depends	status	owner	oracle	test	notes
+p3-001	W3	leaves	Paths + XDG abstraction	p2-001	todo	core	property:paths	test:paths	

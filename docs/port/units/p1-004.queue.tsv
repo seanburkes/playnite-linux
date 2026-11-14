@@ -1,0 +1,2 @@
+id	wave	area	unit	depends	status	owner	oracle	test	notes
+p1-004	W1	oracle	UI reference images (human only)	p1-001	in-progress	oracle	screens-reference	-	partial: docs/port/ui-reference/README.md; all 3 images missing; authorised Windows desktop capture access and runnable frozen build missing; human only, not a pixel gate

@@ -1,0 +1,2 @@
+id	wave	area	unit	depends	status	owner	oracle	test	notes
+p6-002	W6	core	Import/sync service	p4-003,p5-002	todo	core	golden:sync	test:sync	

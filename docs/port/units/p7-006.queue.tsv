@@ -1,0 +1,2 @@
+id	wave	area	unit	depends	status	owner	oracle	test	notes
+p7-006	W7	ui	Settings/first-run/import	p7-002	todo	ui	screens	test:ui	essential only

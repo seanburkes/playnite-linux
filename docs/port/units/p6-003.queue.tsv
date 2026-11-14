@@ -1,0 +1,2 @@
+id	wave	area	unit	depends	status	owner	oracle	test	notes
+p6-003	W6	core	Settings/metadata services	p4-004,p5-003	todo	core	golden:settings	test:services	

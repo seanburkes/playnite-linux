@@ -1,0 +1,2 @@
+id	wave	area	unit	depends	status	owner	oracle	test	notes
+p1-011	W1	repo	Port index shards + generator	-	in-progress	captain	-	scripts/port/test_build_port_index.py	docs/port/units/README.md; generated queue/ledger from per-unit shards; CI single-writer guard; migration moved 8 append rows to wave/id order, ledger byte-identical; fix round 2: exact-prefix history, immutable retirement records with approved-by, strict-ancestor --against, explicit migration-only skip

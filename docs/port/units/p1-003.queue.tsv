@@ -1,0 +1,2 @@
+id	wave	area	unit	depends	status	owner	oracle	test	notes
+p1-003	W1	oracle	Fixture v10 library + Steam root	p1-001	in-progress	oracle	fixtures	-	synthetic Steam done; v10 candidate revised with pre-write output/fixture isolation, disposable-tree tests, tool-local NuGet restore and pre-intake pending gate; Windows build/generation/read-back pass in run 43625147583; strict committed-fixture comparison and two re-reviews pending

@@ -1,0 +1,2 @@
+id	wave	area	unit	depends	status	owner	oracle	test	notes
+p7-001	W7	ui	Bootstrap/DI/theme/localisation	p2-004,p6-001	todo	ui	screens	test:ui	PILOT

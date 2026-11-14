@@ -1,0 +1,2 @@
+id	wave	area	unit	depends	status	owner	oracle	test	notes
+p1-010	W1	spike	Flatpak host launch/tracking	p1-003	in-progress	platform	spike	spikes/flatpak-host/test_probe.py	ADR-020; 26 local/synthetic tests pass; fragmented records bounded by total bytes/deadline; no Flatpak tools/sandbox; real native/Proton unrun; p1-003 incomplete; spikes/flatpak-host/README.md
