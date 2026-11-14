@@ -1,0 +1,18 @@
+bin/
+obj/
+.vs/
+.idea/
+*.user
+*.suo
+*.DotSettings.user
+TestResults/
+artifacts/
+.packages/
+*.log
+*.tmp
+.DS_Store
+docs/port/.cache/
+
+# TLC
+states/
+*.tla.out

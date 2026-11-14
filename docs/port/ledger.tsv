@@ -1,0 +1,2 @@
+timestamp	unit	from	to	actor	evidence
+2026-11-13T22:30:00-05:00	p0-001	todo	done	captain	docs/port/00-DECISIONS.md; docs/port/01-INVENTORY.generated.md

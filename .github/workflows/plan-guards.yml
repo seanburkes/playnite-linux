@@ -1,0 +1,57 @@
+name: plan-guards
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  inventory-and-parity:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Legacy snapshot is immutable
+        if: github.event_name == 'pull_request'
+        run: |
+          git diff --name-only "${{ github.event.pull_request.base.sha }}" HEAD -- legacy
+          if [ -n "$(git diff --name-only "${{ github.event.pull_request.base.sha }}" HEAD -- legacy)" ]; then
+            echo "::error::legacy/ is the frozen oracle and must not change"
+            exit 1
+          fi
+
+      - name: Inventory scanner still works
+        run: python3 scripts/port/scan_legacy.py --format json > /tmp/inventory.json
+
+      - name: Parity ledger is valid
+        run: python3 scripts/port/check_parity.py
+
+  formal:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Fetch tla2tools
+        run: |
+          mkdir -p "$RUNNER_TEMP/tla"
+          curl -sSL -o "$RUNNER_TEMP/tla/tla2tools.jar" \
+            https://github.com/tlaplus/tlaplus/releases/latest/download/tla2tools.jar
+
+      - name: Check TLA+ models
+        env:
+          TLA2TOOLS_JAR: ${{ runner.temp }}/tla/tla2tools.jar
+        run: scripts/formal/run_tlc.sh

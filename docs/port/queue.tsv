@@ -1,0 +1,60 @@
+id	wave	area	unit	depends	status	owner	oracle	test	notes
+p0-001	W0	plan	ADRs and inventory	-	done	captain	legacy/	-	16 ADRs; generated inventory
+p0-002	W0	plan	Plan review	-	todo	captain	-	-	gate to Phase 1
+p0-003	W0	repo	Create public repo + first commit	p0-002	todo	captain	-	-	seanburkes/playnite-linux
+p0-004	W0	repo	Firstmate project registration	p0-003	todo	captain	-	-	local-only until origin
+p1-001	W1	oracle	Windows oracle CI	p0-002	todo	oracle	golden:baseline	-	build legacy + NUnit
+p1-002	W1	oracle	Oracle harness v0 (settings/manifests)	p1-001	todo	oracle	golden:settings	golden:settings	deterministic bytes
+p1-003	W1	oracle	Fixture v10 library + Steam root	p1-001	todo	oracle	fixtures	-	synthetic only
+p1-004	W1	oracle	UI screenshot baseline	p1-001	todo	oracle	screens	-	few stable screens
+p1-005	W1	spike	LiteDB 4 read on net11	p1-003	todo	core	spike	-	fallback Windows exporter
+p1-006	W1	spike	WebKitGTK/WPE offscreen	p1-002	todo	platform	spike	-	Ubuntu/Fedora/Arch
+p1-007	W1	spike	Steam process tracking	p1-003	todo	steam	spike	-	native + Proton
+p1-008	W1	spike	Avalonia headless screenshot	p1-002	todo	ui	spike	-	a11y tree too
+p2-001	W2	scaffold	Solution/projects/props	p1-001	todo	core	-	build	no warnings
+p2-002	W2	scaffold	Analyzers + architecture tests	p2-001	todo	core	-	arch	BannedApi/NetArchTest
+p2-003	W2	scaffold	Linux CI + Windows oracle CI	p2-001	todo	release	-	ci	matrix
+p2-004	W2	scaffold	Empty Avalonia app + CLI smoke	p2-001	todo	ui	-	smoke	Xvfb/headless
+p2-005	W2	scaffold	Packaging smoke	p2-003	todo	release	-	pack	AppImage/Flatpak shell
+p3-001	W3	leaves	Paths + XDG abstraction	p2-001	todo	core	property:paths	test:paths	
+p3-002	W3	leaves	String/date/enum extensions	p2-001	todo	core	golden:utils	test:utils	
+p3-003	W3	leaves	JSON/YAML/TOML/INI helpers	p2-001	todo	core	golden:serialization	test:serialization	PILOT
+p3-004	W3	leaves	Models + equality	p3-003	todo	core	golden:models	test:models	
+p3-005	W3	leaves	Manifest parsing	p3-003	todo	core	golden:manifests	test:manifests	YamlDotNet 18
+p3-006	W3	leaves	Search/filter/sort	p3-004	todo	core	property:filter	test:filter	
+p3-007	W3	leaves	Localisation keys	p2-001	todo	ui	golden:loc	test:loc	reuse translations
+p3-008	W3	leaves	Archive/backup	p3-002	todo	core	golden:archive	test:archive	SharpCompress
+p4-001	W4	data	SQLite schema/repositories	p3-004	todo	core	golden:db	test:db	
+p4-002	W4	data	v10 LiteDB importer	p4-001	todo	import	golden:import	test:import	PILOT; isolated
+p4-003	W4	data	Atomic swap/rollback	p4-002	todo	import	formal:LibraryImport	test:import	TLA+ invariants
+p4-004	W4	data	Settings migration	p3-003	todo	core	golden:settings	test:settings	TLA+ model
+p4-005	W4	data	Asset copy/hash	p4-002	todo	import	golden:assets	test:assets	
+p4-006	W4	data	Skip report (non-Steam)	p4-002	todo	import	golden:skip	test:skip	explicit
+p5-001	W5	steam	VDF/ACF parsers	p3-002	todo	steam	fixtures	vdf	fuzz
+p5-002	W5	steam	Steam root/library discovery	p5-001	todo	steam	fixtures	test:steam	
+p5-003	W5	steam	Artwork/metadata cache	p5-002	todo	steam	http-stub	test:metadata	rate limit
+p5-004	W5	platform	Process launcher/session tracker	p2-002	todo	platform	formal:GameSession	test:session	PILOT
+p5-005	W5	platform	XDG/single-instance/protocol	p3-001	todo	platform	smoke	test:platform	
+p5-006	W5	platform	WebView service	p1-006	todo	platform	http-stub	test:webview	WebKitGTK
+p5-007	W5	platform	Tray/notifications/sleep	p2-002	todo	platform	smoke	test:platform	distro matrix
+p5-008	W5	steam	Launch native/Proton	p5-002,p5-004	todo	steam	manual	test:launch	real Steam
+p6-001	W6	core	Library service	p4-001	todo	core	golden:library	test:library	
+p6-002	W6	core	Import/sync service	p4-003,p5-002	todo	core	golden:sync	test:sync	
+p6-003	W6	core	Settings/metadata services	p4-004,p5-003	todo	core	golden:settings	test:services	
+p6-004	W6	sdk	SDK v7 contracts	p3-004	todo	sdk	api-compat	test:sdk	surface parity
+p6-005	W6	sdk	Sample plugins	p6-004	todo	sdk	compile	test:plugins	load
+p7-001	W7	ui	Bootstrap/DI/theme/localisation	p2-004,p6-001	todo	ui	screens	test:ui	PILOT
+p7-002	W7	ui	Shell/main window	p7-001	todo	ui	screens	test:ui	
+p7-003	W7	ui	Library grid/list/details	p7-002	todo	ui	screens	test:ui	
+p7-004	W7	ui	Search/filter/sort	p7-003,p6-001	todo	ui	screens	test:ui	
+p7-005	W7	ui	Game edit/metadata	p7-003	todo	ui	screens	test:ui	
+p7-006	W7	ui	Settings/first-run/import	p7-002	todo	ui	screens	test:ui	essential only
+p7-007	W7	ui	Tray/protocol/keyboard	p5-005,p7-002	todo	ui	smoke	test:ui	
+p7-008	W7	ui	Accessibility baseline	p7-003	todo	ui	tree	test:a11y	
+p8-001	W8	pack	AppImage x64/ARM64	p7-002	todo	release	pack	test:pack	
+p8-002	W8	pack	Flatpak x64/ARM64	p8-001	todo	release	pack	test:pack	permissions
+p8-003	W8	hard	Benchmarks/soak	p7-003	todo	release	bench	test:perf	
+p8-004	W8	hard	Fuzz/security review	p5-001,p4-002	todo	oracle	fuzz	test:security	zip-slip
+p8-005	W8	hard	Diagnostics/redaction	p7-001	todo	core	smoke	test:diag	
+p9-001	W9	release	Pre-release soak	p8-001,p8-002	todo	captain	-	-	7 days
+p9-002	W9	release	v1 release	p9-001	todo	captain	-	-	notes/migration guide
