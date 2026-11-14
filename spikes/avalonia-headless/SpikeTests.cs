@@ -16,16 +16,21 @@ namespace HeadlessSpike;
 
 public sealed class SpikeTests
 {
-    private static string EvidenceDirectory
+    private static readonly string[] KnownArtifacts =
+        ["render-1.png", "render-2.png", "render-3.png", "render.json", "automation-tree.json"];
+
+    private static readonly Lazy<string> EvidencePath = new(() =>
     {
-        get
-        {
-            var path = Environment.GetEnvironmentVariable("SPIKE_EVIDENCE_DIR")
-                ?? throw new InvalidOperationException("Set SPIKE_EVIDENCE_DIR to an external evidence directory.");
-            Directory.CreateDirectory(path);
-            return path;
-        }
-    }
+        var path = Environment.GetEnvironmentVariable("SPIKE_EVIDENCE_DIR")
+            ?? throw new InvalidOperationException("Set SPIKE_EVIDENCE_DIR to an external evidence directory.");
+        if (Directory.Exists(path) && Directory.EnumerateFileSystemEntries(path).Any())
+            throw new InvalidOperationException(
+                $"SPIKE_EVIDENCE_DIR '{path}' must be new or empty so stale artifacts cannot be attributed to this run.");
+        Directory.CreateDirectory(path);
+        return path;
+    });
+
+    private static string EvidenceDirectory => EvidencePath.Value;
 
     [Fact]
     public Task Skia_renders_nonblank_repeatable_pixels_and_a_decodable_png() => Run(() =>
@@ -62,6 +67,11 @@ public sealed class SpikeTests
             pixelFormat = "RGBA8888", sha256 = Convert.ToHexString(SHA256.HashData(captures[0])),
             distinctColors = captures[0].Chunk(4).Select(p => BitConverter.ToUInt32(p)).Distinct().Count()
         }, new JsonSerializerOptions { WriteIndented = true }));
+
+        AssertEvidence("render-1.png", "render-2.png", "render-3.png", "render.json");
+        Assert.Equal(new[] { "render-1.png", "render-2.png", "render-3.png" },
+            Directory.EnumerateFiles(EvidenceDirectory, "render-*.png")
+                .Select(path => Path.GetFileName(path)!).Order().ToArray());
     });
 
     [Fact]
@@ -98,6 +108,7 @@ public sealed class SpikeTests
                 && p.GetName() == "Meadow — synthetic game");
             File.WriteAllText(Path.Combine(EvidenceDirectory, "automation-tree.json"),
                 JsonSerializer.Serialize(Snapshot(root), new JsonSerializerOptions { WriteIndented = true }));
+            AssertEvidence("automation-tree.json");
 
             var value = Named("search").GetProvider<IValueProvider>();
             Assert.NotNull(value);
@@ -155,8 +166,22 @@ public sealed class SpikeTests
 
     private static async Task Run(Action test)
     {
+        _ = EvidenceDirectory; // fail before any work if the evidence directory is not fresh
         await using var session = HeadlessUnitTestSession.StartNew(typeof(SpikeApplication));
         await session.Dispatch(test, CancellationToken.None);
+    }
+
+    private static void AssertEvidence(params string[] expected)
+    {
+        foreach (var name in expected)
+        {
+            var path = Path.Combine(EvidenceDirectory, name);
+            Assert.True(File.Exists(path), $"Expected evidence artifact '{name}' was not written.");
+            Assert.True(new FileInfo(path).Length > 0, $"Expected evidence artifact '{name}' is empty.");
+        }
+
+        Assert.DoesNotContain(Directory.EnumerateFiles(EvidenceDirectory)
+            .Select(path => Path.GetFileName(path)!), name => !KnownArtifacts.Contains(name));
     }
 
     private static IEnumerable<AutomationPeer> Walk(AutomationPeer peer)

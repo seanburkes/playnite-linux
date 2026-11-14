@@ -3,7 +3,7 @@
         x:Class="HeadlessSpike.SyntheticWindow"
         Width="640" Height="480" CanResize="False" SystemDecorations="None"
         Title="Synthetic library spike" FontFamily="avares://Avalonia.Fonts.Inter/Assets#Inter"
-        AutomationProperties.AutomationId="library" AutomationProperties.Name="Synthetic library">
+        AutomationProperties.AutomationId="library">
   <Border Padding="24" Background="{DynamicResource ThemeBackgroundBrush}">
     <StackPanel Spacing="12">
       <TextBlock Text="Synthetic library — not the application shell" FontSize="20" />
