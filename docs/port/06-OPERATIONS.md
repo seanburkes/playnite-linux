@@ -73,16 +73,17 @@ for a reviewer. The reviewer should use a different model from the implementer w
 
 ## 4. Queue and ledger
 
-The durable contract is a TSV, not a conversation. The two aggregates are generated; workers
-edit unit shards, never the aggregates themselves.
+The durable contract is a TSV, not a conversation. The two aggregates are generated with a
+single writer on `main`; workers edit unit shards and never the aggregates themselves.
 
 - `docs/port/units/<unit-id>.queue.tsv` holds exactly one queue row for that unit.
 - `docs/port/units/<unit-id>.ledger.tsv` holds that unit's append-only ledger rows (optional
   when there are none).
 - `docs/port/units/removed.tsv` holds one `unit`/`reason`/`approved-by` row per deliberately
   retired unit.
-- `docs/port/queue.tsv` and `docs/port/ledger.tsv` are generated from those shards. Commit
-  their regenerated output, but do not hand-edit them.
+- `docs/port/queue.tsv` and `docs/port/ledger.tsv` are generated from those shards by the
+  parent-owned `port-index` workflow after merge. A pull request must not include either file
+  in its diff, even with freshly generated content; CI rejects that change.
 
 A unit id is lowercase letters, digits, and single hyphens. The units directory is enumerated
 strictly: `README.md`, `removed.tsv`, and correctly named shards are the only accepted entries.
@@ -102,19 +103,23 @@ Ledger columns:
 timestamp	unit	from	to	actor	evidence
 ```
 
-After changing your shard, regenerate and verify:
+After changing your shard, validate the shard tree:
 ```sh
-python3 scripts/port/build_port_index.py build
-python3 scripts/port/build_port_index.py check --against origin/main
+python3 scripts/port/build_port_index.py check --shards-only --against origin/main
 ```
 
-`check` regenerates both aggregates in memory, byte-compares them with the committed files,
-and prints any differing lines. `--against <ref>` also fails when a queue shard or queue
-aggregate row is missing, a ledger shard is missing, or a ledger row is missing or altered at
-head, or when an existing retirement record was edited. The ref must be a strict ancestor of
-HEAD; HEAD, a descendant, and an unrelated commit are refused. CI passes the pull request's
-base commit (or the previous commit on `main`) and also rejects a pull request that changes an
-aggregate without changing a contract shard or `removed.tsv`.
+`check --shards-only` validates and regenerates both aggregates in memory without requiring the
+committed files to match. `--against <ref>` also fails when a queue shard or queue aggregate
+row is missing, a ledger shard is missing, or a ledger row is missing or altered at head, or
+when an existing retirement record was edited. The ref must be a strict ancestor of HEAD; HEAD,
+a descendant, and an unrelated commit are refused. CI passes the pull request's base commit (or
+the previous commit on `main`) with `--shards-only`, and on a pull request also passes
+`--forbid-aggregate-changes`, which fails if either aggregate file was modified.
+
+The post-merge `port-index` workflow runs `build` on `main`, verifies the result with `check`,
+and commits only `docs/port/queue.tsv` and `docs/port/ledger.tsv` with a bot-style message. It
+does not run on pull requests and never writes a shard. A PR already in flight that regenerated
+the aggregates should drop those two file changes and keep only its shards.
 
 The migration PR that first adds `docs/port/units` is the only legitimate base without shards.
 It must pass `--allow-pre-migration-base`, which prints an explicit skip notice; ordinary runs
@@ -133,8 +138,9 @@ W2 = scaffolding, W3 = leaves, W4 = data, W5 = Steam/platform, W6 = core/SDK, W7
 W8 = packaging, W9 = release. Do not use the phase number as the wave number.
 
 Rules:
-- One queue row per unit. Update the shard's status before/after work, then regenerate.
-- If `check` reports drift, fix the shard and rerun `build`; never patch the aggregate.
+- One queue row per unit. Update the shard's status before/after work; the parent workflow
+  regenerates the aggregates after merge.
+- If the shard-only check reports drift, fix the shard; never patch or commit the aggregate.
 - `attempts` increments on a failed review or CI run. At 2, stop and escalate; do not thrash.
 - A unit is `done` only when its Definition of Done is checked and CI is green.
 - Progress survives a crash, rate limit, or context reset because the queue is on disk.

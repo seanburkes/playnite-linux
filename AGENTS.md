@@ -32,8 +32,10 @@ oracle. New code is in `src/` (Phase 1 onward). Do not modify the Windows app.
    `Platform`/`Platform.Linux` below Core; `Core`/`SDK.Abstractions` never reference Avalonia,
    directly or transitively; `Desktop` never references `Microsoft.Win32`.
 7. **One unit, one commit.** Keep diffs reviewable. Update the unit's shard under
-   `docs/port/units/` and regenerate `docs/port/queue.tsv`/`docs/port/ledger.tsv` with
-   `python3 scripts/port/build_port_index.py build`; never hand-edit the aggregates.
+   `docs/port/units/` and validate it with
+   `python3 scripts/port/build_port_index.py check --shards-only --against origin/main`.
+   Never modify `docs/port/queue.tsv`/`docs/port/ledger.tsv` in a PR; the post-merge
+   `port-index` workflow regenerates those aggregates on `main`.
 8. **No destructive git.** No `stash`, `reset --hard`, `clean -fdx`, `checkout -- .`, or
    force-push. Stop and report a wedged worktree.
 9. **Do not run solution-wide builds, packaging, or benchmarks.** The parent owns those; run

@@ -155,14 +155,18 @@ language/framework change makes implicit behaviour explicit; an unanswered row i
 
 ## Queue and ledger shards
 
-`docs/port/queue.tsv` and `docs/port/ledger.tsv` are generated aggregates. Never hand-edit
-them. Add or update `docs/port/units/<unit-id>.queue.tsv` and, when there is status evidence,
-`docs/port/units/<unit-id>.ledger.tsv`, then run:
+`docs/port/queue.tsv` and `docs/port/ledger.tsv` are generated aggregates owned by the parent
+post-merge `port-index` workflow. Never hand-edit them, and never commit them in a pull
+request. Add or update `docs/port/units/<unit-id>.queue.tsv` and, when there is status
+evidence, `docs/port/units/<unit-id>.ledger.tsv`, then validate the shard tree:
 
 ```sh
-python3 scripts/port/build_port_index.py build
-python3 scripts/port/build_port_index.py check --against origin/main
+python3 scripts/port/build_port_index.py check --shards-only --against origin/main
 ```
+
+A pull request that changes either aggregate fails CI, even if it contains freshly generated
+output; the aggregate files stop being a per-PR deliverable. The `port-index` workflow runs
+`build` on `main` after merge and commits the regenerated aggregates with a bot commit.
 
 The contract is in [`units/README.md`](units/README.md). Unit ids are lowercase letters,
 digits, and single hyphens; the units directory accepts only `README.md`, `removed.tsv`, and
@@ -173,8 +177,8 @@ delete, duplicate, insert before existing history, or reorder existing ones.
 and requires `<ref>` to be a strict ancestor of HEAD. Retiring a unit is explicit: delete its
 shards and add a new `removed.tsv` row with a reason and a non-empty `approved-by` in the same
 change; retirement records are immutable and captain-authorized, enforced by human review.
-`check` is the CI gate; a shard with a missing or reordered header, a ragged
-row, invalid UTF-8, or a filename/id mismatch fails before any aggregate is written.
+`check --shards-only` is the CI pull request gate; a shard with a missing or reordered header,
+a ragged row, invalid UTF-8, or a filename/id mismatch fails before any aggregate is written.
 
 ## Banned constructs
 
@@ -211,7 +215,7 @@ row, invalid UTF-8, or a filename/id mismatch fails before any aggregate is writ
 [ ] Logs/messages preserve v10 where consumed.
 [ ] legacy/ and oracle paths untouched.
 [ ] Parity row updated with test id.
-[ ] Unit shard updated; port queue/ledger regenerated and `check` clean.
+[ ] Unit shard updated; `check --shards-only` clean; no aggregate files in the PR diff.
 [ ] Two blind reviews; findings fixed or escalated.
 [ ] CI green; counts non-decreasing.
 ```

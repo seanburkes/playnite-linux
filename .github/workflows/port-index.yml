@@ -1,0 +1,52 @@
+name: port-index
+
+# Parent-owned single writer for the generated port aggregates. Pull requests
+# validate shards only; this workflow regenerates docs/port/queue.tsv and
+# docs/port/ledger.tsv on main and commits the result. It never runs on pull
+# requests and never edits a unit shard.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: port-index-main
+  cancel-in-progress: false
+
+jobs:
+  regenerate:
+    # The commit this workflow creates carries the marker, so it cannot start
+    # another regeneration run. GITHUB_TOKEN pushes do not re-trigger workflows,
+    # but the explicit guard keeps the loop closed if that ever changes.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      !contains(github.event.head_commit.message, '[skip port-index]')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Regenerate aggregates from unit shards
+        run: python3 scripts/port/build_port_index.py build
+
+      - name: Verify the regenerated aggregates are reproducible
+        run: python3 scripts/port/build_port_index.py check
+
+      - name: Commit aggregate changes
+        run: |
+          if git diff --quiet -- docs/port/queue.tsv docs/port/ledger.tsv; then
+            echo "Aggregates already current; nothing to commit."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/port/queue.tsv docs/port/ledger.tsv
+          git commit -m "chore(port-index): regenerate aggregates from unit shards [skip port-index]"
+          git push origin HEAD:main
