@@ -1,0 +1,131 @@
+name: settings-library-oracle
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "tools/LegacyOracle/**"
+      - "tests/fixtures/v10/**"
+      - "tests/golden/settings/**"
+      - "tests/golden/library/**"
+      - "tests/golden/settings-library.sha256"
+      - "tests/golden/settings-library.md"
+      - ".github/workflows/settings-library-oracle.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  generate:
+    name: build and generate scratch artifacts
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "11.0.x"
+      - uses: microsoft/setup-msbuild@v2
+      - name: Pin and verify Playnite.Deps
+        shell: pwsh
+        run: ./oracle-lock/fetch.ps1
+      - name: Restore oracle project with the pinned local Playnite.Deps
+        shell: pwsh
+        run: dotnet restore tools/LegacyOracle/LegacyOracle.csproj
+      - name: Build oracle project only
+        shell: pwsh
+        run: msbuild tools/LegacyOracle/LegacyOracle.csproj /p:Configuration=Release /p:Platform=x86 /m /verbosity:minimal
+      - name: Comparator and scratch-safety self-test (synthetic data only)
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem tools/LegacyOracle/bin -Recurse -Filter LegacyOracle.exe |
+            Sort-Object LastWriteTime -Descending | Select-Object -First 1
+          if (!$exe) { throw "LegacyOracle.exe not found" }
+          ./tools/LegacyOracle/Test-Validation.ps1 `
+            -Scratch "${{ runner.temp }}/p1-002-selftest" `
+            -Exe $exe.FullName
+      - name: Generate settings artifact in scratch
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem tools/LegacyOracle/bin -Recurse -Filter LegacyOracle.exe |
+            Sort-Object LastWriteTime -Descending | Select-Object -First 1
+          if (!$exe) { throw "LegacyOracle.exe not found" }
+          ./tools/LegacyOracle/Verify.ps1 `
+            -Mode GenerateSettings `
+            -Exe $exe.FullName `
+            -Scratch "${{ runner.temp }}/p1-002-generate"
+      - name: Retain generated scratch artifact (not acceptance)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: p1-002-generated-settings
+          path: ${{ runner.temp }}/p1-002-generate/**
+          if-no-files-found: warn
+
+  validate:
+    name: validate when approved corpus exists
+    needs: generate
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Determine whether approved fixture and goldens exist
+        id: corpus
+        shell: pwsh
+        run: |
+          $present = (
+            (Test-Path tests/fixtures/v10/SHA256SUMS) -and
+            (Test-Path tests/fixtures/v10/library) -and
+            (Test-Path tests/golden/settings-library.sha256) -and
+            (Test-Path tests/golden/settings-library.md) -and
+            (Test-Path tests/golden/settings) -and
+            (Test-Path tests/golden/library)
+          )
+          "present=$($present.ToString().ToLowerInvariant())" >> $env:GITHUB_OUTPUT
+      - name: Record pending acceptance without claiming success
+        if: steps.corpus.outputs.present != 'true'
+        shell: pwsh
+        run: |
+          $message = "Oracle acceptance is PENDING: approved p1-003 library fixture/manifest and protected goldens are not both present. Generated artifacts are review inputs, not acceptance evidence."
+          Write-Host "::warning title=Oracle acceptance pending::$message"
+          "## Oracle acceptance: PENDING (not success)" >> $env:GITHUB_STEP_SUMMARY
+          $message >> $env:GITHUB_STEP_SUMMARY
+      - uses: actions/setup-dotnet@v4
+        if: steps.corpus.outputs.present == 'true'
+        with:
+          dotnet-version: "11.0.x"
+      - uses: microsoft/setup-msbuild@v2
+        if: steps.corpus.outputs.present == 'true'
+      - name: Pin and verify Playnite.Deps
+        if: steps.corpus.outputs.present == 'true'
+        shell: pwsh
+        run: ./oracle-lock/fetch.ps1
+      - name: Restore oracle project with the pinned local Playnite.Deps
+        if: steps.corpus.outputs.present == 'true'
+        shell: pwsh
+        run: dotnet restore tools/LegacyOracle/LegacyOracle.csproj
+      - name: Build oracle project only
+        if: steps.corpus.outputs.present == 'true'
+        shell: pwsh
+        run: msbuild tools/LegacyOracle/LegacyOracle.csproj /p:Configuration=Release /p:Platform=x86 /m /verbosity:minimal
+      - name: Validate exact payloads, manifest inventory and source preservation
+        if: steps.corpus.outputs.present == 'true'
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem tools/LegacyOracle/bin -Recurse -Filter LegacyOracle.exe |
+            Sort-Object LastWriteTime -Descending | Select-Object -First 1
+          if (!$exe) { throw "LegacyOracle.exe not found" }
+          ./tools/LegacyOracle/Verify.ps1 `
+            -Mode Validate `
+            -Exe $exe.FullName `
+            -Library tests/fixtures/v10/library `
+            -LibraryManifest tests/fixtures/v10/SHA256SUMS `
+            -Scratch "${{ runner.temp }}/p1-002-validate" `
+            -Golden tests/golden
+      - name: Retain validation scratch
+        if: ${{ always() && steps.corpus.outputs.present == 'true' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: p1-002-validation
+          path: ${{ runner.temp }}/p1-002-validate/**
+          if-no-files-found: warn
