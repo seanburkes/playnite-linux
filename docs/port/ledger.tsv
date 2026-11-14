@@ -1,2 +1,3 @@
 timestamp	unit	from	to	actor	evidence
 2026-11-13T22:30:00-05:00	p0-001	todo	done	captain	docs/port/00-DECISIONS.md; docs/port/01-INVENTORY.generated.md
+2026-11-14T10:50:05-07:00	p1-003	in-progress	in-progress	oracle	candidate.diff revised: pre-write canonical fixture/output isolation, external scratch requirement, disposable-tree negative tests (nested/equal/parent-of/linked/repository-internal); static Linux checks only; Windows build/read-back/regeneration and two re-reviews pending

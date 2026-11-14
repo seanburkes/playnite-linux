@@ -1,0 +1,69 @@
+name: windows-fixture-validation
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "tools/V10LibraryFixture/**"
+      - "tests/fixtures/v10/**"
+      - ".github/workflows/windows-fixture-validation.yml"
+  push:
+    branches: ["fm/p1-003"]
+    paths:
+      - "tools/V10LibraryFixture/**"
+      - "tests/fixtures/v10/**"
+      - ".github/workflows/windows-fixture-validation.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  fixture:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Reject overlapping or linked output before any source write
+        shell: pwsh
+        run: ./tools/V10LibraryFixture/Validate.Tests.ps1
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "11.0.x"
+      - uses: microsoft/setup-msbuild@v2
+      - name: Fetch checksum-pinned dependency into temporary feed
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $feed = Join-Path $env:RUNNER_TEMP 'fixture-feed'
+          New-Item -ItemType Directory -Path $feed | Out-Null
+          $file = 'Playnite.Deps.10.56.0.nupkg'
+          $package = Join-Path $feed $file
+          Invoke-WebRequest 'https://nuget.playnite.link/v3/package/playnite.deps/10.56.0/playnite.deps.10.56.0.nupkg' -OutFile $package
+          $line = @(Get-Content oracle-lock/SHA256SUMS | Where-Object { $_ -match [regex]::Escape($file) })
+          if ($line.Count -ne 1) { throw 'Expected exactly one dependency checksum' }
+          $expected = ($line[0] -split '\s+')[0]
+          if ((Get-FileHash $package -Algorithm SHA256).Hash.ToLowerInvariant() -cne $expected) {
+            throw 'Playnite.Deps checksum mismatch'
+          }
+          "FIXTURE_FEED=$feed" >> $env:GITHUB_ENV
+      - name: Restore and build only the isolated generator and its v10 dependencies
+        shell: pwsh
+        run: |
+          dotnet restore tools/V10LibraryFixture/V10LibraryFixture.csproj --source "$env:FIXTURE_FEED" --source https://api.nuget.org/v3/index.json
+          if ($LASTEXITCODE -ne 0) { throw 'Restore failed' }
+          msbuild tools/V10LibraryFixture/V10LibraryFixture.csproj /p:Configuration=Release /p:Platform=x86 /verbosity:minimal
+          if ($LASTEXITCODE -ne 0) { throw 'Build failed' }
+      - name: Regenerate twice, reject mutations and read back through frozen v10
+        shell: pwsh
+        run: |
+          $exe = @(Get-ChildItem tools/V10LibraryFixture/bin -Recurse -Filter V10LibraryFixture.exe)
+          if ($exe.Count -ne 1) { throw 'Expected exactly one generator executable' }
+          ./tools/V10LibraryFixture/Validate.ps1 -Exe $exe[0].FullName -Output "$env:RUNNER_TEMP/fixture-validation" -Fixture "$env:GITHUB_WORKSPACE/tests/fixtures/v10"
+      - name: Retain unmodified candidate bytes and regeneration evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: v10-library-fixture
+          path: ${{ runner.temp }}/fixture-validation/first/**
+          if-no-files-found: error
+          retention-days: 30
