@@ -7,6 +7,7 @@
   manifest comparison https://github.com/seanburkes/playnite-linux/actions/runs/43645705588 (green)
   and https://github.com/seanburkes/playnite-linux/actions/runs/43647994673 (attempt 3 green;
   attempts 1-2 flaked on unrelated legacy tests);
+  EX-3 exclusion https://github.com/seanburkes/playnite-linux/actions/runs/43649562478 (green);
   settings/library https://github.com/seanburkes/playnite-linux/actions/runs/43627447663;
   fixture https://github.com/seanburkes/playnite-linux/actions/runs/43629325359
 - Result: **NOT READY** — the oracle build and v10 suite are green, but the settings/library
@@ -33,6 +34,9 @@ Supporting checks on the committed tree:
 
 - `tests/baseline.json` records 281 executed, 281 passed, 0 failed, 0 skipped and the three
   exclusions; `tests/legacy-exclusions.md` explains all three.
+- EX-3 run evidence: workflow_dispatch run 43649562478 on the EX-3 change is green with
+  **281 executed, 281 passed, 0 failed, 0 skipped** and the three documented exclusions
+  (EX-1, EX-2, EX-3).
 - Manifest reproducibility is proven by the workflow, not just emitted: run 43646522483
   (attempt 2) ran the byte comparison and logged `Manifest goldens match committed bytes:
   2 file(s)` and rejection of the one-byte copy, then failed only in the unrelated legacy
