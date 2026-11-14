@@ -1,0 +1,22 @@
+id: org.playnite.FlatpakHostProbe
+runtime: org.freedesktop.Platform
+runtime-version: "24.08"
+sdk: org.freedesktop.Sdk
+command: flatpak-host-probe
+
+# Required for flatpak-spawn --host. This is probe-only permission, not a
+# proposed production permission for the port.
+finish-args:
+  - --talk-name=org.freedesktop.Flatpak
+
+modules:
+  - name: flatpak-host-probe
+    buildsystem: simple
+    build-commands:
+      - install -Dm755 probe.py /app/bin/probe.py
+      - install -Dm755 sandbox-entrypoint.sh /app/bin/flatpak-host-probe
+    sources:
+      - type: file
+        path: probe.py
+      - type: file
+        path: sandbox-entrypoint.sh

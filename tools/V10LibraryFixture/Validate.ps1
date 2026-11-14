@@ -118,6 +118,13 @@ Invoke-Fixture generate $second
 & $Exe compare $first $second
 if ($LASTEXITCODE -ne 0) { throw 'Two fresh generations differ logically' }
 
+# Record both generations' manifests. LiteDB indexes are unseeded, so the bytes
+# and hashes differ between generations even when every logical document matches.
+Write-Host 'EVIDENCE first generation SHA256SUMS:'
+Get-Content -LiteralPath (Join-Path $first 'SHA256SUMS') | ForEach-Object { Write-Host $_ }
+Write-Host 'EVIDENCE second generation SHA256SUMS:'
+Get-Content -LiteralPath (Join-Path $second 'SHA256SUMS') | ForEach-Object { Write-Host $_ }
+
 # Both negative checks operate only on a disposable generated copy.
 $corrupt = Join-Path $Output 'corrupt'
 Copy-Item -Recurse $first $corrupt
@@ -140,6 +147,8 @@ if (Test-Path -LiteralPath $fixtureManifest) {
     Invoke-Fixture verify $Fixture
     & $Exe compare $first $Fixture
     if ($LASTEXITCODE -ne 0) { throw 'Fresh generation differs logically from the committed fixture' }
+    Write-Host 'EVIDENCE committed fixture SHA256SUMS:'
+    Get-Content -LiteralPath $fixtureManifest | ForEach-Object { Write-Host $_ }
     Write-Host 'PASS: two logically identical generations, one-byte rejection, extra-file rejection, pinned committed capture and v10 read-back'
     exit 0
 }
