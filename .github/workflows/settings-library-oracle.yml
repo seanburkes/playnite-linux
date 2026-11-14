@@ -74,7 +74,7 @@ jobs:
         shell: pwsh
         run: |
           $present = (
-            (Test-Path tests/fixtures/v10/library.sha256) -and
+            (Test-Path tests/fixtures/v10/SHA256SUMS) -and
             (Test-Path tests/fixtures/v10/library) -and
             (Test-Path tests/golden/settings-library.sha256) -and
             (Test-Path tests/golden/settings-library.md) -and
@@ -119,7 +119,7 @@ jobs:
             -Mode Validate `
             -Exe $exe.FullName `
             -Library tests/fixtures/v10/library `
-            -LibraryManifest tests/fixtures/v10/library.sha256 `
+            -LibraryManifest tests/fixtures/v10/SHA256SUMS `
             -Scratch "${{ runner.temp }}/p1-002-validate" `
             -Golden tests/golden
       - name: Retain validation scratch

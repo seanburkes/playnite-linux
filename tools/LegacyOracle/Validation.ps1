@@ -12,6 +12,10 @@ if ($PayloadFiles.Count -ne 21 -or $SettingsFiles.Count -ne 3 -or $LibraryFiles.
 
 function Get-UnlinkedPath([string]$Path) {
     $full = [IO.Path]::GetFullPath($Path)
+    # Windows 8.3 aliases carry a ~N component; reject the shape instead of resolving it.
+    foreach ($segment in ($full -split '[\\/]')) {
+        if ($segment -match '~\d') { throw "Short (8.3) path aliases are forbidden: $full" }
+    }
     for ($current = $full; $current; $current = [IO.Path]::GetDirectoryName($current)) {
         $item = Get-Item -LiteralPath $current -Force -ErrorAction SilentlyContinue
         if ($item -and ($item.Attributes -band [IO.FileAttributes]::ReparsePoint)) {
@@ -88,22 +92,29 @@ function Assert-SameTree([string]$Left, [string]$Right) {
     foreach ($name in $a.Keys) { Assert-SameBytes (Join-Path $Left $name) (Join-Path $Right $name) }
 }
 
-function Get-ManifestHashes([string]$Manifest, [string[]]$ExpectedNames) {
+function Get-ManifestHashes([string]$Manifest, [string[]]$ExpectedNames, [string]$Prefix = '') {
     $null = Get-UnlinkedPath $Manifest
     if (!(Test-Path -LiteralPath $Manifest -PathType Leaf)) { throw "Missing SHA256 manifest: $Manifest" }
     $listed = [Collections.Generic.Dictionary[string, string]]::new([StringComparer]::Ordinal)
     foreach ($line in [IO.File]::ReadAllLines($Manifest)) {
         if ($line -cnotmatch '^([0-9a-f]{64})  ([a-zA-Z0-9./_-]+)$') { throw 'Invalid SHA256 manifest line.' }
-        if (!$listed.TryAdd($Matches[2], $Matches[1])) { throw "Duplicate manifest path: $($Matches[2])" }
+        $name = $Matches[2]
+        if ($Prefix) {
+            # p1-003 pins the bundle root; only library/ entries belong to this unit.
+            if (!$name.StartsWith($Prefix, [StringComparison]::Ordinal)) { continue }
+            $name = $name.Substring($Prefix.Length)
+            if (!$name) { throw 'Empty path after library prefix.' }
+        }
+        if (!$listed.TryAdd($name, $Matches[1])) { throw "Duplicate manifest path: $name" }
     }
     Assert-Names @($listed.Keys) $ExpectedNames
     return $listed
 }
 
-function Assert-HashInventory([string]$Root, [string]$Manifest, [string[]]$Names) {
+function Assert-HashInventory([string]$Root, [string]$Manifest, [string[]]$Names, [string]$Prefix = '') {
     $actual = Get-TreeHashes $Root
     Assert-Names @($actual.Keys) $Names
-    $listed = Get-ManifestHashes $Manifest $Names
+    $listed = Get-ManifestHashes $Manifest $Names $Prefix
     foreach ($name in $Names) {
         if ($listed[$name] -cne $actual[$name]) { throw "SHA256 differs: $name" }
     }

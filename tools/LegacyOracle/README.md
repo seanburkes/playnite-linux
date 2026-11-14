@@ -56,7 +56,7 @@ $exe = Get-ChildItem tools/LegacyOracle/bin -Recurse -Filter LegacyOracle.exe |
 ./tools/LegacyOracle/Test-Validation.ps1 -Scratch "$env:RUNNER_TEMP/p1-002-selftest" -Exe $exe.FullName
 ./tools/LegacyOracle/Verify.ps1 -Mode Validate -Exe $exe.FullName `
   -Library tests/fixtures/v10/library `
-  -LibraryManifest tests/fixtures/v10/library.sha256 `
+  -LibraryManifest tests/fixtures/v10/SHA256SUMS `
   -Scratch "$env:RUNNER_TEMP/p1-002-validate" -Golden tests/golden
 ```
 
@@ -98,10 +98,14 @@ Manifest formats are deliberately dead simple and hash-pinned:
 - `tests/golden/settings-library.sha256`: 21 lines,
   `<lowercase sha256><two spaces><path relative to tests/golden>`, e.g.
   `...  settings/config.json`.
-- The p1-003 fixture pin, passed with `-LibraryManifest`: 18 lines in the same format with
-  paths relative to the fixture library directory. Its exact repository path is pending
-  p1-003's approved capture; the workflow's `tests/fixtures/v10/library.sha256` default is a
-  provisional wiring point, not a claim about that capture.
+- The p1-003 fixture pin is consumed directly as `tests/fixtures/v10/SHA256SUMS`. Only its
+  `library/`-prefixed entries belong to this unit; the prefix is stripped in memory, so the
+  approved bundle file is never copied, rewritten or supplemented with a new fixture path.
+  Other bundle entries are ignored. The 18 stripped names must equal the approved library
+  inventory and match the source tree hashes exactly.
+- Windows 8.3 short-name components (`~N`) are rejected by shape before path comparison, so
+  a short alias cannot silently stand in for a protected tree. This is a conservative shape
+  check, not a general filesystem-identity resolver.
 
 Golden regeneration remains a separately reviewed human operation. Do not write anything
 under `tests/golden/` until exact paths and derivation receive independent approval. Do not

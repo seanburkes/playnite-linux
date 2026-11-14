@@ -76,7 +76,7 @@ try {
         if (!$Library -or !$LibraryManifest) {
             throw 'Approved library and SHA256 manifest are required; acceptance pending.'
         }
-        Assert-HashInventory $Library $LibraryManifest $LibraryFiles
+        Assert-HashInventory $Library $LibraryManifest $LibraryFiles 'library/'
         $copy = Join-Path $Scratch 'library-copy'
         Invoke-Oracle @('library-export', $Library, $copy)
         Assert-SameTree $Library $copy
@@ -89,13 +89,14 @@ try {
     } else {
         $PayloadFiles
     }
-    Assert-Names @((Get-TreeHashes $payload).Keys) $expectedPayload
+    $emitted = Get-TreeHashes $payload
+    Assert-Names @($emitted.Keys) $expectedPayload
 
     if ($Mode -eq 'Validate') {
         Assert-Goldens $payload $Golden
-        $outcome = 'PASS: exact 21 golden payloads and path/hash manifest; settings roundtrip/repeat; raw library bytes; source preserved.'
+        $outcome = "PASS: exact $($emitted.Count) golden payloads and path/hash manifest; settings roundtrip/repeat; raw library bytes; source preserved."
     } else {
-        $outcome = "GENERATED $($expectedPayload.Count) scratch payloads for review: protected acceptance, fixture and Windows evidence remain pending. No protected write or automatic manifest acceptance."
+        $outcome = "GENERATED $($emitted.Count) scratch payloads for review: protected acceptance, fixture and Windows evidence remain pending. No protected write or automatic manifest acceptance."
     }
 } catch {
     $failure = $_

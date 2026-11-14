@@ -97,16 +97,25 @@ Assert-Rejected { Assert-Goldens $emitted (Join-Path $Scratch 'absent-goldens') 
 Assert-Goldens $emitted $golden
 $checks++
 
-# A separate SHA256 inventory pins the single approved library capture before generation.
-$libraryManifest = Join-Path $Scratch 'library.sha256'
-$libraryLines = @($lines | Where-Object { $_ -cmatch '  library/' } | ForEach-Object { $_.Replace('  library/', '  ') })
-[IO.File]::WriteAllLines($libraryManifest, [string[]]$libraryLines)
-Assert-HashInventory "$golden/library" $libraryManifest $LibraryFiles
+# p1-003's approved SHA256SUMS pins the bundle root and prefixes library entries.
+$libraryManifest = Join-Path $Scratch 'SHA256SUMS'
+$libraryLines = @($lines | Where-Object { $_ -cmatch '  library/' })
+[IO.File]::WriteAllLines($libraryManifest,
+    [string[]](@($libraryLines) + ('0' * 64 + '  steam/libraryfolders.vdf')))
+Assert-HashInventory "$golden/library" $libraryManifest $LibraryFiles 'library/'
 $checks++
 [IO.File]::WriteAllLines($libraryManifest, [string[]]$libraryLines[1..17])
-Assert-Rejected { Assert-HashInventory "$golden/library" $libraryManifest $LibraryFiles } 'missing pinned library hash'
-[IO.File]::WriteAllLines($libraryManifest, [string[]](@($libraryLines) + ('0' * 64 + '  extra.db')))
-Assert-Rejected { Assert-HashInventory "$golden/library" $libraryManifest $LibraryFiles } 'extra pinned library hash'
+Assert-Rejected { Assert-HashInventory "$golden/library" $libraryManifest $LibraryFiles 'library/' } 'missing pinned library hash'
+[IO.File]::WriteAllLines($libraryManifest,
+    [string[]](@($libraryLines) + ('0' * 64 + '  library/extra.db')))
+Assert-Rejected { Assert-HashInventory "$golden/library" $libraryManifest $LibraryFiles 'library/' } 'extra pinned library hash'
+[IO.File]::WriteAllLines($libraryManifest, [string[]](@($libraryLines) + @($libraryLines[0])))
+Assert-Rejected { Assert-HashInventory "$golden/library" $libraryManifest $LibraryFiles 'library/' } 'duplicate pinned library hash'
+$bareLines = @($LibraryFiles | ForEach-Object {
+    (Get-FileHash -LiteralPath (Join-Path "$golden/library" $_) -Algorithm SHA256).Hash.ToLowerInvariant() + '  ' + $_
+})
+[IO.File]::WriteAllLines($libraryManifest, [string[]]$bareLines)
+Assert-Rejected { Assert-HashInventory "$golden/library" $libraryManifest $LibraryFiles 'library/' } 'bare-name pin lacks the approved bundle prefix'
 
 # Scratch is rejected without changing source bytes or file sets, even via linked aliases.
 $source = Join-Path $Scratch 'disposable-source'
@@ -124,6 +133,7 @@ New-Item -ItemType $kind -Path $alias -Target $source | Out-Null
 Assert-Rejected { $null = Assert-ScratchPath "$alias/nested" @($source) } 'linked scratch ancestor'
 Assert-Unchanged $source $beforeSource 'Rejected link changed source.'
 if (Test-Path -LiteralPath "$source/nested") { throw 'Rejected linked scratch wrote to source.' }
+Assert-Rejected { $null = Get-UnlinkedPath (Join-Path $Scratch 'PROGRA~1') } '8.3 short-name component'
 
 if ($Exe) {
     # Real harness negative paths; these require the built net462 executable on Windows.
@@ -151,13 +161,15 @@ if ($Exe) {
     $existing = Join-Path $Scratch 'existing-destination'
     New-Item -ItemType Directory -Path $existing | Out-Null
     [IO.File]::WriteAllBytes((Join-Path $existing 'keep'), [byte[]](4, 5))
+    $beforeExisting = Get-TreeState $existing
     Assert-OracleExit @('library-export', $source, $existing) 1
-    Assert-Unchanged $existing (Get-TreeState $existing) 'Existing destination changed.'
+    Assert-Unchanged $existing $beforeExisting 'Existing destination changed by library-export.'
     Assert-OracleExit @('library-export', $alias, (Join-Path $Scratch 'alias-output')) 1
     if (Test-Path -LiteralPath (Join-Path $Scratch 'alias-output')) { throw 'Linked source export wrote output.' }
     Assert-OracleExit @('library-export', (Join-Path $Scratch 'missing-source'), (Join-Path $Scratch 'missing-copy')) 1
     Assert-OracleExit @('settings-bytes', $source, "$source/nested-settings") 1
     Assert-OracleExit @('settings-bytes', $source, $existing) 1
+    Assert-Unchanged $existing $beforeExisting 'Existing destination changed by settings-bytes.'
     Assert-OracleExit @('settings-bytes', (Join-Path $Scratch 'missing-settings'), (Join-Path $Scratch 'missing-settings-output')) 1
     Assert-OracleExit @('settings-bytes') 2
     Assert-OracleExit @('unknown-command', $source, (Join-Path $Scratch 'unused')) 2
