@@ -9,6 +9,11 @@ import select
 import shutil
 import subprocess
 import sys
+import time
+
+
+MAX_RECORD_BYTES = 4096  # Includes the terminating newline.
+RECORD_TIMEOUT = 5
 
 
 # The controlled child self-expires even if its launcher dies. No host file writes.
@@ -55,16 +60,37 @@ def child_command(host=False):
     return [sys.executable, "-u", "-c", CHILD]
 
 
+def read_record(stream):
+    """Read one newline-framed record within a total byte/time budget."""
+    deadline = time.monotonic() + RECORD_TIMEOUT
+    record = bytearray()
+    while True:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise TimeoutError(f"controlled child report timed out ({len(record)} bytes received)")
+        ready, _, _ = select.select([stream], [], [], remaining)
+        if not ready:
+            raise TimeoutError(f"controlled child report timed out ({len(record)} bytes received)")
+        chunk = os.read(stream.fileno(), MAX_RECORD_BYTES + 1 - len(record))
+        if time.monotonic() >= deadline:
+            raise TimeoutError(f"controlled child report timed out ({len(record) + len(chunk)} bytes received)")
+        if not chunk:
+            if record:
+                raise EOFError("controlled child report ended before newline")
+            return b""
+        record.extend(chunk)
+        if len(record) > MAX_RECORD_BYTES:
+            raise ValueError("controlled child report exceeds 4096-byte limit")
+        if b"\n" in record:
+            return bytes(record[:record.index(b"\n") + 1])
+
+
 def run_child(command):
     """Only terminate/reap this probe's own launcher; host child has a 3s deadline."""
     with subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                           stderr=subprocess.PIPE) as process:
         try:
-            # One fixed, small JSON line from our child; no unbounded process scan.
-            ready, _, _ = select.select([process.stdout], [], [], 5)
-            if not ready:
-                raise TimeoutError("controlled child did not report within 5 seconds")
-            line = os.read(process.stdout.fileno(), 4096)
+            line = read_record(process.stdout)
             if not line:
                 _, error = process.communicate(timeout=5)
                 return {"result": "launch-failed", "exit_code": process.returncode,

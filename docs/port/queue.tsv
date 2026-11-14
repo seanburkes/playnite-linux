@@ -65,4 +65,4 @@ p7-009	W7	ui	Import transport/fresh-install wizard	p4-002,p7-002	todo	ui	screens
 p8-006	W8	pack	Flatpak host launch/tracking	p5-008,p8-002	todo	release	manual	test:pack	flatpak-spawn --host; ADR-020
 p8-007	W8	sdk	Freeze SDK UI extension points	p7-001,p6-004	todo	sdk	api-compat	test:sdk	ADR-023; after shell pilot
 p8-008	W8	sdk	WebView service (v1.1)	p8-007	todo	platform	http-stub	test:webview	ADR-019; not v1
-p1-010	W1	spike	Flatpak host launch/tracking	p1-003	in-progress	platform	spike	spikes/flatpak-host/test_probe.py	ADR-020; 13 local/synthetic tests pass; no Flatpak tools/sandbox; real native/Proton unrun; p1-003 incomplete; spikes/flatpak-host/README.md
+p1-010	W1	spike	Flatpak host launch/tracking	p1-003	in-progress	platform	spike	spikes/flatpak-host/test_probe.py	ADR-020; 26 local/synthetic tests pass; fragmented records bounded by total bytes/deadline; no Flatpak tools/sandbox; real native/Proton unrun; p1-003 incomplete; spikes/flatpak-host/README.md

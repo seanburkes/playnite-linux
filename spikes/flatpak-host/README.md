@@ -25,7 +25,7 @@ PYTHONDONTWRITEBYTECODE=1 python3 spikes/flatpak-host/probe.py --host-child
 
 The evidence run used `/usr/bin/python3` (3.14.10), not the untrusted worktree's
 mise shims. Both commands above resolve their script paths from repository root.
-All 13 tests executed, zero failures/errors/skips. JSON is an observation report,
+All 26 tests executed, zero failures/errors/skips. JSON is an observation report,
 not an acceptance verdict: command exit zero does not mean host tracking passed.
 
 Default mode only starts a controlled local Python child. `--host-child` also
@@ -47,6 +47,15 @@ only its own launcher if needed. No Steam command is executed; no user process
 is enumerated, signalled, launched, or killed. PATH presence of `steam` does not
 verify an installation, running client, or available native/Proton games.
 
+The report reader accumulates a newline-framed JSON record across short reads,
+with a total 4096-byte cap (including newline) and one monotonic 5-second deadline
+that fragments do not renew. Empty EOF retains the `launch-failed` report. Partial
+EOF raises `EOFError`; expiry raises `TimeoutError` with the received-byte count;
+oversized output raises `ValueError`; malformed JSON/UTF-8 raises
+`JSONDecodeError`/`UnicodeDecodeError`. These are failures, not visibility results;
+the owned launcher is still killed/reaped in `finally`. No blocking `readline`
+is used.
+
 ## Evidence matrix
 
 | Experiment | Evidence class | Observed result | What it does NOT establish |
@@ -61,10 +70,18 @@ verify an installation, running client, or available native/Proton games.
 | PID reuse, namespace collision, missing/denied `/proc`, stat names with spaces/parentheses | Synthetic unit tests | Distinct identity or explicit inconclusive/denied outcome, never success | Real sandbox policy or Steam identity/attribution |
 | Failed launcher and timeout cleanup | Controlled test children | Failure exit 7 reported; unresponsive owned child reaped | Any host-side teardown guarantee beyond the self-expiring child design |
 | Host gate and fixed argv | Synthetic unit tests | Existing-sandbox/tool gates enforced; fixed host argument list | Actual `flatpak-spawn` execution or permissions |
+| Fragmented record and bounded failure paths | Controlled local child plus synthetic short-read/clock tests | Seven-byte reads retain same identity and exit 23; partial EOF/timeout, malformed records and byte-limit failures reap owned launchers; fragments share one deadline | Real Flatpak forwarding, sandbox visibility or game acceptance |
 
 Raw run output is retained as task proof outside the repository at
 `/home/sean/src/firstmate/data/p1-010/{probe.json,tests.txt}`. The matrix above
 records the relevant observations without publishing user paths or process lists.
+
+Correction evidence is at `/home/sean/src/firstmate/data/p1-010-fix/`:
+`reproduction-before.txt` compares full delivery, seven-byte fragmentation, and
+changing only the read limit back to 4096. Only fragmentation triggered the old
+`JSONDecodeError`; full delivery reported `same-identity`, so sandbox visibility
+is not a trigger. `reproduction-after.txt` reports the same identity/exit with all
+three delivery modes. `tests.txt` and `syntax.txt` record the narrow checks.
 
 ## Interface to p1-007 (via firstmate)
 
