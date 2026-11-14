@@ -10,6 +10,7 @@ on:
       - "oracle-lock/**"
       - "tests/golden/**"
       - "tests/fixtures/**"
+      - "tools/LegacyOracle/**"
       - ".github/workflows/legacy-oracle.yml"
 
 permissions:

@@ -4,6 +4,9 @@
 - Owner: oracle
 - Reviewer: independent plan review (session `ses_e27629994ffec0IK0wD5lgcnOT`); gate evidence pending captain review
 - Runs: legacy oracle https://github.com/seanburkes/playnite-linux/actions/runs/43604176690;
+  manifest comparison https://github.com/seanburkes/playnite-linux/actions/runs/43646522483 (attempt 2;
+  comparison step passed, unrelated legacy test flaked); same commit fully green in
+  https://github.com/seanburkes/playnite-linux/actions/runs/43645705588;
   settings/library https://github.com/seanburkes/playnite-linux/actions/runs/43627447663;
   fixture https://github.com/seanburkes/playnite-linux/actions/runs/43629325359
 - Result: **NOT READY** — the oracle build and v10 suite are green, but the settings/library
@@ -30,6 +33,12 @@ Supporting checks on the committed tree:
 
 - `tests/baseline.json` records 282 executed, 282 passed, 0 failed, 0 skipped and the two
   exclusions; `tests/legacy-exclusions.md` explains both.
+- Manifest reproducibility is proven by the workflow, not just emitted: run 43646522483
+  (attempt 2) ran the byte comparison and logged `Manifest goldens match committed bytes:
+  2 file(s)` and rejection of the one-byte copy, then failed only in the unrelated legacy
+  `ShellExecuteTest` (281/282); attempt 1 of that rerun flaked on the network tests
+  `WebTest`, `AddFileTest` and `GetResponseCodeTest`. The same commit was fully green,
+  including the comparison and one-byte negative, in run 43645705588.
 - `tests/golden/` contains only the two v10 manifest goldens; no
   `settings-library.sha256`, `settings-library.md`, `settings/` or `library/` corpus exists.
 - `tests/fixtures/v10/` does not exist. Only the synthetic Steam fixtures under
