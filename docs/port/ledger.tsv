@@ -1,2 +1,3 @@
 timestamp	unit	from	to	actor	evidence
 2026-11-13T22:30:00-05:00	p0-001	todo	done	captain	docs/port/00-DECISIONS.md; docs/port/01-INVENTORY.generated.md
+2026-11-14T17:05:00Z	p1-007	todo	in-progress	fm/p1-007	spikes/steam-process-tracking/README.md; 16 synthetic/owned-process tests; no real native/Proton acceptance; p1-003 unsatisfied; two blind reviews pending
