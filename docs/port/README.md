@@ -24,6 +24,7 @@ and `net11.0` assemblies cannot coexist in one process.
 | [`04-VERIFICATION.md`](04-VERIFICATION.md) | How do we know a unit is correct, and how is the oracle protected? |
 | [`05-DEPENDENCIES.md`](05-DEPENDENCIES.md) | What replaces every v10 package, and what are the risks? |
 | [`06-OPERATIONS.md`](06-OPERATIONS.md) | How do agents, worktrees, review, and firstmate run this? |
+| [`07-FIRSTMATE.md`](07-FIRSTMATE.md) | What was actually configured, and how do I launch it? |
 | [`PORTING.md`](PORTING.md) | What are the coding rules for every ported unit? |
 | [`RISKS.md`](RISKS.md) | What can kill this, and what is the mitigation? |
 | [`PORT-STATUS.md`](PORT-STATUS.md) | Where are we right now? |

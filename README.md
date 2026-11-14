@@ -38,7 +38,7 @@ legacy/                 Frozen Playnite 10.64 source (read-only oracle)
 src/                    New .NET 11 projects (created in Phase 1)
 tests/                  New tests, fixtures, golden corpus
 scripts/port/           Deterministic inventory and queue generators
-docs/port/              Decisions, inventory, architecture, execution, verification
+docs/port/              Decisions, inventory, architecture, execution, verification, operations
 docs/formal/            TLA+ models for critical state machines
 ```
 

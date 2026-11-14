@@ -14,7 +14,9 @@
 Roles never overlap. The implementer never reviews its own unit. The reviewer never edits the
 implementation. The oracle owner is not the person changing the implementation.
 
-## 2. Firstmate setup (planned)
+## 2. Firstmate setup
+
+Actual configured state and launch commands: [`07-FIRSTMATE.md`](07-FIRSTMATE.md).
 
 Firstmate is cloned at `~/src/firstmate`. Its private home is the repo root by default. Create
 a project clone and registry entry **after** the first commit exists:
