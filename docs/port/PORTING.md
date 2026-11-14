@@ -167,10 +167,13 @@ python3 scripts/port/build_port_index.py check --against origin/main
 The contract is in [`units/README.md`](units/README.md). Unit ids are lowercase letters,
 digits, and single hyphens; the units directory accepts only `README.md`, `removed.tsv`, and
 correctly named shards, so a misnamed file fails instead of silently vanishing. Ledger rows
-are append-only: append new rows, never edit, delete, duplicate, or reorder existing ones.
-`check --against <ref>` fails when a base shard, queue row, or ledger row is missing at head.
-Retiring a unit is explicit: delete its shards and add a new `removed.tsv` row with a reason in
-the same change. `check` is the CI gate; a shard with a missing or reordered header, a ragged
+are append-only: the base rows must stay an exact prefix, so append new rows, never edit,
+delete, duplicate, insert before existing history, or reorder existing ones.
+`check --against <ref>` fails when a base shard, queue row, or ledger row is missing at head,
+and requires `<ref>` to be a strict ancestor of HEAD. Retiring a unit is explicit: delete its
+shards and add a new `removed.tsv` row with a reason and a non-empty `approved-by` in the same
+change; retirement records are immutable and captain-authorized, enforced by human review.
+`check` is the CI gate; a shard with a missing or reordered header, a ragged
 row, invalid UTF-8, or a filename/id mismatch fails before any aggregate is written.
 
 ## Banned constructs

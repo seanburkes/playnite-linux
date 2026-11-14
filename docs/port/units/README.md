@@ -7,7 +7,7 @@ by hand. Each unit owns a shard in this directory:
 | --- | --- |
 | `<unit-id>.queue.tsv` | The exact queue header plus exactly one queue row. |
 | `<unit-id>.ledger.tsv` | Optional; the exact ledger header plus zero or more append-only ledger rows. |
-| `removed.tsv` | Optional; the exact `unit`/`reason` header plus one row per retired unit. |
+| `removed.tsv` | Optional; the exact `unit`/`reason`/`approved-by` header plus one row per retired unit. |
 | `README.md` | This contract. |
 
 A shard uses the same columns, order, and TSV syntax as the aggregate it feeds. The queue
@@ -47,9 +47,13 @@ ledger shard, but it may never edit an existing row, delete one, duplicate one, 
 existing rows. A duplicate is the same unit, instant, and transition content; timestamps that
 name the same instant (for example `Z` and `+00:00`) are compared as instants.
 
-`check --against <ref>` enforces this against a base commit: every queue shard, queue
-aggregate row, ledger shard, and ledger aggregate row present at `<ref>` must still be present
-at head. In CI the base is the pull request's base commit (or the previous commit on `main`).
+`check --against <ref>` enforces this against a base commit that must be a strict ancestor of
+HEAD: the base ledger rows must be an exact prefix of the head rows, and the base ledger
+aggregate must be an exact prefix of the regenerated ledger. A row may not be inserted before
+existing history, and a new row may not carry a backdated instant that sorts ahead of it. Every
+queue shard and queue aggregate row present at `<ref>` must still be present at head; ledger
+shards and rows may only be removed by a recorded retirement. In CI the base is the pull
+request's base commit (or the previous commit on `main`).
 
 ## Retiring a unit
 
@@ -57,14 +61,20 @@ Removal is never silent. To retire a unit, delete its queue and ledger shards an
 to `removed.tsv` in the same change:
 
 ```
-unit	reason
-p1-012	merged into p1-011; no separate tracking row
+unit	reason	approved-by
+p1-012	merged into p1-011; no separate tracking row	captain
 ```
 
-The retirement record must be new in that change. The check fails when a base shard vanishes
-without a new record, when a record names a unit that never existed at the base, when a record
-is deleted, or when a recorded unit's shard still exists. Unit ids are not renamed: retire the
-old id and add a genuinely new unit instead. Retirement records are permanent.
+The retirement record must be new in that change and `approved-by` must be non-empty. The check
+fails when a base shard vanishes without a new record, when a record names a unit that never
+existed at the base, when a record is deleted, when an existing record's reason or approver is
+edited, when `approved-by` is missing, or when a recorded unit's shard still exists. Unit ids
+are not renamed: retire the old id and add a genuinely new unit instead. Retirement records are
+permanent.
+
+CI enforces the record's shape and history, not who approved it. A retirement is a
+captain-authorized decision: human review of the record plus the deleted shards is the
+authority boundary, not a signature scheme or a second approval file.
 
 ## CI
 
@@ -72,6 +82,11 @@ CI runs `check --against <base>` and rejects a pull request that changes either 
 without changing a contract shard or `removed.tsv` once this directory exists on its base.
 The history check is what prevents a shard or ledger row from being deleted and regenerated
 with every other check green.
+
+The migration PR that first adds this directory is the one legitimate pre-migration base. Its
+base has no `docs/port/units` tree, so the CI job passes `--allow-pre-migration-base`, which
+prints an explicit history-skip acknowledgement; ordinary runs refuse a shardless base instead
+of skipping history silently.
 
 The initial migration mechanically reordered eight historical append rows into wave-then-id
 order (`p1-009`, `p1-010`, `p2-006`, `p3-009`, `p7-009`, `p8-006`, `p8-007`, `p8-008`).

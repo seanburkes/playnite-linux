@@ -5,10 +5,15 @@ Usage:
     python3 scripts/port/build_port_index.py build
     python3 scripts/port/build_port_index.py check [--against <ref>]
 
-`check --against <ref>` additionally verifies history: every unit shard and
-ledger row present at <ref> must still be present at head, except for a unit
-explicitly retired in `docs/port/units/removed.tsv`. In CI the base ref is
-supplied through the PORT_INDEX_BASE_REF environment variable.
+`check --against <ref>` additionally verifies history: base ledger rows must be
+an exact prefix of the head rows, queue shards and ledger rows must survive
+unless a unit is explicitly retired in `docs/port/units/removed.tsv`, and <ref>
+must be a strict ancestor of HEAD. CI passes the ref with `--against`; the
+PORT_INDEX_BASE_REF environment variable is only a local convenience fallback.
+
+The migration PR that first adds `docs/port/units` is the one legitimate
+pre-migration base: `--allow-pre-migration-base` acknowledges the history skip
+and prints a notice instead of passing silently.
 
 Exit codes: 0 success, 1 validation error or drift.
 """
@@ -43,7 +48,7 @@ QUEUE_SUFFIX = ".queue.tsv"
 LEDGER_SUFFIX = ".ledger.tsv"
 README_NAME = "README.md"
 REMOVED_NAME = "removed.tsv"
-REMOVED_COLUMNS = ["unit", "reason"]
+REMOVED_COLUMNS = ["unit", "reason", "approved-by"]
 REMOVED_HEADER = "\t".join(REMOVED_COLUMNS)
 
 # Conservative unit-id shape: lowercase letters, digits and single hyphens.
@@ -85,7 +90,7 @@ class ShardIndex:
 
     queue: dict[str, QueueRow]
     ledger: dict[str, tuple[LedgerRow, ...]]
-    removed: dict[str, str]
+    removed: dict[str, tuple[str, ...]]
 
 
 @dataclass(frozen=True)
@@ -96,7 +101,7 @@ class BaseSnapshot:
     ledger_shards: dict[str, tuple[tuple[str, ...], ...]]
     queue_aggregate: tuple[tuple[str, ...], ...]
     ledger_aggregate: tuple[tuple[str, ...], ...]
-    removed: dict[str, str]
+    removed: dict[str, tuple[str, ...]]
 
 
 def _parse_shard_bytes(
@@ -296,22 +301,26 @@ def _collect_ledger(
     return rows, errors
 
 
-def _collect_removed(path: Path) -> dict[str, str]:
+def _collect_removed(path: Path) -> dict[str, tuple[str, ...]]:
     parsed = _read_shard(path, REMOVED_HEADER, REMOVED_COLUMNS)
-    removed: dict[str, str] = {}
+    removed: dict[str, tuple[str, ...]] = {}
     for lineno, fields in parsed:
-        unit_id, reason = fields
+        unit_id, reason, approved_by = fields
         if not _UNIT_ID.fullmatch(unit_id):
             raise PortIndexError(
                 f"{path}:{lineno}: invalid unit id {unit_id!r} in retirement record"
             )
         if not reason.strip():
             raise PortIndexError(f"{path}:{lineno}: retirement record needs a reason")
+        if not approved_by.strip():
+            raise PortIndexError(
+                f"{path}:{lineno}: retirement record needs a non-empty approved-by"
+            )
         if unit_id in removed:
             raise PortIndexError(
                 f"{path}:{lineno}: duplicate retirement record for {unit_id!r}"
             )
-        removed[unit_id] = reason
+        removed[unit_id] = tuple(fields)
     return removed
 
 
@@ -346,7 +355,7 @@ def build_index(units: Path) -> ShardIndex:
     ledger_rows, ledger_errors = _collect_ledger(ledger_paths, set(queue_rows))
     errors.extend(ledger_errors)
 
-    removed: dict[str, str] = {}
+    removed: dict[str, tuple[str, ...]] = {}
     if removed_path is not None:
         try:
             removed = _collect_removed(removed_path)
@@ -363,16 +372,17 @@ def build_index(units: Path) -> ShardIndex:
     return ShardIndex(queue_rows, ledger_rows, removed)
 
 
+def _ordered_ledger_rows(index: ShardIndex) -> tuple[LedgerRow, ...]:
+    """The ledger rows in generated aggregate order."""
+    rows = [row for unit_id in sorted(index.ledger) for row in index.ledger[unit_id]]
+    return tuple(sorted(rows, key=lambda row: (_timestamp(row.timestamp), row.unit)))
+
+
 def render_index(index: ShardIndex) -> tuple[bytes, bytes]:
     queue_rows_sorted = sorted(
         index.queue.values(), key=lambda row: (_wave_key(row.fields[1]), row.fields[0])
     )
-    ledger_rows = [
-        row for unit_id in sorted(index.ledger) for row in index.ledger[unit_id]
-    ]
-    ledger_rows_sorted = sorted(
-        ledger_rows, key=lambda row: (_timestamp(row.timestamp), row.unit)
-    )
+    ledger_rows_sorted = _ordered_ledger_rows(index)
 
     queue_text = QUEUE_HEADER + "\n" + "".join(
         "\t".join(row.fields) + "\n" for row in queue_rows_sorted
@@ -429,7 +439,7 @@ def snapshot_from_dir(units: Path, queue: Path, ledger: Path) -> BaseSnapshot | 
             rows.append(tuple(fields))
         ledger_shards[unit_id] = tuple(rows)
 
-    removed: dict[str, str] = {}
+    removed: dict[str, tuple[str, ...]] = {}
     removed_path = units / REMOVED_NAME
     if removed_path.exists():
         removed = _collect_removed(removed_path)
@@ -452,6 +462,30 @@ def _git(root: Path, *args: str) -> bytes:
         stderr = completed.stderr.decode("utf-8", "replace").strip()
         raise PortIndexError(f"git {' '.join(args)} failed: {stderr}")
     return completed.stdout
+
+
+def _is_strict_ancestor(root: Path, ref: str) -> bool:
+    """True only when `ref` resolves to a commit strictly before HEAD."""
+    try:
+        head = _git(root, "rev-parse", "--verify", "HEAD^{commit}").strip()
+        base = _git(root, "rev-parse", "--verify", "--quiet", f"{ref}^{{commit}}").strip()
+    except PortIndexError:
+        return False
+    if not base or base == head:
+        return False
+    completed = subprocess.run(
+        [
+            "git",
+            "-C",
+            str(root),
+            "merge-base",
+            "--is-ancestor",
+            base.decode("ascii", "replace"),
+            head.decode("ascii", "replace"),
+        ],
+        capture_output=True,
+    )
+    return completed.returncode == 0
 
 
 def load_snapshot_from_git(root: Path, ref: str) -> BaseSnapshot | None:
@@ -518,6 +552,14 @@ def validate_history(index: ShardIndex, base: BaseSnapshot) -> list[str]:
             f"docs/port/units/{REMOVED_NAME}: retirement record for {unit_id!r} was "
             "deleted; retirement records are permanent"
         )
+    # A retirement record is immutable in content, not just in its unit key.
+    for unit_id in sorted(set(base.removed) & set(index.removed)):
+        if index.removed[unit_id] != base.removed[unit_id]:
+            errors.append(
+                f"docs/port/units/{REMOVED_NAME}: retirement record for {unit_id!r} was "
+                "edited; retirement records are permanent (reason and approved-by are "
+                "immutable)"
+            )
 
     # A retirement must name a unit that existed at the base and is gone at head.
     for unit_id in sorted(newly_retired):
@@ -562,7 +604,7 @@ def validate_history(index: ShardIndex, base: BaseSnapshot) -> list[str]:
                     "identities, so retire the old unit and add a genuinely new one"
                 )
 
-    # Ledger shards and their rows are append-only.
+    # Ledger shards are append-only: base rows must remain an exact prefix.
     for unit_id in sorted(base_ledger_ids):
         if unit_id in newly_retired:
             continue
@@ -574,32 +616,41 @@ def validate_history(index: ShardIndex, base: BaseSnapshot) -> list[str]:
             continue
         base_rows = base.ledger_shards[unit_id]
         head_rows = [row.fields for row in index.ledger[unit_id]]
-        if _is_subsequence(base_rows, head_rows):
+        if tuple(head_rows[: len(base_rows)]) == base_rows:
             continue
-        missing = next((row for row in base_rows if row not in head_rows), None)
-        if missing is None:
-            detail = "existing rows were reordered"
+        if _is_subsequence(base_rows, head_rows):
+            detail = (
+                "new rows were inserted before or between existing rows; append new "
+                "rows at the end of the shard"
+            )
         else:
-            detail = f"row {missing!r} is missing or altered"
+            missing = next((row for row in base_rows if row not in head_rows), None)
+            detail = (
+                "existing rows were reordered"
+                if missing is None
+                else f"row {missing!r} is missing or altered"
+            )
         errors.append(
             f"ledger shard {unit_id!r}: existing rows are append-only, but {detail}"
         )
 
-    # Every base ledger aggregate row must survive unchanged.
-    head_ledger_rows = {
-        row.fields for rows in index.ledger.values() for row in rows
-    }
-    for row in base.ledger_aggregate:
-        if len(row) < 2:
+    # Base ledger aggregate rows must remain an exact prefix of the generated ledger.
+    head_aggregate = [row.fields for row in _ordered_ledger_rows(index)]
+    base_aggregate = [
+        row
+        for row in base.ledger_aggregate
+        if len(row) >= 2 and row[1] not in newly_retired
+    ]
+    for position, expected in enumerate(base_aggregate):
+        actual = head_aggregate[position] if position < len(head_aggregate) else None
+        if actual == expected:
             continue
-        unit_id = row[1]
-        if unit_id in newly_retired:
-            continue
-        if row not in head_ledger_rows:
-            errors.append(
-                f"ledger row {row!r} present at the base ref is missing or altered at "
-                "head; the ledger is append-only"
-            )
+        errors.append(
+            f"ledger aggregate: base row {expected!r} is no longer at position "
+            f"{position + 2}; found {actual!r}. New rows may only append after existing "
+            "ledger history; a backdated row may not sort ahead of it"
+        )
+        break
 
     return errors
 
@@ -632,6 +683,7 @@ def main(
     ledger: Path = LEDGER,
     root: Path = ROOT,
     base_loader=None,
+    ancestor_guard=None,
 ) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("mode", choices=("build", "check"))
@@ -639,7 +691,18 @@ def main(
         "--against",
         metavar="REF",
         default=None,
-        help="base git ref whose shards and ledger rows must survive (check only)",
+        help=(
+            "strict ancestor commit whose shards and ledger rows must survive "
+            "(check only)"
+        ),
+    )
+    parser.add_argument(
+        "--allow-pre-migration-base",
+        action="store_true",
+        help=(
+            "acknowledge a --against base that predates docs/port/units "
+            "(migration PR only; prints a skip notice)"
+        ),
     )
     args = parser.parse_args(argv)
 
@@ -662,14 +725,43 @@ def main(
         return 1
 
     ref = args.against or os.environ.get("PORT_INDEX_BASE_REF", "").strip()
+    if args.allow_pre_migration_base and not ref:
+        print(
+            "error: --allow-pre-migration-base requires --against",
+            file=sys.stderr,
+        )
+        return 1
     if ref:
+        guard = ancestor_guard or (lambda target: _is_strict_ancestor(root, target))
+        if not guard(ref):
+            print(
+                f"error: --against {ref!r} is not a strict ancestor of HEAD; history "
+                "may only be compared with an ancestor commit, not HEAD, a descendant, "
+                "or an unrelated ref",
+                file=sys.stderr,
+            )
+            return 1
         loader = base_loader or (lambda target: load_snapshot_from_git(root, target))
         try:
             base = loader(ref)
         except PortIndexError as exc:
             print(f"error: {exc}", file=sys.stderr)
             return 1
-        if base is not None:
+        if base is None:
+            if not args.allow_pre_migration_base:
+                print(
+                    f"error: base ref {ref!r} has no docs/port/units, so history cannot "
+                    "be checked. This is only expected for the migration PR that first "
+                    "adds the shard directory; pass --allow-pre-migration-base to "
+                    "acknowledge it deliberately.",
+                    file=sys.stderr,
+                )
+                return 1
+            print(
+                f"notice: base ref {ref!r} predates docs/port/units; history check "
+                "skipped for the migration PR (--allow-pre-migration-base)"
+            )
+        else:
             history_errors = validate_history(index, base)
             if history_errors:
                 for error in history_errors:

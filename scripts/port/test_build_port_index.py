@@ -1,4 +1,5 @@
 import io
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -101,7 +102,10 @@ class PortIndexTests(unittest.TestCase):
                 LEDGER_HEADER + "\n" + body
             )
         if removed:
-            body = "".join(f"{unit}\t{reason}\n" for unit, reason in removed.items())
+            body = "".join(
+                f"{unit}\t{reason}\t{approved_by}\n"
+                for unit, (reason, approved_by) in removed.items()
+            )
             (base_units / "removed.tsv").write_text(
                 port_index.REMOVED_HEADER + "\n" + body
             )
@@ -114,16 +118,27 @@ class PortIndexTests(unittest.TestCase):
         base_ledger.write_bytes(ledger_bytes)
         return port_index.snapshot_from_dir(base_units, base_queue, base_ledger)
 
-    def check_against(self, base, ref="BASE"):
+    def check_against(
+        self,
+        base,
+        ref="BASE",
+        *,
+        ancestor_ok=True,
+        allow_pre_migration_base=False,
+    ):
+        argv = ["check", "--against", ref]
+        if allow_pre_migration_base:
+            argv.append("--allow-pre-migration-base")
         stdout = io.StringIO()
         stderr = io.StringIO()
         with redirect_stdout(stdout), redirect_stderr(stderr):
             status = port_index.main(
-                ["check", "--against", ref],
+                argv,
                 units=self.units,
                 queue=self.queue,
                 ledger=self.ledger,
                 base_loader=lambda _: base,
+                ancestor_guard=lambda _: ancestor_ok,
             )
         return status, stdout.getvalue() + stderr.getvalue()
 
@@ -496,7 +511,8 @@ class PortIndexTests(unittest.TestCase):
 
     def test_check_against_base_rejects_a_deleted_retirement_record(self):
         base = self.write_base(
-            {"p1-002": queue_row("p1-002")}, removed={"p1-001": "retired"}
+            {"p1-002": queue_row("p1-002")},
+            removed={"p1-001": ("retired", "captain")},
         )
         self.write_queue_shard("p1-002", queue_row("p1-002"))
         self.build()
@@ -531,7 +547,7 @@ class PortIndexTests(unittest.TestCase):
         )
         self.write_queue_shard("p1-002", queue_row("p1-002"))
         (self.units / "removed.tsv").write_text(
-            port_index.REMOVED_HEADER + "\np1-001\tmerged into p1-002\n"
+            port_index.REMOVED_HEADER + "\np1-001\tmerged into p1-002\tcaptain\n"
         )
         self.build()
 
@@ -556,6 +572,175 @@ class PortIndexTests(unittest.TestCase):
         status, output = self.check_against(base)
 
         self.assertEqual(status, 0, output)
+
+    def _base_for_insertion(self):
+        first = ledger_row("2026-11-14T17:00:00Z", "p1-001", to_status="done")
+        second = ledger_row(
+            "2026-11-14T18:00:00Z", "p1-001", from_status="done", to_status="released"
+        )
+        base = self.write_base(
+            {"p1-001": queue_row("p1-001")}, {"p1-001": [first, second]}
+        )
+        self.write_queue_shard("p1-001", queue_row("p1-001"))
+        return base, first, second
+
+    def test_check_against_base_rejects_a_row_inserted_at_the_front(self):
+        base, first, second = self._base_for_insertion()
+        inserted = ledger_row("2026-11-14T16:00:00Z", "p1-001", actor="backdated")
+        self.write_ledger_shard("p1-001", inserted, first, second)
+        self.build()
+
+        status, output = self.check_against(base)
+
+        self.assertEqual(status, 1)
+        self.assertIn("inserted before or between existing rows", output)
+
+    def test_check_against_base_rejects_a_row_inserted_between_rows(self):
+        base, first, second = self._base_for_insertion()
+        inserted = ledger_row("2026-11-14T17:30:00Z", "p1-001", actor="inserted")
+        self.write_ledger_shard("p1-001", first, inserted, second)
+        self.build()
+
+        status, output = self.check_against(base)
+
+        self.assertEqual(status, 1)
+        self.assertIn("inserted before or between existing rows", output)
+
+    def test_check_against_base_rejects_a_backdated_appended_row(self):
+        base, first, second = self._base_for_insertion()
+        backdated = ledger_row("2026-11-14T16:00:00Z", "p1-001", actor="backdated")
+        self.write_ledger_shard("p1-001", first, second, backdated)
+        self.build()
+
+        status, output = self.check_against(base)
+
+        self.assertEqual(status, 1)
+        self.assertIn("backdated row may not sort ahead", output)
+
+    def test_check_against_base_rejects_an_edited_retirement_reason(self):
+        base = self.write_base(
+            {"p1-002": queue_row("p1-002")},
+            removed={"p1-001": ("retired", "captain")},
+        )
+        self.write_queue_shard("p1-002", queue_row("p1-002"))
+        (self.units / "removed.tsv").write_text(
+            port_index.REMOVED_HEADER + "\np1-001\trewritten reason\tcaptain\n"
+        )
+        self.build()
+
+        status, output = self.check_against(base)
+
+        self.assertEqual(status, 1)
+        self.assertIn("retirement record for 'p1-001' was edited", output)
+        self.assertIn("permanent", output)
+
+    def test_check_against_base_rejects_an_edited_retirement_approval(self):
+        base = self.write_base(
+            {"p1-002": queue_row("p1-002")},
+            removed={"p1-001": ("retired", "captain")},
+        )
+        self.write_queue_shard("p1-002", queue_row("p1-002"))
+        (self.units / "removed.tsv").write_text(
+            port_index.REMOVED_HEADER + "\np1-001\tretired\tsomeone-else\n"
+        )
+        self.build()
+
+        status, output = self.check_against(base)
+
+        self.assertEqual(status, 1)
+        self.assertIn("retirement record for 'p1-001' was edited", output)
+
+    def test_retirement_record_without_approved_by_column_is_rejected(self):
+        self.write_queue_shard("p1-002", queue_row("p1-002"))
+        (self.units / "removed.tsv").write_text(
+            "unit\treason\np1-001\tretired\n"
+        )
+
+        with self.assertRaises(port_index.PortIndexError) as raised:
+            self.render()
+        self.assertIn("header mismatch", str(raised.exception))
+        self.assertIn("approved-by", str(raised.exception))
+
+    def test_retirement_record_with_empty_approved_by_is_rejected(self):
+        self.write_queue_shard("p1-002", queue_row("p1-002"))
+        (self.units / "removed.tsv").write_text(
+            port_index.REMOVED_HEADER + "\np1-001\tretired\t\n"
+        )
+
+        with self.assertRaises(port_index.PortIndexError) as raised:
+            self.render()
+        self.assertIn("needs a non-empty approved-by", str(raised.exception))
+
+    def test_check_against_rejects_a_non_ancestor_ref(self):
+        base = self.write_base({"p1-001": queue_row("p1-001")})
+        self.write_queue_shard("p1-001", queue_row("p1-001"))
+        self.build()
+
+        status, output = self.check_against(base, ancestor_ok=False)
+
+        self.assertEqual(status, 1)
+        self.assertIn("not a strict ancestor of HEAD", output)
+        self.assertIn("not HEAD, a descendant", output)
+
+    def test_strict_ancestor_guard_binds_history_to_an_ancestor(self):
+        repo = self.root / "repo"
+        repo.mkdir()
+
+        def git(*args):
+            return subprocess.run(
+                ["git", "-C", str(repo), *args],
+                check=True,
+                capture_output=True,
+                text=True,
+            ).stdout.strip()
+
+        git("init", "-q")
+        git("config", "user.email", "port-index@example.invalid")
+        git("config", "user.name", "Port Index Test")
+        (repo / "a.txt").write_text("one\n")
+        git("add", "a.txt")
+        git("commit", "-q", "-m", "one")
+        first = git("rev-parse", "HEAD")
+        (repo / "a.txt").write_text("two\n")
+        git("commit", "-qam", "two")
+        second = git("rev-parse", "HEAD")
+
+        self.assertTrue(port_index._is_strict_ancestor(repo, first))
+        self.assertFalse(port_index._is_strict_ancestor(repo, second))
+        self.assertFalse(port_index._is_strict_ancestor(repo, "HEAD"))
+
+        git("checkout", "-q", "-b", "ahead")
+        (repo / "a.txt").write_text("three\n")
+        git("commit", "-qam", "three")
+        descendant = git("rev-parse", "HEAD")
+        git("checkout", "-q", "-")
+
+        self.assertFalse(port_index._is_strict_ancestor(repo, descendant))
+        self.assertFalse(port_index._is_strict_ancestor(repo, "does-not-exist"))
+
+    def test_missing_units_base_requires_a_migration_acknowledgement(self):
+        self.write_queue_shard("p1-001", queue_row("p1-001"))
+        self.build()
+
+        status, output = self.check_against(None)
+
+        self.assertEqual(status, 1)
+        self.assertIn("--allow-pre-migration-base", output)
+        self.assertIn("history cannot be checked", output)
+        self.assertNotIn("history matches", output)
+
+    def test_migration_acknowledgement_prints_the_skip_notice(self):
+        self.write_queue_shard("p1-001", queue_row("p1-001"))
+        self.build()
+
+        status, output = self.check_against(
+            None, allow_pre_migration_base=True
+        )
+
+        self.assertEqual(status, 0, output)
+        self.assertIn("notice:", output)
+        self.assertIn("history check skipped for the migration PR", output)
+        self.assertIn("port index is current", output)
 
 
 if __name__ == "__main__":
