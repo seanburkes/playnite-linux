@@ -85,8 +85,21 @@ jobs:
           $ns = New-Object System.Xml.XmlNamespaceManager($xml.NameTable)
           $ns.AddNamespace("t", "http://microsoft.com/schemas/VisualStudio/TeamTest/2010")
           $counters = $xml.SelectSingleNode("//t:ResultSummary/t:Counters", $ns)
-          $counters.Attributes | ForEach-Object { Write-Host "$($_.Name)=$($_.Value)" }
-          $counters.Attributes | ConvertTo-Json | Set-Content "${{ runner.temp }}/test-counts.json"
+          $result = [ordered]@{
+            captured_at = (Get-Date).ToUniversalTime().ToString("o")
+            run_id = "${{ github.run_id }}"
+            total = [int]$counters.GetAttribute("total")
+            executed = [int]$counters.GetAttribute("executed")
+            passed = [int]$counters.GetAttribute("passed")
+            failed = [int]$counters.GetAttribute("failed")
+            skipped = [int]$counters.GetAttribute("notExecuted")
+            excluded = @(
+              "FileSystemTests.CanWriteToFolderTest",
+              "SafeFileEnumeratorTests.OverUnsafeWorksTest"
+            )
+          }
+          $result | ConvertTo-Json -Depth 4 | Set-Content "${{ runner.temp }}/test-counts.json"
+          $result | ConvertTo-Json -Depth 4 | Write-Host
 
       - name: Upload oracle artifacts
         if: always()
