@@ -47,9 +47,7 @@ exclusively and ensure indexes (`legacy/source/Playnite/Database/Collections/Ite
 
 ```
 ./oracle-lock/fetch.ps1
-dotnet restore tools/LegacyOracle/LegacyOracle.csproj `
-  --source "$PWD/oracle-lock/packages" `
-  --source "https://api.nuget.org/v3/index.json"
+dotnet restore tools/LegacyOracle/LegacyOracle.csproj
 msbuild tools/LegacyOracle/LegacyOracle.csproj /p:Configuration=Release /p:Platform=x86 /m /verbosity:minimal
 $exe = Get-ChildItem tools/LegacyOracle/bin -Recurse -Filter LegacyOracle.exe |
   Sort-Object LastWriteTime -Descending | Select-Object -First 1
@@ -61,6 +59,12 @@ $exe = Get-ChildItem tools/LegacyOracle/bin -Recurse -Filter LegacyOracle.exe |
   -LibraryManifest tests/fixtures/v10/library.sha256 `
   -Scratch "$env:RUNNER_TEMP/p1-002-validate" -Golden tests/golden
 ```
+
+`tools/LegacyOracle/NuGet.config` clears inherited sources, resolves `Playnite.Deps` from
+the checksum-verified `oracle-lock/packages` folder written by `oracle-lock/fetch.ps1`, and
+uses nuget.org for the remaining packages. The tools project cannot see
+`legacy/source/nuget.config`, so this keeps the oracle dependency pinned without a
+solution-wide restore.
 
 `Verify.ps1` preflights the scratch location before its first write: it canonicalizes the
 path, rejects an existing scratch, rejects overlap with the repo, executable, library,

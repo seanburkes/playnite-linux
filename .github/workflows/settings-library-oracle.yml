@@ -31,10 +31,7 @@ jobs:
         run: ./oracle-lock/fetch.ps1
       - name: Restore oracle project with the pinned local Playnite.Deps
         shell: pwsh
-        run: |
-          dotnet restore tools/LegacyOracle/LegacyOracle.csproj `
-            --source "${{ github.workspace }}/oracle-lock/packages" `
-            --source "https://api.nuget.org/v3/index.json"
+        run: dotnet restore tools/LegacyOracle/LegacyOracle.csproj
       - name: Build oracle project only
         shell: pwsh
         run: msbuild tools/LegacyOracle/LegacyOracle.csproj /p:Configuration=Release /p:Platform=x86 /m /verbosity:minimal
@@ -106,10 +103,7 @@ jobs:
       - name: Restore oracle project with the pinned local Playnite.Deps
         if: steps.corpus.outputs.present == 'true'
         shell: pwsh
-        run: |
-          dotnet restore tools/LegacyOracle/LegacyOracle.csproj `
-            --source "${{ github.workspace }}/oracle-lock/packages" `
-            --source "https://api.nuget.org/v3/index.json"
+        run: dotnet restore tools/LegacyOracle/LegacyOracle.csproj
       - name: Build oracle project only
         if: steps.corpus.outputs.present == 'true'
         shell: pwsh
