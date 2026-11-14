@@ -73,25 +73,43 @@ for a reviewer. The reviewer should use a different model from the implementer w
 
 ## 4. Queue and ledger
 
-The durable contract is a TSV, not a conversation.
+The durable contract is a TSV, not a conversation. The two aggregates are generated; workers
+edit unit shards, never the aggregates themselves.
 
-`docs/port/queue.tsv` is the single queue (one row per unit):
+- `docs/port/units/<unit-id>.queue.tsv` holds exactly one queue row for that unit.
+- `docs/port/units/<unit-id>.ledger.tsv` holds that unit's append-only ledger rows (optional
+  when there are none).
+- `docs/port/queue.tsv` and `docs/port/ledger.tsv` are generated from those shards. Commit
+  their regenerated output, but do not hand-edit them.
+
+The shard contract is in [`units/README.md`](units/README.md). Queue columns:
 ```
 id	wave	area	unit	depends	status	owner	oracle	test	notes
 p3-003	W3	leaves	JSON/YAML/TOML/INI helpers	p2-001	todo	core	golden:serialization	test:serialization	PILOT
 ```
 
-`docs/port/ledger.tsv` is the append-only status record:
+Ledger columns:
 ```
 timestamp	unit	from	to	actor	evidence
 ```
+
+After changing your shard, regenerate and verify:
+```sh
+python3 scripts/port/build_port_index.py build
+python3 scripts/port/build_port_index.py check
+```
+
+`check` regenerates both aggregates in memory, byte-compares them with the committed files,
+and prints any differing lines. CI runs it and rejects a pull request that changes an
+aggregate without changing a shard once the shard directory exists on the base commit.
 
 Wave numbers in the queue are offset from the phase numbers: W0 = planning, W1 = oracle,
 W2 = scaffolding, W3 = leaves, W4 = data, W5 = Steam/platform, W6 = core/SDK, W7 = UI,
 W8 = packaging, W9 = release. Do not use the phase number as the wave number.
 
 Rules:
-- One line per unit. Update status atomically before/after work.
+- One queue row per unit. Update the shard's status before/after work, then regenerate.
+- If `check` reports drift, fix the shard and rerun `build`; never patch the aggregate.
 - `attempts` increments on a failed review or CI run. At 2, stop and escalate; do not thrash.
 - A unit is `done` only when its Definition of Done is checked and CI is green.
 - Progress survives a crash, rate limit, or context reset because the queue is on disk.

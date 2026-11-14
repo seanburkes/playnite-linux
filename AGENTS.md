@@ -31,8 +31,9 @@ oracle. New code is in `src/` (Phase 1 onward). Do not modify the Windows app.
    `SDK.Abstractions ← Core ← Desktop`; `SDK` (Avalonia UI) references Abstractions;
    `Platform`/`Platform.Linux` below Core; `Core`/`SDK.Abstractions` never reference Avalonia,
    directly or transitively; `Desktop` never references `Microsoft.Win32`.
-7. **One unit, one commit.** Keep diffs reviewable. Update `docs/port/queue.tsv` and
-   `docs/port/ledger.tsv` with the unit id and evidence.
+7. **One unit, one commit.** Keep diffs reviewable. Update the unit's shard under
+   `docs/port/units/` and regenerate `docs/port/queue.tsv`/`docs/port/ledger.tsv` with
+   `python3 scripts/port/build_port_index.py build`; never hand-edit the aggregates.
 8. **No destructive git.** No `stash`, `reset --hard`, `clean -fdx`, `checkout -- .`, or
    force-push. Stop and report a wedged worktree.
 9. **Do not run solution-wide builds, packaging, or benchmarks.** The parent owns those; run

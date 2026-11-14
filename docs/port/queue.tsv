@@ -11,11 +11,15 @@ p1-005	W1	spike	LiteDB 4 read on net11	p1-003	done	core	spike	-	passed on net11;
 p1-006	W1	spike	WebView feasibility (v1.1)	p1-002	todo	platform	spike	-	not a v1 gate; WebKitGTK/WPE
 p1-007	W1	spike	Steam process tracking	p1-003	in-progress	steam	spike	spikes/steam-process-tracking/test_tracking.py	candidate: 21 synthetic/owned-process tests; deadline ordering P2 corrected; real native/Proton acceptance and two revised-diff reviews pending; p1-003 unsatisfied
 p1-008	W1	spike	Avalonia headless screenshot	p1-002	in-progress	ui	spike	spikes/avalonia-headless/SpikeTests.cs	3/3 passed; zero skips; run and artifact contract in spikes/avalonia-headless/README.md; validated head 718e319081a99f0e3eed334d43fa31dee1ece6ff; freshness guard fails closed on a reused evidence directory; both blind re-reviews clean; p1-002 dependency not satisfied
+p1-009	W1	steam	Steam spec + real artifact corpus	p1-003	todo	steam	steam-spec/fixtures	test:steam-spec	greenfield; ADR-017
+p1-010	W1	spike	Flatpak host launch/tracking	p1-003	in-progress	platform	spike	spikes/flatpak-host/test_probe.py	ADR-020; 26 local/synthetic tests pass; fragmented records bounded by total bytes/deadline; no Flatpak tools/sandbox; real native/Proton unrun; p1-003 incomplete; spikes/flatpak-host/README.md
+p1-011	W1	repo	Port index shards + generator	-	in-progress	captain	-	scripts/port/test_build_port_index.py	docs/port/units/README.md; generated queue/ledger from per-unit shards; CI single-writer guard; migration moved 8 append rows to wave/id order, ledger byte-identical
 p2-001	W2	scaffold	Solution/projects/props	p1-001	todo	core	-	build	no warnings
 p2-002	W2	scaffold	Analyzers + architecture tests	p2-001	todo	core	-	arch	BannedApi/NetArchTest
 p2-003	W2	scaffold	Linux CI + Windows oracle CI	p2-001	todo	release	-	ci	matrix
 p2-004	W2	scaffold	Empty Avalonia app + CLI smoke	p2-001	todo	ui	-	smoke	Xvfb/headless
 p2-005	W2	scaffold	Packaging smoke	p2-003	todo	release	-	pack	AppImage/Flatpak shell
+p2-006	W2	scaffold	SDK Abstractions project + PublicAPI	p2-001	todo	sdk	api-compat	build	ADR-018
 p3-001	W3	leaves	Paths + XDG abstraction	p2-001	todo	core	property:paths	test:paths	
 p3-002	W3	leaves	String/date/enum extensions	p2-001	todo	core	golden:utils	test:utils	
 p3-003	W3	leaves	JSON/YAML/TOML/INI helpers	p2-001	todo	core	golden:serialization	test:serialization	PILOT
@@ -24,6 +28,7 @@ p3-005	W3	leaves	Manifest parsing	p3-003	todo	core	golden:manifests	test:manifes
 p3-006	W3	leaves	Search/filter/sort	p3-004	todo	core	property:filter	test:filter	
 p3-007	W3	leaves	Localisation keys	p2-001	todo	ui	golden:loc	test:loc	reuse translations
 p3-008	W3	leaves	Archive/backup	p3-002	todo	core	golden:archive	test:archive	SharpCompress
+p3-009	W3	leaves	Localisation key migration (1,134 keys)	p3-001	todo	ui	golden:loc	test:loc	ADR-022; 37 files
 p4-001	W4	data	SQLite schema/repositories	p3-004	todo	core	golden:db	test:db	
 p4-002	W4	data	v10 LiteDB importer	p4-001	todo	import	golden:import	test:import	PILOT; isolated
 p4-003	W4	data	Atomic swap/rollback	p4-002	todo	import	formal:LibraryImport	test:import	TLA+ invariants
@@ -51,18 +56,14 @@ p7-005	W7	ui	Game edit/metadata	p7-003	todo	ui	screens	test:ui
 p7-006	W7	ui	Settings/first-run/import	p7-002	todo	ui	screens	test:ui	essential only
 p7-007	W7	ui	Tray/protocol/keyboard	p5-005,p7-002	todo	ui	smoke	test:ui	
 p7-008	W7	ui	Accessibility baseline	p7-003	todo	ui	tree	test:a11y	
+p7-009	W7	ui	Import transport/fresh-install wizard	p4-002,p7-002	todo	ui	screens	test:ui	ADR-021
 p8-001	W8	pack	AppImage x64/ARM64	p7-002	todo	release	pack	test:pack	
 p8-002	W8	pack	Flatpak x64/ARM64	p8-001	todo	release	pack	test:pack	permissions
 p8-003	W8	hard	Benchmarks/soak	p7-003	todo	release	bench	test:perf	
 p8-004	W8	hard	Fuzz/security review	p5-001,p4-002	todo	oracle	fuzz	test:security	zip-slip
 p8-005	W8	hard	Diagnostics/redaction	p7-001	todo	core	smoke	test:diag	
-p9-001	W9	release	Pre-release soak	p8-001,p8-002	todo	captain	-	-	7 days
-p9-002	W9	release	v1 release	p9-001	todo	captain	-	-	notes/migration guide
-p1-009	W1	steam	Steam spec + real artifact corpus	p1-003	todo	steam	steam-spec/fixtures	test:steam-spec	greenfield; ADR-017
-p2-006	W2	scaffold	SDK Abstractions project + PublicAPI	p2-001	todo	sdk	api-compat	build	ADR-018
-p3-009	W3	leaves	Localisation key migration (1,134 keys)	p3-001	todo	ui	golden:loc	test:loc	ADR-022; 37 files
-p7-009	W7	ui	Import transport/fresh-install wizard	p4-002,p7-002	todo	ui	screens	test:ui	ADR-021
 p8-006	W8	pack	Flatpak host launch/tracking	p5-008,p8-002	todo	release	manual	test:pack	flatpak-spawn --host; ADR-020
 p8-007	W8	sdk	Freeze SDK UI extension points	p7-001,p6-004	todo	sdk	api-compat	test:sdk	ADR-023; after shell pilot
 p8-008	W8	sdk	WebView service (v1.1)	p8-007	todo	platform	http-stub	test:webview	ADR-019; not v1
-p1-010	W1	spike	Flatpak host launch/tracking	p1-003	in-progress	platform	spike	spikes/flatpak-host/test_probe.py	ADR-020; 26 local/synthetic tests pass; fragmented records bounded by total bytes/deadline; no Flatpak tools/sandbox; real native/Proton unrun; p1-003 incomplete; spikes/flatpak-host/README.md
+p9-001	W9	release	Pre-release soak	p8-001,p8-002	todo	captain	-	-	7 days
+p9-002	W9	release	v1 release	p9-001	todo	captain	-	-	notes/migration guide

@@ -1,0 +1,2 @@
+id	wave	area	unit	depends	status	owner	oracle	test	notes
+p1-008	W1	spike	Avalonia headless screenshot	p1-002	in-progress	ui	spike	spikes/avalonia-headless/SpikeTests.cs	3/3 passed; zero skips; run and artifact contract in spikes/avalonia-headless/README.md; validated head 718e319081a99f0e3eed334d43fa31dee1ece6ff; freshness guard fails closed on a reused evidence directory; both blind re-reviews clean; p1-002 dependency not satisfied

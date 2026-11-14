@@ -1,0 +1,2 @@
+id	wave	area	unit	depends	status	owner	oracle	test	notes
+p2-005	W2	scaffold	Packaging smoke	p2-003	todo	release	-	pack	AppImage/Flatpak shell

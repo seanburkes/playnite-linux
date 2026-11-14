@@ -1,0 +1,2 @@
+timestamp	unit	from	to	actor	evidence
+2026-11-14T17:02:20Z	p1-004	todo	in-progress	fm/p1-004	docs/port/ui-reference/README.md: documented access audit and unexercised human-run procedure; Actions run 43604176690 artifact listing checked, workflow publishes no UI captures/runtime; local link/source-path/TSV/diff checks passed; all 3 images missing, image validation not run; no capture or behavioural equivalence claimed; two independent reviews pending

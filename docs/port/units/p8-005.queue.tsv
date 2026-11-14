@@ -1,0 +1,2 @@
+id	wave	area	unit	depends	status	owner	oracle	test	notes
+p8-005	W8	hard	Diagnostics/redaction	p7-001	todo	core	smoke	test:diag	

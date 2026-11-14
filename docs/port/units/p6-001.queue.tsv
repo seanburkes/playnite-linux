@@ -1,0 +1,2 @@
+id	wave	area	unit	depends	status	owner	oracle	test	notes
+p6-001	W6	core	Library service	p4-001	todo	core	golden:library	test:library	

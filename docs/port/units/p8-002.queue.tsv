@@ -1,0 +1,2 @@
+id	wave	area	unit	depends	status	owner	oracle	test	notes
+p8-002	W8	pack	Flatpak x64/ARM64	p8-001	todo	release	pack	test:pack	permissions

@@ -153,6 +153,21 @@ language/framework change makes implicit behaviour explicit; an unanswered row i
 - A test that would pass with the implementation deleted is not a test.
 - No `[Skip]`, `[Ignore]`, `--filter` exclusions, or conditional test runs in CI.
 
+## Queue and ledger shards
+
+`docs/port/queue.tsv` and `docs/port/ledger.tsv` are generated aggregates. Never hand-edit
+them. Add or update `docs/port/units/<unit-id>.queue.tsv` and, when there is status evidence,
+`docs/port/units/<unit-id>.ledger.tsv`, then run:
+
+```sh
+python3 scripts/port/build_port_index.py build
+python3 scripts/port/build_port_index.py check
+```
+
+The contract is in [`units/README.md`](units/README.md). `check` is the CI gate; a shard with a
+missing or reordered header, a ragged row, or a filename/id mismatch fails before any aggregate
+is written.
+
 ## Banned constructs
 
 | Banned | Why | Allowed |
@@ -188,6 +203,7 @@ language/framework change makes implicit behaviour explicit; an unanswered row i
 [ ] Logs/messages preserve v10 where consumed.
 [ ] legacy/ and oracle paths untouched.
 [ ] Parity row updated with test id.
+[ ] Unit shard updated; port queue/ledger regenerated and `check` clean.
 [ ] Two blind reviews; findings fixed or escalated.
 [ ] CI green; counts non-decreasing.
 ```

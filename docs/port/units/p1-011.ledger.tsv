@@ -1,0 +1,2 @@
+timestamp	unit	from	to	actor	evidence
+2026-11-14T19:14:54Z	p1-011	todo	in-progress	fm/p1-011-aggregates	docs/port/units/README.md; scripts/port/build_port_index.py; 17 generator tests pass; aggregate check clean; migration queue reorder only (row content unchanged), ledger byte-identical; two independent reviews pending

@@ -1,0 +1,2 @@
+id	wave	area	unit	depends	status	owner	oracle	test	notes
+p7-003	W7	ui	Library grid/list/details	p7-002	todo	ui	screens	test:ui	

@@ -1,0 +1,2 @@
+id	wave	area	unit	depends	status	owner	oracle	test	notes
+p8-006	W8	pack	Flatpak host launch/tracking	p5-008,p8-002	todo	release	manual	test:pack	flatpak-spawn --host; ADR-020

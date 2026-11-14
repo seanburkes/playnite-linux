@@ -1,0 +1,2 @@
+id	wave	area	unit	depends	status	owner	oracle	test	notes
+p8-007	W8	sdk	Freeze SDK UI extension points	p7-001,p6-004	todo	sdk	api-compat	test:sdk	ADR-023; after shell pilot
