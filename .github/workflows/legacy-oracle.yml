@@ -46,6 +46,28 @@ jobs:
             /verbosity:minimal `
             /binaryLogger:legacy-build.binlog
 
+      - name: Build legacy oracle harness
+        shell: pwsh
+        run: |
+          msbuild tools/LegacyOracle/LegacyOracle.csproj `
+            /p:Configuration=Release `
+            /p:Platform=x86 `
+            /m `
+            /verbosity:minimal
+
+      - name: Emit manifest and theme goldens
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem tools/LegacyOracle/bin -Recurse -Filter LegacyOracle.exe |
+            Sort-Object LastWriteTime -Descending | Select-Object -First 1
+          if (!$exe) { throw "LegacyOracle.exe not found" }
+          New-Item -ItemType Directory -Force -Path tests/golden/manifests | Out-Null
+          & $exe.FullName manifest legacy/source/Tests/TestPlugin/extension.yaml |
+            Out-File -Encoding utf8NoBOM tests/golden/manifests/TestPlugin.extension.yaml
+          & $exe.FullName manifest legacy/source/Tests/TestGameLibrary/extension.yaml |
+            Out-File -Encoding utf8NoBOM tests/golden/manifests/TestGameLibrary.extension.yaml
+          Get-ChildItem tests/golden/manifests | ForEach-Object { Get-Content $_.FullName }
+
       - name: Locate legacy test assembly
         shell: pwsh
         run: |
@@ -110,4 +132,5 @@ jobs:
             legacy-build.binlog
             ${{ runner.temp }}/test-results/**
             ${{ runner.temp }}/test-counts.json
+            tests/golden/manifests/**
           if-no-files-found: warn
