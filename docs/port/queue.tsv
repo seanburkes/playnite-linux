@@ -10,7 +10,7 @@ p1-004	W1	oracle	UI reference images (human only)	p1-001	todo	oracle	screens-ref
 p1-005	W1	spike	LiteDB 4 read on net11	p1-003	done	core	spike	-	passed on net11; basic read/write
 p1-006	W1	spike	WebView feasibility (v1.1)	p1-002	todo	platform	spike	-	not a v1 gate; WebKitGTK/WPE
 p1-007	W1	spike	Steam process tracking	p1-003	todo	steam	spike	-	native + Proton
-p1-008	W1	spike	Avalonia headless screenshot	p1-002	todo	ui	spike	-	a11y tree too
+p1-008	W1	spike	Avalonia headless screenshot	p1-002	review	ui	spike	spikes/avalonia-headless/SpikeTests.cs	3/3 passed; zero skips; Skia PNG + automation-peer evidence in /home/sean/src/firstmate/data/p1-008-fix/; two blind re-reviews pending; p1-002 dependency not satisfied
 p2-001	W2	scaffold	Solution/projects/props	p1-001	todo	core	-	build	no warnings
 p2-002	W2	scaffold	Analyzers + architecture tests	p2-001	todo	core	-	arch	BannedApi/NetArchTest
 p2-003	W2	scaffold	Linux CI + Windows oracle CI	p2-001	todo	release	-	ci	matrix
