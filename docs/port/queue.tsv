@@ -9,7 +9,7 @@ p1-003	W1	oracle	Fixture v10 library + Steam root	p1-001	in-progress	oracle	fixt
 p1-004	W1	oracle	UI reference images (human only)	p1-001	in-progress	oracle	screens-reference	-	partial: docs/port/ui-reference/README.md; all 3 images missing; authorised Windows desktop capture access and runnable frozen build missing; human only, not a pixel gate
 p1-005	W1	spike	LiteDB 4 read on net11	p1-003	done	core	spike	-	passed on net11; basic read/write
 p1-006	W1	spike	WebView feasibility (v1.1)	p1-002	todo	platform	spike	-	not a v1 gate; WebKitGTK/WPE
-p1-007	W1	spike	Steam process tracking	p1-003	todo	steam	spike	-	native + Proton
+p1-007	W1	spike	Steam process tracking	p1-003	in-progress	steam	spike	spikes/steam-process-tracking/test_tracking.py	candidate: 21 synthetic/owned-process tests; deadline ordering P2 corrected; real native/Proton acceptance and two revised-diff reviews pending; p1-003 unsatisfied
 p1-008	W1	spike	Avalonia headless screenshot	p1-002	todo	ui	spike	-	a11y tree too
 p2-001	W2	scaffold	Solution/projects/props	p1-001	todo	core	-	build	no warnings
 p2-002	W2	scaffold	Analyzers + architecture tests	p2-001	todo	core	-	arch	BannedApi/NetArchTest
