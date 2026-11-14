@@ -4,7 +4,7 @@ p0-002	W0	plan	Plan review	-	todo	captain	-	-	gate to Phase 1
 p0-003	W0	repo	Create public repo + first commit	p0-002	todo	captain	-	-	seanburkes/playnite-linux
 p0-004	W0	repo	Firstmate project registration	p0-003	todo	captain	-	-	local-only until origin
 p1-001	W1	oracle	Windows oracle CI	p0-002	done	oracle	golden:baseline	-	282/282 pass; 2 ACL exclusions
-p1-002	W1	oracle	Oracle harness (settings/library)	p1-001	in-progress	oracle	golden:settings	golden:settings	manifest v0 done; settings/library pending
+p1-002	W1	oracle	Oracle harness (settings/library)	p1-001	in-progress	oracle	golden:settings	tools/LegacyOracle/{Validation,Verify,Test-Validation}.ps1	revised tooling candidate; Windows generation/self-test green (run 43624398626); pending digest-bound re-review, p1-003 fixture, protected goldens and protected-data validation
 p1-003	W1	oracle	Fixture v10 library + Steam root	p1-001	in-progress	oracle	fixtures	-	synthetic Steam done; v10 candidate revised with pre-write output/fixture isolation, disposable-tree tests, tool-local NuGet restore and pre-intake pending gate; Windows build/generation/read-back pass in run 43625147583; strict committed-fixture comparison and two re-reviews pending
 p1-004	W1	oracle	UI reference images (human only)	p1-001	in-progress	oracle	screens-reference	-	partial: docs/port/ui-reference/README.md; all 3 images missing; authorised Windows desktop capture access and runnable frozen build missing; human only, not a pixel gate
 p1-005	W1	spike	LiteDB 4 read on net11	p1-003	done	core	spike	-	passed on net11; basic read/write
