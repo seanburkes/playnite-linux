@@ -46,7 +46,10 @@ exclusively and ensure indexes (`legacy/source/Playnite/Database/Collections/Ite
 ## Narrow Windows validation
 
 ```
-dotnet restore tools/LegacyOracle/LegacyOracle.csproj
+./oracle-lock/fetch.ps1
+dotnet restore tools/LegacyOracle/LegacyOracle.csproj `
+  --source "$PWD/oracle-lock/packages" `
+  --source "https://api.nuget.org/v3/index.json"
 msbuild tools/LegacyOracle/LegacyOracle.csproj /p:Configuration=Release /p:Platform=x86 /m /verbosity:minimal
 $exe = Get-ChildItem tools/LegacyOracle/bin -Recurse -Filter LegacyOracle.exe |
   Sort-Object LastWriteTime -Descending | Select-Object -First 1
