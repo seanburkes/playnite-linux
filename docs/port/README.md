@@ -37,8 +37,8 @@ Formal models live in [`../formal/`](../formal/). Deterministic inventory toolin
 ## Strategy in one page
 
 1. **Freeze the oracle.** Build and run v10.64 on a Windows CI runner. Record library exports,
-   settings round-trips, manifest parses, HTTP traffic, log lines, and a small set of UI
-   screenshots. Check the goldens in.
+   settings round-trips, manifest parses, HTTP traffic and log lines; index official/public UI
+   references (no captured images). Check the goldens in.
 2. **Scaffold the new stack.** `net11.0`, Avalonia 12, SQLite, central package management,
    analyzers that ban WPF/Win32 outside the platform project, Linux CI, Windows oracle CI.
 3. **Port leaves first.** Pure utilities and models, then the data layer and the v10 importer,

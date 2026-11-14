@@ -1,7 +1,7 @@
 # Port status
 
 **Phase:** 1 — freeze the oracle (in progress)
-**Updated:** 2026-11-13
+**Updated:** 2026-11-14
 **Next gate:** Phase 1 exit (oracle harness + fixtures + spikes)
 
 ## Done
@@ -32,12 +32,13 @@
       constrained to v10 APIs, Playnite.Deps pinned by SHA-256, Flatpak host launch/tracking,
       LiteDB importer is a separate process, WebView deferred to v1.1, SDK split into
       Abstractions + UI, executed-case ratchet, all oracle paths guarded.
+- [x] Curated official/public UI reference index (p1-004, reference-only; no images
+      committed).
 
 ## In flight
 
 - [ ] Oracle harness: settings bytes + library export (manifest v0 done).
 - [ ] Fixture v10 library for migration; real Steam artifact capture.
-- [ ] UI reference images (human only, not pixel gates).
 - [ ] Steam process/Flatpak tracking spike.
 - [ ] Avalonia headless screenshot + accessibility spike.
 

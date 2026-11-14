@@ -196,9 +196,11 @@ Avalonia makes UI testable in ways WPF v10 was not:
   state, and focus order. More stable than pixels and better for accessibility.
 - **Interaction tests:** simulate keyboard/pointer input, assert ViewModel state and navigation.
 - **Theme matrix:** default dark/light, 100%/150% scaling, LTR/RTL for a few screens.
-- **Old-app screenshots:** a small set captured on Windows CI as **reference images only**,
-  for human comparison. They are not reproducible across DPI/theme/font/ClearType and are
-  never a pixel gate.
+- **Old-app UI references:** curated official/public screenshot and video links in
+  [`ui-reference/SOURCES.md`](ui-reference/SOURCES.md) (p1-004, reference-only), for human
+  comparison. A local 10.64 capture is optional. These references are not reproducible across
+  DPI/theme/font/ClearType, are never a pixel gate, and no old-app screenshot comparison is
+  ever a test gate.
 - **X11/Wayland:** an app-launch and input smoke test, not a screenshot gate.
 
 Accessibility is a gate: every interactive control has an accessible name/role; tab order is
