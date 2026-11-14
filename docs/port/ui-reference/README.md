@@ -1,9 +1,20 @@
-# Frozen v10 UI references — p1-004
+# v10 UI references — p1-004
 
-**Incomplete: no images captured.** This directory is for human comparison only,
-never a pixel gate or evidence of port equivalence. See
+**Reference-only and non-blocking.** p1-004 is satisfied by the curated public
+reference index in [`SOURCES.md`](SOURCES.md). That index is the deliverable: official
+and public Playnite 10.x screenshot, manual and video links with slide numbers, section
+anchors, image filenames and timestamps, retrieved 2026-11-14 UTC.
+
+No images are captured, downloaded, committed or embedded here. The references are
+**human comparison material only** — never a pixel gate, never a test oracle, never a
+baseline for snapshot acceptance, and never a claim that the Linux port is visually or
+behaviourally equivalent to v10. See
 [`03-EXECUTION-PLAN.md` §Phase 1](../03-EXECUTION-PLAN.md) and
 [`04-VERIFICATION.md` §6](../04-VERIFICATION.md).
+
+The capture procedure below is **optional** and retained only in case the captain later
+wants a genuine local image set from a frozen 10.64 Windows build. It is not required for
+Phase 1 exit, it is not scheduled, and no Phase 1 exit item depends on it.
 
 ## Capture access audit (2026-11-14 UTC)
 
@@ -21,9 +32,12 @@ never a pixel gate or evidence of port equivalence. See
   runnable frozen 10.64 desktop distribution with source/build provenance, or a
   genuine capture bundle from an authorised operator meeting the checklist below.
   No remote connection, credentials, new runner, or capture job was attempted.
+- Since p1-004 is reference-only, this missing capture access is **not a blocker**. The
+  audit is retained only for any future optional local capture.
 
-The procedure below is **not yet exercised on Windows**. It is preparation, not
-capture evidence. Main library, details and settings images all remain missing.
+The procedure below is **not exercised and is not required**. It is optional
+preparation for a future local capture, not evidence and not a Phase 1 gate. No images
+are expected in this directory under the current p1-004 decision.
 
 ## Source and boundaries
 
@@ -50,7 +64,7 @@ capture scratch/user data outside the checkout. Future reviewed PNGs and their
 provenance may live in this directory, not `tests/golden/` or `tests/fixtures/`.
 Do not wire these references into CI image comparison or snapshot acceptance.
 
-## Human-run capture procedure
+## Optional human-run capture procedure (not required)
 
 1. Obtain approval for an existing interactive Windows capture session and a
    parent-supplied runnable build from the frozen source. Record the full source
@@ -138,12 +152,15 @@ Details. A second reviewer must open every PNG, check that it decodes, compare i
 dimensions/hash with provenance and inspect the stated scenario. Hashes establish
 file identity, not authenticity; source/build and operator evidence are required.
 
-## Completion gate
+## Optional capture completion checklist
+
+This checklist applies **only** to the optional local capture. It is not a Phase 1
+gate, and no item here is required for p1-004 or Phase 1 exit.
 
 - [ ] Genuine `main-library.png`, `details.png`, `settings.png` captured and decoded.
 - [ ] Actual version/runtime/dimensions/scenarios and hashes recorded in provenance.
 - [ ] Synthetic-only/privacy and authenticity review complete.
 - [ ] Two independent blind diff-only reviews arranged by firstmate; reviewers do
   not edit. Approval required before merge.
-- [ ] Queue/ledger updated with genuine capture evidence; Phase 1 image gate remains
-  open until then. No image or behavioural verification is claimed by this document.
+- [ ] Queue/ledger updated with genuine capture evidence. No image or behavioural
+  verification is claimed by this document.
