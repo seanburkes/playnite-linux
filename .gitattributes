@@ -1,0 +1,4 @@
+# The frozen oracle and byte-exact fixtures must survive checkout unchanged.
+legacy/** -text
+tests/fixtures/** -text
+tests/golden/** -text

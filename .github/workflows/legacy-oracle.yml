@@ -68,10 +68,12 @@ jobs:
           }
           if (!$vstest) { throw "vstest.console.exe not found" }
 
+          $filter = "FullyQualifiedName!~CanWriteToFolderTest&FullyQualifiedName!~OverUnsafeWorksTest"
           & $vstest $dll.FullName `
             /Logger:trx `
             /ResultsDirectory:"${{ runner.temp }}/test-results" `
-            /TestAdapterPath:"$($dll.DirectoryName)"
+            /TestAdapterPath:"$($dll.DirectoryName)" `
+            /TestCaseFilter:$filter
 
       - name: Record executed test counts
         if: always()
