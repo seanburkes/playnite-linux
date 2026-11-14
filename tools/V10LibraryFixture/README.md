@@ -6,22 +6,21 @@ Only this project and its dependencies are built, never the legacy solution.
 
 ## Current evidence
 
-Merged in PR #6 (`edcbe71`). Windows run 43629325359 is green: the tool restores and builds
-from the local package lock, generates twice with equal logical documents, rejects the
-one-byte mutation and the extra file, and performs a copy-only v10 typed read-back. Two
-independent oracle-change reviews approved the exact 19 protected fixture paths.
+Merged in PR #6 (`edcbe71`). The capture is committed in
+[PR #13](https://github.com/seanburkes/playnite-linux/pull/13): the 18 library
+payloads and `SHA256SUMS` occupy the 19 approved protected paths, copied
+byte-for-byte from the retained first generation of Windows run 43650013648
+(artifact 14135728206). Windows run 43650322895 is green with the manifest
+present: two fresh generations with equal logical documents, rejection of the
+one-byte mutation and the extra file, strict verification of the committed
+capture, and a copy-only v10 typed read-back; the validator logs both
+generation manifests and the committed manifest. Two independent oracle-change
+reviews approved the exact 19 protected fixture paths.
 
-The capture itself is still pending: `tests/fixtures/v10/` does not exist, so there is no
-pinned `SHA256SUMS`, no typed Windows read-back of the committed bytes, and no strict
-committed-fixture comparison (the workflow reports an explicit pending gate while
-`SHA256SUMS` is absent). Path approval is not a capture; do not copy outputs into protected
-paths without the post-write capture review.
-
-One tooling hardening item is also still pending: the `Validate.ps1` canonicalizer does not
+One tooling hardening item remains pending: the `Validate.ps1` canonicalizer does not
 yet reject NTFS 8.3 short-name aliases, which the p1-002 validator does.
 
-Logical determinism, not byte-identical fresh regeneration, is the approved
-acceptance contract. LiteDB
+Fresh generations are compared logically, not byte-for-byte. LiteDB
 4.1.4's `IndexService` initializes a private `Random` without a seed and uses
 `FlipCoin` to choose each persisted index node's level. Fixed entities and insertion
 order do not fix those index bytes. See the exact dependency source:
