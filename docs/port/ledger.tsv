@@ -1,4 +1,4 @@
 timestamp	unit	from	to	actor	evidence
 2026-11-13T22:30:00-05:00	p0-001	todo	done	captain	docs/port/00-DECISIONS.md; docs/port/01-INVENTORY.generated.md
-2026-11-14T17:05:00Z	p1-007	todo	in-progress	fm/p1-007	spikes/steam-process-tracking/README.md; 16 synthetic/owned-process tests; no real native/Proton acceptance; p1-003 unsatisfied; two blind reviews pending
+2026-11-14T17:02:20Z	p1-004	todo	in-progress	fm/p1-004	docs/port/ui-reference/README.md: documented access audit and unexercised human-run procedure; Actions run 43604176690 artifact listing checked, workflow publishes no UI captures/runtime; local link/source-path/TSV/diff checks passed; all 3 images missing, image validation not run; no capture or behavioural equivalence claimed; two independent reviews pending
 2026-11-14T17:14:59Z	p1-007	in-progress	in-progress	fm/p1-007-fix	spikes/steam-process-tracking/README.md; deadline ordering P2 reproduced with deterministic sleep/read cases and corrected; 21 tests pass, zero skips; prior identities and cancellation precedence preserved; real native/Proton acceptance, p1-003 and two independent revised-diff reviews pending
