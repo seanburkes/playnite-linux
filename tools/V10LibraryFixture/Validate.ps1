@@ -141,6 +141,7 @@ if (Test-Path -LiteralPath $fixtureManifest) {
     & $Exe compare $first $Fixture
     if ($LASTEXITCODE -ne 0) { throw 'Fresh generation differs logically from the committed fixture' }
     Write-Host 'PASS: two logically identical generations, one-byte rejection, extra-file rejection, pinned committed capture and v10 read-back'
+    exit 0
 }
 else {
     if (Test-Path -LiteralPath $Fixture) {
@@ -150,4 +151,5 @@ else {
         }
     }
     Write-Host 'PENDING: committed-fixture comparison pending (SHA256SUMS is absent); two logically identical generations, one-byte rejection, extra-file rejection and v10 read-back passed'
+    exit 0
 }
