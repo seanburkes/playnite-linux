@@ -65,23 +65,34 @@ jobs:
         run: |
           base="${{ github.event.pull_request.base.sha }}"
           # The migration PR that first adds docs/port/units is the parent aggregate
-          # change. Afterwards an aggregate edit must come with a shard edit, and the
-          # reproducible check below proves the aggregate is the generated output.
+          # change. Afterwards an aggregate edit must come with a coordination-file
+          # edit from the exact contract paths, and the reproducible check below
+          # proves the aggregate is the generated output. README-only edits and
+          # misnamed files do not count as a shard change.
           if git cat-file -e "$base:docs/port/units" 2>/dev/null; then
             aggregates=$(git diff --name-only \
               "$base" HEAD -- docs/port/queue.tsv docs/port/ledger.tsv)
             if [ -n "$aggregates" ]; then
-              shards=$(git diff --name-only "$base" HEAD -- docs/port/units)
+              shards=$(git diff --name-only "$base" HEAD -- \
+                ':(glob)docs/port/units/*.queue.tsv' \
+                ':(glob)docs/port/units/*.ledger.tsv' \
+                ':(glob)docs/port/units/removed.tsv')
               if [ -z "$shards" ]; then
-                echo "::error::queue.tsv and ledger.tsv are generated; change a unit shard and rerun build."
+                echo "::error::queue.tsv and ledger.tsv are generated; change a unit shard or removed.tsv and rerun build."
                 printf '%s\n' "$aggregates"
                 exit 1
               fi
             fi
           fi
 
-      - name: Port index is current
-        run: python3 scripts/port/build_port_index.py check
+      - name: Port index is current and history is preserved
+        run: |
+          ref="${{ github.event.pull_request.base.sha || github.event.before }}"
+          if [ -n "$ref" ] && ! printf '%s' "$ref" | grep -Eq '^0+$'; then
+            python3 scripts/port/build_port_index.py check --against "$ref"
+          else
+            python3 scripts/port/build_port_index.py check
+          fi
 
   formal:
     runs-on: ubuntu-latest

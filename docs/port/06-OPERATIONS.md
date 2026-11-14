@@ -79,8 +79,15 @@ edit unit shards, never the aggregates themselves.
 - `docs/port/units/<unit-id>.queue.tsv` holds exactly one queue row for that unit.
 - `docs/port/units/<unit-id>.ledger.tsv` holds that unit's append-only ledger rows (optional
   when there are none).
+- `docs/port/units/removed.tsv` holds one `unit`/`reason` row per deliberately retired unit.
 - `docs/port/queue.tsv` and `docs/port/ledger.tsv` are generated from those shards. Commit
   their regenerated output, but do not hand-edit them.
+
+A unit id is lowercase letters, digits, and single hyphens. The units directory is enumerated
+strictly: `README.md`, `removed.tsv`, and correctly named shards are the only accepted entries.
+A subdirectory, wrong-case suffix, backup suffix, trailing space, or other unexpected file is an
+error rather than a silently ignored shard. Ledger rows are append-only: append at the end,
+never edit, delete, duplicate, or reorder existing rows.
 
 The shard contract is in [`units/README.md`](units/README.md). Queue columns:
 ```
@@ -96,12 +103,18 @@ timestamp	unit	from	to	actor	evidence
 After changing your shard, regenerate and verify:
 ```sh
 python3 scripts/port/build_port_index.py build
-python3 scripts/port/build_port_index.py check
+python3 scripts/port/build_port_index.py check --against origin/main
 ```
 
 `check` regenerates both aggregates in memory, byte-compares them with the committed files,
-and prints any differing lines. CI runs it and rejects a pull request that changes an
-aggregate without changing a shard once the shard directory exists on the base commit.
+and prints any differing lines. `--against <ref>` also fails when a queue shard, queue row,
+ledger shard, or ledger row present at `<ref>` is missing or altered at head. CI passes the
+pull request's base commit (or the previous commit on `main`) and also rejects a pull request
+that changes an aggregate without changing a contract shard or `removed.tsv`.
+
+To retire a unit, delete its queue and ledger shards and add a new `removed.tsv` row with a
+reason in the same change. A removal without a new record fails, and unit ids are never
+renamed.
 
 Wave numbers in the queue are offset from the phase numbers: W0 = planning, W1 = oracle,
 W2 = scaffolding, W3 = leaves, W4 = data, W5 = Steam/platform, W6 = core/SDK, W7 = UI,

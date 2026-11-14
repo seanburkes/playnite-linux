@@ -7,27 +7,71 @@ by hand. Each unit owns a shard in this directory:
 | --- | --- |
 | `<unit-id>.queue.tsv` | The exact queue header plus exactly one queue row. |
 | `<unit-id>.ledger.tsv` | Optional; the exact ledger header plus zero or more append-only ledger rows. |
+| `removed.tsv` | Optional; the exact `unit`/`reason` header plus one row per retired unit. |
+| `README.md` | This contract. |
 
 A shard uses the same columns, order, and TSV syntax as the aggregate it feeds. The queue
 row's `id` and every ledger row's `unit` must equal the filename's `<unit-id>`. Missing
 ledger shards mean the unit has no ledger entries yet.
 
+## Unit ids and file names
+
+A unit id is a stable identity: lowercase letters, digits, and single hyphens, for example
+`p3-003`. Dots, spaces, underscores, path separators, mixed case, and empty ids are rejected
+in both the file name and the row's `id`/`unit` field. The units directory is enumerated
+strictly: anything other than `README.md`, `removed.tsv`, `<unit-id>.queue.tsv`, and
+`<unit-id>.ledger.tsv` is an error. That includes a subdirectory, a wrong-case suffix such as
+`p1-012.QUEUE.TSV`, a backup such as `p1-012.queue.tsv.bak`, a trailing space, and a
+directory named like a shard. A misnamed shard fails instead of quietly disappearing from the
+aggregates.
+
+## Add or update a unit
+
 Add or update only your unit's shards, then regenerate and verify:
 
 ```sh
 python3 scripts/port/build_port_index.py build
-python3 scripts/port/build_port_index.py check
+python3 scripts/port/build_port_index.py check --against origin/main
 ```
 
-The generator rejects a missing or reordered header, ragged or blank rows, more than one
-queue row per shard, duplicate unit ids, filename/id disagreement, and ledger rows for a
-unit without a queue shard. It writes the queue in wave-then-id order and the ledger in
-timestamp-instant-then-unit order, using the fixed headers and LF line endings. `check`
-regenerates in memory and byte-compares both aggregates, printing the differing lines.
+`build` writes the aggregates; never patch them. `check` regenerates in memory, byte-compares
+both aggregates, and prints the differing lines. The generator also rejects a missing or
+reordered header, ragged or blank rows, invalid UTF-8, more than one queue row per shard,
+duplicate unit ids, duplicate ledger rows, filename/id disagreement, ledger rows for a unit
+without a queue shard, and unexpected entries in this directory.
 
-CI runs `check` and also rejects a pull request that changes either aggregate without
-changing a shard once this shard directory exists on its base. Add the shard; let the
-generator write the aggregate.
+## Ledger history is append-only
+
+Ledger rows are append-only history. A later commit may append new rows at the end of a unit's
+ledger shard, but it may never edit an existing row, delete one, duplicate one, or reorder
+existing rows. A duplicate is the same unit, instant, and transition content; timestamps that
+name the same instant (for example `Z` and `+00:00`) are compared as instants.
+
+`check --against <ref>` enforces this against a base commit: every queue shard, queue
+aggregate row, ledger shard, and ledger aggregate row present at `<ref>` must still be present
+at head. In CI the base is the pull request's base commit (or the previous commit on `main`).
+
+## Retiring a unit
+
+Removal is never silent. To retire a unit, delete its queue and ledger shards and add a row
+to `removed.tsv` in the same change:
+
+```
+unit	reason
+p1-012	merged into p1-011; no separate tracking row
+```
+
+The retirement record must be new in that change. The check fails when a base shard vanishes
+without a new record, when a record names a unit that never existed at the base, when a record
+is deleted, or when a recorded unit's shard still exists. Unit ids are not renamed: retire the
+old id and add a genuinely new unit instead. Retirement records are permanent.
+
+## CI
+
+CI runs `check --against <base>` and rejects a pull request that changes either aggregate
+without changing a contract shard or `removed.tsv` once this directory exists on its base.
+The history check is what prevents a shard or ledger row from being deleted and regenerated
+with every other check green.
 
 The initial migration mechanically reordered eight historical append rows into wave-then-id
 order (`p1-009`, `p1-010`, `p2-006`, `p3-009`, `p7-009`, `p8-006`, `p8-007`, `p8-008`).

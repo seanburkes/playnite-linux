@@ -86,6 +86,47 @@ class PortIndexTests(unittest.TestCase):
             )
         self.assertEqual(status, 0)
 
+    def write_base(self, queue_shards, ledger_shards=None, removed=None):
+        """Materialise a base checkout and return its snapshot."""
+        base = self.root / "base" / "docs" / "port"
+        base_units = base / "units"
+        base_units.mkdir(parents=True)
+        for unit_id, row in queue_shards.items():
+            (base_units / f"{unit_id}.queue.tsv").write_text(
+                QUEUE_HEADER + "\n" + row + "\n"
+            )
+        for unit_id, rows in (ledger_shards or {}).items():
+            body = "".join(row + "\n" for row in rows)
+            (base_units / f"{unit_id}.ledger.tsv").write_text(
+                LEDGER_HEADER + "\n" + body
+            )
+        if removed:
+            body = "".join(f"{unit}\t{reason}\n" for unit, reason in removed.items())
+            (base_units / "removed.tsv").write_text(
+                port_index.REMOVED_HEADER + "\n" + body
+            )
+
+        base_index = port_index.build_index(base_units)
+        queue_bytes, ledger_bytes = port_index.render_index(base_index)
+        base_queue = base / "queue.tsv"
+        base_ledger = base / "ledger.tsv"
+        base_queue.write_bytes(queue_bytes)
+        base_ledger.write_bytes(ledger_bytes)
+        return port_index.snapshot_from_dir(base_units, base_queue, base_ledger)
+
+    def check_against(self, base, ref="BASE"):
+        stdout = io.StringIO()
+        stderr = io.StringIO()
+        with redirect_stdout(stdout), redirect_stderr(stderr):
+            status = port_index.main(
+                ["check", "--against", ref],
+                units=self.units,
+                queue=self.queue,
+                ledger=self.ledger,
+                base_loader=lambda _: base,
+            )
+        return status, stdout.getvalue() + stderr.getvalue()
+
     def test_queue_is_sorted_by_wave_then_id_and_headers_are_exact(self):
         self.write_queue_shard("p2-001", queue_row("p2-001", wave="W2"))
         self.write_queue_shard("p1-002", queue_row("p1-002", wave="W1"))
@@ -269,6 +310,252 @@ class PortIndexTests(unittest.TestCase):
 
         self.assertEqual(status, 1)
         self.assertIn("is not generated output", output)
+
+    def test_duplicate_ledger_rows_are_rejected(self):
+        self.write_queue_shard("p1-001", queue_row("p1-001"))
+        row = ledger_row("2026-11-14T17:00:00Z", "p1-001")
+        self.write_ledger_shard("p1-001", row, row)
+
+        with self.assertRaises(port_index.PortIndexError) as raised:
+            self.render()
+        self.assertIn("duplicate ledger row", str(raised.exception))
+
+    def test_duplicate_ledger_rows_at_the_same_instant_are_rejected(self):
+        self.write_queue_shard("p1-001", queue_row("p1-001"))
+        self.write_ledger_shard(
+            "p1-001",
+            ledger_row("2026-11-14T17:00:00Z", "p1-001"),
+            ledger_row("2026-11-14T12:00:00-05:00", "p1-001"),
+        )
+
+        with self.assertRaises(port_index.PortIndexError) as raised:
+            self.render()
+        self.assertIn("duplicate ledger row", str(raised.exception))
+
+    def test_unexpected_file_under_units_is_rejected(self):
+        self.write_queue_shard("p1-001", queue_row("p1-001"))
+        (self.units / "p1-002.queue.tsv.bak").write_text("backup")
+
+        with self.assertRaises(port_index.PortIndexError) as raised:
+            self.render()
+        self.assertIn("unexpected entry", str(raised.exception))
+
+    def test_wrong_case_suffix_is_rejected(self):
+        self.write_queue_shard("p1-001", queue_row("p1-001"))
+        (self.units / "p1-002.QUEUE.TSV").write_text(
+            QUEUE_HEADER + "\n" + queue_row("p1-002") + "\n"
+        )
+
+        with self.assertRaises(port_index.PortIndexError) as raised:
+            self.render()
+        self.assertIn("unexpected entry", str(raised.exception))
+
+    def test_shard_in_a_subdirectory_is_rejected(self):
+        nested = self.units / "nested"
+        nested.mkdir()
+        (nested / "p1-002.queue.tsv").write_text(
+            QUEUE_HEADER + "\n" + queue_row("p1-002") + "\n"
+        )
+
+        with self.assertRaises(port_index.PortIndexError) as raised:
+            self.render()
+        self.assertIn("unexpected entry", str(raised.exception))
+
+    def test_directory_named_like_a_shard_is_rejected(self):
+        (self.units / "p1-001.queue.tsv").mkdir()
+
+        with self.assertRaises(port_index.PortIndexError) as raised:
+            self.render()
+        self.assertIn("not a regular file", str(raised.exception))
+
+    def test_invalid_unit_id_in_filename_is_rejected(self):
+        (self.units / "p1_001.queue.tsv").write_text(
+            QUEUE_HEADER + "\n" + queue_row("p1_001") + "\n"
+        )
+
+        with self.assertRaises(port_index.PortIndexError) as raised:
+            self.render()
+        self.assertIn("invalid unit id", str(raised.exception))
+
+    def test_invalid_unit_id_in_row_is_rejected(self):
+        (self.units / "p1-001.queue.tsv").write_text(
+            QUEUE_HEADER + "\n" + queue_row("P1-001") + "\n"
+        )
+
+        with self.assertRaises(port_index.PortIndexError) as raised:
+            self.render()
+        self.assertIn("invalid unit id", str(raised.exception))
+
+    def test_invalid_utf8_shard_is_a_clean_error(self):
+        (self.units / "p1-001.queue.tsv").write_bytes(b"\xff\xfe not utf-8")
+
+        with self.assertRaises(port_index.PortIndexError) as raised:
+            self.render()
+        self.assertIn("invalid UTF-8", str(raised.exception))
+
+    def test_check_against_base_accepts_unchanged_history(self):
+        row = queue_row("p1-001")
+        base = self.write_base(
+            {"p1-001": row},
+            {"p1-001": [ledger_row("2026-11-14T17:00:00Z", "p1-001")]},
+        )
+        self.write_queue_shard("p1-001", row)
+        self.write_ledger_shard(
+            "p1-001", ledger_row("2026-11-14T17:00:00Z", "p1-001")
+        )
+        self.build()
+
+        status, output = self.check_against(base)
+
+        self.assertEqual(status, 0, output)
+        self.assertIn("history matches BASE", output)
+
+    def test_check_against_base_rejects_a_deleted_queue_shard(self):
+        base = self.write_base(
+            {"p1-001": queue_row("p1-001"), "p1-002": queue_row("p1-002")}
+        )
+        self.write_queue_shard("p1-001", queue_row("p1-001"))
+        self.build()
+
+        status, output = self.check_against(base)
+
+        self.assertEqual(status, 1)
+        self.assertIn("queue shard 'p1-002'", output)
+        self.assertIn("missing at head", output)
+
+    def test_check_against_base_rejects_a_renamed_unit(self):
+        base = self.write_base({"p1-001": queue_row("p1-001")})
+        self.write_queue_shard("p1-002", queue_row("p1-002"))
+        self.build()
+
+        status, output = self.check_against(base)
+
+        self.assertEqual(status, 1)
+        self.assertIn("renamed", output)
+        self.assertIn("p1-001", output)
+        self.assertIn("p1-002", output)
+
+    def test_check_against_base_rejects_a_deleted_ledger_row(self):
+        base = self.write_base(
+            {"p1-001": queue_row("p1-001")},
+            {
+                "p1-001": [
+                    ledger_row("2026-11-14T17:00:00Z", "p1-001"),
+                    ledger_row(
+                        "2026-11-14T18:00:00Z", "p1-001", to_status="done"
+                    ),
+                ]
+            },
+        )
+        self.write_queue_shard("p1-001", queue_row("p1-001"))
+        self.write_ledger_shard(
+            "p1-001", ledger_row("2026-11-14T17:00:00Z", "p1-001")
+        )
+        self.build()
+
+        status, output = self.check_against(base)
+
+        self.assertEqual(status, 1)
+        self.assertIn("append-only", output)
+        self.assertIn("missing or altered", output)
+
+    def test_check_against_base_rejects_an_edited_base_row(self):
+        original = ledger_row("2026-11-14T17:00:00Z", "p1-001", actor="alice")
+        base = self.write_base(
+            {"p1-001": queue_row("p1-001")}, {"p1-001": [original]}
+        )
+        self.write_queue_shard("p1-001", queue_row("p1-001"))
+        self.write_ledger_shard(
+            "p1-001", ledger_row("2026-11-14T17:00:00Z", "p1-001", actor="bob")
+        )
+        self.build()
+
+        status, output = self.check_against(base)
+
+        self.assertEqual(status, 1)
+        self.assertIn("append-only", output)
+        self.assertIn("missing or altered", output)
+
+    def test_check_against_base_rejects_a_lost_aggregate_row(self):
+        base = self.write_base({"p1-001": queue_row("p1-001")})
+        extra = tuple(queue_row("p1-002").split("\t"))
+        base = port_index.BaseSnapshot(
+            base.queue_shards,
+            base.ledger_shards,
+            base.queue_aggregate + (extra,),
+            base.ledger_aggregate,
+            base.removed,
+        )
+        self.write_queue_shard("p1-001", queue_row("p1-001"))
+        self.build()
+
+        status, output = self.check_against(base)
+
+        self.assertEqual(status, 1)
+        self.assertIn("queue aggregate row for 'p1-002'", output)
+
+    def test_check_against_base_rejects_a_deleted_retirement_record(self):
+        base = self.write_base(
+            {"p1-002": queue_row("p1-002")}, removed={"p1-001": "retired"}
+        )
+        self.write_queue_shard("p1-002", queue_row("p1-002"))
+        self.build()
+
+        status, output = self.check_against(base)
+
+        self.assertEqual(status, 1)
+        self.assertIn("retirement record for 'p1-001' was deleted", output)
+
+    def test_check_against_base_rejects_reordered_ledger_rows(self):
+        first = ledger_row("2026-11-14T17:00:00Z", "p1-001", to_status="done")
+        second = ledger_row(
+            "2026-11-14T17:00:00Z", "p1-001", from_status="done", to_status="released"
+        )
+        base = self.write_base(
+            {"p1-001": queue_row("p1-001")}, {"p1-001": [first, second]}
+        )
+        self.write_queue_shard("p1-001", queue_row("p1-001"))
+        self.write_ledger_shard("p1-001", second, first)
+        self.build()
+
+        status, output = self.check_against(base)
+
+        self.assertEqual(status, 1)
+        self.assertIn("append-only", output)
+        self.assertIn("reordered", output)
+
+    def test_recorded_retirement_passes(self):
+        base = self.write_base(
+            {"p1-001": queue_row("p1-001"), "p1-002": queue_row("p1-002")},
+            {"p1-001": [ledger_row("2026-11-14T17:00:00Z", "p1-001")]},
+        )
+        self.write_queue_shard("p1-002", queue_row("p1-002"))
+        (self.units / "removed.tsv").write_text(
+            port_index.REMOVED_HEADER + "\np1-001\tmerged into p1-002\n"
+        )
+        self.build()
+
+        status, output = self.check_against(base)
+
+        self.assertEqual(status, 0, output)
+        self.assertIn("history matches BASE", output)
+
+    def test_appending_a_ledger_row_passes(self):
+        base = self.write_base(
+            {"p1-001": queue_row("p1-001")},
+            {"p1-001": [ledger_row("2026-11-14T17:00:00Z", "p1-001")]},
+        )
+        self.write_queue_shard("p1-001", queue_row("p1-001"))
+        self.write_ledger_shard(
+            "p1-001",
+            ledger_row("2026-11-14T17:00:00Z", "p1-001"),
+            ledger_row("2026-11-14T18:00:00Z", "p1-001", to_status="done"),
+        )
+        self.build()
+
+        status, output = self.check_against(base)
+
+        self.assertEqual(status, 0, output)
 
 
 if __name__ == "__main__":
