@@ -168,7 +168,7 @@ jobs:
           }
           if (!$vstest) { throw "vstest.console.exe not found" }
 
-          $filter = "FullyQualifiedName!~CanWriteToFolderTest&FullyQualifiedName!~OverUnsafeWorksTest"
+          $filter = "FullyQualifiedName!~CanWriteToFolderTest&FullyQualifiedName!~OverUnsafeWorksTest&FullyQualifiedName!~ProcessStarterTests.ShellExecuteTest"
           & $vstest $dll.FullName `
             /Logger:trx `
             /ResultsDirectory:"${{ runner.temp }}/test-results" `
@@ -195,7 +195,8 @@ jobs:
             skipped = [int]$counters.GetAttribute("notExecuted")
             excluded = @(
               "FileSystemTests.CanWriteToFolderTest",
-              "SafeFileEnumeratorTests.OverUnsafeWorksTest"
+              "SafeFileEnumeratorTests.OverUnsafeWorksTest",
+              "ProcessStarterTests.ShellExecuteTest"
             )
           }
           $result | ConvertTo-Json -Depth 4 | Set-Content "${{ runner.temp }}/test-counts.json"

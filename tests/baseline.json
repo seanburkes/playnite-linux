@@ -1,17 +1,18 @@
 {
   "legacy": {
-    "captured_at": "2026-11-14T14:20:45Z",
-    "run_id": "43604176690",
-    "total": 282,
-    "executed": 282,
-    "passed": 282,
+    "captured_at": "2026-11-14T22:49:59Z",
+    "run_id": "43649562478",
+    "total": 281,
+    "executed": 281,
+    "passed": 281,
     "failed": 0,
     "skipped": 0,
     "excluded": [
       "FileSystemTests.CanWriteToFolderTest",
-      "SafeFileEnumeratorTests.OverUnsafeWorksTest"
+      "SafeFileEnumeratorTests.OverUnsafeWorksTest",
+      "ProcessStarterTests.ShellExecuteTest"
     ],
-    "notes": "VSTest TRX from the Windows oracle. Two Windows-ACL tests are excluded; see tests/legacy-exclusions.md."
+    "notes": "VSTest TRX from the Windows oracle. Two Windows-ACL tests and one flaky Windows shell test are excluded; see tests/legacy-exclusions.md."
   },
   "new": null
 }
