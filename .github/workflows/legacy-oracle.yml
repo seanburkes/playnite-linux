@@ -51,7 +51,6 @@ jobs:
         run: |
           dotnet test legacy/source/Tests/Playnite.Tests/Playnite.Tests.csproj `
             -c Release `
-            --no-build `
             --logger "trx;LogFileName=playnite-tests.trx" `
             --results-directory "${{ runner.temp }}/test-results"
 
