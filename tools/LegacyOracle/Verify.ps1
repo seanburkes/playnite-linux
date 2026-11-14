@@ -84,13 +84,18 @@ try {
         Copy-Item -LiteralPath $copy -Destination "$payload/library" -Recurse
         Assert-TreeUnchanged $Library $beforeLibrary 'Source library changed.'
     }
-    Assert-Names @((Get-TreeHashes $payload).Keys) $PayloadFiles
+    $expectedPayload = if ($Mode -eq 'GenerateSettings') {
+        @($PayloadFiles | Where-Object { $_ -like 'settings/*' })
+    } else {
+        $PayloadFiles
+    }
+    Assert-Names @((Get-TreeHashes $payload).Keys) $expectedPayload
 
     if ($Mode -eq 'Validate') {
         Assert-Goldens $payload $Golden
         $outcome = 'PASS: exact 21 golden payloads and path/hash manifest; settings roundtrip/repeat; raw library bytes; source preserved.'
     } else {
-        $outcome = "GENERATED $($PayloadFiles.Count) scratch payloads for review: protected acceptance, fixture and Windows evidence remain pending. No protected write or automatic manifest acceptance."
+        $outcome = "GENERATED $($expectedPayload.Count) scratch payloads for review: protected acceptance, fixture and Windows evidence remain pending. No protected write or automatic manifest acceptance."
     }
 } catch {
     $failure = $_
