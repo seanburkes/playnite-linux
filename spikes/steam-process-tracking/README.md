@@ -1,9 +1,11 @@
 # p1-007: bounded native/Proton tracking experiment
 
-**Candidate evidence, not production platform code or real Steam acceptance.**
+**Candidate evidence, not production platform code.**
 This dependency-free Python/Linux experiment answers what a polling process-tree
-tracker can and cannot establish. It does not launch Steam or games, enumerate a
-user's processes, read their environments, or implement Flatpak host transport.
+tracker can and cannot establish. One bounded real native Steam acceptance run is
+recorded in `real-acceptance.md`; the rest of this note is synthetic/owned-process
+evidence. The experiment does not implement Flatpak host transport, production
+root attribution, or environment inspection.
 
 ## Reproduce
 
@@ -83,7 +85,9 @@ Executed locally with `/usr/bin/python3` 3.14.10 on Linux 7.3.0-3-cachyos:
 **21 tests passed, zero skipped** with the command above. Full revised command output
 is retained under `/home/sean/src/firstmate/data/p1-007-fix/tests.txt`; the original
 16-test run is under `/home/sean/src/firstmate/data/p1-007/tests.txt`.
-The test source is the reproducible, repository-contained evidence.
+The test source is the reproducible, repository-contained evidence. Real native
+Steam launch/track/exit evidence for Terraria (105600) is in
+`real-acceptance.md`; it is separate from the synthetic table below.
 
 | Scenario | Evidence kind | Observation |
 | --- | --- | --- |
@@ -116,20 +120,23 @@ No test asserts that synchronous reads can be interrupted.
 **Observed:** the local kernel exposes stat identities/parent links for owned Python
 processes, fixed-point tree tracking works for those supplied rows, and controlled
 cleanup/cancellation works. Synthetic reparenting and broker cases expose where
-tree-only attribution fails. A `steam` executable exists on this machine; that is
-not evidence of an available/consenting real-game acceptance environment.
+tree-only attribution fails. A real native Steam launch of Terraria (105600) on
+this host produced the expected reaper/runtime/launcher/game chain and a correct
+`running` → `stopped` session; see `real-acceptance.md`.
 
-**Unverified:** real native Steam launch, real Proton/Wine wrapper lifetimes,
-actual live reparenting, Steam client handoff/early return, concurrent same-app
-launches, shared Wine servers, permission-restricted `/proc`, and Flatpak host PID
-visibility. No real Steam/game process was launched, killed, or reconfigured.
-Python wrapper shape is not Proton emulation or evidence of Proton compatibility.
+**Unverified:** real Proton/Wine wrapper lifetimes and multi-process Wine trees,
+actual live reparenting, Steam client handoff/early return against a real client,
+concurrent same-app launches, shared Wine servers, permission-restricted `/proc`,
+Flatpak host PID visibility, anti-cheat/launcher/login titles, and the secondary
+library. The real run did not change Steam/game configuration. Python wrapper
+shape is not Proton emulation or evidence of Proton compatibility.
 
 **Conclusion:** a known-tree observer is feasible, but process trees alone are
 insufficient to identify and authoritatively end Steam sessions. Do not promote
 this spike to production tracking or mark ADR-017/020 acceptance passed. p5-004/
-p5-008 need a reviewed launch/session attribution strategy plus consented real
-native/Proton acceptance; p1-010 must validate host namespace/transport separately.
+p5-008 need a reviewed launch/session attribution strategy plus real Proton
+acceptance and broader title coverage; one real native title is now observed
+(`real-acceptance.md`). p1-010 must validate host namespace/transport separately.
 No privileged helper is justified by these results.
 
 ## References / remaining gates
