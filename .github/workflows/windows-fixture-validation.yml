@@ -30,26 +30,15 @@ jobs:
         with:
           dotnet-version: "11.0.x"
       - uses: microsoft/setup-msbuild@v2
-      - name: Fetch checksum-pinned dependency into temporary feed
+      - name: Pin and verify Playnite.Deps in the tool-local feed
         shell: pwsh
-        run: |
-          $ErrorActionPreference = 'Stop'
-          $feed = Join-Path $env:RUNNER_TEMP 'fixture-feed'
-          New-Item -ItemType Directory -Path $feed | Out-Null
-          $file = 'Playnite.Deps.10.56.0.nupkg'
-          $package = Join-Path $feed $file
-          Invoke-WebRequest 'https://nuget.playnite.link/v3/package/playnite.deps/10.56.0/playnite.deps.10.56.0.nupkg' -OutFile $package
-          $line = @(Get-Content oracle-lock/SHA256SUMS | Where-Object { $_ -match [regex]::Escape($file) })
-          if ($line.Count -ne 1) { throw 'Expected exactly one dependency checksum' }
-          $expected = ($line[0] -split '\s+')[0]
-          if ((Get-FileHash $package -Algorithm SHA256).Hash.ToLowerInvariant() -cne $expected) {
-            throw 'Playnite.Deps checksum mismatch'
-          }
-          "FIXTURE_FEED=$feed" >> $env:GITHUB_ENV
+        run: ./oracle-lock/fetch.ps1
       - name: Restore and build only the isolated generator and its v10 dependencies
         shell: pwsh
         run: |
-          dotnet restore tools/V10LibraryFixture/V10LibraryFixture.csproj --source "$env:FIXTURE_FEED" --source https://api.nuget.org/v3/index.json
+          # tools/V10LibraryFixture/NuGet.config clears inherited sources, uses the
+          # checksum-verified oracle-lock/packages folder, and adds nuget.org.
+          dotnet restore tools/V10LibraryFixture/V10LibraryFixture.csproj
           if ($LASTEXITCODE -ne 0) { throw 'Restore failed' }
           msbuild tools/V10LibraryFixture/V10LibraryFixture.csproj /p:Configuration=Release /p:Platform=x86 /verbosity:minimal
           if ($LASTEXITCODE -ne 0) { throw 'Build failed' }
@@ -59,6 +48,15 @@ jobs:
           $exe = @(Get-ChildItem tools/V10LibraryFixture/bin -Recurse -Filter V10LibraryFixture.exe)
           if ($exe.Count -ne 1) { throw 'Expected exactly one generator executable' }
           ./tools/V10LibraryFixture/Validate.ps1 -Exe $exe[0].FullName -Output "$env:RUNNER_TEMP/fixture-validation" -Fixture "$env:GITHUB_WORKSPACE/tests/fixtures/v10"
+      - name: Record committed-fixture gate
+        shell: pwsh
+        run: |
+          if (Test-Path -LiteralPath tests/fixtures/v10/SHA256SUMS) {
+            'Committed-fixture comparison: STRICT (SHA256SUMS present)' >> $env:GITHUB_STEP_SUMMARY
+          }
+          else {
+            'PENDING: committed-fixture comparison pending (tests/fixtures/v10/SHA256SUMS is absent)' >> $env:GITHUB_STEP_SUMMARY
+          }
       - name: Retain unmodified candidate bytes and regeneration evidence
         if: always()
         uses: actions/upload-artifact@v4

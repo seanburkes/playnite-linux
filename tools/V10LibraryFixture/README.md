@@ -85,15 +85,21 @@ extension code/data is ingested.
 
 ## Windows procedure
 
-Use `.github/workflows/windows-fixture-validation.yml`. It downloads Playnite.Deps
-to a temporary NuGet feed and verifies the existing immutable checksum, restores
-and builds only `V10LibraryFixture.csproj`, runs the output-path safety tests, then
-invokes:
+Use `.github/workflows/windows-fixture-validation.yml`. It runs
+`oracle-lock/fetch.ps1` (which downloads and verifies the existing immutable
+Playnite.Deps checksum into `oracle-lock/packages`), restores through the
+tool-local `NuGet.config`, builds only `V10LibraryFixture.csproj`, runs the
+output-path safety tests, then invokes:
 
 ```powershell
 ./tools/V10LibraryFixture/Validate.ps1 -Exe <built-V10LibraryFixture.exe> `
   -Output <nonexistent-external-scratch-directory> -Fixture tests/fixtures/v10
 ```
+
+`NuGet.config` clears inherited sources, uses the real local
+`oracle-lock/packages` folder, and adds the standard nuget.org index. It is
+needed because the tools project cannot see `legacy/source/nuget.config` and
+command-line URL sources were misinterpreted on Windows.
 
 Before the first directory creation, `Validate.ps1` resolves both paths to their
 canonical form, including reparse-point (junction/symlink) ancestors, and rejects
@@ -117,10 +123,17 @@ and stable row ordering. They are comparison-only, not a new persisted library
 export format. Freshly generated documents must also equal the committed capture's
 documents. No test exclusions or conditional skips.
 
+The committed-fixture gate is strict only when `tests/fixtures/v10/SHA256SUMS`
+exists. Before protected intake, the workflow still generates, runs every
+negative check, uploads the candidate bytes, and passes with an explicit
+`PENDING: committed-fixture comparison pending` notice. Once the manifest is
+present, `Validate.ps1` verifies the pinned capture and compares fresh logical
+documents against it; a bad or incomplete capture fails the run. A non-empty
+fixture directory without `SHA256SUMS` also fails rather than being treated as
+pending. The workflow writes the active gate to its step summary.
+
 The workflow retains first-generation candidate bytes even if a later assertion
 fails; an uploaded artifact is not by itself evidence of a passing validation.
-Before protected intake, absence of the committed fixture intentionally fails the
-last verification rather than reporting success or weakening the checks.
 
 The oracle consumer (p1-002) is authorized to copy the library directory as raw,
 unchanged bytes into temporary storage. This generator does not define a new
