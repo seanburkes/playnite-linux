@@ -1,8 +1,8 @@
 # Port status
 
-**Phase:** 0 — decisions and inventory
+**Phase:** 1 — freeze the oracle (in progress)
 **Updated:** 2026-11-13
-**Next gate:** captain review, then Phase 1 (freeze the oracle)
+**Next gate:** Phase 1 exit (oracle harness + fixtures + spikes)
 
 ## Done
 
@@ -20,7 +20,12 @@
 - [x] Formal models checked by TLC (LibraryImport with a concurrent reader, GameSession,
       SettingsMigration).
 - [x] Deterministic inventory scanner (`scripts/port/scan_legacy.py`).
-- [x] Firstmate cloned at `~/src/firstmate`.
+- [x] Firstmate cloned at `~/src/firstmate`; prerequisites installed; project registered `direct-PR`.
+- [x] Public repo created: https://github.com/seanburkes/playnite-linux
+- [x] Windows oracle build + suite green: 282 executed, 282 passed, 2 documented ACL-test
+      exclusions (run 43604176690).
+- [x] LiteDB 4.1.4 read/write spike on `net11.0` passed (`spikes/litedb-net11`).
+- [x] Synthetic Steam fixture corpus (`tests/fixtures/steam/`).
 - [x] Independent plan review; findings incorporated: Steam is greenfield, oracle harness
       constrained to v10 APIs, Playnite.Deps pinned by SHA-256, Flatpak host launch/tracking,
       LiteDB importer is a separate process, WebView deferred to v1.1, SDK split into
@@ -28,15 +33,15 @@
 
 ## In flight
 
-- [ ] Review this plan with the captain; resolve open questions.
-- [ ] Create the public GitHub repo and push the first commit.
-- [ ] Register `playnite-linux` in firstmate (`local-only` until `origin` exists).
-- [ ] Run the Phase 1 spikes (LiteDB on net11, WebKitGTK/WPE offscreen, Steam process
-      tracking, Avalonia headless screenshots).
+- [ ] Oracle harness constrained to v10 APIs (settings/manifests first).
+- [ ] Fixture v10 library for migration; real Steam artifact capture.
+- [ ] UI reference images (human only, not pixel gates).
+- [ ] Steam process/Flatpak tracking spike.
+- [ ] Avalonia headless screenshot + accessibility spike.
 
 ## Not started
 
-- Phase 1 oracle harness and Windows CI.
+- Oracle harness byte diff and golden corpus.
 - Phase 2 solution/projects/analyzers.
 - Any production code.
 
@@ -61,7 +66,8 @@
 - Windows oracle CI needs a runner image with .NET Framework MSBuild. `Playnite.Deps` is
   publicly reachable, but it is a mutable third-party feed; the SHA-256 pin in `oracle-lock/`
   is the reproducibility control, and redistribution needs a license review.
-- LiteDB 4 compatibility on `net11.0` is unproven until the Phase 1 spike.
+- LiteDB 4 basic read/write passes on `net11.0`; the v10-specific mapper/collection layout still
+  needs a fixture-based verification.
 - Steam is greenfield: no v10 implementation exists to port, so its oracle is a recorded
   artifact corpus + real-install acceptance, not a v10 diff.
 
@@ -71,7 +77,7 @@
 | --- | ---: | --- |
 | Legacy C# LOC | 143,152 | `scan_legacy.py` |
 | Legacy XAML LOC | 68,226 | `scan_legacy.py` |
-| Legacy test methods | 204 (82 parameterised cases) | `scan_legacy.py` |
+| Legacy executed cases (oracle) | 282 passed, 2 excluded | `tests/baseline.json` |
 | Windows-only files (non-WPF) | 72 | `scan_legacy.py` |
 | New tests | 0 | — |
 | Ported parity rows | 0 | `surface-parity.tsv` |
