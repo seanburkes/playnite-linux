@@ -6,8 +6,19 @@ Only this project and its dependencies are built, never the legacy solution.
 
 ## Current evidence
 
-**Candidate only. Windows build, read-back, and logical regeneration are pending.**
-Do not copy outputs into protected paths before two independent diff-only reviews.
+Merged in PR #6 (`edcbe71`). Windows run 43629325359 is green: the tool restores and builds
+from the local package lock, generates twice with equal logical documents, rejects the
+one-byte mutation and the extra file, and performs a copy-only v10 typed read-back. Two
+independent oracle-change reviews approved the exact 19 protected fixture paths.
+
+The capture itself is still pending: `tests/fixtures/v10/` does not exist, so there is no
+pinned `SHA256SUMS`, no typed Windows read-back of the committed bytes, and no strict
+committed-fixture comparison (the workflow reports an explicit pending gate while
+`SHA256SUMS` is absent). Path approval is not a capture; do not copy outputs into protected
+paths without the post-write capture review.
+
+One tooling hardening item is also still pending: the `Validate.ps1` canonicalizer does not
+yet reject NTFS 8.3 short-name aliases, which the p1-002 validator does.
 
 Logical determinism, not byte-identical fresh regeneration, is the approved
 acceptance contract. LiteDB

@@ -59,18 +59,91 @@ jobs:
             /m `
             /verbosity:minimal
 
-      - name: Emit manifest and theme goldens
+      - name: Emit manifest goldens to a temporary directory
         shell: pwsh
         run: |
           $exe = Get-ChildItem tools/LegacyOracle/bin -Recurse -Filter LegacyOracle.exe |
             Sort-Object LastWriteTime -Descending | Select-Object -First 1
           if (!$exe) { throw "LegacyOracle.exe not found" }
-          New-Item -ItemType Directory -Force -Path tests/golden/manifests | Out-Null
+          $out = Join-Path $env:RUNNER_TEMP "manifest-goldens"
+          New-Item -ItemType Directory -Force -Path $out | Out-Null
           & $exe.FullName manifest legacy/source/Tests/TestPlugin/extension.yaml |
-            Out-File -Encoding utf8NoBOM tests/golden/manifests/TestPlugin.extension.yaml
+            Out-File -Encoding utf8NoBOM (Join-Path $out "TestPlugin.extension.yaml")
           & $exe.FullName manifest legacy/source/Tests/TestGameLibrary/extension.yaml |
-            Out-File -Encoding utf8NoBOM tests/golden/manifests/TestGameLibrary.extension.yaml
-          Get-ChildItem tests/golden/manifests | ForEach-Object { Get-Content $_.FullName }
+            Out-File -Encoding utf8NoBOM (Join-Path $out "TestGameLibrary.extension.yaml")
+          Get-ChildItem -LiteralPath $out | ForEach-Object { Get-Content $_.FullName }
+
+      - name: Byte-compare manifest goldens and prove the comparator bites
+        shell: pwsh
+        run: |
+          function Get-ManifestGoldenDifferences {
+            param(
+              [Parameter(Mandatory)][string]$Generated,
+              [Parameter(Mandatory)][string]$Committed
+            )
+            $problems = [System.Collections.Generic.List[string]]::new()
+            $committedFiles = @(Get-ChildItem -LiteralPath $Committed -File -Filter *.yaml | Sort-Object Name)
+            if ($committedFiles.Count -eq 0) {
+              $problems.Add("no committed manifest goldens found in $Committed")
+              return ,$problems
+            }
+            foreach ($file in $committedFiles) {
+              $candidate = Join-Path $Generated $file.Name
+              if (-not (Test-Path -LiteralPath $candidate -PathType Leaf)) {
+                $problems.Add("$($file.Name): regenerated manifest is missing")
+                continue
+              }
+              $expected = [System.IO.File]::ReadAllBytes($file.FullName)
+              $actual = [System.IO.File]::ReadAllBytes($candidate)
+              if ($expected.Length -ne $actual.Length) {
+                $problems.Add("$($file.Name): byte length differs (committed $($expected.Length), regenerated $($actual.Length))")
+                continue
+              }
+              for ($i = 0; $i -lt $expected.Length; $i++) {
+                if ($expected[$i] -ne $actual[$i]) {
+                  $problems.Add(("{0}: byte {1} differs (committed 0x{2:x2}, regenerated 0x{3:x2})" -f $file.Name, $i, $expected[$i], $actual[$i]))
+                  break
+                }
+              }
+            }
+            $committedNames = @($committedFiles | ForEach-Object { $_.Name })
+            foreach ($extra in @(Get-ChildItem -LiteralPath $Generated -File)) {
+              if ($committedNames -notcontains $extra.Name) {
+                $problems.Add("$($extra.Name): regenerated manifest has no committed counterpart")
+              }
+            }
+            return ,$problems
+          }
+
+          $committedDir = "tests/golden/manifests"
+          $generatedDir = Join-Path $env:RUNNER_TEMP "manifest-goldens"
+          $differences = Get-ManifestGoldenDifferences -Generated $generatedDir -Committed $committedDir
+          if ($differences.Count -gt 0) {
+            $differences | ForEach-Object { Write-Host "GOLDEN MISMATCH: $_" }
+            throw "Manifest goldens are not reproducible: $($differences.Count) difference(s). See GOLDEN MISMATCH lines."
+          }
+          Write-Host "Manifest goldens match committed bytes: $((Get-ChildItem -LiteralPath $committedDir -File).Count) file(s)."
+
+          $probe = Get-ChildItem -LiteralPath $committedDir -File -Filter *.yaml |
+            Sort-Object Name | Select-Object -First 1
+          if (-not $probe) { throw "One-byte negative check needs a committed manifest golden." }
+          $negativeDir = Join-Path $env:RUNNER_TEMP "manifest-goldens-negative"
+          New-Item -ItemType Directory -Force -Path $negativeDir | Out-Null
+          $mutated = Join-Path $negativeDir $probe.Name
+          [System.IO.File]::Copy($probe.FullName, $mutated, $true)
+          $bytes = [System.IO.File]::ReadAllBytes($mutated)
+          if ($bytes.Length -lt 1) { throw "One-byte negative check needs a non-empty golden: $($probe.Name)." }
+          $bytes[0] = [byte]($bytes[0] -bxor 0x01)
+          [System.IO.File]::WriteAllBytes($mutated, $bytes)
+          $negativeDifferences = Get-ManifestGoldenDifferences -Generated $negativeDir -Committed $committedDir
+          if ($negativeDifferences.Count -eq 0) {
+            throw "One-byte negative check did not bite: a copy of $($probe.Name) with one flipped byte was accepted."
+          }
+          $named = @($negativeDifferences | Where-Object { $_ -like "$($probe.Name):*" })
+          if ($named.Count -eq 0) {
+            throw "One-byte negative check failed without naming $($probe.Name): $($negativeDifferences -join '; ')"
+          }
+          Write-Host "One-byte negative check passed: $($negativeDifferences -join '; ')"
 
       - name: Locate legacy test assembly
         shell: pwsh
@@ -136,5 +209,5 @@ jobs:
             legacy-build.binlog
             ${{ runner.temp }}/test-results/**
             ${{ runner.temp }}/test-counts.json
-            tests/golden/manifests/**
+            ${{ runner.temp }}/manifest-goldens/**
           if-no-files-found: warn
