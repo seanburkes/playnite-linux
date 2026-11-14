@@ -2,11 +2,20 @@
 
 ## Bounded conclusion (2026-11-14)
 
-**Inconclusive for ADR-020's no-host-helper question.** This worker has neither
-`flatpak` nor `flatpak-spawn` on PATH and is not inside a Flatpak sandbox.
-Controlled local-child observations and synthetic identity tests pass; they do
-not establish sandbox-to-host access or native/Proton Steam session tracking.
-No helper or permission change is proposed or implemented.
+**Sandbox-to-host transport is now proven; Steam tracking is not.** A minimal
+user-scoped test Flatpak was built with `flatpak-builder`, run for real, and its
+`flatpak-spawn --host` child returned the host PID, start ticks and host PID
+namespace. From inside the sandbox that host PID was not visible; the host child
+exited 23 and `flatpak-spawn` forwarded that code. A second run without the
+`org.freedesktop.Flatpak` D-Bus permission failed with `launch-failed` and
+`org.freedesktop.DBus.Error.ServiceUnknown`, as expected.
+
+The run used only the EOL `org.freedesktop.Platform`/`Sdk` 24.08 present on the
+host, so this is probe evidence, not a supported-runtime or production claim.
+No Steam client, native game or Proton game was launched or tracked, and no
+helper or production permission change is proposed or implemented. Full
+commands, output, versions and limitations are in
+[`REAL-ACCEPTANCE.md`](REAL-ACCEPTANCE.md).
 
 References: ADR-017 and ADR-020 in `docs/port/00-DECISIONS.md`; Phase 1
 spikes in `docs/port/03-EXECUTION-PLAN.md`. Steam is greenfield: there is no
@@ -23,10 +32,25 @@ PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s spikes/flatpak-host -v
 PYTHONDONTWRITEBYTECODE=1 python3 spikes/flatpak-host/probe.py --host-child
 ```
 
-The evidence run used `/usr/bin/python3` (3.14.10), not the untrusted worktree's
-mise shims. Both commands above resolve their script paths from repository root.
-All 26 tests executed, zero failures/errors/skips. JSON is an observation report,
-not an acceptance verdict: command exit zero does not mean host tracking passed.
+The local suite run used `/usr/bin/python3` (3.14.10), not the untrusted
+worktree's mise shims. Both commands above resolve their script paths from
+repository root. All 26 tests executed, zero failures/errors/skips. JSON is an
+observation report, not an acceptance verdict: command exit zero does not mean
+host tracking passed.
+
+Real sandbox acceptance uses the committed manifest and builds a throwaway app
+(requires `flatpak-builder` and an installed `org.freedesktop.Platform` runtime):
+
+```sh
+flatpak-builder --user --install --force-clean /tmp/p1-010-build \
+  spikes/flatpak-host/org.playnite.FlatpakHostProbe.yaml
+flatpak run org.playnite.FlatpakHostProbe
+flatpak run --no-talk-name=org.freedesktop.Flatpak org.playnite.FlatpakHostProbe
+flatpak uninstall --user -y org.playnite.FlatpakHostProbe
+```
+
+The exact versions, output, exit paths and cleanup confirmation are recorded in
+[`REAL-ACCEPTANCE.md`](REAL-ACCEPTANCE.md).
 
 Default mode only starts a controlled local Python child. `--host-child` also
 attempts a controlled host child **only from an already available Flatpak
@@ -60,21 +84,25 @@ is used.
 
 | Experiment | Evidence class | Observed result | What it does NOT establish |
 | --- | --- | --- | --- |
-| Capability check | Actual local, read-only | `in_flatpak=false`, `flatpak_on_path=false`, `flatpak_spawn_on_path=false`, `steam_on_path=true` | Steam installation health or any game availability |
-| Own local child identity while live | Actual local controlled process | PID 2362442, start ticks 197314503, PID namespace `pid:[4026531836]`; caller `/proc` identity matched | Host PID visibility from a sandbox |
+| Capability check | Actual local and actual sandbox, read-only | Local: `in_flatpak=false`, `flatpak_on_path=false`, `flatpak_spawn_on_path=false`, `steam_on_path=true`. Sandbox: `in_flatpak=true`, `flatpak_spawn_on_path=true`, `steam_on_path=false` | Steam installation health or any game availability |
+| Sandbox identity | Actual Flatpak sandbox | App/entrypoint PID 2, PID namespace `pid:[4026533530]`; host shell namespace `pid:[4026531836]` | Cross-namespace PID visibility by itself |
+| Own local child identity while live | Actual local controlled process | PID 2362442, start ticks 197314503, PID namespace `pid:[4026531836]`; caller `/proc` identity matched (local run). Inside the sandbox: PID 4, namespace `pid:[4026533530]`, matched | Host PID visibility from a sandbox |
 | Own local child release/exit | Actual local controlled process | Exit 23 observed, empty stderr; launcher reaped | Steam launcher PID equals game PID; game exit propagation |
-| Host child via `flatpak-spawn --host` | **Not run** | Caller is not sandboxed; both Flatpak tools absent | Host transport, D-Bus authority, host namespace access, host exit forwarding |
-| Real host Steam launch from sandbox | **Not run** | No existing sandbox/host transport; user-game launches not authorised | ADR-020 launch acceptance |
+| Host child via `flatpak-spawn --host` | **Actual Flatpak sandbox run** | Transport worked: host PID 435688, start ticks 199472051, host namespace `pid:[4026531836]`; sandbox visibility `not-visible-or-exited`; exit 23 forwarded, empty stderr | Steam launch, D-Bus policy for other runtimes, signal delivery |
+| Host child without `org.freedesktop.Flatpak` permission | **Actual Flatpak sandbox run** | `launch-failed`, exit 1, `org.freedesktop.DBus.Error.ServiceUnknown` | Whether another transport would succeed |
+| Real host Steam launch from sandbox | **Not run** | No Steam in the test sandbox; user-game launches not authorised | ADR-020 launch acceptance |
 | Real native Steam session | **Not run** | No authorised native game experiment; availability not inspected | Start/stop, reparenting, already-running Steam behaviour |
 | Real Proton Steam session | **Not run** | No authorised Proton game experiment; availability not inspected | Wine/Proton descendant lifetime, wineserver reuse, app attribution |
 | PID reuse, namespace collision, missing/denied `/proc`, stat names with spaces/parentheses | Synthetic unit tests | Distinct identity or explicit inconclusive/denied outcome, never success | Real sandbox policy or Steam identity/attribution |
 | Failed launcher and timeout cleanup | Controlled test children | Failure exit 7 reported; unresponsive owned child reaped | Any host-side teardown guarantee beyond the self-expiring child design |
-| Host gate and fixed argv | Synthetic unit tests | Existing-sandbox/tool gates enforced; fixed host argument list | Actual `flatpak-spawn` execution or permissions |
+| Host gate and fixed argv | Synthetic unit tests | Existing-sandbox/tool gates enforced; fixed host argument list | Gate logic alone; real execution is covered by the two sandbox rows above |
 | Fragmented record and bounded failure paths | Controlled local child plus synthetic short-read/clock tests | Seven-byte reads retain same identity and exit 23; partial EOF/timeout, malformed records and byte-limit failures reap owned launchers; fragments share one deadline | Real Flatpak forwarding, sandbox visibility or game acceptance |
 
 Raw run output is retained as task proof outside the repository at
-`/home/sean/src/firstmate/data/p1-010/{probe.json,tests.txt}`. The matrix above
-records the relevant observations without publishing user paths or process lists.
+`/home/sean/src/firstmate/data/p1-010/{probe.json,tests.txt}`; the real
+acceptance logs are at `/home/sean/src/firstmate/data/p1-010-live/`. The matrix
+above records the relevant observations without publishing user paths or process
+lists.
 
 Correction evidence is at `/home/sean/src/firstmate/data/p1-010-fix/`:
 `reproduction-before.txt` compares full delivery, seven-byte fragmentation, and
@@ -103,18 +131,20 @@ the launcher early, or reparent a game. Those remain p1-007/real-install questio
 
 ## Remaining evidence / review handoff
 
-1. On an already authorised sandbox/test host, run the optional host-child probe
-   unchanged and retain its output, sandbox identity/version and existing
-   permissions. Do not broaden permissions just to make this pass.
+1. ~~On an already authorised sandbox/test host, run the optional host-child
+   probe unchanged.~~ Done for one runtime: see `REAL-ACCEPTANCE.md`. Repeating
+   on a supported runtime is still open.
 2. Under separately authorised real-game acceptance, coordinate native and Proton
    launch/start/stop observations with p1-007, including an already-running Steam
    client and reparenting. The present probe deliberately has no game-launch mode.
-3. If direct `/proc` is isolated, test whether existing host transport can perform
-   bounded host-side identity observations without installing a persistent helper.
-   This experiment has not run; isolation alone is not evidence a helper is needed.
+3. Direct `/proc` is isolated in the tested sandbox, and existing host transport
+   (`flatpak-spawn --host`) did perform bounded host-side identity observations
+   without a persistent helper. That is one runtime/host result; it does not by
+   itself settle the ADR-020 helper decision or production permissions.
 4. Any D-Bus/permission or host-helper architecture change belongs to the captain.
-   ADR-020 and Phase 5/8 real acceptance remain open, not waived by local tests.
+   ADR-020 and Phase 5/8 real acceptance remain open, not waived by this probe.
 
 Candidate diff and evidence are for firstmate to obtain two independent blind
 diff-only reviews. No reviewer edits or completed-review claim is included here.
-The queue remains `in-progress` because real sandbox/Steam evidence is absent.
+The queue remains `in-progress` because real Steam/native/Proton evidence is
+absent; sandbox transport acceptance is no longer pending.
