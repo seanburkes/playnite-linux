@@ -1,8 +1,8 @@
 # Port status
 
-**Phase:** 2 complete — scaffolding exit evidence recorded; owner acceptance pending
+**Phase:** 3 — authorised by owner acceptance of Phase 2 on 2026-11-15
 **Updated:** 2026-11-15
-**Next gate:** Phase 3 exit (after the Phase 2 exit verdict is accepted)
+**Next gate:** Phase 3 exit
 
 ## Done
 
@@ -75,11 +75,14 @@
       NOT MEASURED, explicitly deferred to Phase 4 because no library/database/open API exists.
 - [x] Merged Phase 2 hardening board reconciled in shards; stale UI follow-up notes removed.
       `gates/P2-scaffolding.md` records run identities, hashes, declared deferrals and residuals.
+- [x] Phase 2 accepted with declared deferrals on 2026-11-15: D1 accessibility, WebView
+      to v1.1 and empty-library-open to Phase 4. Exit artifact
+      https://github.com/seanburkes/playnite-linux/pull/64 merged at `0e39326`;
+      owner acceptance authorises Phase 3, without waiving the recorded residual risks.
 
 ## In flight
 
-No implementation units. Only this `p2-exit` documentation/reconciliation PR is in review;
-after its merge there are no Phase 2 units in flight. Phase 3 has not started.
+None. Phase 2 units are done; Phase 3 is authorised but no implementation unit has started.
 
 ## Not started
 
@@ -99,6 +102,8 @@ after its merge there are no Phase 2 units in flight. Phase 3 has not started.
   exception was taken; correlated blind spots and owner-controlled protection remain risks.
 - **Path guard:** merged hardening is not exhaustive; bypass and over-blocking classes may
   remain, detailed in `gates/P2-scaffolding.md`. Historical ledger exceptions stay immutable.
+- **p2-006-harden:** review A's P2 on unsupplied negative full-suite proof logs remains
+  open; those logs were never supplied. Acceptance records this residual, not a proof pass.
 - **Bounded evidence:** the Steam acceptance is single-title/single-host; the Flatpak probe
   ran on an EOL runtime; the X11 accessibility evidence is XWayland, not bare Xorg.
 
@@ -118,8 +123,8 @@ after its merge there are no Phase 2 units in flight. Phase 3 has not started.
 
 ## Blockers
 
-- No unwaived Phase 2 runtime-evidence blocker. The exit PR's owner review/acceptance and
-  merge are still pending; the gate records the library-open deferral rather than measuring it.
+- No Phase 3 entry blocker: the owner accepted Phase 2 with declared deferrals on
+  2026-11-15. Library-open and the negative-proof-log residual remain explicitly unproven.
 - Release work still needs dependency redistribution/license review. Steam remains greenfield
   with corpus/real-install acceptance rather than a v10 implementation diff; neither is an
   unreported scaffolding test pass.

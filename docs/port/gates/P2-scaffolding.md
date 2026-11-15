@@ -3,13 +3,18 @@
 - Date: 2026-11-15
 - Gate commit: `a2b66339a41130b40da0b42b94df7984227cf81c` (`main`). This documentation
   change records that tree; it does not claim that its own later commit ran these workflows.
+  The exit artifact merged in https://github.com/seanburkes/playnite-linux/pull/64 at
+  `0e39326`; this acceptance correction follows that merge without rewriting its evidence.
 - Owner: scaffolding / p2-exit
 - Review model: adversarial assistance on the owner's behalf, not independent approval.
   The single-owner exception in ADR-024 was taken for the merged units; no external-human
   review is claimed. This exit artifact has two worker diff-only self-review passes;
-  these are not separate reviewer agents or approval. Owner review of this PR remains pending.
-- Result: **READY for owner acceptance**, with the explicit deferrals and bounded claims
-  below. Empty-library-open is deferred to Phase 4, not a passing measurement.
+  these are not separate reviewer agents or approval. Firstmate subsequently supplied two
+  verdict reviews; their wording corrections are incorporated here.
+- Result: **ACCEPTED with declared deferrals** — owner acceptance dated **2026-11-15**;
+  Phase 3 is authorised. Acceptance retains D1 accessibility, WebView to v1.1,
+  empty-library-open to Phase 4 and every bounded claim below. Empty-library-open is
+  deferred, not a passing measurement.
 
 ## Evidence
 
@@ -24,20 +29,23 @@
 
 ### Merge and board verification
 
-Every merge cited here was checked with `git merge-base --is-ancestor <merge> a2b6633`.
+Every implementation merge below was checked with
+`git merge-base --is-ancestor <merge> a2b6633`; the later exit-artifact merge was
+separately verified as an ancestor of acceptance-correction base `80b0e6b`.
 The reconciliation changes only queue shards and appends ledger evidence; historical rows
 remain unchanged and the parent post-merge workflow alone commits generated aggregates.
 
 - `p2-ci-cost`: [advisory filters/formal pin](https://github.com/seanburkes/playnite-linux/pull/61)
-  at `c448dd79a2944e4f732eac5c9e99e3b0d5e6da63`, plus the
-  [path-guard follow-up](https://github.com/seanburkes/playnite-linux/pull/63) at
-  `bc649e589e35e1ba741067bbc3ca3657a405fb4d`. The former's final evidence is
-  **121 CI-policy tests** (the historical 118 was pre-main-merge); the latter records
-  **94 generator / 123 CI-policy tests**. Review records A/B are
+  at `c448dd79a2944e4f732eac5c9e99e3b0d5e6da63`; final evidence is
+  **121 CI-policy tests** (the historical 118 was pre-main-merge). Review records A/B are
   `data/p1-tooling-review-a/review-p2-061.md` and
-  `data/p1-tooling-review-b/review-p2-061.md`, and the corresponding
-  `review-p2-063.md` files. Review packets include stale-candidate caveats and residual
-  findings; citing them is not claiming every finding was fixed.
+  `data/p1-tooling-review-b/review-p2-061.md`.
+- `p2-local-path-guard`: [path-guard follow-up](https://github.com/seanburkes/playnite-linux/pull/63)
+  at `bc649e589e35e1ba741067bbc3ca3657a405fb4d`; final evidence is
+  **94 generator / 123 CI-policy tests**. Review records A/B are the corresponding
+  `review-p2-063.md` files. This is not a `p2-ci-cost` follow-up. Review packets include
+  stale-candidate caveats and residual findings; citing them is not claiming every finding
+  was fixed.
 - `p2-guard-wording2`: [wording correction](https://github.com/seanburkes/playnite-linux/pull/55)
   at `9a4c79f7a91644063f1eb8a5a496968b54b63c20`; 116 policy / 144 architecture cases
   recorded by the unit. Protected-path authorization remains the `oracle-change` route.
@@ -47,7 +55,8 @@ remain unchanged and the parent post-merge workflow alone commits generated aggr
 - Additional stale rows: [workflow/SSH hardening](https://github.com/seanburkes/playnite-linux/pull/59)
   at `d1c6dedf02656f2083fed77dda9195b6526cff8f` and
   [initial local-path guard](https://github.com/seanburkes/playnite-linux/pull/62) at
-  `634d96e97f8f83d6bd51d57a69bf6dfa5d123ba7` plus the follow-up above are merged.
+  `634d96e97f8f83d6bd51d57a69bf6dfa5d123ba7` plus its `p2-local-path-guard`
+  follow-up above are merged.
   Closing those rows records delivery, not absence of the residual risks below.
 
 ### UI two-process identity evidence
@@ -65,7 +74,9 @@ are excluded. This gate rechecks the committed semantic hash and records the mer
 two-process evidence; it does not claim a fresh UI execution on the gate commit.
 The structural comparator tolerates ±1 logical pixel per bounds component, not structural
 drift; byte identity is separate recorded evidence. This is a visual control-tree
-projection, not an automation-peer tree, product UI parity or an accessibility claim.
+projection, not an Avalonia automation-peer or AT-SPI tree. It meets the plan's literal
+“semantic-tree baseline” exit line. **No automation-peer baseline exists for the product
+shell**; product UI parity is not claimed and accessibility remains deferred under D1.
 
 ### Performance medians and explicit gap
 
@@ -96,6 +107,10 @@ partially measured, with that explicit deferral rather than a fictional number.
   test was performed.
 - **WebView:** deferred to v1.1 by ADR-019; no v1 browser-engine dependency.
 - **Empty-library-open performance:** NOT MEASURED, deferred to Phase 4 as above.
+- **p2-006-harden negative-proof evidence:** review A's P2 on unsupplied negative
+  full-suite proof logs remains open; those logs were noted but never supplied. The
+  merged hardening unit does not claim that missing evidence. Owner acceptance retains
+  this residual rather than treating the positive 144-case suite as negative-proof logs.
 - **ADR-024 single-owner exception:** review assistance is correlated and can miss shared
   blind spots; the owner selects evidence and controls merge/protection decisions. Frozen
   sources, hashes, protected-path diffs, executed-case ratchets and required checks provide
@@ -129,7 +144,8 @@ partially measured, with that explicit deferral rather than a fictional number.
 - [x] First performance proxies recorded; empty-library-open explicitly deferred to Phase 4.
 - [x] Board rows reconciled in shards without editing aggregate/history bytes.
 
-**Verdict: READY for owner acceptance** — all named runtime checks have verified evidence
-at the gate commit; the performance gap and v1 limitations are explicit deferrals, not passes.
-The next phase's gate is Phase 3 exit; Phase 3 implementation has not started. This PR's
-review/merge remains pending and does not retroactively become run evidence for its own head.
+**Verdict: ACCEPTED with declared deferrals — owner acceptance 2026-11-15.** All named
+runtime checks have verified evidence at the gate commit; the performance gap, D1 and
+WebView are explicit deferrals, not passes, and the negative-proof-log residual remains open.
+Phase 3 is authorised; its next gate is Phase 3 exit. This acceptance does not retroactively
+make the documentation PR's head the subject of the recorded runtime evidence.
