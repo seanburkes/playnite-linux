@@ -22,6 +22,13 @@
       "failed": 0,
       "skipped": 0
     },
+    "Playnite.Core.Tests": {
+      "total": 89,
+      "executed": 89,
+      "passed": 89,
+      "failed": 0,
+      "skipped": 0
+    },
     "Playnite.Smoke.Tests": {
       "total": 4,
       "executed": 4,
@@ -33,9 +40,6 @@
   "new_capture": {
     "captured_at": "2026-11-15T17:24:49Z",
     "run_id": "43740834379",
-    "notes": "linux-ci workflow (linux-build-and-test job) run 43740834379 on main 68ee1b9: Playnite.Architecture.Tests 103 executed / 103 passed / 0 failed / 0 skipped; Playnite.Smoke.Tests 4 executed / 4 passed / 0 failed / 0 skipped; Playnite.Core.Tests 0 executed with MTP exit 8, declared in empty_projects and kept out of the counted baseline so it cannot create a zero floor. Counts are the run's reported totals from its JUnit artifacts, not a local estimate."
-  },
-  "empty_projects": {
-    "Playnite.Core.Tests": "Marker-only scaffold with no test methods yet; it existed at the base commit and executes zero cases with MTP exit 8. Declared empty so it cannot create a zero-case floor in the counted baseline. Move it into new once it executes cases."
+    "notes": "linux-ci workflow (linux-build-and-test job) run 43740834379 on main 68ee1b9 established this baseline: Playnite.Architecture.Tests 103 executed / 103 passed / 0 failed / 0 skipped; Playnite.Smoke.Tests 4 executed / 4 passed / 0 failed / 0 skipped; Playnite.Core.Tests executed zero cases with MTP exit 8 and was declared in empty_projects. On 2026-11-15 the serialisation unit p3-003c moved Playnite.Core.Tests into the counted baseline after a local linux-ci-shape run of all three test projects reported 89 executed / 89 passed / 0 failed / 0 skipped; the pull request's linux-ci run re-confirms those counts. Counts are the run's reported JUnit totals, not an estimate."
   }
 }

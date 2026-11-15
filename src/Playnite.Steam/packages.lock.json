@@ -11,18 +11,39 @@
       "playnite.core": {
         "type": "Project",
         "dependencies": {
-          "Playnite.SDK.Abstractions": "[1.0.0, )"
+          "Newtonsoft.Json": "[13.0.4, )",
+          "Playnite.SDK.Abstractions": "[7.0.0, )",
+          "Tomlyn": "[2.11.1, )",
+          "YamlDotNet": "[18.1.0, )"
         }
       },
       "playnite.platform": {
         "type": "Project",
         "dependencies": {
           "Playnite.Core": "[1.0.0, )",
-          "Playnite.SDK.Abstractions": "[1.0.0, )"
+          "Playnite.SDK.Abstractions": "[7.0.0, )"
         }
       },
       "playnite.sdk.abstractions": {
         "type": "Project"
+      },
+      "Newtonsoft.Json": {
+        "type": "CentralTransitive",
+        "requested": "[13.0.4, )",
+        "resolved": "13.0.4",
+        "contentHash": "pdgNNMai3zv51W5aq268sujXUyx7SNdE2bj1wZcWjAQrKMFZV260lbqYop1d2GM67JI1huLRwxo9ZqnfF/lC6A=="
+      },
+      "Tomlyn": {
+        "type": "CentralTransitive",
+        "requested": "[2.11.1, )",
+        "resolved": "2.11.1",
+        "contentHash": "ePC5kPidQngNoOi7jCDeRo5hbXS5uV3o4CAzz5QaxkDo1IhgM0QtGinuI03tqj8/Dl/FigRG4gRiatUsV3pcrA=="
+      },
+      "YamlDotNet": {
+        "type": "CentralTransitive",
+        "requested": "[18.1.0, )",
+        "resolved": "18.1.0",
+        "contentHash": "5K+9KFg2TdTl7VXv88Qzi/0lqK6JFoNP3lRuImPYGRV7K/QYklDyTrj4+A+KAki1JsQi6qKY+hDyY7d6WRqjrw=="
       }
     }
   }

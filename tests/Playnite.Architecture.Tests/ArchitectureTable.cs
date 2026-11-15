@@ -43,6 +43,7 @@ internal static class ArchitectureTable
         "Microsoft.DotNet.ApiCompat.Task",
         "Newtonsoft.Json",
         "NLog",
+        "Tomlyn",
         "YamlDotNet",
     ];
 
