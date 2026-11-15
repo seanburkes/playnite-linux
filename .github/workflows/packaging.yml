@@ -107,7 +107,8 @@ jobs:
             echo 'SVG loader librsvg2-common 2.58.0+dfsg-1ubuntu0.1; GDK thumbnailer 2.42.10+dfsg-3ubuntu3.3'
             stat --printf='Artifact: %n — %s bytes\n' artifacts/*.flatpak
             for ref in org.freedesktop.Platform/x86_64/25.08 org.freedesktop.Sdk/x86_64/25.08; do
-              echo "$ref commit: $(flatpak info --user --show-commit "$ref")"
+              commit=$(flatpak info --user --show-commit "$ref")
+              echo "$ref commit: $commit"
             done
             cat "$installed"/files/lib/playnite/{cli,desktop}/*.runtimeconfig.json
           } | tee -a "$GITHUB_STEP_SUMMARY"
