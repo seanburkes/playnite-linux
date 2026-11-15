@@ -35,11 +35,12 @@ python3 scripts/perf/baseline.py --output /tmp/opencode/playnite-perf-run1.json
 python3 scripts/perf/baseline.py --output /tmp/opencode/playnite-perf-run2.json
 ```
 
-Actual capture commands on this host (same script, run twice):
+Both recorded runs used the same script and arguments below (shown in portable,
+repository-relative form; `perf-evidence` denotes the external evidence directory):
 
 ```sh
-python3 /home/sean/.treehouse/playnite-linux-4a47e8/12/playnite-linux/scripts/perf/baseline.py --output /home/sean/src/firstmate/data/p2-perf-baseline/run1.json
-python3 /home/sean/.treehouse/playnite-linux-4a47e8/12/playnite-linux/scripts/perf/baseline.py --output /home/sean/src/firstmate/data/p2-perf-baseline/run2.json
+python3 scripts/perf/baseline.py --output perf-evidence/run1.json
+python3 scripts/perf/baseline.py --output perf-evidence/run2.json
 ```
 
 Each invocation performs `dotnet restore <project> --locked-mode`, then
@@ -56,8 +57,7 @@ dotnet src/Playnite.Desktop/bin/Release/net11.0/Playnite.Desktop.dll --headless 
 The script resolves `dotnet` to its absolute PATH location, sets telemetry opt-out,
 no-logo and skip-first-time-experience, removes DISPLAY and WAYLAND_DISPLAY, and
 otherwise inherits the invoking environment. All subprocesses use repository-root
-cwd. On this host dotnet resolved to
-`/home/sean/.local/share/mise/dotnet-root/dotnet`.
+cwd. On this host the resolved executable used the SDK and runtime listed above.
 
 One full process launch per host is recorded separately as an **excluded warm-up**,
 then **10 fresh-process repetitions** per host are measured sequentially. Build,
@@ -69,8 +69,9 @@ not cold-boot/cold-disk numbers. No cache dropping or host lifecycle changes.
 JSON output includes every raw sample, excluded warm-ups, median/min/max,
 commands, product commit/worktree status, per-output-file SHA-256, `dotnet --info`,
 central package versions, `lscpu`, OS/kernel, RAM and load averages. Preserve it
-when comparing runs; the capture files above are task evidence, not portable repo
-paths. This document is the committed result; raw JSON is generated on demand.
+when comparing runs; `perf-evidence` is a directory name for external capture
+files, not a committed repository directory. Create the output directory before
+running. This document is the committed result; raw JSON is generated on demand.
 
 ## Results
 
@@ -122,9 +123,10 @@ resident set, including runtime/native allocations and shutdown. It is not a
 sampled `/proc` estimate, managed heap size, proportional set size, steady-state
 working set, or process-tree total. The Python observer and build processes are
 not added. Binary hashing is streamed to avoid a large parent allocation inflating
-the inherited pre-exec high-water mark. A preliminary capture using whole-file
-hashing exposed that artefact (both hosts reported 126,720 KiB); that pilot was
-rejected, the hashing corrected, and **both reported runs use the corrected script**.
+the inherited pre-exec high-water mark. **REJECTED PILOT — not baseline data:** a
+preliminary capture using whole-file hashing exposed that artefact (both hosts
+reported 126,720 KiB). The pilot is excluded from all accepted results above;
+hashing was corrected, and **both reported runs use the corrected script**.
 
 CLI medians agree within 0.4% for timing and 1.1% for RSS. Desktop lifecycle medians
 differ by 3.1%, launch → Opened by 5.7%, launch → exit by 5.3%, and RSS by 0.3%
