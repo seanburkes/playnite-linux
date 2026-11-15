@@ -9,7 +9,10 @@ Conventional Steam/config home references and standard system paths are not priv
 and remain allowed. Generic home allowances match exact path tokens, not whole lines or
 Markdown labels: a private link target or another private path on that line is still checked.
 Repository-relative orchestrator documentation paths are allowed; data/state paths anchored
-in a personal home or a configured task root are not.
+in a personal home or a configured task root, or a bare orchestrator data/state directory,
+are not. Named-user tilde forms, Windows profile environment forms, escaped/mixed separators,
+UNC shares and percent-encoded equivalents are also checked. Matching requires a path-token
+boundary, so task names embedded in other words do not become paths.
 The generator rejects an offending file and row without echoing its private path.
 The CI policy suite also checks documentation. Both build and check validate documentation
 and every shard before writing aggregates.
@@ -39,6 +42,10 @@ the complete ledger allowance; CI asserts the recorded list and aggregate hashes
 Remote HTTP(S), FTP, SSH, Git and SFTP URLs, protocol-relative URLs, and schemeless domain URLs
 are removed before matching, including Markdown links and code spans. A genuine local path
 elsewhere on the same line still fails; a file URI does not receive this remote-URL exemption.
+Markdown delimiters and punctuation terminate a remote target, so an adjacent private target
+cannot be swallowed by the URL exemption. Remote targets are removed before decoding;
+remaining percent encoding is decoded to stability and separators are normalized before
+matching. Protocol-relative domain URLs remain remote URLs; unqualified share paths are UNC.
 
 The scan covers Markdown, TSV, text, reStructuredText, and AsciiDoc under `docs/`, root Markdown,
 and Markdown under `spikes/`, `tests/`, `tools/`, `packaging/`, and `src/`, including new files

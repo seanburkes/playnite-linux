@@ -83,6 +83,41 @@ class PortIndexTests(unittest.TestCase):
             with self.subTest(line=line):
                 self.assertEqual(1, len(port_index.local_path_errors(line, "docs/proof.md")))
 
+    def test_alternate_personal_path_spellings_are_rejected(self):
+        paths = ("~alice", "~alice/private-proof", "%USERPROFILE%",
+                 "$env:USERPROFILE", r"C:\\Users\\alice\\proof",
+                 r"C:\/Users\/alice\/proof", r"firstmate\\data\\task",
+                 r"firstmate\/data\/task", r"\\server\share\proof",
+                 "//server/share/proof",
+                 r"\\server.example.org\share\proof",
+                 "%2Fhome%2Falice%2Fproof", "%252Fhome%252Falice%252Fproof",
+                 "C%3A%5CUsers%5Calice%5Cproof", "%25USERPROFILE%25%5Cproof",
+                 "%5C%5Cserver%5Cshare%5Cproof", "firstmate%5C%5Cdata%5Ctask")
+        for path in paths:
+            with self.subTest(path=path):
+                errors = port_index.local_path_errors(path, "docs/proof.md")
+                self.assertEqual(1, len(errors))
+                self.assertIn("docs/proof.md:1:", errors[0])
+
+    def test_task_words_without_path_boundaries_are_allowed(self):
+        for text in ("notfirstmate/data/task", "some.treehouse/task", "a.treehouse/task",
+                     "firstmate and .treehouse are names", "docs/firstmate/data/task",
+                     r"docs\\firstmate\\data\\task"):
+            with self.subTest(text=text):
+                self.assertEqual([], port_index.local_path_errors(text, "docs/proof.md"))
+
+    def test_remote_target_ends_before_following_local_path(self):
+        remote = "https://api.example.org/users/alice/home/root"
+        for text in (f"[remote]({remote})/home/alice/proof",
+                     f"{remote},/home/alice/proof",
+                     f"{remote};/home/alice/proof",
+                     f"{remote}|/home/alice/proof",
+                     "https://example.org/%2Fhome%2Falice%2Fproof /home/bob/proof"):
+            with self.subTest(text=text):
+                self.assertEqual(1, len(port_index.local_path_errors(text, "docs/proof.md")))
+        self.assertEqual([], port_index.local_path_errors(
+            "https://example.org/%2Fhome%2Falice%2Fproof", "docs/proof.md"))
+
     def test_remote_urls_do_not_hide_a_local_path_on_the_same_line(self):
         target = "api.example.org/users/alice/home/root/firstmate/data/.treehouse/task"
         urls = [scheme + target for scheme in ("https://", "git://", "sftp://", "//", "")]
