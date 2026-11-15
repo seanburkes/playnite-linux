@@ -140,6 +140,13 @@ internal static class ArchitectureTable
     /// </summary>
     internal static string? PackageViolation(ArchitectureRow row, string package)
     {
+        // Private analyzer/MSBuild tooling is not a runtime dependency allowance.
+        if (row.Project == "Playnite.SDK.Abstractions" && package is
+            "Microsoft.CodeAnalysis.PublicApiAnalyzers" or "Microsoft.DotNet.ApiCompat.Task")
+        {
+            return null;
+        }
+
         var forbidden = row.ForbiddenPackages.FirstOrDefault(name => IsFamily(package, name));
         if (forbidden != null)
         {

@@ -1,0 +1,29 @@
+# SDK Abstractions preview baseline
+
+`Playnite.SDK.Abstractions.dll` is a **reference assembly**, not an implementation or a
+v6 compatibility shim. It freezes the seven public seed types declared in
+`../PublicAPI.Shipped.txt`, with assembly version `7.0.0.0`, targeting `net11.0`.
+
+SHA-256: `78623d275ca0efdb394408e8fb8824681be50e8a74e8a877be99e0779740b282`.
+
+It was generated with .NET SDK 11.0.100 from this unit's sources by building
+`src/Playnite.SDK.Abstractions` in Release and copying
+`obj/Release/net11.0/ref/Playnite.SDK.Abstractions.dll` here. Only the first baseline
+bootstrap used `-p:ApiCompatValidateAssemblies=false` before a contract assembly existed;
+ordinary builds enable validation unconditionally in the project. No target regenerates
+or replaces this baseline.
+
+Microsoft.DotNet.ApiCompat.Task 11.0.100 compares this left-hand contract against the
+newly compiled implementation after `CoreCompile`, including on a normal `dotnet build`
+(not only on pack). Missing baselines fail validation. Framework reference assemblies
+come from the implementation's resolved reference set, as supported by the task.
+No compatibility suppressions or disabled checks are committed.
+
+For compatible additions, declare the new API in `PublicAPI.Unshipped.txt`; do not
+overwrite the baseline to silence a failure. Any intentional breaking change needs an
+explicitly reviewed compatibility decision. PublicApiAnalyzers tracks the text surface
+(including nullable annotations); ApiCompat independently catches binary breaks even
+when somebody updates that text to match the breaking source.
+
+This is **not** the complete v6→v7 report or a claim that the v6 SDK has been ported.
+See `docs/port/ARCHITECTURE-CHECKS.md` for the seed scope, oracle paths and proofs.
