@@ -184,7 +184,18 @@ jobs:
           # port-index workflow regenerates and commits them on main. A pull
           # request owns only its unit shards, so even a correctly regenerated
           # aggregate change fails here.
-          python3 scripts/port/build_port_index.py check --shards-only \
+          head_tool="$PWD/scripts/port/build_port_index.py"
+          if git cat-file -e "$BASE_SHA:scripts/port/build_port_index.py" 2>/dev/null; then
+            base_tool="$RUNNER_TEMP/base-port/build_port_index.py"
+            mkdir -p "$(dirname "$base_tool")"
+            git show "$BASE_SHA:scripts/port/build_port_index.py" > "$base_tool"
+            cp "$head_tool" "$RUNNER_TEMP/build_port_index.head.py"
+            cp "$base_tool" "$head_tool"
+            trap 'cp "$RUNNER_TEMP/build_port_index.head.py" "$head_tool"' EXIT
+          else
+            echo "::warning::BOOTSTRAP: base commit has no scripts/port/build_port_index.py; using the head tool"
+          fi
+          python3 "$head_tool" check --shards-only \
             --against "$merge_base" --forbid-aggregate-changes
 
       - name: Port shards are valid and history is preserved
@@ -212,7 +223,19 @@ jobs:
               args+=(--against "$ref" --allow-pre-migration-base)
             fi
           fi
-          python3 scripts/port/build_port_index.py check "${args[@]}"
+          head_tool="$PWD/scripts/port/build_port_index.py"
+          if [ -n "$ref" ] && \
+             git cat-file -e "$BASE_SHA:scripts/port/build_port_index.py" 2>/dev/null; then
+            base_tool="$RUNNER_TEMP/base-port/build_port_index.py"
+            mkdir -p "$(dirname "$base_tool")"
+            git show "$BASE_SHA:scripts/port/build_port_index.py" > "$base_tool"
+            cp "$head_tool" "$RUNNER_TEMP/build_port_index.head.py"
+            cp "$base_tool" "$head_tool"
+            trap 'cp "$RUNNER_TEMP/build_port_index.head.py" "$head_tool"' EXIT
+          else
+            echo "::warning::BOOTSTRAP: base commit has no scripts/port/build_port_index.py; using the head tool"
+          fi
+          python3 "$head_tool" check "${args[@]}"
 
   formal:
     runs-on: ubuntu-latest

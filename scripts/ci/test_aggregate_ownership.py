@@ -95,8 +95,21 @@ def stale_pr_repo(root):
 def run_step(script, repo, base_sha):
     env = os.environ.copy()
     env["BASE_SHA"] = base_sha
+    env["RUNNER_TEMP"] = str(repo / "runner")
+    (repo / "runner").mkdir(exist_ok=True)
     return subprocess.run(["bash", "-e", "-c", script], cwd=repo, env=env,
                           capture_output=True, text=True, check=False)
+
+
+def merge_main(repo, keep_old_aggregates=False):
+    _, main_tip = stale_pr_repo(repo)
+    git(repo, "merge", "--no-ff", "-q", "-m", "merge main", "main")
+    if keep_old_aggregates:
+        old = git(repo, "merge-base", main_tip, "HEAD^1")
+        git(repo, "checkout", old, "--", "docs/port/queue.tsv",
+            "docs/port/ledger.tsv")
+        commit(repo, "carry base aggregates")
+    return main_tip
 
 
 class AggregateOwnershipTests(unittest.TestCase):
@@ -134,6 +147,85 @@ class AggregateOwnershipTests(unittest.TestCase):
             result = run_step(run_block(PLAN_GUARDS, "Port aggregates are generated on main"),
                               repo, main_tip)
             self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+
+    def test_merge_main_pr_with_current_main_aggregates_passes(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary)
+            main_tip = merge_main(repo)
+            result = run_step(run_block(PLAN_GUARDS, "Port aggregates are generated on main"),
+                              repo, main_tip)
+            self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+
+    def test_merge_main_pr_carrying_recorded_base_aggregates_passes(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary)
+            main_tip = merge_main(repo, keep_old_aggregates=True)
+            result = run_step(run_block(PLAN_GUARDS, "Port aggregates are generated on main"),
+                              repo, main_tip)
+            self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+
+    def test_merge_commit_with_divergent_aggregate_fails(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary)
+            main_tip = merge_main(repo)
+            queue = repo / "docs" / "port" / "queue.tsv"
+            queue.write_text(queue.read_text() + "divergent\n")
+            commit(repo, "divergent aggregate")
+            result = run_step(run_block(PLAN_GUARDS, "Port aggregates are generated on main"),
+                              repo, main_tip)
+            self.assertEqual(1, result.returncode)
+            self.assertIn("changed: docs/port/queue.tsv", result.stderr)
+
+    def test_deleting_an_aggregate_fails(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary)
+            _, main_tip = stale_pr_repo(repo)
+            (repo / "docs" / "port" / "queue.tsv").unlink()
+            commit(repo, "delete aggregate")
+            result = run_step(run_block(PLAN_GUARDS, "Port aggregates are generated on main"),
+                              repo, main_tip)
+            self.assertEqual(1, result.returncode)
+            self.assertIn("changed: docs/port/queue.tsv", result.stderr)
+
+    def test_renaming_an_aggregate_fails(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary)
+            _, main_tip = stale_pr_repo(repo)
+            queue = repo / "docs" / "port" / "queue.tsv"
+            queue.rename(queue.with_name("queue-old.tsv"))
+            commit(repo, "rename aggregate")
+            result = run_step(run_block(PLAN_GUARDS, "Port aggregates are generated on main"),
+                              repo, main_tip)
+            self.assertEqual(1, result.returncode)
+            self.assertIn("changed: docs/port/queue.tsv", result.stderr)
+
+    def test_editing_one_aggregate_row_fails(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary)
+            _, main_tip = stale_pr_repo(repo)
+            queue = repo / "docs" / "port" / "queue.tsv"
+            lines = queue.read_text().splitlines()
+            lines[1] = lines[1].replace("\ttodo\t", "\tin-progress\t")
+            queue.write_text("\n".join(lines) + "\n")
+            commit(repo, "edit one aggregate row")
+            result = run_step(run_block(PLAN_GUARDS, "Port aggregates are generated on main"),
+                              repo, main_tip)
+            self.assertEqual(1, result.returncode)
+            self.assertIn("changed: docs/port/queue.tsv", result.stderr)
+
+    def test_head_aggregate_tool_substitution_cannot_weaken_checks(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary)
+            _, main_tip = stale_pr_repo(repo)
+            (repo / "scripts" / "port" / "build_port_index.py").write_text(
+                "import sys\nsys.exit(0)\n")
+            queue = repo / "docs" / "port" / "queue.tsv"
+            queue.write_text(queue.read_text() + "edit\n")
+            commit(repo, "weaken head tool and edit aggregate")
+            result = run_step(run_block(PLAN_GUARDS, "Port aggregates are generated on main"),
+                              repo, main_tip)
+            self.assertEqual(1, result.returncode, result.stdout + result.stderr)
+            self.assertIn("changed: docs/port/queue.tsv", result.stderr)
 
     def test_missing_merge_base_fails_closed(self):
         with tempfile.TemporaryDirectory() as temporary:

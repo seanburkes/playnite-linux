@@ -119,9 +119,14 @@ be a strict ancestor of HEAD; HEAD, a descendant, and an unrelated commit are re
 passes the merge base of the recorded pull-request base and `HEAD` (the fork point) with
 `--shards-only` and `--forbid-aggregate-changes`, so a PR branched before an unrelated
 aggregate regeneration on `main` is not charged for main's own commit; if the merge base cannot
-be computed, the step fails closed. Pushes to `main` pass the immediate previous main commit.
-Inventory, parity, generator-test, and TLC steps compare the working tree or run a model; they
-do not diff a recorded base against `HEAD`, so they need no fork-point translation.
+be computed, the step fails closed. An aggregate file whose content exactly matches a
+legitimate base side -- the recorded base, the merge base, or the fork point carried across a
+merge of the recorded base -- is not an aggregate edit. Any other content, and every add,
+delete, or rename of an aggregate, still fails. The recorded-base content check is therefore
+not redundant; it is one of the allowed base-side snapshots. Pushes to `main` pass the
+immediate previous main commit. Inventory, parity, generator-test, TLC, and frozen-step checks
+either compare the working tree, run a model, or use the shared merge-base gate; none compares
+a recorded base to `HEAD` with two-dot semantics.
 
 The post-merge `port-index` workflow runs only on a push to `main`. It first validates the
 shard tree and history against the previous `main` commit; an invalid shard fails the run with
@@ -252,13 +257,16 @@ passed/failed/skipped counts, coverage and capture provenance. Python policy tes
 The enforcement scripts are self-protecting. Before the protected-path gate or the results
 checker runs, the workflow selects a materialiser from the comparison base and uses it to
 materialise `scripts/ci`; the protected-path gate, results checker, and base project lister
-then run from the base copy. If the base commit contains a script but it cannot be
-materialised, the job fails instead of falling back. Only while the base genuinely lacks a
-script (including the materialiser itself) does the head copy run, with a named `BOOTSTRAP`
-warning; once `main` contains the script, every later run uses the base copy. The base SHA
-comes directly from the event fields in the workflow, not from a PR-controlled helper. This
-keeps a pull request from weakening the gate, the results check, or the base project list in
-its own checkout. The protected-path diff is taken from the merge base to `HEAD`, so a PR
+then run from the base copy. The aggregate and shard-history steps materialise
+`scripts/port/build_port_index.py` from the same base and run that copy, so a PR cannot weaken
+`changed_aggregates` or `validate_history` in its own checkout. If the base commit contains a
+script but it cannot be materialised, the job fails instead of falling back. Only while the
+base genuinely lacks a script (including the materialiser itself) does the head copy run, with
+a named `BOOTSTRAP` warning; once `main` contains the script, every later run uses the base
+copy. The base SHA comes directly from the event fields in the workflow, not from a
+PR-controlled helper. This keeps a pull request from weakening the gate, the results check,
+the aggregate tool, or the base project list in its own checkout. The protected-path diff is
+taken from the merge base to `HEAD`, so a PR
 branched before a protected-path change landed on `main` is not charged for that main-side
 change; failure to compute the merge base fails closed. The frozen `legacy/`/`oracle-lock/`
 step uses the same merge-base diff through the shared gate and has no label override. The

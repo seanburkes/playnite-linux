@@ -468,6 +468,38 @@ class CiPolicyTests(unittest.TestCase):
             self.assertEqual(0, result.returncode, result.stdout + result.stderr)
             self.assertEqual(base, values["sha"])
 
+    def test_forged_ancestor_cannot_replace_the_event_base(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary)
+            base = committed_repo(repo)
+            (repo / "README.md").write_text("forged ancestor\n")
+            commit(repo, "forged ancestor with aggregate edit")
+            (repo / "README.md").write_text("head\n")
+            commit(repo, "head")
+            result, values = resolve_base(LINUX_CI, "pull_request",
+                                          pull_request_base=base, repo=repo)
+            self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+            self.assertEqual(base, values["sha"])
+
+    def test_stale_pr_is_not_charged_for_main_legacy_change(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary)
+            base = committed_repo(repo)
+            git(repo, "checkout", "-q", "-b", "pr")
+            (repo / "README.md").write_text("pr change\n")
+            commit(repo, "pr change")
+            git(repo, "checkout", "-q", "main")
+            frozen = repo / "legacy" / "file.cs"
+            frozen.parent.mkdir(parents=True)
+            frozen.write_text("main changed legacy\n")
+            main_tip = commit(repo, "main legacy change")
+            git(repo, "checkout", "-q", "pr")
+            result = run("check_protected_paths.py", "--base", main_tip,
+                         "--paths", "legacy",
+                         "--error", "legacy/ and oracle-lock/ are frozen; no label overrides this.",
+                         cwd=repo)
+            self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+
     def test_resolved_base_must_exist_and_be_an_ancestor(self):
         with tempfile.TemporaryDirectory() as temporary:
             repo = Path(temporary)

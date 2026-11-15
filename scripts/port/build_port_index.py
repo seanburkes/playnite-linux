@@ -619,11 +619,57 @@ def _repo_relative(path: Path, root: Path) -> str:
         return path.as_posix()
 
 
+def _git_bytes(root: Path, *args: str) -> bytes | None:
+    """Return stdout for a successful git call, or None for a missing object."""
+    completed = subprocess.run(["git", "-C", str(root), *args],
+                               capture_output=True)
+    return completed.stdout if completed.returncode == 0 else None
+
+
+def _is_ancestor(root: Path, ancestor: str, descendant: str) -> bool:
+    completed = subprocess.run(
+        ["git", "-C", str(root), "merge-base", "--is-ancestor", ancestor, descendant],
+        capture_output=True)
+    return completed.returncode == 0
+
+
+def _base_side_refs(root: Path, commit: str, merge_base: str) -> set[str]:
+    """Commits whose aggregate snapshots are legitimate base sides.
+
+    The recorded base and merge base always count. A merge commit that brought an
+    ancestor of the recorded base into this branch also contributes the merge base
+    of that base-side parent and the PR-side parent. That is the fork point a
+    merge-main PR carried forward; it is not an aggregate edit.
+    """
+    refs = {commit, merge_base}
+    merges = _git(
+        root, "rev-list", "--first-parent", "--merges", f"{merge_base}..HEAD"
+    ).decode("ascii", "replace").split()
+    for merge in merges:
+        fields = _git(root, "rev-list", "--parents", "-n", "1", merge).decode(
+            "ascii", "replace").split()
+        parents = fields[1:]
+        for parent in parents:
+            if parent == commit or _is_ancestor(root, parent, commit):
+                other = next((candidate for candidate in parents
+                              if candidate != parent), None)
+                if other:
+                    fork = _git(root, "merge-base", commit, other).decode(
+                        "ascii", "replace").strip()
+                    if fork:
+                        refs.add(fork)
+                break
+    return refs
+
+
 def changed_aggregates(root: Path, ref: str, queue: Path, ledger: Path) -> list[str]:
-    """Paths of the generated aggregates changed on this branch since its merge base.
+    """Paths of generated aggregates changed outside any legitimate base side.
 
     The comparison is three-dot: a stale branch must not appear to revert aggregate
-    changes that landed on main after it forked.
+    changes that landed on main after it forked. A file whose HEAD content equals a
+    base-side snapshot (the recorded base, the merge base, or the fork point carried
+    across a merge of the recorded base) is not an aggregate edit. Any other
+    content, and every add/delete/rename, still fails.
     """
     resolved = _git(root, "rev-parse", "--verify", "--quiet", f"{ref}^{{commit}}").strip()
     commit = resolved.decode("ascii", "replace")
@@ -634,18 +680,31 @@ def changed_aggregates(root: Path, ref: str, queue: Path, ledger: Path) -> list[
     )
     if not merge_base:
         raise PortIndexError(f"no merge base between {ref!r} and HEAD")
+    paths = (_repo_relative(queue, root), _repo_relative(ledger, root))
     listing = _git(
-        root,
-        "diff",
-        "--name-only",
-        "-z",
-        merge_base,
-        "HEAD",
-        "--",
-        _repo_relative(queue, root),
-        _repo_relative(ledger, root),
+        root, "diff", "--name-only", "-z", merge_base, "HEAD", "--", *paths
     )
-    return [name for name in listing.decode("utf-8", "replace").split("\0") if name]
+    changed = [name for name in listing.decode("utf-8", "replace").split("\0") if name]
+    if not changed:
+        return []
+    base_sides = _base_side_refs(root, commit, merge_base)
+    allowed: dict[str, set[bytes]] = {name: set() for name in changed}
+    for side in base_sides:
+        for name in changed:
+            content = _git_bytes(root, "show", f"{side}:{name}")
+            if content is not None:
+                allowed[name].add(content)
+    failures = []
+    for name in changed:
+        head = _git_bytes(root, "show", f"HEAD:{name}")
+        merge_content = _git_bytes(root, "show", f"{merge_base}:{name}")
+        if head is None or merge_content is None:
+            failures.append(name)
+            continue
+        if head == merge_content or head in allowed[name]:
+            continue
+        failures.append(name)
+    return failures
 
 
 def _is_strict_ancestor(root: Path, ref: str) -> bool:
