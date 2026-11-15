@@ -11,6 +11,7 @@ on:
       - "tests/golden/settings-library.sha256"
       - "tests/golden/settings-library.md"
       - ".github/workflows/settings-library-oracle.yml"
+      - "!**/*.md"
 
 permissions:
   contents: read

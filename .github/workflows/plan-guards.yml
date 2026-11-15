@@ -4,6 +4,7 @@ on:
   push:
     branches: [main]
   pull_request:
+    types: [opened, synchronize, reopened, labeled, unlabeled]
   merge_group:
 
 permissions:
@@ -261,9 +262,11 @@ jobs:
 
       - name: Fetch tla2tools
         run: |
+          set -euo pipefail
           mkdir -p "$RUNNER_TEMP/tla"
-          curl -sSL -o "$RUNNER_TEMP/tla/tla2tools.jar" \
-            https://github.com/tlaplus/tlaplus/releases/latest/download/tla2tools.jar
+          curl -fsSL -o "$RUNNER_TEMP/tla/tla2tools.jar" \
+            https://github.com/tlaplus/tlaplus/releases/download/v1.7.4/tla2tools.jar
+          echo "936a262061c914694dfd669a543be24573c45d5aa0ff20a8b96b23d01e050e88  $RUNNER_TEMP/tla/tla2tools.jar" | sha256sum --check --strict
 
       - name: Check TLA+ models
         env:

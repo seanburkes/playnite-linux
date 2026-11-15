@@ -12,6 +12,7 @@ on:
       - "tests/fixtures/**"
       - "tools/LegacyOracle/**"
       - ".github/workflows/legacy-oracle.yml"
+      - "!**/*.md"
 
 permissions:
   contents: read

@@ -9,7 +9,7 @@ JAR="${TLA2TOOLS_JAR:-/tmp/opencode/tla/tla2tools.jar}"
 
 if [[ ! -f "$JAR" ]]; then
   echo "tla2tools.jar not found at $JAR" >&2
-  echo "Download: https://github.com/tlaplus/tlaplus/releases/latest/download/tla2tools.jar" >&2
+  echo "Download: https://github.com/tlaplus/tlaplus/releases/download/v1.7.4/tla2tools.jar" >&2
   exit 1
 fi
 

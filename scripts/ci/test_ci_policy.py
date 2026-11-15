@@ -152,6 +152,26 @@ def capture(repo, base, runner_temp, output, lister=None):
 
 
 class CiPolicyTests(unittest.TestCase):
+    def test_plan_guards_rechecks_label_changes(self):
+        trigger = PLAN_GUARDS.read_text().split("  pull_request:\n", 1)[1]
+        self.assertEqual(
+            "    types: [opened, synchronize, reopened, labeled, unlabeled]",
+            trigger.splitlines()[0])
+
+    def test_advisory_pr_paths_exclude_markdown_last(self):
+        for name in ("legacy-oracle", "settings-library-oracle",
+                     "windows-fixture-validation"):
+            path = PLAN_GUARDS.with_name(f"{name}.yml")
+            with self.subTest(workflow=name):
+                trigger = path.read_text().split("  pull_request:\n", 1)[1]
+                paths = []
+                for line in trigger.splitlines()[1:]:
+                    if not line.startswith("      - "):
+                        break
+                    paths.append(line.strip())
+                self.assertGreater(len(paths), 1)
+                self.assertEqual('- "!**/*.md"', paths[-1])
+
     def test_ci_policy_surface_is_protected_and_codeowned(self):
         paths = protected_paths()
         owners = codeowners()
