@@ -192,7 +192,8 @@ The live product loop now asserts the exact Core/Abstractions target set before
 checking it. Source probes also reject innocently named types from eight different
 UI/platform assembly identities, not only their usual namespaces.
 
-Review validation: **144 passed, 0 failed, 0 skipped**; narrow Release build
+Review validation: **144 passed, 0 failed, 0 skipped**; **55 CI-policy tests passed**;
+narrow Release build
 **0 warnings / 0 errors**. Full-suite negative probes were run without exclusions
 and restored: a same-arity source/declaration change failed with
 `Shipped SDK API checksum mismatch: expected 8d54786f51b13af2d188898ebd4db3c06b5d3e4dee309dcb1ef31d335f9a61ca, got 14dba5373f7bbe1546e957d9a8655c5823b8f8877971fcd83d1ab6f35c67ea72; rebaselining requires oracle-change and second-review approval`;
