@@ -20,6 +20,7 @@ p2-003	W2	scaffold	Linux CI + Windows oracle CI	p2-001	in-progress	fm/p2-003	.gi
 p2-004	W2	scaffold	Empty Avalonia app + CLI smoke	p2-001	in-progress	fm/p2-004	legacy/source/Playnite.DesktopApp/App.xaml.cs; docs/port/02-ARCHITECTURE.md; docs/port/05-DEPENDENCIES.md	Playnite.Smoke.Tests (4 cases); native Xvfb CI smoke	Real desktop lifecycle with Fluent base theme; headless opens/closes and CLI version pass; architecture 43 pass; Release zero warnings; native Xvfb CI smoke passes (local Xvfb unavailable); content-set history gate passes after parent model fix; two blind reviews pending
 p2-005	W2	scaffold	Packaging smoke	p2-003	todo	release	-	pack	AppImage/Flatpak shell
 p2-006	W2	scaffold	SDK Abstractions project + PublicAPI	p2-001	todo	sdk	api-compat	build	ADR-018
+p2-ci-harden	W2	scaffold	Linux CI policy hardening	p2-003	in-progress	fm/p2-ci-harden	.github/workflows/linux-ci.yml;tests/baseline.json	ci:linux-build-and-test;plan-guards	Previous committed baseline and base project list make the new-suite baseline a ratchet; baseline deletion/reset/lowering and silent project delete/rename/empty fail; reviewed removed_projects records; linux-ci.yml and scripts/ci CODEOWNED and protected-path gated
 p3-001	W3	leaves	Paths + XDG abstraction	p2-001	todo	core	property:paths	test:paths	
 p3-002	W3	leaves	String/date/enum extensions	p2-001	todo	core	golden:utils	test:utils	
 p3-003	W3	leaves	JSON/YAML/TOML/INI helpers	p2-001	todo	core	golden:serialization	test:serialization	PILOT
