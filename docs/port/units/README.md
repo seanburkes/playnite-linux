@@ -77,12 +77,34 @@ p2-001	2026-11-15T01:51:31Z	2026-11-15T03:30:55Z	fm/p2-ledger-fix	merged out of 
 
 The record must be new in that change and match a base row exactly: same unit, same previous
 instant, and the corrected row keeps every other field and its position. A correction may only
-move a row later, and one record authorizes one row; any other timestamp edit, field edit,
-deletion, insertion, or reorder still fails. Correction records are themselves append-only, so
-an earlier correction cannot be reused to rewrite a row again. After the correction, regenerate
-local aggregates with `build` to verify, but leave `docs/port/queue.tsv` and
-`docs/port/ledger.tsv` out of the pull request; the post-merge `port-index` workflow commits
-them.
+move a row later, and it must move it strictly after the newest pre-existing ledger row, not
+merely later than its own previous timestamp; otherwise the row would still sort ahead of
+history and the correction would not fix the ordering. At most one correction is allowed per
+unit. A second record for the same unit, including one whose previous timestamp is an earlier
+correction's corrected value, is rejected, so corrections cannot chain across changes.
+Correction records are themselves append-only, so an earlier correction cannot be reused.
+
+A new correction must be recorded while its unit is live. A record whose unit never existed, or
+whose unit has no queue or ledger shard other than through retirement, is a dead record and is
+rejected; a record added in the same change that retires the unit is also rejected. A historical
+correction stays valid after a later retirement, because the append-only record describes a row
+that did exist when it was recorded. A correction may only move its own row. The base ledger
+aggregate must already be in generated order, and unaffected rows keep their relative order, so
+a correction cannot launder a pre-existing reorder of unrelated rows. `check` prints a notice
+naming every correction record it accepts, so a reviewer sees which record authorized the
+history rewrite.
+
+A correction is a captain-authorised operation, not something a contributor can self-approve.
+It requires the same review gate as an oracle change: the `oracle-change` label plus a second
+reviewer, in addition to the normal two blind reviews. CI enforces the record's shape and
+history, not who approved it; human review of the record against the corrected row is the
+authority boundary.
+
+`build` enforces the same backdate rule as `check --against`, comparing new rows with the
+committed aggregate it is about to replace. A backdated row fails before either aggregate is
+written, leaving both untouched. After the correction, regenerate local aggregates with `build`
+to verify, but leave `docs/port/queue.tsv` and `docs/port/ledger.tsv` out of the pull request;
+the post-merge `port-index` workflow commits them.
 
 ## Retiring a unit
 

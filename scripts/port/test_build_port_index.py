@@ -82,14 +82,20 @@ class PortIndexTests(unittest.TestCase):
             )
         return status, stdout.getvalue() + stderr.getvalue()
 
-    def build(self):
-        with redirect_stdout(io.StringIO()):
+    def run_build(self):
+        stdout = io.StringIO()
+        stderr = io.StringIO()
+        with redirect_stdout(stdout), redirect_stderr(stderr):
             status = port_index.main(
                 ["build"],
                 units=self.units,
                 queue=self.queue,
                 ledger=self.ledger,
             )
+        return status, stdout.getvalue() + stderr.getvalue()
+
+    def build(self):
+        status, _ = self.run_build()
         self.assertEqual(status, 0)
 
     def write_base(self, queue_shards, ledger_shards=None, removed=None, corrections=None):
@@ -738,6 +744,355 @@ class PortIndexTests(unittest.TestCase):
         self.assertEqual(status, 1)
         self.assertIn("sorts before the newest existing ledger row", output)
         self.assertIn("current time", output)
+
+    def test_build_rejects_a_backdated_row_and_leaves_aggregates_untouched(self):
+        self.write_queue_shard("p1-001", queue_row("p1-001"))
+        self.write_ledger_shard(
+            "p1-001", ledger_row("2026-11-14T17:00:00Z", "p1-001")
+        )
+        self.build()
+        queue_before = self.queue.read_bytes()
+        ledger_before = self.ledger.read_bytes()
+
+        self.write_ledger_shard(
+            "p1-001",
+            ledger_row("2026-11-14T17:00:00Z", "p1-001"),
+            ledger_row("2026-11-14T16:00:00Z", "p1-001", to_status="done"),
+        )
+
+        status, output = self.run_build()
+
+        self.assertEqual(status, 1)
+        self.assertIn("sorts before the newest existing ledger row", output)
+        self.assertIn("current time", output)
+        self.assertIn("aggregates were left unchanged", output)
+        self.assertEqual(self.queue.read_bytes(), queue_before)
+        self.assertEqual(self.ledger.read_bytes(), ledger_before)
+
+    def test_build_accepts_an_appended_row_after_the_newest(self):
+        self.write_queue_shard("p1-001", queue_row("p1-001"))
+        self.write_ledger_shard(
+            "p1-001", ledger_row("2026-11-14T17:00:00Z", "p1-001")
+        )
+        self.build()
+        self.write_ledger_shard(
+            "p1-001",
+            ledger_row("2026-11-14T17:00:00Z", "p1-001"),
+            ledger_row("2026-11-14T18:00:00Z", "p1-001", to_status="done"),
+        )
+
+        status, output = self.run_build()
+
+        self.assertEqual(status, 0, output)
+        self.assertIn(
+            ledger_row("2026-11-14T18:00:00Z", "p1-001", to_status="done"),
+            self.ledger.read_text(),
+        )
+
+    def test_correction_that_still_sorts_before_existing_history_fails(self):
+        base = self.write_base(
+            {"p1-001": queue_row("p1-001"), "p1-002": queue_row("p1-002")},
+            {
+                "p1-001": [ledger_row("2026-11-14T17:00:00Z", "p1-001")],
+                "p1-002": [ledger_row("2026-11-14T18:00:00Z", "p1-002")],
+            },
+        )
+        self.write_queue_shard("p1-001", queue_row("p1-001"))
+        self.write_queue_shard("p1-002", queue_row("p1-002"))
+        self.write_ledger_shard(
+            "p1-001", ledger_row("2026-11-14T17:30:00Z", "p1-001")
+        )
+        self.write_ledger_shard(
+            "p1-002", ledger_row("2026-11-14T18:00:00Z", "p1-002")
+        )
+        self.write_corrections(
+            (
+                "p1-001",
+                "2026-11-14T17:00:00Z",
+                "2026-11-14T17:30:00Z",
+                "tester",
+                "merged out of order",
+            )
+        )
+        self.build()
+
+        status, output = self.check_against(base)
+
+        self.assertEqual(status, 1)
+        self.assertIn("strictly after", output)
+        self.assertIn("newest pre-existing ledger row at 2026-11-14T18:00:00Z", output)
+        self.assertIn("may not leave the row before existing history", output)
+
+    def test_second_correction_for_the_same_unit_is_rejected(self):
+        self.write_queue_shard("p1-001", queue_row("p1-001"))
+        self.write_ledger_shard(
+            "p1-001", ledger_row("2026-11-14T17:00:00Z", "p1-001")
+        )
+        self.write_corrections(
+            (
+                "p1-001",
+                "2026-11-14T17:00:00Z",
+                "2026-11-14T18:00:00Z",
+                "tester",
+                "merged out of order",
+            ),
+            (
+                "p1-001",
+                "2026-11-14T18:00:00Z",
+                "2026-11-14T19:00:00Z",
+                "tester",
+                "corrected again",
+            ),
+        )
+
+        with self.assertRaises(port_index.PortIndexError) as raised:
+            self.render()
+        self.assertIn("multiple correction records", str(raised.exception))
+        self.assertIn("corrected at most once", str(raised.exception))
+
+    def test_correction_for_an_already_corrected_row_is_rejected(self):
+        first = (
+            "p1-001",
+            "2026-11-14T17:00:00Z",
+            "2026-11-14T18:00:00Z",
+            "tester",
+            "merged out of order",
+        )
+        base = self.write_base(
+            {"p1-001": queue_row("p1-001")},
+            {"p1-001": [ledger_row("2026-11-14T18:00:00Z", "p1-001")]},
+            corrections=[first],
+        )
+        self.write_queue_shard("p1-001", queue_row("p1-001"))
+        self.write_ledger_shard(
+            "p1-001", ledger_row("2026-11-14T19:00:00Z", "p1-001")
+        )
+        self.write_corrections(
+            first,
+            (
+                "p1-001",
+                "2026-11-14T18:00:00Z",
+                "2026-11-14T19:00:00Z",
+                "tester",
+                "corrected again",
+            ),
+        )
+
+        status, output = self.check_against(base)
+
+        self.assertEqual(status, 1)
+        self.assertIn("multiple correction records", output)
+        self.assertIn("corrected at most once", output)
+
+    def test_correction_for_a_unit_without_a_queue_shard_is_rejected(self):
+        self.write_queue_shard("p1-001", queue_row("p1-001"))
+        self.write_ledger_shard(
+            "p1-001", ledger_row("2026-11-14T17:00:00Z", "p1-001")
+        )
+        self.write_corrections(
+            (
+                "p1-002",
+                "2026-11-14T17:00:00Z",
+                "2026-11-14T18:00:00Z",
+                "tester",
+                "dead record",
+            )
+        )
+
+        with self.assertRaises(port_index.PortIndexError) as raised:
+            self.render()
+        self.assertIn("no queue shard", str(raised.exception))
+        self.assertIn("dead correction record", str(raised.exception))
+
+    def test_correction_for_a_newly_retired_unit_is_rejected(self):
+        base = self.write_base(
+            {"p1-001": queue_row("p1-001"), "p1-002": queue_row("p1-002")},
+            {
+                "p1-001": [ledger_row("2026-11-14T17:00:00Z", "p1-001")],
+                "p1-002": [ledger_row("2026-11-14T18:00:00Z", "p1-002")],
+            },
+        )
+        self.write_queue_shard("p1-001", queue_row("p1-001"))
+        self.write_ledger_shard(
+            "p1-001", ledger_row("2026-11-14T17:00:00Z", "p1-001")
+        )
+        (self.units / "removed.tsv").write_text(
+            port_index.REMOVED_HEADER + "\np1-002\tretired\tcaptain\n"
+        )
+        self.write_corrections(
+            (
+                "p1-002",
+                "2026-11-14T18:00:00Z",
+                "2026-11-14T19:00:00Z",
+                "tester",
+                "dead record",
+            )
+        )
+        self.build()
+
+        status, output = self.check_against(base)
+
+        self.assertEqual(status, 1)
+        self.assertIn("retired in this change", output)
+        self.assertIn("correction only while the unit is live", output)
+        self.assertIn("no ledger shard at head", output)
+
+    def test_correction_for_a_unit_that_never_had_a_ledger_shard_is_rejected(self):
+        self.write_queue_shard("p1-001", queue_row("p1-001"))
+        self.write_corrections(
+            (
+                "p1-001",
+                "2026-11-14T17:00:00Z",
+                "2026-11-14T18:00:00Z",
+                "tester",
+                "no ledger row to correct",
+            )
+        )
+
+        with self.assertRaises(port_index.PortIndexError) as raised:
+            self.render()
+        self.assertIn("no ledger shard to correct", str(raised.exception))
+
+    def test_historical_correction_survives_a_later_retirement(self):
+        correction = (
+            "p1-002",
+            "2026-11-14T17:00:00Z",
+            "2026-11-14T18:00:00Z",
+            "tester",
+            "merged out of order",
+        )
+        base = self.write_base(
+            {"p1-001": queue_row("p1-001"), "p1-002": queue_row("p1-002")},
+            {
+                "p1-001": [ledger_row("2026-11-14T17:00:00Z", "p1-001")],
+                "p1-002": [ledger_row("2026-11-14T18:00:00Z", "p1-002")],
+            },
+            corrections=[correction],
+        )
+        self.write_queue_shard("p1-001", queue_row("p1-001"))
+        self.write_ledger_shard(
+            "p1-001", ledger_row("2026-11-14T17:00:00Z", "p1-001")
+        )
+        (self.units / "removed.tsv").write_text(
+            port_index.REMOVED_HEADER + "\np1-002\tretired\tcaptain\n"
+        )
+        self.write_corrections(correction)
+        self.build()
+
+        status, output = self.check_against(base)
+
+        self.assertEqual(status, 0, output)
+        self.assertIn("history matches BASE", output)
+        self.assertIn("notice: ledger correction p1-002", output)
+
+    def test_correction_cannot_launder_a_reordered_base_aggregate(self):
+        base = self.write_base(
+            {"p1-001": queue_row("p1-001"), "p1-002": queue_row("p1-002")},
+            {
+                "p1-001": [ledger_row("2026-11-14T17:00:00Z", "p1-001")],
+                "p1-002": [ledger_row("2026-11-14T18:00:00Z", "p1-002")],
+            },
+        )
+        reordered = port_index.BaseSnapshot(
+            base.queue_shards,
+            base.ledger_shards,
+            base.queue_aggregate,
+            tuple(reversed(base.ledger_aggregate)),
+            base.removed,
+            base.corrections,
+        )
+        self.write_queue_shard("p1-001", queue_row("p1-001"))
+        self.write_queue_shard("p1-002", queue_row("p1-002"))
+        self.write_ledger_shard(
+            "p1-001", ledger_row("2026-11-14T19:00:00Z", "p1-001")
+        )
+        self.write_ledger_shard(
+            "p1-002", ledger_row("2026-11-14T18:00:00Z", "p1-002")
+        )
+        self.write_corrections(
+            (
+                "p1-001",
+                "2026-11-14T17:00:00Z",
+                "2026-11-14T19:00:00Z",
+                "tester",
+                "merged out of order",
+            )
+        )
+        self.build()
+
+        status, output = self.check_against(reordered)
+
+        self.assertEqual(status, 1)
+        self.assertIn("base ledger aggregate is not in generated order", output)
+        self.assertIn("may not be used to reorder unrelated rows", output)
+
+    def test_correction_cannot_hide_a_shard_reorder(self):
+        first = ledger_row("2026-11-14T17:00:00Z", "p1-001", to_status="done")
+        second = ledger_row(
+            "2026-11-14T18:00:00Z", "p1-001", from_status="done", to_status="released"
+        )
+        base = self.write_base(
+            {"p1-001": queue_row("p1-001")}, {"p1-001": [first, second]}
+        )
+        self.write_queue_shard("p1-001", queue_row("p1-001"))
+        self.write_ledger_shard(
+            "p1-001",
+            ledger_row(
+                "2026-11-14T18:00:00Z", "p1-001", from_status="done", to_status="released"
+            ),
+            ledger_row("2026-11-14T19:00:00Z", "p1-001", to_status="done"),
+        )
+        self.write_corrections(
+            (
+                "p1-001",
+                "2026-11-14T17:00:00Z",
+                "2026-11-14T19:00:00Z",
+                "tester",
+                "merged out of order",
+            )
+        )
+        self.build()
+
+        status, output = self.check_against(base)
+
+        self.assertEqual(status, 1)
+        self.assertIn("must keep its base position", output)
+
+    def test_check_prints_a_notice_naming_the_correction_record(self):
+        base = self.write_base(
+            {"p1-001": queue_row("p1-001"), "p1-002": queue_row("p1-002")},
+            {
+                "p1-001": [ledger_row("2026-11-14T17:00:00Z", "p1-001")],
+                "p1-002": [ledger_row("2026-11-14T18:00:00Z", "p1-002")],
+            },
+        )
+        self.write_queue_shard("p1-001", queue_row("p1-001"))
+        self.write_queue_shard("p1-002", queue_row("p1-002"))
+        self.write_ledger_shard(
+            "p1-001", ledger_row("2026-11-14T19:00:00Z", "p1-001")
+        )
+        self.write_ledger_shard(
+            "p1-002", ledger_row("2026-11-14T18:00:00Z", "p1-002")
+        )
+        self.write_corrections(
+            (
+                "p1-001",
+                "2026-11-14T17:00:00Z",
+                "2026-11-14T19:00:00Z",
+                "tester",
+                "merged out of order",
+            )
+        )
+        self.build()
+
+        status, output = self.check_against(base)
+
+        self.assertEqual(status, 0, output)
+        self.assertIn(
+            "notice: ledger correction p1-001: 2026-11-14T17:00:00Z -> "
+            "2026-11-14T19:00:00Z by tester (merged out of order)",
+            output,
+        )
 
     def test_existing_correction_records_are_append_only(self):
         base = self.write_base(
