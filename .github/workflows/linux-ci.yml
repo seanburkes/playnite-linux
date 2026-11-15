@@ -6,6 +6,7 @@ on:
   push:
     branches: [main]
   pull_request:
+  merge_group:
 
 permissions:
   contents: read
@@ -24,25 +25,6 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Capture the committed policy baseline
-        shell: bash
-        env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
-        run: |
-          set -euo pipefail
-          previous_projects="$RUNNER_TEMP/previous-projects.txt"
-          : > "$previous_projects"
-          if [ -z "${BASE_SHA:-}" ] || printf '%s' "$BASE_SHA" | grep -Eq '^0+$'; then
-            echo "::notice::No base commit is available; first-baseline policy applies"
-            exit 0
-          fi
-          if git cat-file -e "$BASE_SHA:tests/baseline.json" 2>/dev/null; then
-            git show "$BASE_SHA:tests/baseline.json" > "$RUNNER_TEMP/previous-baseline.json"
-          fi
-          git ls-tree -r --name-only "$BASE_SHA" -- tests \
-            | grep -E '/[^/]+\.csproj$' \
-            | sed -e 's|.*/||' -e 's|\.csproj$||' | sort -u > "$previous_projects" || true
-
       - uses: actions/setup-dotnet@v4
         with:
           global-json-file: global.json
@@ -50,6 +32,38 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+
+      - name: Resolve the policy base commit
+        id: policy_base
+        run: |
+          base=$(python3 scripts/ci/resolve_base_sha.py \
+            --event "${{ github.event_name }}" \
+            --pull-request-base "${{ github.event.pull_request.base.sha }}" \
+            --merge-group-base "${{ github.event.merge_group.base_sha }}" \
+            --push-before "${{ github.event.before }}")
+          printf 'sha=%s\n' "$base" >> "$GITHUB_OUTPUT"
+
+      - name: Capture the committed policy baseline
+        id: policy_baseline
+        shell: bash
+        env:
+          BASE_SHA: ${{ steps.policy_base.outputs.sha }}
+        run: |
+          set -euo pipefail
+          if [ -z "${BASE_SHA:-}" ]; then
+            echo "::notice::No base commit for this first push; first-baseline policy applies"
+            printf 'baseline_state=absent\nprojects_state=absent\n' >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if git cat-file -e "$BASE_SHA:tests/baseline.json" 2>/dev/null; then
+            git show "$BASE_SHA:tests/baseline.json" > "$RUNNER_TEMP/previous-baseline.json"
+            printf 'baseline_state=present\n' >> "$GITHUB_OUTPUT"
+          else
+            printf 'baseline_state=absent\n' >> "$GITHUB_OUTPUT"
+          fi
+          python3 scripts/ci/list_test_projects.py --ref "$BASE_SHA" \
+            > "$RUNNER_TEMP/previous-projects.txt"
+          printf 'projects_state=present\n' >> "$GITHUB_OUTPUT"
 
       - name: Verify the result and baseline policy
         run: python3 -m unittest discover -s scripts/ci -p 'test_*.py'
@@ -107,7 +121,9 @@ jobs:
             --results-directory "$RUNNER_TEMP/linux-test-results" \
             --baseline "$GITHUB_WORKSPACE/tests/baseline.json" \
             --previous-baseline "$RUNNER_TEMP/previous-baseline.json" \
+            --previous-baseline-state "${{ steps.policy_baseline.outputs.baseline_state }}" \
             --previous-projects "$RUNNER_TEMP/previous-projects.txt" \
+            --previous-projects-state "${{ steps.policy_baseline.outputs.projects_state }}" \
             --summary "$GITHUB_STEP_SUMMARY"
 
       - name: Install Xvfb for native window smoke
