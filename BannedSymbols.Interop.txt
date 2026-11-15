@@ -1,0 +1,2 @@
+T:System.Runtime.InteropServices.DllImportAttribute;Native calls belong in Playnite.Platform.Linux.
+T:System.Runtime.InteropServices.LibraryImportAttribute;Native calls belong in Playnite.Platform.Linux.
