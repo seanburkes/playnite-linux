@@ -122,8 +122,13 @@ aggregate regeneration on `main` is not charged for main's own commit; if the me
 be computed, the step fails closed. An aggregate file whose content exactly matches the fork
 point or the recorded event base is not an aggregate edit. Any other content, and every add,
 delete, or rename of an aggregate, still fails. The recorded-base content check is therefore
-not redundant; it is the second allowed base-side snapshot, alongside the fork point. Pushes to
-`main` pass the immediate previous main commit. Inventory, parity, generator-test, TLC, and frozen-step checks
+not redundant; it is the second allowed base-side snapshot, alongside the fork point. Because
+the aggregate check runs the base-materialised `build_port_index.py`, this tolerance is
+head-only until the merge that carries the new tool: before that merge the base tool from
+`main` governs, ignores `RECORDED_BASE`, and still passes stale or merged-main PRs through the
+fork point alone. The recorded-base-specific tolerance is proven by direct tool tests and
+becomes live from the first merge carrying it. Pushes to `main` pass the immediate previous
+main commit. Inventory, parity, generator-test, TLC, and frozen-step checks
 either compare the working tree, run a model, or use the shared merge-base gate; none compares
 a recorded base to `HEAD` with two-dot semantics.
 
@@ -264,7 +269,9 @@ base genuinely lacks a script (including the materialiser itself) does the head 
 a named `BOOTSTRAP` warning; once `main` contains the script, every later run uses the base
 copy. The base SHA and the recorded event base come directly from the event fields in the
 workflow, not from a PR-controlled helper; `policy_base.sha` is their fork point and
-`policy_base.recorded` is the event base. This keeps a pull request from weakening the gate,
+`policy_base.recorded` is the event base. A policy change that adds a new tool capability is
+therefore bootstrapped by design: the introducing PR runs the previous base tool, and the new
+capability is live from the first merge that carries it. This keeps a pull request from weakening the gate,
 the results check, the aggregate tool, or the base project list in its own checkout. The protected-path diff is
 taken from the merge base to `HEAD`, so a PR
 branched before a protected-path change landed on `main` is not charged for that main-side
