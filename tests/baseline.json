@@ -23,9 +23,9 @@
       "skipped": 0
     },
     "Playnite.Core.Tests": {
-      "total": 412,
-      "executed": 412,
-      "passed": 412,
+      "total": 1191,
+      "executed": 1191,
+      "passed": 1191,
       "failed": 0,
       "skipped": 0
     },
@@ -73,5 +73,12 @@
     "run_url": "https://github.com/seanburkes/playnite-linux/actions/runs/43769779701",
     "commit": "cb5c7bbbab02567e040b5de1fb655b7482a6d6bc",
     "notes": "linux-ci run 43769779701 on PR #69 head cb5c7bb, parsed from its linux-test-results JUnit artifacts: Playnite.Core.Tests 412 executed / 412 passed / 0 failed / 0 skipped, MTP exit 0; Playnite.Architecture.Tests 144 executed / 144 passed / 0 failed / 0 skipped, MTP exit 0 (recorded floor 103); Playnite.Smoke.Tests 4 executed / 4 passed / 0 failed / 0 skipped, MTP exit 0. The 412 count is the union the p3-003c serialisation unit adds on top of the recorded 316 floor (316 + 89 serialisation cases + 3 bounded-fuzz cases + 4 v10-golden cases). empty_projects remains unchanged and no recorded floor was lowered. union_capture_correction above supplies the corrected #68 run citation; the merged union_capture record is retained unedited."
+  },
+  "p3_004_capture": {
+    "captured_at": "2026-11-15T23:17:22Z",
+    "run_id": 43773267320,
+    "run_url": "https://github.com/seanburkes/playnite-linux/actions/runs/43773267320",
+    "commit": "486cc9d31756101f828e8c359ffb2a5a7a7e8c62",
+    "notes": "Counts independently parsed from the actual linux-test-results JUnit artifacts for linux-ci run 43773267320: Core 1191 executed / 1191 passed / 0 failed / 0 skipped, Architecture 144 / 144 / 0 / 0, Smoke 4 / 4 / 0 / 0, all MTP exit 0. Core rises from the existing actual-CI 412 floor by 779 cases (755 frozen-v10 model observations, 2 golden coverage/provenance cases and 22 additional model behavior cases). Architecture and Smoke floors remain unchanged, empty_projects remains unchanged, all historical capture records are retained, and no count was lowered. The source run is on the model implementation head delivered in https://github.com/seanburkes/playnite-linux/pull/72, not on this baseline-only follow-up; any subsequent manifest tests are additional to this evidenced 1191 floor. Additive real-CI baseline update authorized under oracle-change by firstmate steering p3-004/001 and follow-up p3-004/005."
   }
 }
