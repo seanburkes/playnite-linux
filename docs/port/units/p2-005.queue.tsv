@@ -1,2 +1,2 @@
 id	wave	area	unit	depends	status	owner	oracle	test	notes
-p2-005	W2	scaffold	Packaging smoke	p2-003	todo	release	-	pack	AppImage/Flatpak shell
+p2-005	W2	scaffold	Packaging smoke	p2-003	in-progress	fm/p2-005	-	packaging/test_packaging.py; packaging.yml	AppImage/Flatpak existing shell and CLI; local AppImage 43735544 bytes; SDK 11.0.100/.NET 11.0.0; appimagetool release 1.9.1/type2-runtime 20251108; Flatpak builder 1.4.2/Flatpak 1.14.6/Freedesktop Platform and SDK 25.08; CI sizes and exact OSTree commits pending; no real application payload/signing/update channel/ARM64

@@ -1,0 +1,16 @@
+{
+  "app-id": "io.github.playnite_linux.Playnite",
+  "runtime": "org.freedesktop.Platform",
+  "runtime-version": "25.08",
+  "sdk": "org.freedesktop.Sdk",
+  "command": "playnite",
+  "finish-args": ["--socket=wayland", "--socket=fallback-x11", "--share=ipc", "--device=dri"],
+  "modules": [
+    {
+      "name": "playnite-shell",
+      "buildsystem": "simple",
+      "build-commands": ["cp -a payload/. /app/"],
+      "sources": [{"type": "dir", "path": "payload", "dest": "payload"}]
+    }
+  ]
+}
