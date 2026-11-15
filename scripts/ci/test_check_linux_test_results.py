@@ -214,6 +214,13 @@ class LinuxTestResultPolicyTests(unittest.TestCase):
         self.assertEqual(0, self.check(
             self.project(outcomes=["pass"] * 43), previous=previous))
 
+    def test_dotted_project_name_is_not_truncated(self):
+        name = "Playnite.Architecture.Tests"
+        previous = self.record_previous(None, present=(name,))
+        self.record_baseline({name: {"executed": 43, "passed": 43}})
+        self.assertEqual(0, self.check(
+            self.project(name, outcomes=["pass"] * 43), previous=previous))
+
     def test_reviewed_removal_record_allows_a_project_to_retire(self):
         previous = self.record_previous(
             {"OldSuite": {"executed": 43, "passed": 43}}, present=("OldSuite",))

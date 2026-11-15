@@ -70,10 +70,21 @@ def read_removed_projects(document):
     return removed
 
 
+def project_name(value):
+    """Return a project name without a path or .csproj suffix.
+
+    The project name itself may contain dots (Playnite.Architecture.Tests), so
+    only the final .csproj suffix is removed; Path.stem would truncate at the
+    last dot and turn it into Playnite.Architecture.
+    """
+    name = Path(value).name
+    return name[:-len(".csproj")] if name.endswith(".csproj") else name
+
+
 def read_previous_projects(path):
     if path is None or not path.exists():
         return set()
-    return {Path(line.strip()).stem for line in path.read_text().splitlines() if line.strip()}
+    return {project_name(line) for line in path.read_text().splitlines() if line.strip()}
 
 
 def baseline_count(row, field):
@@ -208,7 +219,7 @@ def check_results(projects, results, baseline_path, summary_path,
     else:
         previous_projects = set()
 
-    project_names = {Path(project).stem for project in projects}
+    project_names = {project_name(project) for project in projects}
     failures.extend(validate_baseline_policy(
         baseline_path, current_document, baseline, removed,
         previous_document, previous, previous_projects, project_names))
@@ -218,7 +229,7 @@ def check_results(projects, results, baseline_path, summary_path,
                "| Project | Executed | Passed | Failed | Skipped | MTP exit | Outcome |",
                "| --- | ---: | ---: | ---: | ---: | ---: | --- |"]
     for project in projects:
-        name = Path(project).stem
+        name = project_name(project)
         if name in rows:
             failures.append(f"duplicate test project name: {name}")
             continue
