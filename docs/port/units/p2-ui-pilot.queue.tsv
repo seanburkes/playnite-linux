@@ -1,2 +1,2 @@
 id	wave	area	unit	depends	status	owner	oracle	test	notes
-p2-ui-pilot	W2	spike	Standalone themed library shell evidence		in-progress	fm/p2-ui-pilot	spike; ADR-007; ADR-013	spikes/ui-shell/ShellTests.cs	Six headless xunit v3 facts pass zero skips; real Skia and resource dictionaries; fake data only; independent blind reviews pending; no product integration
+p2-ui-pilot	W2	spike	Standalone themed library shell evidence		in-progress	fm/p2-ui-pilot	spike; ADR-007; ADR-013	spikes/ui-shell/ShellTests.cs	Six manually invoked headless facts pass zero skips in each of two automated process runs; real Skia and resource/spacing swaps; fake data only; initial blind reviews received, follow-up review pending; outside product solution/Linux CI, no integration

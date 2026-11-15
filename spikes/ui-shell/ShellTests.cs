@@ -32,6 +32,7 @@ public sealed class ShellTests
     public Task Grid_binds_every_fake_cover_title_playtime_and_last_played() => Run(window =>
     {
         var grid = window.FindControl<ListBox>("Games")!;
+        Assert.Equal("6 invented games", window.FindControl<TextBlock>("Count")!.Text);
         Assert.Equal(LibraryModel.Catalog, grid.Items.Cast<Game>());
         Assert.Equal(6, grid.GetVisualDescendants().OfType<ListBoxItem>().Count());
         foreach (var game in LibraryModel.Catalog)
@@ -59,6 +60,7 @@ public sealed class ShellTests
         Refresh(window);
         Assert.True(window.Model.InstalledOnly);
         Assert.Empty(grid.Items);
+        Assert.Equal("0 invented games", window.FindControl<TextBlock>("Count")!.Text);
         Assert.True(string.IsNullOrEmpty(window.FindControl<TextBlock>("DetailsTitle")!.Text));
         search.Text = "";
         Refresh(window);
@@ -96,6 +98,9 @@ public sealed class ShellTests
             foreach (var cell in cells)
             {
                 Inside(window, cell);
+                var cover = Assert.Single(cell.GetVisualDescendants().OfType<CoverArt>());
+                Assert.Equal(width == 640 ? 100 : 138, cover.Height);
+                Assert.Equal(cover.Height, cover.Bounds.Height);
                 foreach (var text in cell.GetVisualDescendants().OfType<TextBlock>())
                 {
                     var point = text.TranslatePoint(default, games)!.Value;
@@ -120,6 +125,7 @@ public sealed class ShellTests
     {
         var dictionaries = Application.Current!.Resources.MergedDictionaries;
         var original = dictionaries[0];
+        var spacingOverride = new ResourceDictionary { ["CoverHeight"] = 110d };
         var replacement = new ResourceDictionary();
         replacement["CanvasColor"] = Color.Parse("#362144");
         replacement["SurfaceColor"] = Color.Parse("#51335E");
@@ -130,13 +136,27 @@ public sealed class ShellTests
         try
         {
             var before = ((ISolidColorBrush)window.Background!).Color;
+            var cover = window.GetVisualDescendants().OfType<CoverArt>().First();
+            var card = window.FindControl<ListBox>("Games")!.GetVisualDescendants().OfType<Border>()
+                .First(border => border.Classes.Contains("surface"));
+            Assert.Equal(138, cover.Height);
             dictionaries[0] = replacement;
+            dictionaries.Add(spacingOverride);
             Refresh(window);
             Assert.NotEqual(before, ((ISolidColorBrush)window.Background!).Color);
             Assert.Equal(Color.Parse("#362144"), ((ISolidColorBrush)window.Background!).Color);
             Assert.Equal(Colors.Gold, ((ISolidColorBrush)window.FindResource("AccentBrush")!).Color);
+            Assert.Equal(Colors.DarkSlateBlue, ((ISolidColorBrush)cover.Fill).Color);
+            Assert.Equal(Colors.Gold, ((ISolidColorBrush)cover.Accent).Color);
+            Assert.Equal(Color.Parse("#51335E"), ((ISolidColorBrush)card.Background!).Color);
+            Assert.Equal(110, cover.Height);
+            Assert.Equal(110, cover.Bounds.Height);
         }
-        finally { dictionaries[0] = original; }
+        finally
+        {
+            dictionaries.Remove(spacingOverride);
+            dictionaries[0] = original;
+        }
     });
 
     [Fact]

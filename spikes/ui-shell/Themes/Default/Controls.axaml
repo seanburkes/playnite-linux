@@ -10,7 +10,11 @@
   <Style Selector="Border.surface"><Setter Property="Background" Value="{DynamicResource SurfaceBrush}" /><Setter Property="Padding" Value="{DynamicResource CardPadding}" /></Style>
   <Style Selector="ListBox"><Setter Property="Background" Value="{DynamicResource CanvasBrush}" /><Setter Property="Padding" Value="0" /></Style>
   <Style Selector="ListBoxItem"><Setter Property="Padding" Value="0" /><Setter Property="Margin" Value="{DynamicResource CardMargin}" /></Style>
-  <Style Selector="local|CoverArt"><Setter Property="Height" Value="{DynamicResource CoverHeight}" /></Style>
+  <Style Selector="local|CoverArt">
+    <Setter Property="Height" Value="{DynamicResource CoverHeight}" />
+    <Setter Property="Fill" Value="{DynamicResource CoverBrush}" />
+    <Setter Property="Accent" Value="{DynamicResource AccentBrush}" />
+  </Style>
   <Style Selector="Window.narrow local|CoverArt"><Setter Property="Height" Value="{DynamicResource CompactCoverHeight}" /></Style>
   <Style Selector="ListBoxItem:selected Border.surface"><Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}" /><Setter Property="BorderThickness" Value="{DynamicResource SelectionBorder}" /></Style>
 </Styles>
