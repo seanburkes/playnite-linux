@@ -1,5 +1,18 @@
 #!/usr/bin/env python3
-"""Classify MTP results; empty scaffolds are allowed only before a new-suite baseline."""
+"""Classify MTP results; empty scaffolds are allowed only before a new-suite baseline.
+
+The committed baseline is a ratchet. When a previous committed baseline is
+supplied, a change may add the first non-null ``new`` object, but it may never
+delete the baseline file, reset ``new`` to null, lower a project's executed or
+passed count, or silently drop/rename a project. A project may be retired only
+by a ``removed_projects`` record in the protected baseline that names a reason
+and an approver; the protected-path ``oracle-change`` gate makes that record a
+second-reviewer decision.
+
+``--previous-projects`` lists the project names present at the base commit, so
+deleting a project before the first baseline is recorded is still a failure
+rather than zero tests.
+"""
 
 import argparse
 import json
@@ -8,11 +21,21 @@ import sys
 import xml.etree.ElementTree as ET
 
 
-def load_baseline(path):
-    if not path.exists():
+def load_document(path):
+    """Load a baseline document, or return None when it does not exist."""
+    if path is None or not path.exists():
         return None
     document = json.loads(path.read_text())
-    if not isinstance(document, dict) or "new" not in document:
+    if not isinstance(document, dict):
+        raise ValueError("baseline must be a JSON object")
+    return document
+
+
+def read_new_baseline(document):
+    """Return the validated ``new`` object, or None while bootstrap is open."""
+    if document is None:
+        return None
+    if "new" not in document:
         raise ValueError("baseline must contain the new-suite state in 'new'")
     baseline = document["new"]
     if baseline is None:
@@ -20,9 +43,93 @@ def load_baseline(path):
     if not isinstance(baseline, dict) or not baseline:
         raise ValueError("recorded new-suite baseline must contain per-project counts")
     for project, row in baseline.items():
-        if not isinstance(row, dict) or type(row.get("executed")) is not int or row["executed"] < 0:
+        if (not isinstance(row, dict) or type(row.get("executed")) is not int
+                or row["executed"] < 0):
             raise ValueError(f"invalid executed baseline for {project}")
+        if "passed" in row and (type(row["passed"]) is not int or row["passed"] < 0):
+            raise ValueError(f"invalid passed baseline for {project}")
+        if "passed" in row and row["passed"] > row["executed"]:
+            raise ValueError(f"passed baseline exceeds executed for {project}")
     return baseline
+
+
+def read_removed_projects(document):
+    """Return reviewed project-retirement records from the baseline."""
+    if document is None:
+        return {}
+    removed = document.get("removed_projects", {})
+    if not isinstance(removed, dict):
+        raise ValueError("removed_projects must be an object")
+    for project, record in removed.items():
+        if not isinstance(record, dict):
+            raise ValueError(f"invalid removal record for {project}")
+        for field in ("reason", "approved_by"):
+            value = record.get(field)
+            if not isinstance(value, str) or not value.strip():
+                raise ValueError(f"removal record for {project} needs a non-empty {field}")
+    return removed
+
+
+def read_previous_projects(path):
+    if path is None or not path.exists():
+        return set()
+    return {Path(line.strip()).stem for line in path.read_text().splitlines() if line.strip()}
+
+
+def baseline_count(row, field):
+    if field in row:
+        return row[field]
+    # Older baselines recorded only executed; a passing suite has passed == executed.
+    return row["executed"] if field == "passed" else None
+
+
+def validate_baseline_policy(current_path, current_document, current, removed,
+                             previous_document, previous, previous_projects,
+                             current_projects):
+    """Return failures for a baseline that lowers, deletes or loses history."""
+    failures = []
+    if previous_document is not None and current_document is None:
+        failures.append(f"baseline file {current_path} was deleted; the committed "
+                        "baseline cannot be removed")
+        return failures
+
+    if previous_document is not None and previous is not None and current is None:
+        failures.append("new-suite baseline was reset to null; the committed baseline "
+                        "cannot be cleared")
+
+    for project, previous_row in (previous or {}).items():
+        if current is not None and project in current:
+            current_row = current[project]
+            for field in ("executed", "passed"):
+                previous_count = baseline_count(previous_row, field)
+                current_count = baseline_count(current_row, field)
+                if previous_count is not None and (current_count is None
+                                                   or current_count < previous_count):
+                    failures.append(
+                        f"{project}: baseline {field} count {current_count} is below the "
+                        f"previous committed baseline {previous_count}")
+        elif project not in removed:
+            failures.append(
+                f"{project}: test project from the previous committed baseline is "
+                "missing; restore it or record a reviewed removal in removed_projects")
+
+    for project in sorted(removed):
+        if previous is not None and project not in previous and project not in previous_projects:
+            failures.append(f"{project}: removal record names a project with no previous "
+                            "baseline entry or base-commit project")
+        if current is not None and project in current:
+            failures.append(f"{project}: removal record conflicts with a current "
+                            "baseline entry")
+        if project in current_projects:
+            failures.append(f"{project}: removal record conflicts with a project that "
+                            "still ran")
+
+    for project in sorted(previous_projects - current_projects):
+        if project not in removed:
+            failures.append(
+                f"{project}: test project existed at the base commit but was not run; "
+                "restore it or record a reviewed removal in removed_projects")
+    return failures
 
 
 def read_counts(path):
@@ -69,9 +176,14 @@ def classify(project, exit_code, counts, baseline):
     return "pass", "all executed cases passed"
 
 
-def check_results(projects, results, baseline_path, summary_path):
+def check_results(projects, results, baseline_path, summary_path,
+                  previous_baseline_path=None, previous_projects_path=None):
+    failures = []
+    notices = []
     try:
-        baseline = load_baseline(baseline_path)
+        current_document = load_document(baseline_path)
+        baseline = read_new_baseline(current_document)
+        removed = read_removed_projects(current_document)
     except (OSError, ValueError) as error:
         message = f"Invalid new-suite baseline: {error}"
         print(f"::error::{message}")
@@ -79,9 +191,29 @@ def check_results(projects, results, baseline_path, summary_path):
             summary.write(f"\n**FAIL: {message}**\n")
         return 1
 
+    try:
+        previous_document = load_document(previous_baseline_path)
+        previous = read_new_baseline(previous_document)
+        read_removed_projects(previous_document)
+    except (OSError, ValueError) as error:
+        previous_document = previous = None
+        failures.append(f"Invalid previous committed baseline: {error}")
+
+    if previous_document is not None or previous_baseline_path is not None:
+        try:
+            previous_projects = read_previous_projects(previous_projects_path)
+        except OSError as error:
+            failures.append(f"Invalid previous project list: {error}")
+            previous_projects = set()
+    else:
+        previous_projects = set()
+
+    project_names = {Path(project).stem for project in projects}
+    failures.extend(validate_baseline_policy(
+        baseline_path, current_document, baseline, removed,
+        previous_document, previous, previous_projects, project_names))
+
     rows = {}
-    failures = []
-    notices = []
     summary = ["\n### Linux test counts\n",
                "| Project | Executed | Passed | Failed | Skipped | MTP exit | Outcome |",
                "| --- | ---: | ---: | ---: | ---: | ---: | --- |"]
@@ -126,7 +258,9 @@ def check_results(projects, results, baseline_path, summary_path):
         summary.append(f"\n**FAIL: {failure}**\n")
     results.mkdir(parents=True, exist_ok=True)
     (results / "test-counts.json").write_text(json.dumps(
-        {"baseline_recorded": baseline is not None, "projects": rows, "failures": failures},
+        {"baseline_recorded": baseline is not None,
+         "previous_baseline_recorded": previous is not None,
+         "projects": rows, "failures": failures},
         indent=2) + "\n")
     with summary_path.open("a") as output:
         output.write("\n".join(summary) + "\n")
@@ -138,9 +272,12 @@ def main():
     parser.add_argument("--projects", nargs="+", required=True)
     parser.add_argument("--results-directory", type=Path, required=True)
     parser.add_argument("--baseline", type=Path, required=True)
+    parser.add_argument("--previous-baseline", type=Path)
+    parser.add_argument("--previous-projects", type=Path)
     parser.add_argument("--summary", type=Path, required=True)
     args = parser.parse_args()
-    return check_results(args.projects, args.results_directory, args.baseline, args.summary)
+    return check_results(args.projects, args.results_directory, args.baseline,
+                         args.summary, args.previous_baseline, args.previous_projects)
 
 
 if __name__ == "__main__":

@@ -184,7 +184,7 @@ checks remain in `plan-guards.yml`; they are not duplicated in the build workflo
 
 | Workflow / check | Runner | Trigger and guarantee |
 | --- | --- | --- |
-| `linux-ci` / `linux-build-and-test` | `ubuntu-24.04`, Python 3.12 | Test the result policy, restore `Playnite.slnx` in locked mode, build Release, and run every project under `tests/`. Restore/build warnings and xUnit skipped/warned tests fail; the bounded empty-scaffold policy below applies before the new-suite baseline is recorded. |
+| `linux-ci` / `linux-build-and-test` | `ubuntu-24.04`, Python 3.12 | Test the result policy, restore `Playnite.slnx` in locked mode, build Release, and run every project under `tests/`. Restore/build warnings and xUnit skipped/warned tests fail; the bounded empty-scaffold policy below applies before the new-suite baseline is recorded, then the committed baseline is a ratchet. |
 | `plan-guards` / `inventory-and-parity` | `ubuntu-latest` | Reproduce inventory, validate parity, run port-index generator tests, validate shard history, and reject aggregate edits on PRs. Also enforce immutable `legacy/`/`oracle-lock/` and the protected-path `oracle-change` gate. |
 | `plan-guards` / `formal` | `ubuntu-latest`, Temurin 21 | Run `scripts/formal/run_tlc.sh` for the existing formal models. |
 | `legacy-oracle` / `windows-oracle` | `windows-latest`, x86 Release | Existing oracle-path PR filters, `oracle-*` tags, or manual dispatch. Verify pinned Playnite.Deps, build frozen v10, byte-compare manifest goldens with a negative probe, run NUnit via VSTest, and retain TRX/counts. |
@@ -218,9 +218,11 @@ mandatory. Empty scaffold assemblies are not evidence of tested application beha
 
 The pre-baseline bootstrap policy is deliberately self-closing. The workflow runs **every**
 discovered project, records each exit code, then calls
-`scripts/ci/check_linux_test_results.py`. Only MTP exit **8** accompanied by a valid JUnit
-report declaring and containing **zero cases** is non-failing while no new-suite baseline is
-recorded (`tests/baseline.json` has `new: null`, or no baseline file exists). Each such project
+`scripts/ci/check_linux_test_results.py`. It checks out full history and materialises the base
+commit's `tests/baseline.json` and `.csproj` list for that call. Only MTP exit **8** accompanied
+by a valid JUnit report declaring and containing **zero cases** is non-failing while no
+new-suite baseline is recorded (`tests/baseline.json` has `new: null`, or no baseline file
+exists). Each such project
 gets a prominent **NO TESTS EXIST YET** notice in the log and job summary, plus a recorded
 zero count; the result is `bootstrap-empty`, never a tested behavior claim. Missing, malformed
 or inconsistent reports fail. Every other nonzero exit, exit 8 with nonempty results, any
@@ -235,6 +237,16 @@ fails instead of reopening bootstrap. The `new` object is keyed directly by proj
 each project's object must contain a nonnegative integer `executed` count and may also record
 passed/failed/skipped counts, coverage and capture provenance. Python policy tests in
 `scripts/ci/` exercise the bootstrap-to-baseline transition and these failure paths in CI.
+
+The committed baseline is a ratchet. A change may add the first non-null `new` object, but it
+may not delete `tests/baseline.json`, reset `new` to null, lower a retained project's
+`executed` or `passed` count, or silently delete or rename a project that was present at the
+base commit. Retiring a project requires a reviewed `removed_projects` entry in the protected
+baseline, carrying a non-empty `reason` and `approved_by`; a project that is still discovered
+and run cannot be retired. `tests/baseline.json`, `.github/workflows/linux-ci.yml` and the
+`scripts/ci/` checker/tests are CODEOWNED and in the protected-path set, so changing the policy
+surface requires the `oracle-change` route and a second reviewer. An absent base commit (a
+brand-new branch) keeps the first-baseline addition path open.
 
 The Windows oracle remains independent, with its existing triggers and VSTest filters:
 EX-1 `FileSystemTests.CanWriteToFolderTest`, EX-2
