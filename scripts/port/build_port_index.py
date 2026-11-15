@@ -619,33 +619,65 @@ def _repo_relative(path: Path, root: Path) -> str:
         return path.as_posix()
 
 
-def changed_aggregates(root: Path, ref: str, queue: Path, ledger: Path) -> list[str]:
-    """Paths of the generated aggregates changed on this branch since its merge base.
+def _git_bytes(root: Path, *args: str) -> bytes | None:
+    """Return stdout for a successful git call, or None for a missing object."""
+    completed = subprocess.run(["git", "-C", str(root), *args],
+                               capture_output=True)
+    return completed.stdout if completed.returncode == 0 else None
 
+
+def changed_aggregates(root: Path, ref: str, queue: Path, ledger: Path,
+                       recorded_base: str | None = None) -> list[str]:
+    """Paths of generated aggregates changed outside both base sides.
+
+    `ref` is the fork point (the merge base of the recorded event base and HEAD).
     The comparison is three-dot: a stale branch must not appear to revert aggregate
-    changes that landed on main after it forked.
+    changes that landed on main after it forked. A file whose HEAD content equals
+    the fork point or the recorded event base is not an aggregate edit. Any other
+    content, and every add/delete/rename, still fails.
     """
     resolved = _git(root, "rev-parse", "--verify", "--quiet", f"{ref}^{{commit}}").strip()
-    commit = resolved.decode("ascii", "replace")
-    if not commit:
+    fork = resolved.decode("ascii", "replace")
+    if not fork:
         raise PortIndexError(f"cannot resolve base ref {ref!r}")
     merge_base = (
-        _git(root, "merge-base", commit, "HEAD").strip().decode("ascii", "replace")
+        _git(root, "merge-base", fork, "HEAD").strip().decode("ascii", "replace")
     )
     if not merge_base:
         raise PortIndexError(f"no merge base between {ref!r} and HEAD")
+    recorded = fork
+    if recorded_base is not None:
+        resolved_recorded = _git(
+            root, "rev-parse", "--verify", "--quiet", f"{recorded_base}^{{commit}}"
+        ).strip().decode("ascii", "replace")
+        if not resolved_recorded:
+            raise PortIndexError(f"cannot resolve recorded base {recorded_base!r}")
+        recorded = resolved_recorded
+    paths = (_repo_relative(queue, root), _repo_relative(ledger, root))
     listing = _git(
-        root,
-        "diff",
-        "--name-only",
-        "-z",
-        merge_base,
-        "HEAD",
-        "--",
-        _repo_relative(queue, root),
-        _repo_relative(ledger, root),
+        root, "diff", "--name-only", "-z", merge_base, "HEAD", "--", *paths
     )
-    return [name for name in listing.decode("utf-8", "replace").split("\0") if name]
+    changed = [name for name in listing.decode("utf-8", "replace").split("\0") if name]
+    if not changed:
+        return []
+    base_sides = {merge_base, recorded}
+    allowed: dict[str, set[bytes]] = {name: set() for name in changed}
+    for side in base_sides:
+        for name in changed:
+            content = _git_bytes(root, "show", f"{side}:{name}")
+            if content is not None:
+                allowed[name].add(content)
+    failures = []
+    for name in changed:
+        head = _git_bytes(root, "show", f"HEAD:{name}")
+        merge_content = _git_bytes(root, "show", f"{merge_base}:{name}")
+        if head is None or merge_content is None:
+            failures.append(name)
+            continue
+        if head == merge_content or head in allowed[name]:
+            continue
+        failures.append(name)
+    return failures
 
 
 def _is_strict_ancestor(root: Path, ref: str) -> bool:
@@ -1075,6 +1107,15 @@ def main(
             "docs/port/ledger.tsv (the pull request ownership gate)"
         ),
     )
+    parser.add_argument(
+        "--recorded-base",
+        metavar="REF",
+        default=None,
+        help=(
+            "recorded event base whose aggregate content is the other legitimate "
+            "base side for --forbid-aggregate-changes"
+        ),
+    )
     args = parser.parse_args(argv)
 
     try:
@@ -1097,8 +1138,11 @@ def main(
                 file=sys.stderr,
             )
             return 1
+        recorded_base = (args.recorded_base
+                         or os.environ.get("RECORDED_BASE") or None)
         try:
-            changed = changed_aggregates(root, args.against, queue, ledger)
+            changed = changed_aggregates(root, args.against, queue, ledger,
+                                         recorded_base)
         except PortIndexError as exc:
             print(f"error: {exc}", file=sys.stderr)
             return 1
