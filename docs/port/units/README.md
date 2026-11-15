@@ -55,15 +55,20 @@ and `+00:00`) are compared as instants.
 `check --against <ref>` enforces this against a base commit that must be a strict ancestor of
 HEAD, per unit, as a multiset: every base ledger row must still exist at head with identical
 field values. Order is not part of the guarantee, so a new row may carry any instant, including
-one older than rows already recorded, and a row may be appended in any position. Every queue
+one older than rows already recorded, and a row may be appended in any position. A head row
+that matches a base row on every field except its timestamp is treated as a timestamp edit, not
+a new event, and is rejected unless a correction names that unit and previous/corrected pair,
+so retaining an old row and adding a changed copy cannot launder an edit. Every queue
 shard and queue aggregate row present at `<ref>` must still be present at head; ledger shards
 and rows may only be removed by a recorded retirement. In CI the base is the pull request's
 base commit (or the previous commit on `main`).
 
 ## Ordering is generated, not authored
 
-`docs/port/ledger.tsv` is ordered by instant, then unit; `docs/port/queue.tsv` is ordered by
-wave, then unit. That ordering is derived output: `build` produces it, and the post-merge
+`docs/port/ledger.tsv` is ordered by instant, then unit, then the row's remaining fields, so
+rows that share an instant and unit order by content rather than by their position in a shard.
+`docs/port/queue.tsv` is ordered by wave, then unit. That ordering is derived output: `build`
+produces it, and the post-merge
 `port-index` workflow on `main` is the only writer that commits it. Contributors never
 hand-order or hand-edit an aggregate. The parent job's regeneration normalises order after
 every merge, so a row that lands with an instant earlier than existing history simply sorts
@@ -76,12 +81,16 @@ adds a matching record to `ledger-corrections.tsv`:
 
 ```
 unit	previous-timestamp	corrected-timestamp	actor	reason
-p2-001	2026-11-15T01:51:31Z	2026-11-15T03:30:55Z	fm/p2-ledger-fix	recorded the deployment time instead of the completion time
+p2-001	2026-11-15T01:51:31Z	2026-11-15T03:30:55Z	fm/p2-ledger-fix	merged out of order: #28 landed before #29, so this row sorted ahead of already-committed history
 ```
 
+That is the record already in `ledger-corrections.tsv`; records are append-only, so its text is
+kept verbatim even though the rule it describes is no longer how ordering is handled.
+
 The record must be new in that change and match a base row exactly: same unit, same previous
-instant, and the corrected row keeps every other field. A correction may only move a row later,
-never earlier; it corrects recorded content, not ordering. At most one correction is allowed
+instant, and the corrected row keeps every other field. A correction is a move: the previous
+row must be gone from the head shard, not retained beside the corrected copy. A correction may
+only move a row later, never earlier; it corrects recorded content, not ordering. At most one correction is allowed
 per unit. A second record for the same unit, including one whose previous timestamp is an
 earlier correction's corrected value, is rejected, so corrections cannot chain across changes.
 Correction records are themselves append-only, so an earlier correction cannot be reused.

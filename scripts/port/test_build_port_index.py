@@ -590,6 +590,87 @@ class PortIndexTests(unittest.TestCase):
         self.assertEqual(status, 0, output)
         self.assertIn("history matches BASE", output)
 
+    def test_check_against_base_rejects_a_retained_row_plus_a_changed_copy(self):
+        original = ledger_row("2026-11-14T17:00:00Z", "p1-001")
+        base = self.write_base(
+            {"p1-001": queue_row("p1-001")}, {"p1-001": [original]}
+        )
+        self.write_queue_shard("p1-001", queue_row("p1-001"))
+        self.write_ledger_shard(
+            "p1-001", original, ledger_row("2026-11-14T18:00:00Z", "p1-001")
+        )
+        self.build()
+
+        status, output = self.check_against(base)
+
+        self.assertEqual(status, 1)
+        self.assertIn("matches base row", output)
+        self.assertIn("except its timestamp", output)
+
+    def test_check_against_base_rejects_a_retained_row_plus_a_corrected_copy(self):
+        original = ledger_row("2026-11-14T17:00:00Z", "p1-001")
+        base = self.write_base(
+            {"p1-001": queue_row("p1-001")}, {"p1-001": [original]}
+        )
+        self.write_queue_shard("p1-001", queue_row("p1-001"))
+        self.write_ledger_shard(
+            "p1-001", original, ledger_row("2026-11-14T18:00:00Z", "p1-001")
+        )
+        self.write_corrections(
+            (
+                "p1-001",
+                "2026-11-14T17:00:00Z",
+                "2026-11-14T18:00:00Z",
+                "tester",
+                "wrong timestamp",
+            )
+        )
+        self.build()
+
+        status, output = self.check_against(base)
+
+        self.assertEqual(status, 1)
+        self.assertIn("still present at head alongside the corrected copy", output)
+        self.assertIn("does not append one", output)
+
+    def test_check_against_base_rejects_a_row_moved_to_another_unit(self):
+        row = ledger_row("2026-11-14T17:00:00Z", "p1-001")
+        base = self.write_base(
+            {"p1-001": queue_row("p1-001"), "p1-002": queue_row("p1-002")},
+            {"p1-001": [row], "p1-002": []},
+        )
+        self.write_queue_shard("p1-001", queue_row("p1-001"))
+        self.write_queue_shard("p1-002", queue_row("p1-002"))
+        self.write_ledger_shard("p1-001")
+        self.write_ledger_shard(
+            "p1-002", ledger_row("2026-11-14T17:00:00Z", "p1-002")
+        )
+        self.build()
+
+        status, output = self.check_against(base)
+
+        self.assertEqual(status, 1)
+        self.assertIn("ledger shard 'p1-001'", output)
+        self.assertIn("missing or altered", output)
+
+    def test_ledger_order_is_total_for_rows_sharing_an_instant_and_unit(self):
+        self.write_queue_shard("p1-001", queue_row("p1-001"))
+        released = ledger_row(
+            "2026-11-14T17:00:00Z", "p1-001", from_status="done", to_status="released"
+        )
+        started = ledger_row("2026-11-14T17:00:00Z", "p1-001", to_status="done")
+
+        self.write_ledger_shard("p1-001", released, started)
+        _, first = self.render()
+
+        self.write_ledger_shard("p1-001", started, released)
+        _, second = self.render()
+
+        # The tiebreak is content, not shard position, so the bytes are stable.
+        self.assertEqual(first, second)
+        transitions = [line.split("\t")[3] for line in first.decode().splitlines()[1:]]
+        self.assertEqual(transitions, ["released", "done"])
+
     def test_check_against_base_rejects_a_duplicated_ledger_row(self):
         row = ledger_row("2026-11-14T17:00:00Z", "p1-001")
         base = self.write_base({"p1-001": queue_row("p1-001")}, {"p1-001": [row]})
