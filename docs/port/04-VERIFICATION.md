@@ -130,8 +130,8 @@ file** (not a regex over source), plus skip count (must be zero) and coverage pe
 reliably, and a loop can game it.
 
 The new-suite baseline is recorded at **Phase 2 exit**, not from the legacy suite. A PR that
-lowers the executed-case count fails unless it carries an `oracle-change` label and a second
-reviewer. Replaced tests must be replaced one-for-one or better.
+lowers the executed-case count fails unless it carries the `oracle-change` label and passes the
+protected-path gate. Replaced tests must be replaced one-for-one or better.
 
 ### 4.2 Verify the harness itself
 
@@ -143,22 +143,42 @@ reviewer. Replaced tests must be replaced one-for-one or better.
 
 ### 4.3 Oracle independence
 
-Structural, not cultural:
-- `tests/fixtures/`, `tests/golden/`, `tests/baseline.json`, `legacy/`, `docs/formal/`,
-  `oracle-lock/`, and `docs/port/surface-parity.tsv` are protected paths. CI diffs all of them
-  on every PR; CODEOWNERS names the oracle owner.
-- `legacy/` and `oracle-lock/` are **unconditionally** immutable; no label overrides them.
-  Fixtures/goldens/baseline/formal/parity changes need an `oracle-change` label and a second
-  reviewer.
+Independence is structural, not cultural. The mechanisms that carry it are:
+- `legacy/` is a frozen snapshot and `oracle-lock/` pins its dependencies. Both are
+  **unconditionally** immutable: CI fails on any change and no label overrides them.
+- `tests/fixtures/`, `tests/golden/`, `tests/baseline.json`, `docs/formal/`, and
+  `docs/port/surface-parity.tsv` are protected paths. The `plan-guards` workflow diffs every
+  one of them against the merge base on each PR and merge-queue entry, and fails on a change
+  the `oracle-change` route did not declare. The merge-queue job re-reads the PR label through
+  the API because merge-group events do not carry it.
+- The bytes are pinned: `tests/fixtures/v10/SHA256SUMS`, the golden manifests, `oracle-lock/`,
+  and the `api-baseline/` SHA files change when a payload changes, even when the diff looks
+  small.
+- The checks are executed, not asserted: the `formal` job runs the TLA+ models in
+  `docs/formal/`, and the Linux job runs the count and skip policy. The five required contexts
+  are `inventory-and-parity`, `formal`, `linux-build-and-test`, `AppImage packaging smoke` and
+  `Flatpak packaging smoke`; these are status checks, not reviewer opinions. The
+  `legacy-oracle`, `settings-library-oracle` and `windows-fixture-validation` jobs run the
+  frozen Windows code and validate regenerated fixtures as path-filtered additional checks,
+  so they only run when their paths change.
 - There is no auto-accept/update-snapshot command in the repo. Regeneration is a separate
-  script run by a human, with the diff reviewed.
+  script run by a human, and the resulting diff goes through the protected-path route.
 - Escape hatches (`Skip`, `Explicit`, `[Ignore]`, category filters) are counted; a non-zero
   skip count fails.
-- The implementer cannot approve its own oracle change. With one human, the second reviewer
-  is a different agent/model with a diff-only prompt; the human signs the final gate. Record
-  the residual risk: model independence is weaker than a second human. For an oracle change,
-  prefer a human external reviewer or a second machine/owner; if neither exists, the change is
-  `pass-with-exception` and is called out in the gate artifact.
+- `.github/CODEOWNERS` records which paths belong to the owner for visibility and routing. It
+  is audit metadata, not an approval gate.
+
+An oracle change is declared, not approved by a second person: the task says `oracle-change`,
+the PR carries the label, and the protected-path gate checks the diff. This repository has one
+human owner, so review is adversarial agent assistance rather than independent human approval,
+and the owner makes the merge decision (ADR-024). An external reviewer is still preferred where
+one can exist - an external human, or a different machine or owner - and when it is not used
+the owner's merge decision is the accepted exception, recorded in the gate artifact
+(`docs/port/gates/P<phase>-*.md`). The residual risk is real: one human plus models can share
+blind spots, correlated reviewers miss the same defects, and the structural checks catch
+tampering and regression rather than a wrong port that passes its tests. The mitigations are
+the mechanical protections above, not a second signature, and they reduce the risk without
+eliminating it.
 
 ## 5. Process-level differential harness
 
@@ -314,7 +334,7 @@ modes. One waiver cannot hide all three.
 - [ ] Resource lifetime: dispose/cancel paths tested.
 - [ ] Logging and error messages match v10 where consumed.
 - [ ] `legacy/` untouched; test/golden paths untouched.
-- [ ] Two blind reviews (diff only, "assume this is wrong"); fixes applied.
+- [ ] Two adversarial reviews (diff only, "assume this is wrong"); fixes applied.
 - [ ] Ledger row updated; commit message names the row and oracle.
 - [ ] CI green, including oracle and counts.
 

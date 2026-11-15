@@ -14,7 +14,8 @@ oracle. New code is in `src/` (Phase 1 onward). Do not modify the Windows app.
    changes.
 2. **Oracle paths are protected.** Do not edit `tests/golden/`, `tests/fixtures/`,
    `tests/baseline.json`, `docs/formal/`, or `docs/port/surface-parity.tsv` unless the task
-   explicitly says `oracle-change` and a second reviewer approves. `legacy/` and
+   explicitly authorises an oracle change with the `oracle-change` label, which sends it
+   through the protected-path gate. `legacy/` and
    `oracle-lock/` are unconditionally immutable; no label overrides them. A porting change may
    not redefine correctness.
 3. **Do not weaken tests.** No `[Skip]`, `[Ignore]`, `--filter` exclusions, snapshot
@@ -48,7 +49,7 @@ oracle. New code is in `src/` (Phase 1 onward). Do not modify the Windows app.
 - Read the parity row and the v10 reference file before implementing.
 - Prefer copying/adapting v10 code over inventing a new shape; keep names 1:1 where practical.
 - Every implemented unit gets a test and an oracle reference. "It compiles" is not evidence.
-- Two blind reviews for every unit: diff only, "assume this is wrong". Reviewer never edits.
+- Two adversarial reviews for every unit: diff only, "assume this is wrong". Reviewer never edits.
 - If the same failure happens twice, fix the generator (analyzer, template, standing rule),
   not the artifact.
 - If a workaround needs a paragraph to justify, the code is wrong. Fix the code.

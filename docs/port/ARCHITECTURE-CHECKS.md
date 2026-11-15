@@ -168,7 +168,7 @@ failed, 0 skipped** (the original 76 plus 27 new cases). Two actual narrow negat
 builds were also run and reverted: an untracked public class failed with RS0016;
 changing Id to string **and updating the text API declaration to match** failed with
 CP0002/CP0006. Proof logs are retained as task evidence, not repository paths.
-Independent blind reviews and CI acceptance remain the merge authority's gates.
+Two adversarial agent reviews and CI acceptance remain the unit's acceptance evidence.
 
 ### Review hardening
 
@@ -178,7 +178,7 @@ Both PublicAPI text files and the entire `api-baseline/` directory are now in
 checks every byte of the shipped declaration, not only member counts or arities.
 Changing source, declarations and binary baseline together cannot silently bypass
 the protected checksum. Changing the checksum itself requires the same
-`oracle-change` label and second reviewer as the other baseline files.
+`oracle-change` route through the protected-path gate as the other baseline files.
 `Same_arity_signature_or_enum_rename_cannot_silently_rebaseline` proves that both
 an object-to-string parameter change and a MetadataField rename are rejected;
 `API_surface_and_baseline_are_review_protected_and_code_owned` verifies the policy
@@ -204,7 +204,7 @@ Logs are `negative-same-arity-rebaseline.log` and `negative-transitive-platform.
 under the unit's proof directory. The refreshed `bootstrap.log` records the final
 nullable declaration and a successful guarded build, superseding its initial
 bootstrap diagnostics. This hardening changes protected policy, so the PR itself
-requires the `oracle-change` label and second-review approval before merge.
+requires the `oracle-change` label and the protected-path gate before merge.
 
 This follow-up ships as **p2-006-harden**, separately from the merged seed unit.
 `Binary_baseline_matches_the_review_protected_SHA` asserts the reference assembly's
@@ -319,8 +319,8 @@ also made `docs/port/02-ARCHITECTURE.md`, `docs/port/PORTING.md`,
 `docs/port/BenchmarkHarnessAllowlist.props` and the root `BannedSymbols*.txt`
 files protected paths in `plan-guards.yml` and `CODEOWNERS`, so a later change
 to the enforced table, exception allowlist or symbol vocabulary needs the
-`oracle-change` label and a second reviewer. This PR itself changes those files,
+`oracle-change` label and the protected-path gate. This PR itself changes those files,
 so it needs that label to pass the oracle gate.
 The architecture suite count is recorded in the p2-002 ledger shard alongside
-the clean build/test results. Two independent blind diff reviews remain required
+the clean build/test results. Two adversarial diff reviews remain required
 before this unit is accepted.

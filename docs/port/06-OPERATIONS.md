@@ -4,15 +4,18 @@
 
 | Role | Who | Owns |
 | --- | --- | --- |
-| Captain | Sean | Scope, ADRs, gate evidence, merge approval |
+| Captain (owner) | Sean | Scope, ADRs, gate evidence, merge decision |
 | First mate | Firstmate primary (OpenCode/Claude/Codex) | Intake, dispatch, supervision, escalation |
 | Implementer | Crewmate per worktree | One unit: code + tests + ledger |
-| Reviewer A/B | Two independent agents, diff only | "Assume this is wrong; enumerate how" |
+| Reviewer A/B | Two adversarial agents, diff only; a different model from the implementer is preferred, not required | "Assume this is wrong; enumerate how" |
 | Fixer | A separate crewmate | Apply review findings |
-| Oracle owner | Captain + a separate agent | Goldens, fixtures, formal models; never the implementer |
+| Oracle owner | Captain + a separate agent, ideally a different model; never the implementer | Goldens, fixtures, formal models |
 
 Roles never overlap. The implementer never reviews its own unit. The reviewer never edits the
-implementation. The oracle owner is not the person changing the implementation.
+implementation. The oracle owner is the Captain working with a separate agent that is not the
+implementer; that is agent role separation, not independent human approval. Review is
+adversarial agent assistance: the owner makes the merge decision, and no agent review is
+independent human approval (ADR-024).
 
 ## 2. Firstmate setup
 
@@ -206,12 +209,13 @@ not duplicated in the build workflow.
 | `windows-fixture-validation` / `fixture` | `windows-latest` | Existing fixture/tool-path filters or manual dispatch; validate regeneration, mutations, source preservation, and the committed fixture. |
 | `port-index` / `regenerate` | `ubuntu-latest` | Push to `main` only; validate history, regenerate aggregates, and commit them on `main` with no force-push. |
 
-Require `linux-build-and-test`, `inventory-and-parity`, and `formal` for every PR and
-merge-queue entry. Require the
-applicable Windows checks when their existing path filters select a PR; do not configure a
-path-filtered Windows workflow as an unconditional required check, since an untriggered
-workflow would stay pending. The aggregate writer is a post-merge check, not a PR check.
-These are required-check names for repository configuration; this document does not change
+Require exactly these five contexts on every PR and merge-queue entry: `inventory-and-parity`,
+`formal`, `linux-build-and-test`, `AppImage packaging smoke` and `Flatpak packaging smoke`,
+with a strict up-to-date branch and no required reviews. The `legacy-oracle`,
+`settings-library-oracle` and `windows-fixture-validation` jobs are path-filtered additional
+checks: they run when their paths change, so they are not required contexts (an untriggered
+workflow would stay pending). The aggregate writer is a post-merge check, not a PR check.
+These are the required-check names for repository configuration; this document does not change
 branch protection.
 
 `linux-ci.yml` installs the exact SDK version from `global.json` (currently `11.0.100`) with
@@ -297,11 +301,11 @@ discovered and run cannot be retired. Prior removal records are immutable, and `
 plus `replacement_executed` must be a string and a nonnegative integer. A recorded rename must
 carry the retired project's executed floor to the replacement. Test discovery for the run uses
 the same test-project filter as the base list. `tests/baseline.json`, the Linux, plan-guards,
-legacy-oracle, settings-library-oracle, windows-fixture-validation and port-index workflows,
-`.github/CODEOWNERS`, and `scripts/ci/`, `scripts/port/`, `scripts/formal/` are CODEOWNED and
-in the protected-path set, so changing the policy surface
-requires the `oracle-change` route and a second reviewer. The protected-path step itself is
-asserted to have no `continue-on-error` and to exit nonzero on a violation. An absent base
+legacy-oracle, settings-library-oracle, windows-fixture-validation, packaging and port-index
+workflows, `.github/CODEOWNERS`, `packaging/`, and `scripts/ci/`, `scripts/port/`, `scripts/formal/`
+are CODEOWNED and in the protected-path set, so changing the policy surface requires the
+declared `oracle-change` route through the protected-path gate. The protected-path step itself
+is asserted to have no `continue-on-error` and to exit nonzero on a violation. An absent base
 commit (a brand-new branch's first push) keeps the first-baseline addition path open.
 
 The Windows oracle remains independent, with its existing triggers and VSTest filters:
@@ -319,10 +323,11 @@ unfiltered triggers, and the Windows jobs retain their narrower oracle triggers.
 while p2-002 supplies real architecture cases. Do not replace `new: null` with a fabricated
 zero-test baseline. At Phase 2 exit, after every remaining empty project has real tests and the
 Linux CI run is green, the oracle owner records the new suite **per project under
-`tests/baseline.json`'s `new` object**, in a separate `oracle-change` PR with a second reviewer.
-Preserve the complete `legacy` object. Record executed cases, passed/failed cases, zero skips,
-the CI run URL/commit and capture time; coverage is informational and may remain null until
-measured. Count cases from result XML, never from source attributes or legacy counts.
+`tests/baseline.json`'s `new` object**, in a separate `oracle-change` PR through the
+protected-path gate. Preserve the complete `legacy` object. Record executed cases,
+passed/failed cases, zero skips, the CI run URL/commit and capture time; coverage is
+informational and may remain null until measured. Count cases from result XML, never from
+source attributes or legacy counts.
 
 On the exit candidate, the parent runs the same locked restore and Release build as CI, then
 produces the JUnit evidence required by verification §4.1 with the pinned xUnit native runner:
@@ -381,13 +386,21 @@ For every unit:
 2. **Reviewer A** gets only the diff, the unit's parity row, and the relevant oracle artifacts.
    Prompt: "Assume this code is wrong. Compare it to the v10 reference and the contract.
    Enumerate behavioural differences, omissions, and lifetime/ordering bugs, file:line."
-3. **Reviewer B** gets the same, with a different model. It must independently enumerate; do
-   not show A's findings.
+3. **Reviewer B** gets the same, ideally with a different model from A. It must enumerate
+   separately; do not show A's findings. If the same model or provider has to review twice,
+   record the correlation in the findings.
 4. **Fixer** applies accepted findings. It does not add scope.
 5. Re-run both reviewers on the updated diff until clean or until a finding is explicitly
    escalated to the captain.
 6. Parent runs CI. A red CI is not a review finding; it is a gate.
-7. Parent merges (captain approval for v1) and tears down the worktree.
+7. Parent merges under the owner's merge decision and tears down the worktree.
+
+Both reviews are adversarial agent assistance, not independent human approval: this repository
+has one human owner, who reads the findings and decides the merge (ADR-024). Branch protection
+requires the pull request, the five required checks (`inventory-and-parity`, `formal`,
+`linux-build-and-test`, `AppImage packaging smoke`, `Flatpak packaging smoke`) and an up-to-date
+branch; it has no approval requirement, and CODEOWNERS is audit metadata rather than an
+approval gate. The path-filtered oracle jobs run in addition when their paths change.
 
 Reviewer prompt skeleton:
 

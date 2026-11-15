@@ -147,5 +147,5 @@ the two tested sizes. It does **not** prove v10 visual/behaviour parity, a real
 X11/Wayland desktop, AT-SPI/screen-reader accessibility, production virtualization or
 large-library performance, keyboard/pointer end-to-end interaction, localization, other
 scalings/window sizes, product integration or a finished user-theme format. This is
-evidence for a shape, not integration or an acceptance gate. Two independent reviews of
+evidence for a shape, not integration or an acceptance gate. Two adversarial agent reviews of
 the initial head were supplied by firstmate; the follow-up changes require parent review.

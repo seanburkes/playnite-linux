@@ -1,9 +1,9 @@
-# p1-009 Steam corpus proposal (corrected) — protected-path approval required before writes
+# p1-009 Steam corpus proposal (corrected) — oracle-change required before writes
 
 No protected path has been written. This revision corrects the corpus after the two
-independent reviews of PR #14. The corrected corpus is staged outside the checkout in the task
-data directory under `p1-009-corpus/proposal/tests/fixtures/steam/real/`; it is not in this
-repository. Worktree branch: `fm/p1-009-corpus`. Spec: `docs/port/08-STEAM-SPEC.md`.
+adversarial agent reviews of PR #14. The corrected corpus is staged outside the checkout in
+the task data directory under `p1-009-corpus/proposal/tests/fixtures/steam/real/`; it is not in
+this repository. Worktree branch: `fm/p1-009-corpus`. Spec: `docs/port/08-STEAM-SPEC.md`.
 
 This document is the only repository change. The corpus files are **not** in this PR; they are
 proposed destinations for a later, separately approved change. The merged spec is unchanged;
@@ -22,10 +22,10 @@ see "Why the spec is unchanged".
 | P3: over-stated "strict KeyValues parser parsed every file" | Validation now says exactly what parsed each type: KeyValues text for the six VDF/ACF files, JSON for the JSON file, emptiness for the placeholder, and hash verification for `SHA256SUMS`. |
 | P3: padded maps / minimality | The payloads are unmodified real captures except for redaction; trimming would make them hand-edited and weaken provenance. Justification is recorded under "Minimality". |
 
-## Requested independent second-reviewer approval
+## Requested oracle-change approval
 
-Add exactly these new files under the protected `tests/fixtures/` root (an `oracle-change` label
-and a second reviewer are required):
+Add exactly these new files under the protected `tests/fixtures/` root (the `oracle-change`
+label and the protected-path gate are required):
 
 | # | Proposed destination | SHA-256 | Reason it is needed |
 | --- | --- | --- | --- |
@@ -257,8 +257,8 @@ labelled as synthetic.
 
 ## Open questions for the reviewer
 
-1. Approve the eleven exact destination paths above, with the `oracle-change` label and a second
-   reviewer, so a separate change can copy them into `tests/fixtures/steam/real/`.
+1. Approve the eleven exact destination paths above through the `oracle-change` route and the
+   protected-path gate, so a separate change can copy them into `tests/fixtures/steam/real/`.
 2. Confirm the corpus location (`tests/fixtures/steam/real/`) and the `/home/test` substitution
    convention, or direct a different one.
 3. Confirm that a real Proton-title launch and a real Flatpak-hosted launch remain Phase 2
