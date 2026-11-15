@@ -1,2 +1,2 @@
 id	wave	area	unit	depends	status	owner	oracle	test	notes
-p2-004	W2	scaffold	Empty Avalonia app + CLI smoke	p2-001	todo	ui	-	smoke	Xvfb/headless
+p2-004	W2	scaffold	Empty Avalonia app + CLI smoke	p2-001	in-progress	fm/p2-004	legacy/source/Playnite.DesktopApp/App.xaml.cs; docs/port/02-ARCHITECTURE.md; docs/port/05-DEPENDENCIES.md	Playnite.Smoke.Tests (4 cases); native Xvfb CI smoke	Real desktop lifecycle with Fluent base theme; headless opens/closes and CLI version pass; architecture 43 pass; Release zero warnings; native Xvfb CI smoke passes (local Xvfb unavailable); content-set history gate passes after parent model fix; two blind reviews pending

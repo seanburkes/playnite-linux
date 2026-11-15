@@ -14,5 +14,6 @@
   <Folder Name="/tests/">
     <Project Path="tests/Playnite.Core.Tests/Playnite.Core.Tests.csproj" />
     <Project Path="tests/Playnite.Architecture.Tests/Playnite.Architecture.Tests.csproj" />
+    <Project Path="tests/Playnite.Smoke.Tests/Playnite.Smoke.Tests.csproj" />
   </Folder>
 </Solution>
