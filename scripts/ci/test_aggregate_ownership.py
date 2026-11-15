@@ -13,7 +13,7 @@ PORT_TOOL = ROOT / "scripts" / "port" / "build_port_index.py"
 
 
 def base_port_tool():
-    """The tool version committed on main, before this PR's tolerance."""
+    """The tool version committed on origin/main (the live base tool)."""
     result = subprocess.run(
         ["git", "-C", str(ROOT), "show",
          "origin/main:scripts/port/build_port_index.py"],
@@ -387,18 +387,18 @@ class AggregateOwnershipTests(unittest.TestCase):
                               repo, values["sha"], values["recorded"])
             self.assertEqual(0, result.returncode, result.stdout + result.stderr)
 
-    def test_pre_merge_recorded_base_content_step_is_charged(self):
+    def test_recorded_base_content_step_passes_after_merge(self):
+        # Post-merge reality: the base-materialised tool now understands
+        # RECORDED_BASE. A real aggregate edit is still covered by the negative
+        # tests below and by test_aggregate_edited_in_merge_commit_whole_chain_fails.
         with tempfile.TemporaryDirectory() as temporary:
             repo = Path(temporary)
             base, recorded = recorded_repo(repo)
             result = run_step(run_block(PLAN_GUARDS, "Port aggregates are generated on main"),
                               repo, base, recorded)
-            self.assertEqual(1, result.returncode)
-            self.assertIn("changed: docs/port/queue.tsv", result.stderr)
+            self.assertEqual(0, result.returncode, result.stdout + result.stderr)
 
-    def test_post_merge_only_recorded_base_tolerance_head_tool_passes(self):
-        # Post-merge expectation: once this lands, the base tool carries the
-        # tolerance. Pre-merge the base-materialised tool charges this tree.
+    def test_recorded_base_tolerance_head_tool_passes(self):
         with tempfile.TemporaryDirectory() as temporary:
             repo = Path(temporary)
             base, recorded = recorded_repo(repo)
