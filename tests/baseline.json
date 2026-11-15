@@ -23,9 +23,9 @@
       "skipped": 0
     },
     "Playnite.Core.Tests": {
-      "total": 316,
-      "executed": 316,
-      "passed": 316,
+      "total": 412,
+      "executed": 412,
+      "passed": 412,
       "failed": 0,
       "skipped": 0
     },
@@ -66,5 +66,12 @@
     "run_url": "https://github.com/seanburkes/playnite-linux/actions/runs/43768687792",
     "head": "41d4619",
     "notes": "Provenance correction for the record above, added by p3-003c without editing or deleting the merged union_capture entry. The actual #68 linux-ci run is 43768687792 on head 41d4619: Playnite.Core.Tests 316 executed / 316 passed / 0 failed / 0 skipped, Playnite.Architecture.Tests 144 executed / 144 passed / 0 failed / 0 skipped, Playnite.Smoke.Tests 4 executed / 4 passed / 0 failed / 0 skipped. This record supersedes the local-fm-p3-001c-union run id in union_capture as the citation for the 316 floor; the recorded counts themselves are unchanged and no floor was lowered."
+  },
+  "p3_003c_capture": {
+    "captured_at": "2026-11-15T22:34:09Z",
+    "run_id": 43769779701,
+    "run_url": "https://github.com/seanburkes/playnite-linux/actions/runs/43769779701",
+    "commit": "cb5c7bbbab02567e040b5de1fb655b7482a6d6bc",
+    "notes": "linux-ci run 43769779701 on PR #69 head cb5c7bb, parsed from its linux-test-results JUnit artifacts: Playnite.Core.Tests 412 executed / 412 passed / 0 failed / 0 skipped, MTP exit 0; Playnite.Architecture.Tests 144 executed / 144 passed / 0 failed / 0 skipped, MTP exit 0 (recorded floor 103); Playnite.Smoke.Tests 4 executed / 4 passed / 0 failed / 0 skipped, MTP exit 0. The 412 count is the union the p3-003c serialisation unit adds on top of the recorded 316 floor (316 + 89 serialisation cases + 3 bounded-fuzz cases + 4 v10-golden cases). empty_projects remains unchanged and no recorded floor was lowered. union_capture_correction above supplies the corrected #68 run citation; the merged union_capture record is retained unedited."
   }
 }
