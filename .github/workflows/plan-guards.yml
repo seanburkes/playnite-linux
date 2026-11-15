@@ -20,10 +20,7 @@ env:
     src/Playnite.SDK.Abstractions/PublicAPI.Unshipped.txt
     src/Playnite.SDK.Abstractions/api-baseline
     tools/LegacyOracle tools/V10LibraryFixture
-    .github/workflows/linux-ci.yml .github/workflows/plan-guards.yml
-    .github/workflows/legacy-oracle.yml .github/workflows/settings-library-oracle.yml
-    .github/workflows/windows-fixture-validation.yml .github/workflows/port-index.yml
-    .github/workflows/packaging.yml packaging
+    .github/workflows packaging
     .github/CODEOWNERS scripts/ci scripts/port scripts/formal
 
 jobs:
