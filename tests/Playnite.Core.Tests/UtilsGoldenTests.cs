@@ -45,7 +45,7 @@ public sealed class UtilsGoldenTests
     private static string? Run(JsonElement c)
     {
         var a = c.GetProperty("args").EnumerateArray().Select(value => value.GetString()).ToArray();
-        var culture = CultureInfo.GetCultureInfo(c.GetProperty("culture").GetString()!);
+        var culture = MakeCulture(c.GetProperty("culture").GetString()!);
         switch (c.GetProperty("op").GetString())
         {
             case "md5": return StringExtensions.MD5(a[0]!);
@@ -78,6 +78,20 @@ public sealed class UtilsGoldenTests
                 return parsed?.ToString("O", CultureInfo.InvariantCulture) ?? "empty";
             default: throw new ArgumentException(c.GetProperty("op").GetString());
         }
+    }
+
+    // Match the oracle's culture construction without depending on an ICU build's choice of
+    // default calendar for ar-SA.
+    private static CultureInfo MakeCulture(string name)
+    {
+        if (name == "ar-SA-umalqura")
+        {
+            var culture = (CultureInfo)CultureInfo.GetCultureInfo("ar-SA").Clone();
+            culture.DateTimeFormat.Calendar = new UmAlQuraCalendar();
+            return culture;
+        }
+
+        return CultureInfo.GetCultureInfo(name);
     }
 
     private static string Localize(string key) => key switch

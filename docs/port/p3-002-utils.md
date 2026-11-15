@@ -86,7 +86,11 @@ into the oracle.
 * Dates: en-US/fr-FR/tr-TR, null/empty/whitespace, exact-width parsing, leap days,
   malformed/overflow dates, min/max years, unspecified `Kind`, invariant English month
   parsing even under French display, relative 0/1/2/6/7-day and future boundaries,
-  invalid format exceptions and out-of-calendar `"unsupported"` fallback.
+  invalid format exceptions and out-of-calendar `"unsupported"` fallback. The fallback case
+  assigns `UmAlQuraCalendar` explicitly: an ICU build may otherwise give ar-SA a Gregorian
+  default and format year 1 successfully, while v10 on Windows NLS throws
+  `ArgumentOutOfRangeException` and returns `"unsupported"`. The explicit calendar pins the
+  real v10 behaviour on every host.
 * Playtime: null/zero, 59/60, 3599/3600, 86399/86400, optional days, truncation of
   seconds, explicit numeric cultures, and `ulong.MaxValue` without TimeSpan overflow.
 * Enum descriptions: named/unnamed numbers, named and unnamed flag combinations,

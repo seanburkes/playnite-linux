@@ -84,7 +84,9 @@ def cases():
             add("date", f"2024-05-{day:02}T12:30:00", "2024-05-15", None, "true", culture=culture)
         for fmt in [None, "", "D", "yyyy-MM-dd", "%", "Q"]:
             add("date", "2024-05-15", "2024-05-15", fmt, "false", culture=culture)
-    add("date", "0001-01-01", "2024-05-15", "d", "false", culture="ar-SA")
+    # The explicit UmAlQura calendar keeps the out-of-calendar fallback stable across ICU
+    # versions; the ambient ar-SA default calendar differs between ICU builds.
+    add("date", "0001-01-01", "2024-05-15", "d", "false", culture="ar-SA-umalqura")
     for culture in ["en-US", "fr-FR"]:
         for value in [None, "0", "1", "59", "60", "3599", "3600", "86399", "86400", "90061", "18446744073709551615"]:
             for days in ["false", "true"]:
@@ -127,11 +129,23 @@ public sealed class FixedTime : Playnite.DateTimes.IDateTimes { public DateTime 
 public sealed class Case { public string op {get;set;} public string[] args {get;set;} public string culture {get;set;} public string expected {get;set;} }
 public static class Program
 {
+    // Pin the out-of-calendar fallback independently of which default calendar an ICU build
+    // assigns to ar-SA; the legacy body reads only the supplied culture.
+    public static CultureInfo MakeCulture(string name)
+    {
+        if (name == "ar-SA-umalqura")
+        {
+            var culture = (CultureInfo)CultureInfo.GetCultureInfo("ar-SA").Clone();
+            culture.DateTimeFormat.Calendar = new UmAlQuraCalendar();
+            return culture;
+        }
+        return CultureInfo.GetCultureInfo(name);
+    }
     public static void Main(string[] args)
     {
         var cases = JsonSerializer.Deserialize<List<Case>>(System.IO.File.ReadAllText(args[0]));
         foreach(var item in cases) {
-            CultureInfo.CurrentCulture = CultureInfo.GetCultureInfo(item.culture);
+            CultureInfo.CurrentCulture = MakeCulture(item.culture);
             try { item.expected = Run(item); } catch(Exception e) { item.expected = "!" + e.GetType().Name; }
         }
         System.IO.File.WriteAllText(args[1], JsonSerializer.Serialize(cases, new JsonSerializerOptions {WriteIndented=true}));

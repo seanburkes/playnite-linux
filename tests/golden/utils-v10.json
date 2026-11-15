@@ -1971,8 +1971,8 @@
         "d",
         "false"
       ],
-      "culture": "ar-SA",
-      "expected": "1‏‏/1‏‏/0001"
+      "culture": "ar-SA-umalqura",
+      "expected": "unsupported"
     },
     {
       "op": "playtime",
