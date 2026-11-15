@@ -9,4 +9,6 @@ docs/port/surface-parity.tsv @seanburkes
 tools/LegacyOracle/        @seanburkes
 tools/V10LibraryFixture/   @seanburkes
 .github/workflows/linux-ci.yml @seanburkes
+.github/workflows/plan-guards.yml @seanburkes
+.github/CODEOWNERS         @seanburkes
 scripts/ci/                @seanburkes
