@@ -1,0 +1,2 @@
+timestamp	unit	from	to	actor	evidence
+2026-11-15T01:52:00Z	p0-004	todo	done	fm/p2-status	docs/port/07-FIRSTMATE.md records the project registered direct-PR and docs/port/PORT-STATUS.md records registration after origin was set; the registry entry itself is local firstmate state outside the repository

@@ -1,0 +1,2 @@
+timestamp	unit	from	to	actor	evidence
+2026-11-15T01:52:00Z	p0-003	todo	done	fm/p2-status	public repo exists at https://github.com/seanburkes/playnite-linux and is configured as origin; docs/port/PORT-STATUS.md records the URL and the repository has a populated main history

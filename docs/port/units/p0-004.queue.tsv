@@ -1,2 +1,2 @@
 id	wave	area	unit	depends	status	owner	oracle	test	notes
-p0-004	W0	repo	Firstmate project registration	p0-003	todo	captain	-	-	local-only until origin
+p0-004	W0	repo	Firstmate project registration	p0-003	done	captain	-	-	project registered direct-PR after origin was set; recorded in docs/port/07-FIRSTMATE.md and docs/port/PORT-STATUS.md (the registry itself is local firstmate state)

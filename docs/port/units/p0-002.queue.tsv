@@ -1,2 +1,2 @@
 id	wave	area	unit	depends	status	owner	oracle	test	notes
-p0-002	W0	plan	Plan review	-	todo	captain	-	-	gate to Phase 1
+p0-002	W0	plan	Plan review	-	done	captain	-	-	plan review completed; findings incorporated (Steam greenfield, v10-constrained oracle harness, Playnite.Deps SHA-256 pin, separate LiteDB importer, WebView v1.1, SDK split, executed-case ratchet, guarded oracle paths); evidenced in docs/port/PORT-STATUS.md, 00-DECISIONS.md and the closed p1 rows

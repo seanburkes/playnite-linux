@@ -1,2 +1,2 @@
 id	wave	area	unit	depends	status	owner	oracle	test	notes
-p0-003	W0	repo	Create public repo + first commit	p0-002	todo	captain	-	-	seanburkes/playnite-linux
+p0-003	W0	repo	Create public repo + first commit	p0-002	done	captain	-	-	public repo https://github.com/seanburkes/playnite-linux exists and is the origin; main is populated and PORT-STATUS.md records the URL

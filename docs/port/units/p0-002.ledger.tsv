@@ -1,0 +1,2 @@
+timestamp	unit	from	to	actor	evidence
+2026-11-15T01:52:00Z	p0-002	todo	done	fm/p2-status	plan review completed and findings incorporated: docs/port/PORT-STATUS.md records the independent review and its findings, docs/port/00-DECISIONS.md carries the resulting ADRs, and every Phase 1 unit that depends on this gate is closed
