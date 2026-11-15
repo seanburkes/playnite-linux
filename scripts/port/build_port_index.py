@@ -46,6 +46,8 @@ from __future__ import annotations
 
 import argparse
 import difflib
+import hashlib
+from functools import lru_cache
 import os
 import re
 import subprocess
@@ -60,6 +62,74 @@ ROOT = Path(__file__).resolve().parents[2]
 UNITS = ROOT / "docs" / "port" / "units"
 QUEUE = ROOT / "docs" / "port" / "queue.tsv"
 LEDGER = ROOT / "docs" / "port" / "ledger.tsv"
+
+# Conventional machine-local roots. Changes are protected policy changes.
+LOCAL_ABSOLUTE_ROOTS = (
+    "home", "Users", "root", "opt", "var", "mnt", "tmp", "srv",
+    "media", "Volumes", "private", "run", "usr", "etc", "bin", "sbin",
+    "lib", "lib64", "dev", "proc", "sys",
+)
+LOCAL_PATH = re.compile(
+    r"(?<![\w])/(?:" + "|".join(map(re.escape, LOCAL_ABSOLUTE_ROOTS)) + r")(?:/|\b)|"
+    r"(?<![\w])\$(?:HOME\b|\{HOME\})|(?<![\w])~[\\/]|"
+    r"(?<![\w])[A-Za-z]:[\\/](?:Users|Home|Documents and Settings)(?:[\\/]|\b)|"
+    r"firstmate[\\/](?:data|state)(?:[\\/]|\b)|\.treehouse(?:[\\/]|\b)",
+    re.IGNORECASE,
+)
+REMOTE_URL = re.compile(r"\b(?:https?|ftp|ssh)://[^\s<>`\"']+", re.IGNORECASE)
+# Fixed, not the event base or HEAD; see docs/port/LOCAL-PATH-EXCEPTIONS.md.
+PRE_GUARD_COMMIT = "0b02bf9ff395a91b3524545074f53abe403effc2"
+
+
+@lru_cache(maxsize=None)
+def local_path_allowance(label: str) -> Counter:
+    # Fail closed if the pinned baseline is unavailable (requires full history).
+    _git(ROOT, "cat-file", "-e", f"{PRE_GUARD_COMMIT}^{{commit}}")
+    blob = _git_bytes(ROOT, "show", f"{PRE_GUARD_COMMIT}:{label}")
+    if blob is None:
+        return Counter()
+    return Counter(hashlib.sha256(line.encode("utf-8")).hexdigest()
+                   for line in blob.decode("utf-8").splitlines()
+                   if LOCAL_PATH.search(REMOTE_URL.sub("", line)))
+
+
+def local_path_errors(text: str, label: str) -> list[str]:
+    """Reject paths not present in the exact file/line multiset at the fixed baseline."""
+    allowed = None
+    errors = []
+    for lineno, line in enumerate(text.splitlines(), start=1):
+        if not LOCAL_PATH.search(REMOTE_URL.sub("", line)):
+            continue
+        if allowed is None:
+            allowed = local_path_allowance(label).copy()
+        digest = hashlib.sha256(line.encode("utf-8")).hexdigest()
+        if allowed[digest] > 0:
+            allowed[digest] -= 1
+        else:
+            errors.append(f"{label}:{lineno}: absolute local path in row; "
+                          "use a repository-relative reference")
+    return errors
+
+
+def document_path_errors(root: Path) -> list[str]:
+    """Scan documentation, including staged/new files, without inspecting oracle data."""
+    paths = list((root / "docs").rglob("*"))
+    paths.extend(path for path in root.iterdir() if path.suffix.lower() == ".md")
+    for name in ("spikes", "tests", "tools", "packaging", "src"):
+        paths.extend(path for path in (root / name).rglob("*")
+                     if path.suffix.lower() == ".md")
+    errors = []
+    for path in sorted(paths):
+        if not path.is_file() or path.suffix.lower() not in {".md", ".tsv", ".txt", ".rst", ".adoc"}:
+            continue
+        label = path.relative_to(root).as_posix()
+        try:
+            text = path.read_bytes().decode("utf-8")
+        except (OSError, UnicodeDecodeError) as exc:
+            errors.append(f"{label}: cannot read documentation: {exc}")
+            continue
+        errors.extend(local_path_errors(text, label))
+    return errors
 
 QUEUE_COLUMNS = [
     "id", "wave", "area", "unit", "depends",
@@ -163,6 +233,9 @@ def _parse_shard_bytes(
     except UnicodeDecodeError as exc:
         raise PortIndexError(f"{label}: invalid UTF-8: {exc}") from exc
     lines = text.splitlines()
+    path_errors = local_path_errors(text, "docs/port/units/" + Path(label).name)
+    if path_errors:
+        raise PortIndexError("\n".join(path_errors))
     if not lines:
         raise PortIndexError(f"{label}: empty shard")
     if lines[0] != header:
@@ -1119,6 +1192,9 @@ def main(
     args = parser.parse_args(argv)
 
     try:
+        path_errors = document_path_errors(root)
+        if path_errors:
+            raise PortIndexError("\n".join(path_errors))
         index = build_index(units)
         queue_bytes, ledger_bytes = render_index(index)
     except PortIndexError as exc:

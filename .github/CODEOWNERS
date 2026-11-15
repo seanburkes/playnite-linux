@@ -26,4 +26,5 @@ packaging/                 @seanburkes
 .github/CODEOWNERS         @seanburkes
 scripts/ci/                @seanburkes
 scripts/port/              @seanburkes
+docs/port/LOCAL-PATH-EXCEPTIONS.md @seanburkes
 scripts/formal/            @seanburkes
