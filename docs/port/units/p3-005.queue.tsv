@@ -1,2 +1,2 @@
 id	wave	area	unit	depends	status	owner	oracle	test	notes
-p3-005	W3	leaves	Manifest parsing	p3-003	todo	core	golden:manifests	test:manifests	YamlDotNet 18
+p3-005	W3	leaves	Manifest parsing	p3-003	in-progress	fm/p3-005	fixtures:manifests-v10	test:ManifestTests	Extension/theme/addon/update and emulation metadata shapes; explicit errors and v10 unknown-field ignore rule; Core 475/0 skipped and architecture 144/0 skipped locally; acceptance pending PR CI and two independent reviews; docs/port/p3-005-manifests.md

@@ -1,0 +1,62 @@
+{
+  "library.yaml": {
+    "source": "legacy/source/Tests/TestGameLibrary/extension.yaml",
+    "sha256": "e0f8e26ddc701809007fc6356d580a4d139dee652189d2bef2610770660d858b",
+    "derivation": "byte copy"
+  },
+  "metadata.yaml": {
+    "source": "legacy/source/Tests/TestMetadataPlugin/extension.yaml",
+    "sha256": "4053d4d71ac79231b6cd211ac831150ec6810329ec077061c3372ec2de11b493",
+    "derivation": "byte copy"
+  },
+  "generic.yaml": {
+    "source": "legacy/source/Tests/TestPlugin/extension.yaml",
+    "sha256": "de22b7a03f6461958695981604b7ef37dd6e85baed9e7d39985014e1561bc349",
+    "derivation": "byte copy"
+  },
+  "desktop.yaml": {
+    "source": "legacy/source/Playnite.DesktopApp/Themes/Desktop/Default/theme.yaml",
+    "sha256": "28b76150ca4ce007a79bfc40d1806ae3f8a9386262756cc4eec99c54f47a71a9",
+    "derivation": "byte copy"
+  },
+  "fullscreen.yaml": {
+    "source": "legacy/source/Playnite.FullscreenApp/Themes/Fullscreen/Default/theme.yaml",
+    "sha256": "6867a3ef5b0144b22ca232f245bd942efea91042a1c99256f8673cfd3332b5c6",
+    "derivation": "byte copy"
+  },
+  "emulator.yaml": {
+    "source": "legacy/source/Playnite/Emulation/Emulators/Dolphin/emulator.yaml",
+    "sha256": "1145210e6de5edef8b4922285ef564f1c9cdd1e92749bc1449473d8f8707f5b9",
+    "derivation": "byte copy"
+  },
+  "platforms.yaml": {
+    "source": "legacy/source/Playnite/Emulation/Platforms.yaml",
+    "sha256": "4650d6589bb250a4f5244af458aad1c8c19e43f1de0016ba6e0916f67c675838",
+    "derivation": "byte copy"
+  },
+  "regions.yaml": {
+    "source": "legacy/source/Playnite/Emulation/Regions.yaml",
+    "sha256": "a62c3bf36b22f45d05b2ebcc5ab9ffef94cf88a9433ca60d526294367aff950d",
+    "derivation": "byte copy"
+  },
+  "addon.json": {
+    "source": "legacy/source/Playnite/Manifests/AddonManifestBase.cs",
+    "sha256": "3c5d7fcd30f22e34dba6be1b5298ee05d1f18650db30ff1a99f96db67391398d",
+    "derivation": "synthetic values for declared wire members; installer versions from legacy/source/Tests/Playnite.Tests/Manifests/AddonManifestTests.cs:20-32; not captured service output"
+  },
+  "installer.json": {
+    "source": "legacy/source/Playnite/Manifests/AddonManifestBase.cs",
+    "sha256": "af732e9d154f7bd027a1ab47c23c1c47eca35d076cc673b6133a028b154d99f7",
+    "derivation": "synthetic values for declared wire members; installer versions from legacy/source/Tests/Playnite.Tests/Manifests/AddonManifestTests.cs:20-32; not captured service output"
+  },
+  "update.json": {
+    "source": "legacy/source/Playnite/App/UpdateManifest.cs",
+    "sha256": "753f2ad687a0d1118b7b2bbcb6e83c396aa8cdea4c7077d0d048e4b20c6f2f02",
+    "derivation": "synthetic values for declared wire members; installer versions from legacy/source/Tests/Playnite.Tests/Manifests/AddonManifestTests.cs:20-32; not captured service output"
+  },
+  "release-note.json": {
+    "source": "legacy/source/Playnite/App/UpdateManifest.cs",
+    "sha256": "172fe50a6754f86a6afd271fa06cf96ee57894712c8f1637a4317227d8c26e7a",
+    "derivation": "synthetic values for declared wire members; installer versions from legacy/source/Tests/Playnite.Tests/Manifests/AddonManifestTests.cs:20-32; not captured service output"
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "AddonId": "test-addon",
+  "Type": 0,
+  "Name": "日本語 🎮 \"quoted\"\\path\nnext",
+  "Author": "Test",
+  "IconUrl": "https://example.invalid/icon.png",
+  "InstallerManifestUrl": "https://example.invalid/installer.yaml",
+  "ShortDescription": "short",
+  "Description": "long",
+  "SourceUrl": "https://example.invalid/source",
+  "CommunityNote": "note",
+  "Tags": [
+    "one"
+  ],
+  "Links": {
+    "site": "https://example.invalid"
+  },
+  "Screenshots": [
+    {
+      "Thumbnail": "thumb",
+      "Image": "image"
+    }
+  ],
+  "UserAgreement": {
+    "Updated": "2020-01-02T03:04:05Z",
+    "AgreementUrl": "https://example.invalid/license"
+  }
+}

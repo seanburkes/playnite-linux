@@ -1,0 +1,2 @@
+timestamp	unit	from	to	actor	evidence
+2026-11-15T23:07:00Z	p3-005	todo	in-progress	fm/p3-005	Ported legacy manifest wire shapes and explicit parser validation; additive provenance-pinned fixtures authorized with oracle-change; Core 475 passed/0 skipped versus floor 412 (linux-ci 43769779701); architecture 144 passed/0 skipped; narrow Core build 0 warnings/0 errors; docs/port/p3-005-manifests.md; PR CI and two independent reviews required before merge

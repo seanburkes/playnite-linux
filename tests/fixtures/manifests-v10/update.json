@@ -1,0 +1,14 @@
+{
+  "Version": "10.64",
+  "SdkVersion": "6.0",
+  "FullscreenThemeVersion": "1.0",
+  "DesktopThemeVersion": "1.0",
+  "Sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "PackageUrls": [
+    "https://example.invalid/日本語.zip"
+  ],
+  "VersionHistory": [
+    "10.63",
+    "10.64"
+  ]
+}
