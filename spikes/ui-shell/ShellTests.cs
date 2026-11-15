@@ -29,6 +29,54 @@ public sealed class ShellTests
     });
 
     [Fact]
+    public Task Rendered_library_tree_matches_committed_semantic_baseline() => Run(window =>
+    {
+        var tree = SemanticTree.Capture(window);
+        File.WriteAllText(Path.Combine(Evidence.Value, "library-1200.semantic.json"),
+            JsonSerializer.Serialize(tree, SemanticTree.Json) + "\n");
+        var nodes = SemanticTree.Flatten(tree).ToArray();
+        Assert.NotEmpty(tree.Children);
+        Assert.Equal(6, nodes.Count(node => node.Type == nameof(ListBoxItem)));
+        Assert.Single(nodes, node => node.Name == "Details");
+        var baseline = JsonSerializer.Deserialize<SemanticNode>(File.ReadAllText(
+            Path.Combine(AppContext.BaseDirectory, "Baselines", "library-1200.semantic.json")))!;
+        SemanticTree.AssertMatches(baseline, tree);
+    });
+
+    [Fact]
+    public Task Semantic_comparison_rejects_structural_drift_and_only_tolerates_one_pixel() => Run(window =>
+    {
+        var tree = SemanticTree.Capture(window);
+        SemanticTree.AssertMatches(tree, tree);
+        SemanticNode Change(SemanticNode node, string name, Func<SemanticNode, SemanticNode> change) =>
+            node.Name == name ? change(node) : node with
+            {
+                Children = node.Children.Select(child => Change(child, name, change)).ToArray()
+            };
+        var drifts = new[]
+        {
+            Change(tree, "Games", node => node with { Children = node.Children.Skip(1).ToArray() }),
+            Change(tree, "Search", node => node with { Name = "Renamed" }),
+            Change(tree, "Search", node => node with { AutomationName = "Renamed search" }),
+            Change(tree, "Search", node => node with { Type = "Button" }),
+            tree with { Children = tree.Children.Where(node => node.Name != "Details").ToArray() },
+            Change(tree, "DetailsTitle", node => node with { Text = "Wrong title" }),
+            Change(tree, "Installed", node => node with { Value = "True" }),
+            Change(tree, "Search", node => node with { Enabled = false }),
+            Change(tree, "Details", node => node with { Visible = false })
+        };
+        foreach (var drift in drifts)
+            Assert.ThrowsAny<Xunit.Sdk.XunitException>(() => SemanticTree.AssertMatches(tree, drift));
+        SemanticNode Shift(double delta) => tree with
+        {
+            Bounds = tree.Bounds.Select(value => value + delta).ToArray()
+        };
+        SemanticTree.AssertMatches(tree, Shift(SemanticTree.BoundsTolerance));
+        Assert.ThrowsAny<Xunit.Sdk.XunitException>(() =>
+            SemanticTree.AssertMatches(tree, Shift(SemanticTree.BoundsTolerance + 0.001)));
+    });
+
+    [Fact]
     public Task Grid_binds_every_fake_cover_title_playtime_and_last_played() => Run(window =>
     {
         var grid = window.FindControl<ListBox>("Games")!;

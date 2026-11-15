@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Compare three PNGs within each of two processes, then the first PNG across processes."""
+"""Compare PNG captures and rendered semantic trees across two separate processes."""
 
 import argparse
 import hashlib
@@ -34,8 +34,8 @@ def main():
         print(result.stdout, end="", flush=True)
         result.check_returncode()
         summary = re.search(r"Total:\s*(\d+), Errors:\s*(\d+), Failed:\s*(\d+), Skipped:\s*(\d+), Not Run:\s*(\d+)", result.stdout)
-        if summary is None or int(summary[1]) < 6 or any(int(value) for value in summary.groups()[1:]):
-            raise RuntimeError(f"{name}: expected at least six tests with zero errors/failures/skips/not-run")
+        if summary is None or int(summary[1]) < 8 or any(int(value) for value in summary.groups()[1:]):
+            raise RuntimeError(f"{name}: expected at least eight tests with zero errors/failures/skips/not-run")
         metadata = json.loads((run / "render.json").read_text())
         captures = [(run / f"render-{index}.png").read_bytes() for index in (1, 2, 3)]
         digest = hashlib.sha256(captures[0]).hexdigest()
@@ -43,14 +43,18 @@ def main():
             raise RuntimeError(f"{name}: within-process PNG bytes differ")
         if metadata["sha256"].lower() != digest:
             raise RuntimeError(f"{name}: metadata SHA-256 does not match PNG bytes")
+        tree = (run / "library-1200.semantic.json").read_bytes()
         results.append({"directory": name, "sha256": digest, "pngBytes": len(captures[0]),
+                        "treeSha256": hashlib.sha256(tree).hexdigest(),
                         "passed": int(summary[1]), "skipped": 0})
     first = evidence / "process-1/render-1.png"
     second = evidence / "process-2/render-1.png"
     # Equality within each triple plus this cross-process pair proves all six equal.
     if first.read_bytes() != second.read_bytes():
         raise RuntimeError(f"Cross-process PNG bytes differ: {results}")
-    report = {"separateProcesses": 2, "byteIdentical": True, "runs": results}
+    if (evidence / "process-1/library-1200.semantic.json").read_bytes() != (evidence / "process-2/library-1200.semantic.json").read_bytes():
+        raise RuntimeError(f"Cross-process semantic trees differ: {results}")
+    report = {"separateProcesses": 2, "byteIdentical": True, "treeByteIdentical": True, "runs": results}
     (evidence / "comparison.json").write_text(json.dumps(report, indent=2) + "\n")
     print(json.dumps(report, indent=2))
 
