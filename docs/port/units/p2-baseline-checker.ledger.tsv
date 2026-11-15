@@ -1,0 +1,2 @@
+timestamp	unit	from	to	actor	evidence
+2026-11-15T16:01:00Z	p2-baseline-checker	todo	in-progress	fm/p2-baseline-checker	split from ec1afeb, checker and tests only; adds empty_projects schema support to tests/baseline.json handling and classify/validate policy; declared-empty zero-case project passes, declared-empty project that gains a case fails, undeclared zero-case project fails, counted entry lowered fails; 49 CI policy tests pass; tests/baseline.json remains new:null with no recorded counts; no product code, legacy, golden or aggregate changes
