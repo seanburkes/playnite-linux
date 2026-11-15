@@ -10,7 +10,8 @@
   The single-owner exception in ADR-024 was taken for the merged units; no external-human
   review is claimed. This exit artifact has two worker diff-only self-review passes;
   these are not separate reviewer agents or approval. Firstmate subsequently supplied two
-  verdict reviews; their wording corrections are incorporated here.
+  verdict reviews; this document records the resulting scope clarifications, not a claim
+  that every review finding is closed.
 - Result: **ACCEPTED with declared deferrals** — owner acceptance dated **2026-11-15**;
   Phase 3 is authorised. Acceptance retains D1 accessibility, WebView to v1.1,
   empty-library-open to Phase 4 and every bounded claim below. Empty-library-open is
@@ -144,8 +145,10 @@ partially measured, with that explicit deferral rather than a fictional number.
 - [x] First performance proxies recorded; empty-library-open explicitly deferred to Phase 4.
 - [x] Board rows reconciled in shards without editing aggregate/history bytes.
 
-**Verdict: ACCEPTED with declared deferrals — owner acceptance 2026-11-15.** All named
-runtime checks have verified evidence at the gate commit; the performance gap, D1 and
+**Verdict: ACCEPTED with declared deferrals — owner acceptance 2026-11-15.** Linux,
+Windows, packaging and plan-guards evidence was verified at `a2b6633`; the recorded baseline
+comes from run 43740834379 at `68ee1b9`; UI and performance evidence is historical from
+their merged PRs. The performance gap, D1 and
 WebView are explicit deferrals, not passes, and the negative-proof-log residual remains open.
 Phase 3 is authorised; its next gate is Phase 3 exit. This acceptance does not retroactively
 make the documentation PR's head the subject of the recorded runtime evidence.
