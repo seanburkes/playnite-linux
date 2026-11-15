@@ -6,6 +6,7 @@ on:
   push:
     branches: [main]
   pull_request:
+  merge_group:
 
 permissions:
   contents: read
@@ -24,25 +25,6 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Capture the committed policy baseline
-        shell: bash
-        env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
-        run: |
-          set -euo pipefail
-          previous_projects="$RUNNER_TEMP/previous-projects.txt"
-          : > "$previous_projects"
-          if [ -z "${BASE_SHA:-}" ] || printf '%s' "$BASE_SHA" | grep -Eq '^0+$'; then
-            echo "::notice::No base commit is available; first-baseline policy applies"
-            exit 0
-          fi
-          if git cat-file -e "$BASE_SHA:tests/baseline.json" 2>/dev/null; then
-            git show "$BASE_SHA:tests/baseline.json" > "$RUNNER_TEMP/previous-baseline.json"
-          fi
-          git ls-tree -r --name-only "$BASE_SHA" -- tests \
-            | grep -E '/[^/]+\.csproj$' \
-            | sed -e 's|.*/||' -e 's|\.csproj$||' | sort -u > "$previous_projects" || true
-
       - uses: actions/setup-dotnet@v4
         with:
           global-json-file: global.json
@@ -50,6 +32,83 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+
+      - name: Resolve the comparison base commit
+        id: policy_base
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PULL_REQUEST_BASE: ${{ github.event.pull_request.base.sha }}
+          MERGE_GROUP_BASE: ${{ github.event.merge_group.base_sha }}
+          PUSH_BEFORE: ${{ github.event.before }}
+        run: |
+          set -euo pipefail
+          case "$EVENT_NAME" in
+            pull_request) base="$PULL_REQUEST_BASE" ;;
+            merge_group) base="$MERGE_GROUP_BASE" ;;
+            push) base="$PUSH_BEFORE" ;;
+            *)
+              echo "::error::Unsupported event $EVENT_NAME; cannot resolve a policy base"
+              exit 1
+              ;;
+          esac
+          if [ "$EVENT_NAME" = "push" ]; then
+            if [ -z "$base" ] || printf '%s' "$base" | grep -Eq '^0+$'; then
+              base=""
+            fi
+          elif [ -z "$base" ] || printf '%s' "$base" | grep -Eq '^0+$'; then
+            echo "::error::$EVENT_NAME event has no usable base SHA; refusing to open the first-baseline path"
+            exit 1
+          fi
+          if [ -n "$base" ]; then
+            if ! git cat-file -e "$base^{commit}" 2>/dev/null; then
+              echo "::error::Resolved base $base is not a commit in this checkout"
+              exit 1
+            fi
+            if ! git merge-base --is-ancestor "$base" HEAD; then
+              echo "::error::Resolved base $base is not an ancestor of HEAD"
+              exit 1
+            fi
+          fi
+          printf 'sha=%s\n' "$base" >> "$GITHUB_OUTPUT"
+
+      - name: Select the policy materialiser
+        id: policy_materialiser
+        shell: bash
+        env:
+          BASE_SHA: ${{ steps.policy_base.outputs.sha }}
+        run: |
+          set -euo pipefail
+          if [ -n "${BASE_SHA:-}" ] && \
+             git cat-file -e "$BASE_SHA:scripts/ci/materialise_policy.sh" 2>/dev/null; then
+            git show "$BASE_SHA:scripts/ci/materialise_policy.sh" \
+              > "$RUNNER_TEMP/materialise_policy.sh"
+            printf 'path=%s\n' "$RUNNER_TEMP/materialise_policy.sh" >> "$GITHUB_OUTPUT"
+            printf 'source=base\n' >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::BOOTSTRAP: base commit has no scripts/ci/materialise_policy.sh; using the head materialiser for this transition only"
+            printf 'path=%s\n' "scripts/ci/materialise_policy.sh" >> "$GITHUB_OUTPUT"
+            printf 'source=head\n' >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Materialise the base policy scripts
+        id: policy_scripts
+        shell: bash
+        env:
+          BASE_SHA: ${{ steps.policy_base.outputs.sha }}
+          MATERIALISER: ${{ steps.policy_materialiser.outputs.path }}
+        run: |
+          bash "$MATERIALISER" "$BASE_SHA" "$RUNNER_TEMP" "$GITHUB_OUTPUT"
+
+      - name: Capture the committed policy baseline
+        id: policy_baseline
+        shell: bash
+        env:
+          BASE_SHA: ${{ steps.policy_base.outputs.sha }}
+          CAPTURE: ${{ steps.policy_scripts.outputs.capture }}
+          LISTER: ${{ steps.policy_scripts.outputs.lister }}
+        run: |
+          bash "$CAPTURE" "$BASE_SHA" "$RUNNER_TEMP" "$GITHUB_OUTPUT" "$LISTER"
 
       - name: Verify the result and baseline policy
         run: python3 -m unittest discover -s scripts/ci -p 'test_*.py'
@@ -71,11 +130,14 @@ jobs:
 
       - name: Run every new-suite test project
         shell: bash
+        env:
+          PREVIOUS_BASELINE_STATE: ${{ steps.policy_baseline.outputs.baseline_state }}
+          PREVIOUS_PROJECTS_STATE: ${{ steps.policy_baseline.outputs.projects_state }}
         run: |
           set -euo pipefail
           test -f "$GITHUB_WORKSPACE/tests/Playnite.Core.Tests/Playnite.Core.Tests.csproj"
-          mapfile -t projects < <(find "$GITHUB_WORKSPACE/tests" -name '*.csproj' \
-            -not -path '*/obj/*' -not -path '*/bin/*' | sort)
+          mapfile -t projects < <(python3 scripts/ci/list_test_projects.py \
+            --worktree "$GITHUB_WORKSPACE")
           if [ "${#projects[@]}" -eq 0 ]; then
             echo "::error::No new-suite test projects found"
             exit 1
@@ -102,7 +164,7 @@ jobs:
           # The previous committed baseline and base project list make the
           # baseline a ratchet: lowering, resetting, deleting or silently
           # dropping a project fails instead of reopening bootstrap.
-          python3 scripts/ci/check_linux_test_results.py \
+          python3 "${{ steps.policy_scripts.outputs.checker }}" \
             --projects "${projects[@]}" \
             --results-directory "$RUNNER_TEMP/linux-test-results" \
             --baseline "$GITHUB_WORKSPACE/tests/baseline.json" \

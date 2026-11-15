@@ -13,4 +13,12 @@ docs/port/surface-parity.tsv @seanburkes
 tools/LegacyOracle/        @seanburkes
 tools/V10LibraryFixture/   @seanburkes
 .github/workflows/linux-ci.yml @seanburkes
+.github/workflows/plan-guards.yml @seanburkes
+.github/workflows/legacy-oracle.yml @seanburkes
+.github/workflows/settings-library-oracle.yml @seanburkes
+.github/workflows/windows-fixture-validation.yml @seanburkes
+.github/workflows/port-index.yml @seanburkes
+.github/CODEOWNERS         @seanburkes
 scripts/ci/                @seanburkes
+scripts/port/              @seanburkes
+scripts/formal/            @seanburkes

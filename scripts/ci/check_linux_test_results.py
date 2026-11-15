@@ -16,6 +16,7 @@ rather than zero tests.
 
 import argparse
 import json
+import os
 from pathlib import Path
 import sys
 import xml.etree.ElementTree as ET
@@ -67,6 +68,14 @@ def read_removed_projects(document):
             value = record.get(field)
             if not isinstance(value, str) or not value.strip():
                 raise ValueError(f"removal record for {project} needs a non-empty {field}")
+        if "replaced_by" in record and (not isinstance(record["replaced_by"], str)
+                                        or not record["replaced_by"].strip()):
+            raise ValueError(f"removal record for {project} has an invalid replaced_by")
+        if "replacement_executed" in record and (
+                type(record["replacement_executed"]) is not int
+                or record["replacement_executed"] < 0):
+            raise ValueError(
+                f"removal record for {project} has an invalid replacement_executed")
     return removed
 
 
@@ -95,8 +104,8 @@ def baseline_count(row, field):
 
 
 def validate_baseline_policy(current_path, current_document, current, removed,
-                             previous_document, previous, previous_projects,
-                             current_projects):
+                             previous_document, previous, previous_removed,
+                             previous_projects, current_projects):
     """Return failures for a baseline that lowers, deletes or loses history."""
     failures = []
     if previous_document is not None and current_document is None:
@@ -119,12 +128,50 @@ def validate_baseline_policy(current_path, current_document, current, removed,
                     failures.append(
                         f"{project}: baseline {field} count {current_count} is below the "
                         f"previous committed baseline {previous_count}")
-        elif project not in removed:
+        elif project in removed:
+            record = removed[project]
+            replacement = record.get("replaced_by")
+            if replacement is not None:
+                replacement_row = (current or {}).get(replacement)
+                if replacement_row is None:
+                    failures.append(
+                        f"{project}: removal record names replacement {replacement}, "
+                        "which is not in the current baseline")
+                else:
+                    previous_count = baseline_count(previous_row, "executed")
+                    replacement_count = baseline_count(replacement_row, "executed")
+                    if replacement_count is None or replacement_count < previous_count:
+                        failures.append(
+                            f"{project}: replacement {replacement} executed count "
+                            f"{replacement_count} is below the retired project count "
+                            f"{previous_count}")
+                    stated = record.get("replacement_executed")
+                    if stated is not None and stated != replacement_count:
+                        failures.append(
+                            f"{project}: removal record states replacement count {stated} "
+                            f"but {replacement} records {replacement_count}")
+        else:
             failures.append(
                 f"{project}: test project from the previous committed baseline is "
                 "missing; restore it or record a reviewed removal in removed_projects")
 
+    for project, previous_record in previous_removed.items():
+        if project not in removed:
+            failures.append(
+                f"{project}: prior reviewed removal record was deleted; retirement "
+                "records are immutable")
+        elif removed[project] != previous_record:
+            failures.append(
+                f"{project}: prior reviewed removal record was edited; retirement "
+                "records are immutable")
+
     for project in sorted(removed):
+        record = removed[project]
+        if "replaced_by" in record and "replacement_executed" not in record:
+            failures.append(f"{project}: removal record must state the replacement count")
+        if "replacement_executed" in record and "replaced_by" not in record:
+            failures.append(f"{project}: removal record states a replacement count "
+                            "without a replaced_by project")
         if previous is not None and project not in previous and project not in previous_projects:
             failures.append(f"{project}: removal record names a project with no previous "
                             "baseline entry or base-commit project")
@@ -188,7 +235,8 @@ def classify(project, exit_code, counts, baseline):
 
 
 def check_results(projects, results, baseline_path, summary_path,
-                  previous_baseline_path=None, previous_projects_path=None):
+                  previous_baseline_path=None, previous_projects_path=None,
+                  previous_baseline_state=None, previous_projects_state=None):
     failures = []
     notices = []
     try:
@@ -202,27 +250,53 @@ def check_results(projects, results, baseline_path, summary_path,
             summary.write(f"\n**FAIL: {message}**\n")
         return 1
 
-    try:
-        previous_document = load_document(previous_baseline_path)
-        previous = read_new_baseline(previous_document)
-        read_removed_projects(previous_document)
-    except (OSError, ValueError) as error:
-        previous_document = previous = None
-        failures.append(f"Invalid previous committed baseline: {error}")
+    if previous_baseline_state is None:
+        previous_baseline_state = "present" if previous_baseline_path is not None else "absent"
+    if previous_projects_state is None:
+        previous_projects_state = "present" if previous_projects_path is not None else "absent"
 
-    if previous_document is not None or previous_baseline_path is not None:
-        try:
-            previous_projects = read_previous_projects(previous_projects_path)
-        except OSError as error:
-            failures.append(f"Invalid previous project list: {error}")
-            previous_projects = set()
-    else:
-        previous_projects = set()
+    previous_document = None
+    previous = None
+    previous_removed = {}
+    if previous_baseline_state not in ("present", "absent"):
+        failures.append(f"invalid previous baseline state: {previous_baseline_state}")
+    elif previous_baseline_state == "present":
+        if previous_baseline_path is None or not previous_baseline_path.exists():
+            failures.append(f"previous committed baseline was expected at "
+                            f"{previous_baseline_path} but is missing")
+        else:
+            try:
+                previous_document = load_document(previous_baseline_path)
+                previous = read_new_baseline(previous_document)
+                previous_removed = read_removed_projects(previous_document)
+            except (OSError, ValueError) as error:
+                previous_document = previous = None
+                failures.append(f"Invalid previous committed baseline: {error}")
+    elif previous_baseline_path is not None and previous_baseline_path.exists():
+        failures.append(f"previous committed baseline state is absent but "
+                        f"{previous_baseline_path} exists")
+
+    previous_projects = set()
+    if previous_projects_state not in ("present", "absent"):
+        failures.append(f"invalid previous project list state: {previous_projects_state}")
+    elif previous_projects_state == "present":
+        if previous_projects_path is None or not previous_projects_path.exists():
+            failures.append(f"previous test project list was expected at "
+                            f"{previous_projects_path} but is missing")
+        else:
+            try:
+                previous_projects = read_previous_projects(previous_projects_path)
+            except OSError as error:
+                failures.append(f"Invalid previous project list: {error}")
+    elif previous_projects_path is not None and previous_projects_path.exists():
+        failures.append(f"previous project list state is absent but "
+                        f"{previous_projects_path} exists")
 
     project_names = {project_name(project) for project in projects}
     failures.extend(validate_baseline_policy(
         baseline_path, current_document, baseline, removed,
-        previous_document, previous, previous_projects, project_names))
+        previous_document, previous, previous_removed,
+        previous_projects, project_names))
 
     rows = {}
     summary = ["\n### Linux test counts\n",
@@ -258,6 +332,25 @@ def check_results(projects, results, baseline_path, summary_path,
         elif outcome == "fail":
             failures.append(f"{name}: {message}")
 
+    first_baseline = previous is None and (
+        previous_document is not None
+        or (previous_baseline_state == "absent" and previous_baseline_path is not None))
+    if first_baseline and baseline is not None:
+        for project, row in baseline.items():
+            observed = rows.get(project, {}).get("counts")
+            if observed is None:
+                continue
+            for field in ("executed", "passed"):
+                recorded = baseline_count(row, field)
+                seen = observed[field]
+                if recorded is not None and recorded < seen:
+                    failures.append(
+                        f"{project}: first baseline {field} count {recorded} is below "
+                        f"observed {seen}; record the observed floor")
+        for project in sorted(set(rows) - set(baseline)):
+            failures.append(
+                f"{project}: observed test project was omitted from the first baseline")
+
     if not projects:
         failures.append("no test projects were supplied")
     if baseline is not None:
@@ -285,10 +378,17 @@ def main():
     parser.add_argument("--baseline", type=Path, required=True)
     parser.add_argument("--previous-baseline", type=Path)
     parser.add_argument("--previous-projects", type=Path)
+    parser.add_argument("--previous-baseline-state", choices=("present", "absent"))
+    parser.add_argument("--previous-projects-state", choices=("present", "absent"))
     parser.add_argument("--summary", type=Path, required=True)
     args = parser.parse_args()
+    previous_baseline_state = (args.previous_baseline_state
+                               or os.environ.get("PREVIOUS_BASELINE_STATE") or None)
+    previous_projects_state = (args.previous_projects_state
+                               or os.environ.get("PREVIOUS_PROJECTS_STATE") or None)
     return check_results(args.projects, args.results_directory, args.baseline,
-                         args.summary, args.previous_baseline, args.previous_projects)
+                         args.summary, args.previous_baseline, args.previous_projects,
+                         previous_baseline_state, previous_projects_state)
 
 
 if __name__ == "__main__":
