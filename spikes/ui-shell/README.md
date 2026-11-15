@@ -133,8 +133,9 @@ include search text, checkbox state and cover motif; no paths, clocks or object 
 Comparison requires exact types, names, text/values, states, hierarchy, ordering and
 child counts. **Only each bounds component has an inclusive ±1 logical-pixel tolerance**
 (one device pixel at the pinned scale), allowing small pixel-derived layout rounding;
-there is no structural tolerance. Missing/renamed cells or controls, type changes or a
-lost details panel fail. The comparator's mutation test exercises these failures.
+there is no structural tolerance. The comparator's mutation test rejects a missing
+cell, renamed control/automation name, changed control type, text/value or effective
+state, and a lost details panel.
 There is no automatic baseline acceptance/update mode: the test emits its actual tree
 to the new external evidence directory before comparing, never overwriting the baseline.
 Any intentional baseline change needs explicit review of that emitted diff.
@@ -142,6 +143,13 @@ Any intentional baseline change needs explicit review of that emitted diff.
 Two fresh process runs each passed all eight facts with zero skips; emitted trees were
 byte-identical to one another and to the committed baseline, SHA-256
 `886a28797c9b0dd4d12271d26fac472513f7370703830ed8ce43b30b03226b5e`.
+This byte-identity claim is evidenced by the matching recorded SHA-256 values for both
+processes and the baseline, plus the runner's direct cross-process byte comparison;
+the structural comparison itself permits the bounds tolerance and does not assert
+byte identity. The initial external `bootstrap/` tree capture was **pre-final** (before
+the visibility field and final serialization format), is not the committed baseline,
+and is excluded from this equality claim. The final-source evidence is the two runs
+under external `verified-processes/`, with their hashes recorded in `comparison.json`.
 All six PNG captures retained the existing reference hash above.
 
 This proves the initial fake-data shell's selected structure and bound content, not
