@@ -17,4 +17,7 @@
   <ItemGroup>
     <None Include="../golden/paths/*.json" Link="golden/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
+  <ItemGroup>
+    <None Include="../golden/utils-v10.json" Link="utils-v10.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
 </Project>
