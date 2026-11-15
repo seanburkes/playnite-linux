@@ -4,14 +4,22 @@ on:
   push:
     branches: [main]
   pull_request:
+  merge_group:
 
 permissions:
   contents: read
+  pull-requests: read
 
 env:
   PROTECTED_PATHS: >-
     tests/golden tests/fixtures tests/baseline.json docs/formal
-    docs/port/surface-parity.tsv tools/LegacyOracle tools/V10LibraryFixture
+    docs/port/surface-parity.tsv docs/port/02-ARCHITECTURE.md docs/port/PORTING.md
+    docs/port/BenchmarkHarnessAllowlist.props BannedSymbols*.txt
+    tools/LegacyOracle tools/V10LibraryFixture
+    .github/workflows/linux-ci.yml .github/workflows/plan-guards.yml
+    .github/workflows/legacy-oracle.yml .github/workflows/settings-library-oracle.yml
+    .github/workflows/windows-fixture-validation.yml .github/workflows/port-index.yml
+    .github/CODEOWNERS scripts/ci scripts/port scripts/formal
 
 jobs:
   inventory-and-parity:
@@ -25,29 +33,118 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Frozen snapshot and dependency pin are unconditionally immutable
-        if: github.event_name == 'pull_request'
+      - name: Resolve the comparison base commit
+        id: policy_base
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PULL_REQUEST_BASE: ${{ github.event.pull_request.base.sha }}
+          MERGE_GROUP_BASE: ${{ github.event.merge_group.base_sha }}
+          PUSH_BEFORE: ${{ github.event.before }}
         run: |
-          changed=$(git diff --name-only \
-            "${{ github.event.pull_request.base.sha }}" HEAD -- legacy oracle-lock)
-          if [ -n "$changed" ]; then
-            echo "::error::legacy/ and oracle-lock/ are frozen; no label overrides this."
-            printf '%s\n' "$changed"
+          set -euo pipefail
+          case "$EVENT_NAME" in
+            pull_request) base="$PULL_REQUEST_BASE" ;;
+            merge_group) base="$MERGE_GROUP_BASE" ;;
+            push) base="$PUSH_BEFORE" ;;
+            *)
+              echo "::error::Unsupported event $EVENT_NAME; cannot resolve a policy base"
+              exit 1
+              ;;
+          esac
+          if [ "$EVENT_NAME" = "push" ]; then
+            if [ -z "$base" ] || printf '%s' "$base" | grep -Eq '^0+$'; then
+              base=""
+            fi
+          elif [ -z "$base" ] || printf '%s' "$base" | grep -Eq '^0+$'; then
+            echo "::error::$EVENT_NAME event has no usable base SHA; refusing to open the first-baseline path"
             exit 1
           fi
+          if [ -n "$base" ]; then
+            if ! git cat-file -e "$base^{commit}" 2>/dev/null; then
+              echo "::error::Resolved base $base is not a commit in this checkout"
+              exit 1
+            fi
+            if ! git merge-base --is-ancestor "$base" HEAD; then
+              echo "::error::Resolved base $base is not an ancestor of HEAD"
+              exit 1
+            fi
+          fi
+          printf 'sha=%s\n' "$base" >> "$GITHUB_OUTPUT"
+
+      - name: Select the policy materialiser
+        id: policy_materialiser
+        shell: bash
+        env:
+          BASE_SHA: ${{ steps.policy_base.outputs.sha }}
+        run: |
+          set -euo pipefail
+          if [ -n "${BASE_SHA:-}" ] && \
+             git cat-file -e "$BASE_SHA:scripts/ci/materialise_policy.sh" 2>/dev/null; then
+            git show "$BASE_SHA:scripts/ci/materialise_policy.sh" \
+              > "$RUNNER_TEMP/materialise_policy.sh"
+            printf 'path=%s\n' "$RUNNER_TEMP/materialise_policy.sh" >> "$GITHUB_OUTPUT"
+            printf 'source=base\n' >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::BOOTSTRAP: base commit has no scripts/ci/materialise_policy.sh; using the head materialiser for this transition only"
+            printf 'path=%s\n' "scripts/ci/materialise_policy.sh" >> "$GITHUB_OUTPUT"
+            printf 'source=head\n' >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Materialise the base policy scripts
+        id: policy_scripts
+        shell: bash
+        env:
+          BASE_SHA: ${{ steps.policy_base.outputs.sha }}
+          MATERIALISER: ${{ steps.policy_materialiser.outputs.path }}
+        run: |
+          bash "$MATERIALISER" "$BASE_SHA" "$RUNNER_TEMP" "$GITHUB_OUTPUT"
+
+      - name: Frozen snapshot and dependency pin are unconditionally immutable
+        if: >-
+          github.event_name == 'pull_request' ||
+          github.event_name == 'merge_group'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 "${{ steps.policy_scripts.outputs.gate }}" \
+            --base "${{ steps.policy_base.outputs.sha }}" \
+            --paths legacy oracle-lock \
+            --error "legacy/ and oracle-lock/ are frozen; no label overrides this."
 
       - name: Oracle artifacts require an explicit oracle-change PR
         if: >-
           github.event_name == 'pull_request' &&
           !contains(github.event.pull_request.labels.*.name, 'oracle-change')
         run: |
-          changed=$(git diff --name-only \
-            "${{ github.event.pull_request.base.sha }}" HEAD -- $PROTECTED_PATHS)
-          if [ -n "$changed" ]; then
-            echo "::error::Protected oracle artifacts changed. Use a separate oracle-change PR with a second reviewer."
-            printf '%s\n' "$changed"
+          python3 "${{ steps.policy_scripts.outputs.gate }}" \
+            --base "${{ steps.policy_base.outputs.sha }}" \
+            --paths $PROTECTED_PATHS
+
+      - name: Oracle artifacts require an explicit oracle-change merge-queue entry
+        if: github.event_name == 'merge_group'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          head_sha="${{ github.event.merge_group.head_sha }}"
+          pulls="repos/${{ github.repository }}/commits/$head_sha/pulls"
+          count=$(gh api "$pulls" --jq 'length')
+          if [ "$count" -ne 1 ]; then
+            # Batched groups do not identify one PR to label-check. Fail closed
+            # with the limitation rather than silently checking a single PR.
+            echo "::error::Merge group contains $count pull requests; the oracle-change label check supports exactly one PR per group. Disable batching or re-run as a single PR."
             exit 1
           fi
+          pr=$(gh api "$pulls" --jq '.[0].number')
+          labels=$(gh api "repos/${{ github.repository }}/pulls/$pr" --jq '.labels[].name')
+          if printf '%s\n' "$labels" | grep -qx 'oracle-change'; then
+            echo "oracle-change label present for PR $pr"
+            exit 0
+          fi
+          python3 "${{ steps.policy_scripts.outputs.gate }}" \
+            --base "${{ steps.policy_base.outputs.sha }}" \
+            --paths $PROTECTED_PATHS
 
       - name: Inventory is reproducible
         run: |
@@ -61,9 +158,11 @@ jobs:
         run: python3 -m unittest discover -s scripts/port -p 'test_*.py'
 
       - name: Port aggregates are generated on main
-        if: github.event_name == 'pull_request'
+        if: >-
+          github.event_name == 'pull_request' ||
+          github.event_name == 'merge_group'
         run: |
-          base="${{ github.event.pull_request.base.sha }}"
+          base="${{ steps.policy_base.outputs.sha }}"
           # Aggregates are a parent-owned single-writer artifact: the post-merge
           # port-index workflow regenerates and commits them on main. A pull
           # request owns only its unit shards, so even a correctly regenerated
@@ -73,7 +172,7 @@ jobs:
 
       - name: Port shards are valid and history is preserved
         run: |
-          ref="${{ github.event.pull_request.base.sha || github.event.before }}"
+          ref="${{ steps.policy_base.outputs.sha }}"
           args=(--shards-only)
           if [ -n "$ref" ] && ! printf '%s' "$ref" | grep -Eq '^0+$'; then
             if git cat-file -e "$ref:docs/port/units" 2>/dev/null; then

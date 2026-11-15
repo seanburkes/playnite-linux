@@ -1,4 +1,7 @@
 <Project>
+  <!-- The GC.Collect exception allowlist is a protected policy file outside this unprotected
+       root file. Product projects cannot widen it through their own csproj. -->
+  <Import Project="$(MSBuildThisFileDirectory)docs/port/BenchmarkHarnessAllowlist.props" />
   <!-- Keep the frozen Windows oracle and standalone Phase 1 tools/spikes independent. -->
   <PropertyGroup Condition="$(MSBuildProjectDirectory.StartsWith('$(MSBuildThisFileDirectory)src$([System.IO.Path]::DirectorySeparatorChar)')) Or $(MSBuildProjectDirectory.StartsWith('$(MSBuildThisFileDirectory)tests$([System.IO.Path]::DirectorySeparatorChar)'))">
     <TargetFramework>net11.0</TargetFramework>
@@ -21,6 +24,14 @@
     <PackageReference Include="Microsoft.CodeAnalysis.BannedApiAnalyzers" PrivateAssets="all" />
     <AdditionalFiles Include="$(MSBuildThisFileDirectory)BannedSymbols.txt" />
     <AdditionalFiles Include="$(MSBuildThisFileDirectory)BannedSymbols.Library.txt" Condition="'$(MSBuildProjectName)' != 'Playnite.Cli' And '$(MSBuildProjectName)' != 'Playnite.Desktop' And '$(MSBuildProjectName)' != 'Playnite.LegacyImport'" />
+    <!-- PORTING allows .Result/.Wait() only at a commented top-level Cli entry point, so the
+         symbol file stops short of Cli and SourcePolicy checks the contextual exception. -->
+    <AdditionalFiles Include="$(MSBuildThisFileDirectory)BannedSymbols.Blocking.txt" Condition="'$(MSBuildProjectName)' != 'Playnite.Cli'" />
+    <!-- PORTING allows GC.Collect only in a benchmark/soak harness with a comment. The harness
+         names come from the protected docs/port/BenchmarkHarnessAllowlist.props import above;
+         SourcePolicy reads the same file and requires a comment, so the allowlist alone
+         permits nothing. -->
+    <AdditionalFiles Include="$(MSBuildThisFileDirectory)BannedSymbols.GcCollect.txt" Condition="!$([System.String]::Copy(';$(PlayniteBenchmarkHarnessProjects);').Contains(';$(MSBuildProjectName);'))" />
     <AdditionalFiles Include="$(MSBuildThisFileDirectory)BannedSymbols.Core.txt" Condition="'$(MSBuildProjectName)' == 'Playnite.Core'" />
     <AdditionalFiles Include="$(MSBuildThisFileDirectory)BannedSymbols.Logic.txt" Condition="'$(MSBuildProjectName)' == 'Playnite.Core' Or '$(MSBuildProjectName)' == 'Playnite.SDK.Abstractions' Or '$(MSBuildProjectName)' == 'Playnite.Steam'" />
     <AdditionalFiles Include="$(MSBuildThisFileDirectory)BannedSymbols.Interop.txt" Condition="'$(MSBuildProjectName)' != 'Playnite.Platform.Linux'" />

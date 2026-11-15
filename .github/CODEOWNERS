@@ -1,10 +1,24 @@
-# Oracle and plan ownership. A porting change may not approve its own oracle change.
+# Oracle, plan, and CI-policy ownership. A porting change may not approve its own oracle change.
 legacy/                    @seanburkes
 tests/golden/              @seanburkes
 tests/fixtures/            @seanburkes
 tests/baseline.json        @seanburkes
 docs/formal/               @seanburkes
+docs/port/02-ARCHITECTURE.md @seanburkes
+docs/port/PORTING.md       @seanburkes
+docs/port/BenchmarkHarnessAllowlist.props @seanburkes
+BannedSymbols*.txt         @seanburkes
 oracle-lock/               @seanburkes
 docs/port/surface-parity.tsv @seanburkes
 tools/LegacyOracle/        @seanburkes
 tools/V10LibraryFixture/   @seanburkes
+.github/workflows/linux-ci.yml @seanburkes
+.github/workflows/plan-guards.yml @seanburkes
+.github/workflows/legacy-oracle.yml @seanburkes
+.github/workflows/settings-library-oracle.yml @seanburkes
+.github/workflows/windows-fixture-validation.yml @seanburkes
+.github/workflows/port-index.yml @seanburkes
+.github/CODEOWNERS         @seanburkes
+scripts/ci/                @seanburkes
+scripts/port/              @seanburkes
+scripts/formal/            @seanburkes

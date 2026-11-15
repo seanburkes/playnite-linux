@@ -9,23 +9,24 @@ internal sealed class ProductGraph
     internal static readonly string Configuration = typeof(ProductGraph).Assembly
         .GetCustomAttributes<AssemblyMetadataAttribute>().Single(a => a.Key == "BuildConfiguration").Value!;
 
-    internal static readonly IReadOnlyDictionary<string, string[]> AllowedProjects =
-        new Dictionary<string, string[]>
-        {
-            ["Playnite.SDK.Abstractions"] = [],
-            ["Playnite.SDK"] = ["Playnite.SDK.Abstractions"],
-            ["Playnite.Core"] = ["Playnite.SDK.Abstractions"],
-            ["Playnite.Platform"] = ["Playnite.Core", "Playnite.SDK.Abstractions"],
-            ["Playnite.Platform.Linux"] = ["Playnite.Platform", "Playnite.Core"],
-            ["Playnite.Steam"] = ["Playnite.Core", "Playnite.Platform"],
-            ["Playnite.LegacyImport.Contracts"] = [],
-            ["Playnite.LegacyImport"] = ["Playnite.LegacyImport.Contracts"],
-            ["Playnite.Desktop"] = ["Playnite.Core", "Playnite.SDK", "Playnite.Platform", "Playnite.Steam", "Playnite.LegacyImport.Contracts"],
-            ["Playnite.Cli"] = ["Playnite.Core", "Playnite.Platform", "Playnite.Steam", "Playnite.LegacyImport.Contracts"]
-        };
+    internal static IEnumerable<ProductGraph> Products => RequireProducts(Directory.EnumerateFiles(
+        Path.Combine(Root, "src"), "*.csproj", SearchOption.AllDirectories).Select(p => new ProductGraph(p)));
 
-    internal static IEnumerable<ProductGraph> Products => Directory.EnumerateFiles(
-        Path.Combine(Root, "src"), "*.csproj", SearchOption.AllDirectories).Select(p => new ProductGraph(p));
+    /// <summary>
+    /// The product set is the target of every graph and source rule. An empty target
+    /// would make the whole suite pass vacuously, so it is a hard failure.
+    /// </summary>
+    internal static ProductGraph[] RequireProducts(IEnumerable<ProductGraph> products)
+    {
+        var result = products.ToArray();
+        if (result.Length == 0)
+        {
+            throw new InvalidOperationException("No product projects found under src/; architecture checks would pass vacuously");
+        }
+
+        ProductInputs.RequireUniqueNames(result.Select(p => p.Name));
+        return result;
+    }
 
     internal string ProjectFile { get; }
     internal string Name => Path.GetFileNameWithoutExtension(ProjectFile);
