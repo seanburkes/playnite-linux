@@ -61,7 +61,7 @@ public sealed class PublicApiTests
     {
         var approved = File.ReadAllText(Path.Combine(ProductGraph.Root, "src", "Playnite.SDK.Abstractions", "api-baseline", "PublicAPI.Shipped.sha256")).Trim();
         var actual = Convert.ToHexStringLower(SHA256.HashData(surface));
-        return actual == approved ? null : $"Shipped SDK API checksum mismatch: expected {approved}, got {actual}; rebaselining requires oracle-change and second-review approval";
+        return actual == approved ? null : $"Shipped SDK API checksum mismatch: expected {approved}, got {actual}; rebaselining requires the oracle-change label and the protected-path gate, with adversarial review on the owner's behalf";
     }
 
     [Fact]

@@ -17,4 +17,5 @@ Rules:
 
 - Do not edit these files in a porting change.
 - Do not normalise line endings or whitespace when comparing; the bytes are the oracle.
-- A new golden needs a provenance note and a second reviewer (`oracle-change`).
+- A new golden needs a provenance note and the `oracle-change` route: the label declares it and
+  the protected-path gate checks the diff; review is adversarial on the owner's behalf.

@@ -1,7 +1,7 @@
 <Project>
   <!-- Reviewed projects allowed to call GC.Collect in a benchmark/soak harness (PORTING.md).
        This file is a protected policy path: widening the exception needs the oracle-change
-       label and a second reviewer, so an ordinary product PR cannot exempt itself.
+       label and the protected-path gate, so an ordinary product PR cannot exempt itself.
        Empty today; p8-003 adds its reviewed harness project here. SourcePolicy reads this
        list and the symbol-file scope below is derived from it. -->
   <PropertyGroup>

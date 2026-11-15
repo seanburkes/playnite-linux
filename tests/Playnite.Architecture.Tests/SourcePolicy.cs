@@ -30,8 +30,9 @@ internal static class SourcePolicy
 
     // PORTING allows GC.Collect only in a benchmark/soak harness with a comment. The harness
     // projects come from the protected docs/port/BenchmarkHarnessAllowlist.props file, so
-    // widening the exception needs the oracle-change label and a second reviewer. No project
-    // can declare itself a harness, and the comment is still required by the source rule.
+    // widening the exception needs the oracle-change label and the protected-path gate; review
+    // is adversarial on the owner's behalf. No project can declare itself a harness, and the
+    // comment is still required by the source rule.
     internal static readonly string[] BenchmarkHarnessProjects = LoadBenchmarkHarnesses();
 
     internal static IEnumerable<string> Violations(string project, CSharpCompilation compilation,

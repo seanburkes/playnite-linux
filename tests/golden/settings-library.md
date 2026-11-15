@@ -107,7 +107,7 @@ from the harness and compares them to `tests/golden`. A harness-only change that
 emitted bytes therefore fails the `validate` job unless the goldens are regenerated in the
 same change; stale goldens cannot silently keep passing. `tools/LegacyOracle/` and
 `tools/V10LibraryFixture/` are protected paths, so that paired harness+golden change needs the
-`oracle-change` label and a second review. `Test-Validation.ps1` also flips one byte in a
+`oracle-change` label and the protected-path gate; review is adversarial on the owner's behalf. `Test-Validation.ps1` also flips one byte in a
 disposable copy of this committed corpus and requires the same whole-set comparator to reject
 it, then checks that the real `tests/golden` tree is byte-identical before and after.
 
@@ -124,4 +124,4 @@ it, then checks that the real `tests/golden` tree is byte-identical before and a
   run. `Test-Validation.ps1` includes a one-byte mutation of a disposable copy of these
   committed payloads, but that is not exhaustive fuzzing.
 - They are not acceptance by themselves: tests/golden changes still require the
-  `oracle-change` label, independent review, and merge.
+  `oracle-change` label, the protected-path gate, and the owner's merge decision.
