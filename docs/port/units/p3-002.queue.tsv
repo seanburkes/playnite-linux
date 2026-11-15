@@ -1,2 +1,2 @@
 id	wave	area	unit	depends	status	owner	oracle	test	notes
-p3-002	W3	leaves	String/date/enum extensions	p2-001	todo	core	golden:utils	test:utils	
+p3-002	W3	leaves	String/date/enum extensions	p2-001	done	core	tests/golden/utils-v10.json	UtilsGoldenTests	docs/port/p3-002-utils.md maps every helper to its legacy source file and line; Playnite.Core implementation plus 274 v10-derived golden cases and 3 property/ambient-culture tests; helper-to-legacy groups are StringExtensions.cs (strings), Enums.cs (descriptions), DateTimes.cs plus NullableDateToStringConverter.cs (dates), PlayTimeToStringConverter.cs (playtime); goldens and baseline transition completed by p3-002c; aggregates parent-owned

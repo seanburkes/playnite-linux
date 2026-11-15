@@ -1,0 +1,2502 @@
+{
+  "provenance": {
+    "invocation": "python3 scripts/port/generate_utils_goldens.py --output /tmp/opencode/utils-v10.json",
+    "runtime": "11.0.100",
+    "rule": "Frozen v10 source on .NET 11/ICU; deterministic localization and clock shims. Original NullableDateToStringConverter.ConvertBack with case-supplied Constants.DateUiFormat; WPF empty/unset mapped to empty/invalid.",
+    "sources": {
+      "Playnite/Common/Extensions/StringExtensions.cs": "a3e27dd925548ec4774be4ef0a0ae2f593505b7d5f7d36e36c6c92c0b6f9c340",
+      "Playnite/Common/Extensions/Enums.cs": "46092d7b22aa45f54d74b02bdd1faff441cbbcdcb1f5043c5628e0a7aa929bff",
+      "Playnite/DateTimes.cs": "29b4e9dc7abe2ee224291799a2547ac662076697439b6c5bd9344e0fa08b3b73",
+      "Playnite/Converters/NullableDateToStringConverter.cs": "846ea1ca66f70d904a5864997c680ad72355a01d9262cf21777f34c69ef3306b",
+      "Playnite/Converters/PlayTimeToStringConverter.cs": "a1e28dc72d410c86390b9173e4728db91aeaf70945735f7fe18daeb3e8fb5c4c"
+    }
+  },
+  "cases": [
+    {
+      "op": "md5",
+      "args": [
+        null
+      ],
+      "culture": "en-US",
+      "expected": "!ArgumentNullException"
+    },
+    {
+      "op": "empty",
+      "args": [
+        null
+      ],
+      "culture": "en-US",
+      "expected": "True"
+    },
+    {
+      "op": "whitespace",
+      "args": [
+        null
+      ],
+      "culture": "en-US",
+      "expected": "True"
+    },
+    {
+      "op": "trademarks",
+      "args": [
+        null,
+        ""
+      ],
+      "culture": "en-US",
+      "expected": null
+    },
+    {
+      "op": "normalize",
+      "args": [
+        null
+      ],
+      "culture": "en-US",
+      "expected": ""
+    },
+    {
+      "op": "http",
+      "args": [
+        null
+      ],
+      "culture": "en-US",
+      "expected": "False"
+    },
+    {
+      "op": "uri",
+      "args": [
+        null
+      ],
+      "culture": "en-US",
+      "expected": "False"
+    },
+    {
+      "op": "url",
+      "args": [
+        null
+      ],
+      "culture": "en-US",
+      "expected": null
+    },
+    {
+      "op": "any",
+      "args": [
+        null,
+        "[]"
+      ],
+      "culture": "en-US",
+      "expected": "False"
+    },
+    {
+      "op": "md5",
+      "args": [
+        ""
+      ],
+      "culture": "en-US",
+      "expected": "d41d8cd98f00b204e9800998ecf8427e"
+    },
+    {
+      "op": "empty",
+      "args": [
+        ""
+      ],
+      "culture": "en-US",
+      "expected": "True"
+    },
+    {
+      "op": "whitespace",
+      "args": [
+        ""
+      ],
+      "culture": "en-US",
+      "expected": "True"
+    },
+    {
+      "op": "trademarks",
+      "args": [
+        "",
+        ""
+      ],
+      "culture": "en-US",
+      "expected": ""
+    },
+    {
+      "op": "normalize",
+      "args": [
+        ""
+      ],
+      "culture": "en-US",
+      "expected": ""
+    },
+    {
+      "op": "http",
+      "args": [
+        ""
+      ],
+      "culture": "en-US",
+      "expected": "False"
+    },
+    {
+      "op": "uri",
+      "args": [
+        ""
+      ],
+      "culture": "en-US",
+      "expected": "False"
+    },
+    {
+      "op": "url",
+      "args": [
+        ""
+      ],
+      "culture": "en-US",
+      "expected": ""
+    },
+    {
+      "op": "any",
+      "args": [
+        "",
+        "[]"
+      ],
+      "culture": "en-US",
+      "expected": "False"
+    },
+    {
+      "op": "md5",
+      "args": [
+        " "
+      ],
+      "culture": "en-US",
+      "expected": "7215ee9c7d9dc229d2921a40e899ec5f"
+    },
+    {
+      "op": "empty",
+      "args": [
+        " "
+      ],
+      "culture": "en-US",
+      "expected": "False"
+    },
+    {
+      "op": "whitespace",
+      "args": [
+        " "
+      ],
+      "culture": "en-US",
+      "expected": "True"
+    },
+    {
+      "op": "trademarks",
+      "args": [
+        " ",
+        ""
+      ],
+      "culture": "en-US",
+      "expected": " "
+    },
+    {
+      "op": "normalize",
+      "args": [
+        " "
+      ],
+      "culture": "en-US",
+      "expected": ""
+    },
+    {
+      "op": "http",
+      "args": [
+        " "
+      ],
+      "culture": "en-US",
+      "expected": "False"
+    },
+    {
+      "op": "uri",
+      "args": [
+        " "
+      ],
+      "culture": "en-US",
+      "expected": "False"
+    },
+    {
+      "op": "url",
+      "args": [
+        " "
+      ],
+      "culture": "en-US",
+      "expected": " "
+    },
+    {
+      "op": "any",
+      "args": [
+        " ",
+        "[]"
+      ],
+      "culture": "en-US",
+      "expected": "False"
+    },
+    {
+      "op": "md5",
+      "args": [
+        "\t\n"
+      ],
+      "culture": "en-US",
+      "expected": "9dd172a836334f81b8e77c6bdd621ba2"
+    },
+    {
+      "op": "empty",
+      "args": [
+        "\t\n"
+      ],
+      "culture": "en-US",
+      "expected": "False"
+    },
+    {
+      "op": "whitespace",
+      "args": [
+        "\t\n"
+      ],
+      "culture": "en-US",
+      "expected": "True"
+    },
+    {
+      "op": "trademarks",
+      "args": [
+        "\t\n",
+        ""
+      ],
+      "culture": "en-US",
+      "expected": "\t\n"
+    },
+    {
+      "op": "normalize",
+      "args": [
+        "\t\n"
+      ],
+      "culture": "en-US",
+      "expected": ""
+    },
+    {
+      "op": "http",
+      "args": [
+        "\t\n"
+      ],
+      "culture": "en-US",
+      "expected": "False"
+    },
+    {
+      "op": "uri",
+      "args": [
+        "\t\n"
+      ],
+      "culture": "en-US",
+      "expected": "False"
+    },
+    {
+      "op": "url",
+      "args": [
+        "\t\n"
+      ],
+      "culture": "en-US",
+      "expected": "\t\n"
+    },
+    {
+      "op": "any",
+      "args": [
+        "\t\n",
+        "[]"
+      ],
+      "culture": "en-US",
+      "expected": "False"
+    },
+    {
+      "op": "md5",
+      "args": [
+        "x"
+      ],
+      "culture": "en-US",
+      "expected": "9dd4e461268c8034f5c8564e155c67a6"
+    },
+    {
+      "op": "empty",
+      "args": [
+        "x"
+      ],
+      "culture": "en-US",
+      "expected": "False"
+    },
+    {
+      "op": "whitespace",
+      "args": [
+        "x"
+      ],
+      "culture": "en-US",
+      "expected": "False"
+    },
+    {
+      "op": "trademarks",
+      "args": [
+        "x",
+        ""
+      ],
+      "culture": "en-US",
+      "expected": "x"
+    },
+    {
+      "op": "normalize",
+      "args": [
+        "x"
+      ],
+      "culture": "en-US",
+      "expected": "x"
+    },
+    {
+      "op": "http",
+      "args": [
+        "x"
+      ],
+      "culture": "en-US",
+      "expected": "False"
+    },
+    {
+      "op": "uri",
+      "args": [
+        "x"
+      ],
+      "culture": "en-US",
+      "expected": "False"
+    },
+    {
+      "op": "url",
+      "args": [
+        "x"
+      ],
+      "culture": "en-US",
+      "expected": "x"
+    },
+    {
+      "op": "any",
+      "args": [
+        "x",
+        "[]"
+      ],
+      "culture": "en-US",
+      "expected": "False"
+    },
+    {
+      "op": "md5",
+      "args": [
+        "é😀"
+      ],
+      "culture": "en-US",
+      "expected": "62b3afe3b01f6f80152b567d9b216cde"
+    },
+    {
+      "op": "trim",
+      "args": [
+        "file.gz.gz",
+        ".gz",
+        "Ordinal"
+      ],
+      "culture": "en-US",
+      "expected": "file.gz"
+    },
+    {
+      "op": "trim",
+      "args": [
+        "file.gz.gz",
+        ".gz",
+        "OrdinalIgnoreCase"
+      ],
+      "culture": "en-US",
+      "expected": "file.gz"
+    },
+    {
+      "op": "trim",
+      "args": [
+        "file.GZ",
+        ".gz",
+        "Ordinal"
+      ],
+      "culture": "en-US",
+      "expected": "file.GZ"
+    },
+    {
+      "op": "trim",
+      "args": [
+        "file.GZ",
+        ".gz",
+        "OrdinalIgnoreCase"
+      ],
+      "culture": "en-US",
+      "expected": "file"
+    },
+    {
+      "op": "trim",
+      "args": [
+        "file",
+        "",
+        "Ordinal"
+      ],
+      "culture": "en-US",
+      "expected": "file"
+    },
+    {
+      "op": "trim",
+      "args": [
+        "file",
+        "",
+        "OrdinalIgnoreCase"
+      ],
+      "culture": "en-US",
+      "expected": "file"
+    },
+    {
+      "op": "trim",
+      "args": [
+        "",
+        "",
+        "Ordinal"
+      ],
+      "culture": "en-US",
+      "expected": ""
+    },
+    {
+      "op": "trim",
+      "args": [
+        "",
+        "",
+        "OrdinalIgnoreCase"
+      ],
+      "culture": "en-US",
+      "expected": ""
+    },
+    {
+      "op": "trim",
+      "args": [
+        "file",
+        "x",
+        "Ordinal"
+      ],
+      "culture": "en-US",
+      "expected": "file"
+    },
+    {
+      "op": "trim",
+      "args": [
+        "file",
+        "x",
+        "OrdinalIgnoreCase"
+      ],
+      "culture": "en-US",
+      "expected": "file"
+    },
+    {
+      "op": "trim",
+      "args": [
+        null,
+        "x",
+        "Ordinal"
+      ],
+      "culture": "en-US",
+      "expected": "!NullReferenceException"
+    },
+    {
+      "op": "trim",
+      "args": [
+        null,
+        "x",
+        "OrdinalIgnoreCase"
+      ],
+      "culture": "en-US",
+      "expected": "!NullReferenceException"
+    },
+    {
+      "op": "trim",
+      "args": [
+        "file",
+        null,
+        "Ordinal"
+      ],
+      "culture": "en-US",
+      "expected": "!ArgumentNullException"
+    },
+    {
+      "op": "trim",
+      "args": [
+        "file",
+        null,
+        "OrdinalIgnoreCase"
+      ],
+      "culture": "en-US",
+      "expected": "!ArgumentNullException"
+    },
+    {
+      "op": "normalize",
+      "args": [
+        "Game™®©"
+      ],
+      "culture": "en-US",
+      "expected": "Game"
+    },
+    {
+      "op": "trademarks",
+      "args": [
+        "Game™®©",
+        "$&!"
+      ],
+      "culture": "en-US",
+      "expected": "Game™!®!©!"
+    },
+    {
+      "op": "normalize",
+      "args": [
+        "™"
+      ],
+      "culture": "en-US",
+      "expected": ""
+    },
+    {
+      "op": "trademarks",
+      "args": [
+        "™",
+        "$&!"
+      ],
+      "culture": "en-US",
+      "expected": "™!"
+    },
+    {
+      "op": "normalize",
+      "args": [
+        "A[B](C)"
+      ],
+      "culture": "en-US",
+      "expected": "A"
+    },
+    {
+      "op": "trademarks",
+      "args": [
+        "A[B](C)",
+        "$&!"
+      ],
+      "culture": "en-US",
+      "expected": "A[B](C)"
+    },
+    {
+      "op": "normalize",
+      "args": [
+        "[Only]"
+      ],
+      "culture": "en-US",
+      "expected": "[Only]"
+    },
+    {
+      "op": "trademarks",
+      "args": [
+        "[Only]",
+        "$&!"
+      ],
+      "culture": "en-US",
+      "expected": "[Only]"
+    },
+    {
+      "op": "normalize",
+      "args": [
+        "(Only)"
+      ],
+      "culture": "en-US",
+      "expected": "(Only)"
+    },
+    {
+      "op": "trademarks",
+      "args": [
+        "(Only)",
+        "$&!"
+      ],
+      "culture": "en-US",
+      "expected": "(Only)"
+    },
+    {
+      "op": "normalize",
+      "args": [
+        "Game, The"
+      ],
+      "culture": "en-US",
+      "expected": "The Game"
+    },
+    {
+      "op": "trademarks",
+      "args": [
+        "Game, The",
+        "$&!"
+      ],
+      "culture": "en-US",
+      "expected": "Game, The"
+    },
+    {
+      "op": "normalize",
+      "args": [
+        "Game, the"
+      ],
+      "culture": "en-US",
+      "expected": "Game, the"
+    },
+    {
+      "op": "trademarks",
+      "args": [
+        "Game, the",
+        "$&!"
+      ],
+      "culture": "en-US",
+      "expected": "Game, the"
+    },
+    {
+      "op": "normalize",
+      "args": [
+        "  game.__:  sub ’title’ [tag] (edition)  "
+      ],
+      "culture": "en-US",
+      "expected": "game: sub 'title'"
+    },
+    {
+      "op": "trademarks",
+      "args": [
+        "  game.__:  sub ’title’ [tag] (edition)  ",
+        "$&!"
+      ],
+      "culture": "en-US",
+      "expected": "  game.__:  sub ’title’ [tag] (edition)  "
+    },
+    {
+      "op": "normalize",
+      "args": [
+        "[a] (b)"
+      ],
+      "culture": "en-US",
+      "expected": "(b)"
+    },
+    {
+      "op": "trademarks",
+      "args": [
+        "[a] (b)",
+        "$&!"
+      ],
+      "culture": "en-US",
+      "expected": "[a] (b)"
+    },
+    {
+      "op": "acronym",
+      "args": [
+        "AB",
+        "Alpha Beta Gamma"
+      ],
+      "culture": "en-US",
+      "expected": "True"
+    },
+    {
+      "op": "acronym",
+      "args": [
+        "AB",
+        "Alpha\tBeta"
+      ],
+      "culture": "en-US",
+      "expected": "False"
+    },
+    {
+      "op": "acronym",
+      "args": [
+        "AB",
+        "Alpha-Beta"
+      ],
+      "culture": "en-US",
+      "expected": "False"
+    },
+    {
+      "op": "acronym",
+      "args": [
+        "A",
+        "Alpha"
+      ],
+      "culture": "en-US",
+      "expected": "False"
+    },
+    {
+      "op": "acronym",
+      "args": [
+        "A!",
+        "Alpha Beta"
+      ],
+      "culture": "en-US",
+      "expected": "False"
+    },
+    {
+      "op": "acronym",
+      "args": [
+        null,
+        "Alpha Beta"
+      ],
+      "culture": "en-US",
+      "expected": "False"
+    },
+    {
+      "op": "acronym",
+      "args": [
+        "AB",
+        null
+      ],
+      "culture": "en-US",
+      "expected": "False"
+    },
+    {
+      "op": "acronym",
+      "args": [
+        "AB",
+        "alpha beta"
+      ],
+      "culture": "en-US",
+      "expected": "True"
+    },
+    {
+      "op": "acronym",
+      "args": [
+        "AG",
+        "Alpha Beta Gamma"
+      ],
+      "culture": "en-US",
+      "expected": "False"
+    },
+    {
+      "op": "contains",
+      "args": [
+        null,
+        "x"
+      ],
+      "culture": "en-US",
+      "expected": "True"
+    },
+    {
+      "op": "contains",
+      "args": [
+        null,
+        null
+      ],
+      "culture": "en-US",
+      "expected": "True"
+    },
+    {
+      "op": "contains",
+      "args": [
+        "",
+        ""
+      ],
+      "culture": "en-US",
+      "expected": "True"
+    },
+    {
+      "op": "contains",
+      "args": [
+        "abc",
+        "B"
+      ],
+      "culture": "en-US",
+      "expected": "True"
+    },
+    {
+      "op": "contains",
+      "args": [
+        "abc",
+        null
+      ],
+      "culture": "en-US",
+      "expected": "!ArgumentNullException"
+    },
+    {
+      "op": "any",
+      "args": [
+        "abc",
+        null
+      ],
+      "culture": "en-US",
+      "expected": "!ArgumentNullException"
+    },
+    {
+      "op": "http",
+      "args": [
+        "https://"
+      ],
+      "culture": "en-US",
+      "expected": "True"
+    },
+    {
+      "op": "uri",
+      "args": [
+        "https://"
+      ],
+      "culture": "en-US",
+      "expected": "False"
+    },
+    {
+      "op": "url",
+      "args": [
+        "https://"
+      ],
+      "culture": "en-US",
+      "expected": "https://"
+    },
+    {
+      "op": "http",
+      "args": [
+        "HTTP://x"
+      ],
+      "culture": "en-US",
+      "expected": "True"
+    },
+    {
+      "op": "uri",
+      "args": [
+        "HTTP://x"
+      ],
+      "culture": "en-US",
+      "expected": "True"
+    },
+    {
+      "op": "url",
+      "args": [
+        "HTTP://x"
+      ],
+      "culture": "en-US",
+      "expected": "HTTP://x"
+    },
+    {
+      "op": "http",
+      "args": [
+        "https://not a host"
+      ],
+      "culture": "en-US",
+      "expected": "True"
+    },
+    {
+      "op": "uri",
+      "args": [
+        "https://not a host"
+      ],
+      "culture": "en-US",
+      "expected": "False"
+    },
+    {
+      "op": "url",
+      "args": [
+        "https://not a host"
+      ],
+      "culture": "en-US",
+      "expected": "https://not%20a%20host"
+    },
+    {
+      "op": "http",
+      "args": [
+        "ftp://host/file"
+      ],
+      "culture": "en-US",
+      "expected": "False"
+    },
+    {
+      "op": "uri",
+      "args": [
+        "ftp://host/file"
+      ],
+      "culture": "en-US",
+      "expected": "True"
+    },
+    {
+      "op": "url",
+      "args": [
+        "ftp://host/file"
+      ],
+      "culture": "en-US",
+      "expected": "ftp://host/file"
+    },
+    {
+      "op": "http",
+      "args": [
+        " https://host"
+      ],
+      "culture": "en-US",
+      "expected": "False"
+    },
+    {
+      "op": "uri",
+      "args": [
+        " https://host"
+      ],
+      "culture": "en-US",
+      "expected": "True"
+    },
+    {
+      "op": "url",
+      "args": [
+        " https://host"
+      ],
+      "culture": "en-US",
+      "expected": " https://host"
+    },
+    {
+      "op": "http",
+      "args": [
+        "/path a/é?q=a b&x=+%2F#frag"
+      ],
+      "culture": "en-US",
+      "expected": "False"
+    },
+    {
+      "op": "uri",
+      "args": [
+        "/path a/é?q=a b&x=+%2F#frag"
+      ],
+      "culture": "en-US",
+      "expected": "False"
+    },
+    {
+      "op": "url",
+      "args": [
+        "/path a/é?q=a b&x=+%2F#frag"
+      ],
+      "culture": "en-US",
+      "expected": "/path%20a/%c3%a9?q=a b&x=+%2F#frag"
+    },
+    {
+      "op": "http",
+      "args": [
+        "a+b"
+      ],
+      "culture": "en-US",
+      "expected": "False"
+    },
+    {
+      "op": "uri",
+      "args": [
+        "a+b"
+      ],
+      "culture": "en-US",
+      "expected": "False"
+    },
+    {
+      "op": "url",
+      "args": [
+        "a+b"
+      ],
+      "culture": "en-US",
+      "expected": "a+b"
+    },
+    {
+      "op": "http",
+      "args": [
+        "a%20b"
+      ],
+      "culture": "en-US",
+      "expected": "False"
+    },
+    {
+      "op": "uri",
+      "args": [
+        "a%20b"
+      ],
+      "culture": "en-US",
+      "expected": "False"
+    },
+    {
+      "op": "url",
+      "args": [
+        "a%20b"
+      ],
+      "culture": "en-US",
+      "expected": "a%20b"
+    },
+    {
+      "op": "http",
+      "args": [
+        "https://例.test/é"
+      ],
+      "culture": "en-US",
+      "expected": "True"
+    },
+    {
+      "op": "uri",
+      "args": [
+        "https://例.test/é"
+      ],
+      "culture": "en-US",
+      "expected": "True"
+    },
+    {
+      "op": "url",
+      "args": [
+        "https://例.test/é"
+      ],
+      "culture": "en-US",
+      "expected": "https://例.test/%c3%a9"
+    },
+    {
+      "op": "replace",
+      "args": [
+        "aAa",
+        "a",
+        "A"
+      ],
+      "culture": "en-US",
+      "expected": "AAA"
+    },
+    {
+      "op": "replace",
+      "args": [
+        "aaa",
+        "aa",
+        "x"
+      ],
+      "culture": "en-US",
+      "expected": "xa"
+    },
+    {
+      "op": "replace",
+      "args": [
+        "abc",
+        "b",
+        null
+      ],
+      "culture": "en-US",
+      "expected": "ac"
+    },
+    {
+      "op": "replace",
+      "args": [
+        "",
+        null,
+        "x"
+      ],
+      "culture": "en-US",
+      "expected": ""
+    },
+    {
+      "op": "replace",
+      "args": [
+        "",
+        "",
+        "x"
+      ],
+      "culture": "en-US",
+      "expected": ""
+    },
+    {
+      "op": "replace",
+      "args": [
+        "abc",
+        "",
+        "x"
+      ],
+      "culture": "en-US",
+      "expected": "!ArgumentException"
+    },
+    {
+      "op": "replace",
+      "args": [
+        null,
+        "a",
+        "x"
+      ],
+      "culture": "en-US",
+      "expected": "!ArgumentNullException"
+    },
+    {
+      "op": "replace",
+      "args": [
+        "abc",
+        null,
+        "x"
+      ],
+      "culture": "en-US",
+      "expected": "!ArgumentNullException"
+    },
+    {
+      "op": "replace",
+      "args": [
+        "abc",
+        "z",
+        "x"
+      ],
+      "culture": "en-US",
+      "expected": "abc"
+    },
+    {
+      "op": "invariant",
+      "args": [
+        "Café-Game",
+        "cafe game"
+      ],
+      "culture": "en-US",
+      "expected": "True"
+    },
+    {
+      "op": "invariant",
+      "args": [
+        "Istanbul",
+        "istanbul"
+      ],
+      "culture": "en-US",
+      "expected": "True"
+    },
+    {
+      "op": "invariant",
+      "args": [
+        "",
+        ""
+      ],
+      "culture": "en-US",
+      "expected": "True"
+    },
+    {
+      "op": "invariant",
+      "args": [
+        null,
+        "x"
+      ],
+      "culture": "en-US",
+      "expected": "!ArgumentNullException"
+    },
+    {
+      "op": "invariant",
+      "args": [
+        "x",
+        null
+      ],
+      "culture": "en-US",
+      "expected": "!ArgumentNullException"
+    },
+    {
+      "op": "invariant",
+      "args": [
+        "ab",
+        "b"
+      ],
+      "culture": "en-US",
+      "expected": "True"
+    },
+    {
+      "op": "levenshtein",
+      "args": [
+        "",
+        ""
+      ],
+      "culture": "en-US",
+      "expected": "0"
+    },
+    {
+      "op": "jaro",
+      "args": [
+        "",
+        "",
+        "0.7"
+      ],
+      "culture": "en-US",
+      "expected": "1"
+    },
+    {
+      "op": "levenshtein",
+      "args": [
+        "",
+        "abc"
+      ],
+      "culture": "en-US",
+      "expected": "3"
+    },
+    {
+      "op": "jaro",
+      "args": [
+        "",
+        "abc",
+        "0.7"
+      ],
+      "culture": "en-US",
+      "expected": "0"
+    },
+    {
+      "op": "levenshtein",
+      "args": [
+        "abc",
+        ""
+      ],
+      "culture": "en-US",
+      "expected": "3"
+    },
+    {
+      "op": "jaro",
+      "args": [
+        "abc",
+        "",
+        "0.7"
+      ],
+      "culture": "en-US",
+      "expected": "0"
+    },
+    {
+      "op": "levenshtein",
+      "args": [
+        "hello",
+        "HELLO"
+      ],
+      "culture": "en-US",
+      "expected": "0"
+    },
+    {
+      "op": "jaro",
+      "args": [
+        "hello",
+        "HELLO",
+        "0.7"
+      ],
+      "culture": "en-US",
+      "expected": "1"
+    },
+    {
+      "op": "levenshtein",
+      "args": [
+        "kitten",
+        "sitting"
+      ],
+      "culture": "en-US",
+      "expected": "3"
+    },
+    {
+      "op": "jaro",
+      "args": [
+        "kitten",
+        "sitting",
+        "0.7"
+      ],
+      "culture": "en-US",
+      "expected": "0.746031746031746"
+    },
+    {
+      "op": "levenshtein",
+      "args": [
+        "kiwi",
+        "banana"
+      ],
+      "culture": "en-US",
+      "expected": "6"
+    },
+    {
+      "op": "jaro",
+      "args": [
+        "kiwi",
+        "banana",
+        "0.7"
+      ],
+      "culture": "en-US",
+      "expected": "0"
+    },
+    {
+      "op": "levenshtein",
+      "args": [
+        "MARTHA",
+        "MARHTA"
+      ],
+      "culture": "en-US",
+      "expected": "2"
+    },
+    {
+      "op": "jaro",
+      "args": [
+        "MARTHA",
+        "MARHTA",
+        "0.7"
+      ],
+      "culture": "en-US",
+      "expected": "0.9611111111111111"
+    },
+    {
+      "op": "levenshtein",
+      "args": [
+        "ABCD",
+        "ACBD"
+      ],
+      "culture": "en-US",
+      "expected": "2"
+    },
+    {
+      "op": "jaro",
+      "args": [
+        "ABCD",
+        "ACBD",
+        "0.7"
+      ],
+      "culture": "en-US",
+      "expected": "0.9249999999999999"
+    },
+    {
+      "op": "levenshtein",
+      "args": [
+        null,
+        "x"
+      ],
+      "culture": "en-US",
+      "expected": "!NullReferenceException"
+    },
+    {
+      "op": "jaro",
+      "args": [
+        null,
+        "x",
+        "0.7"
+      ],
+      "culture": "en-US",
+      "expected": "!NullReferenceException"
+    },
+    {
+      "op": "levenshtein",
+      "args": [
+        "x",
+        null
+      ],
+      "culture": "en-US",
+      "expected": "!NullReferenceException"
+    },
+    {
+      "op": "jaro",
+      "args": [
+        "x",
+        null,
+        "0.7"
+      ],
+      "culture": "en-US",
+      "expected": "!NullReferenceException"
+    },
+    {
+      "op": "jaro",
+      "args": [
+        "MARTHA",
+        "MARHTA",
+        "1"
+      ],
+      "culture": "en-US",
+      "expected": "0.9444444444444445"
+    },
+    {
+      "op": "format",
+      "args": [
+        "{0:N2}",
+        "1234.5"
+      ],
+      "culture": "en-US",
+      "expected": "1,234.50"
+    },
+    {
+      "op": "format",
+      "args": [
+        "{",
+        "1"
+      ],
+      "culture": "en-US",
+      "expected": "!FormatException"
+    },
+    {
+      "op": "format",
+      "args": [
+        "{0:N2}",
+        "1234.5"
+      ],
+      "culture": "fr-FR",
+      "expected": "1 234,50"
+    },
+    {
+      "op": "format",
+      "args": [
+        "{",
+        "1"
+      ],
+      "culture": "fr-FR",
+      "expected": "!FormatException"
+    },
+    {
+      "op": "format",
+      "args": [
+        "{0:N2}",
+        "1234.5"
+      ],
+      "culture": "tr-TR",
+      "expected": "1.234,50"
+    },
+    {
+      "op": "format",
+      "args": [
+        "{",
+        "1"
+      ],
+      "culture": "tr-TR",
+      "expected": "!FormatException"
+    },
+    {
+      "op": "parseDate",
+      "args": [
+        null,
+        "yyyy-MM-dd"
+      ],
+      "culture": "en-US",
+      "expected": "empty"
+    },
+    {
+      "op": "parseDate",
+      "args": [
+        "",
+        "yyyy-MM-dd"
+      ],
+      "culture": "en-US",
+      "expected": "empty"
+    },
+    {
+      "op": "parseDate",
+      "args": [
+        " ",
+        "yyyy-MM-dd"
+      ],
+      "culture": "en-US",
+      "expected": "invalid"
+    },
+    {
+      "op": "parseDate",
+      "args": [
+        "2024-02-29",
+        "yyyy-MM-dd"
+      ],
+      "culture": "en-US",
+      "expected": "2024-02-29T00:00:00.0000000"
+    },
+    {
+      "op": "parseDate",
+      "args": [
+        "2023-02-29",
+        "yyyy-MM-dd"
+      ],
+      "culture": "en-US",
+      "expected": "invalid"
+    },
+    {
+      "op": "parseDate",
+      "args": [
+        "2024-2-29",
+        "yyyy-MM-dd"
+      ],
+      "culture": "en-US",
+      "expected": "invalid"
+    },
+    {
+      "op": "parseDate",
+      "args": [
+        "2024-02-29 ",
+        "yyyy-MM-dd"
+      ],
+      "culture": "en-US",
+      "expected": "invalid"
+    },
+    {
+      "op": "parseDate",
+      "args": [
+        "0001-01-01",
+        "yyyy-MM-dd"
+      ],
+      "culture": "en-US",
+      "expected": "0001-01-01T00:00:00.0000000"
+    },
+    {
+      "op": "parseDate",
+      "args": [
+        "9999-12-31",
+        "yyyy-MM-dd"
+      ],
+      "culture": "en-US",
+      "expected": "9999-12-31T00:00:00.0000000"
+    },
+    {
+      "op": "parseDate",
+      "args": [
+        "10000-01-01",
+        "yyyy-MM-dd"
+      ],
+      "culture": "en-US",
+      "expected": "invalid"
+    },
+    {
+      "op": "parseDate",
+      "args": [
+        "2024-13-01",
+        "yyyy-MM-dd"
+      ],
+      "culture": "en-US",
+      "expected": "invalid"
+    },
+    {
+      "op": "parseDate",
+      "args": [
+        "nonsense",
+        "yyyy-MM-dd"
+      ],
+      "culture": "en-US",
+      "expected": "invalid"
+    },
+    {
+      "op": "parseDate",
+      "args": [
+        "31 décembre 2024",
+        "dd MMMM yyyy"
+      ],
+      "culture": "fr-FR",
+      "expected": "invalid"
+    },
+    {
+      "op": "parseDate",
+      "args": [
+        "31 December 2024",
+        "dd MMMM yyyy"
+      ],
+      "culture": "fr-FR",
+      "expected": "2024-12-31T00:00:00.0000000"
+    },
+    {
+      "op": "parseDate",
+      "args": [
+        "12/31/2024",
+        "MM/dd/yyyy"
+      ],
+      "culture": "fr-FR",
+      "expected": "2024-12-31T00:00:00.0000000"
+    },
+    {
+      "op": "date",
+      "args": [
+        "2024-05-15T12:30:00",
+        "2024-05-15",
+        null,
+        "true"
+      ],
+      "culture": "en-US",
+      "expected": "localized:LOCToday"
+    },
+    {
+      "op": "date",
+      "args": [
+        "2024-05-14T12:30:00",
+        "2024-05-15",
+        null,
+        "true"
+      ],
+      "culture": "en-US",
+      "expected": "localized:LOCYesterday"
+    },
+    {
+      "op": "date",
+      "args": [
+        "2024-05-13T12:30:00",
+        "2024-05-15",
+        null,
+        "true"
+      ],
+      "culture": "en-US",
+      "expected": "localized:LOCMonday"
+    },
+    {
+      "op": "date",
+      "args": [
+        "2024-05-09T12:30:00",
+        "2024-05-15",
+        null,
+        "true"
+      ],
+      "culture": "en-US",
+      "expected": "localized:LOCThursday"
+    },
+    {
+      "op": "date",
+      "args": [
+        "2024-05-08T12:30:00",
+        "2024-05-15",
+        null,
+        "true"
+      ],
+      "culture": "en-US",
+      "expected": "5/8/2024"
+    },
+    {
+      "op": "date",
+      "args": [
+        "2024-05-16T12:30:00",
+        "2024-05-15",
+        null,
+        "true"
+      ],
+      "culture": "en-US",
+      "expected": "5/16/2024"
+    },
+    {
+      "op": "date",
+      "args": [
+        "2024-05-15",
+        "2024-05-15",
+        null,
+        "false"
+      ],
+      "culture": "en-US",
+      "expected": "5/15/2024"
+    },
+    {
+      "op": "date",
+      "args": [
+        "2024-05-15",
+        "2024-05-15",
+        "",
+        "false"
+      ],
+      "culture": "en-US",
+      "expected": "5/15/2024 12:00:00 AM"
+    },
+    {
+      "op": "date",
+      "args": [
+        "2024-05-15",
+        "2024-05-15",
+        "D",
+        "false"
+      ],
+      "culture": "en-US",
+      "expected": "Wednesday, May 15, 2024"
+    },
+    {
+      "op": "date",
+      "args": [
+        "2024-05-15",
+        "2024-05-15",
+        "yyyy-MM-dd",
+        "false"
+      ],
+      "culture": "en-US",
+      "expected": "2024-05-15"
+    },
+    {
+      "op": "date",
+      "args": [
+        "2024-05-15",
+        "2024-05-15",
+        "%",
+        "false"
+      ],
+      "culture": "en-US",
+      "expected": "!FormatException"
+    },
+    {
+      "op": "date",
+      "args": [
+        "2024-05-15",
+        "2024-05-15",
+        "Q",
+        "false"
+      ],
+      "culture": "en-US",
+      "expected": "!FormatException"
+    },
+    {
+      "op": "date",
+      "args": [
+        "2024-05-15T12:30:00",
+        "2024-05-15",
+        null,
+        "true"
+      ],
+      "culture": "fr-FR",
+      "expected": "localized:LOCToday"
+    },
+    {
+      "op": "date",
+      "args": [
+        "2024-05-14T12:30:00",
+        "2024-05-15",
+        null,
+        "true"
+      ],
+      "culture": "fr-FR",
+      "expected": "localized:LOCYesterday"
+    },
+    {
+      "op": "date",
+      "args": [
+        "2024-05-13T12:30:00",
+        "2024-05-15",
+        null,
+        "true"
+      ],
+      "culture": "fr-FR",
+      "expected": "localized:LOCMonday"
+    },
+    {
+      "op": "date",
+      "args": [
+        "2024-05-09T12:30:00",
+        "2024-05-15",
+        null,
+        "true"
+      ],
+      "culture": "fr-FR",
+      "expected": "localized:LOCThursday"
+    },
+    {
+      "op": "date",
+      "args": [
+        "2024-05-08T12:30:00",
+        "2024-05-15",
+        null,
+        "true"
+      ],
+      "culture": "fr-FR",
+      "expected": "08/05/2024"
+    },
+    {
+      "op": "date",
+      "args": [
+        "2024-05-16T12:30:00",
+        "2024-05-15",
+        null,
+        "true"
+      ],
+      "culture": "fr-FR",
+      "expected": "16/05/2024"
+    },
+    {
+      "op": "date",
+      "args": [
+        "2024-05-15",
+        "2024-05-15",
+        null,
+        "false"
+      ],
+      "culture": "fr-FR",
+      "expected": "15/05/2024"
+    },
+    {
+      "op": "date",
+      "args": [
+        "2024-05-15",
+        "2024-05-15",
+        "",
+        "false"
+      ],
+      "culture": "fr-FR",
+      "expected": "15/05/2024 00:00:00"
+    },
+    {
+      "op": "date",
+      "args": [
+        "2024-05-15",
+        "2024-05-15",
+        "D",
+        "false"
+      ],
+      "culture": "fr-FR",
+      "expected": "mercredi 15 mai 2024"
+    },
+    {
+      "op": "date",
+      "args": [
+        "2024-05-15",
+        "2024-05-15",
+        "yyyy-MM-dd",
+        "false"
+      ],
+      "culture": "fr-FR",
+      "expected": "2024-05-15"
+    },
+    {
+      "op": "date",
+      "args": [
+        "2024-05-15",
+        "2024-05-15",
+        "%",
+        "false"
+      ],
+      "culture": "fr-FR",
+      "expected": "!FormatException"
+    },
+    {
+      "op": "date",
+      "args": [
+        "2024-05-15",
+        "2024-05-15",
+        "Q",
+        "false"
+      ],
+      "culture": "fr-FR",
+      "expected": "!FormatException"
+    },
+    {
+      "op": "date",
+      "args": [
+        "2024-05-15T12:30:00",
+        "2024-05-15",
+        null,
+        "true"
+      ],
+      "culture": "tr-TR",
+      "expected": "localized:LOCToday"
+    },
+    {
+      "op": "date",
+      "args": [
+        "2024-05-14T12:30:00",
+        "2024-05-15",
+        null,
+        "true"
+      ],
+      "culture": "tr-TR",
+      "expected": "localized:LOCYesterday"
+    },
+    {
+      "op": "date",
+      "args": [
+        "2024-05-13T12:30:00",
+        "2024-05-15",
+        null,
+        "true"
+      ],
+      "culture": "tr-TR",
+      "expected": "localized:LOCMonday"
+    },
+    {
+      "op": "date",
+      "args": [
+        "2024-05-09T12:30:00",
+        "2024-05-15",
+        null,
+        "true"
+      ],
+      "culture": "tr-TR",
+      "expected": "localized:LOCThursday"
+    },
+    {
+      "op": "date",
+      "args": [
+        "2024-05-08T12:30:00",
+        "2024-05-15",
+        null,
+        "true"
+      ],
+      "culture": "tr-TR",
+      "expected": "8.05.2024"
+    },
+    {
+      "op": "date",
+      "args": [
+        "2024-05-16T12:30:00",
+        "2024-05-15",
+        null,
+        "true"
+      ],
+      "culture": "tr-TR",
+      "expected": "16.05.2024"
+    },
+    {
+      "op": "date",
+      "args": [
+        "2024-05-15",
+        "2024-05-15",
+        null,
+        "false"
+      ],
+      "culture": "tr-TR",
+      "expected": "15.05.2024"
+    },
+    {
+      "op": "date",
+      "args": [
+        "2024-05-15",
+        "2024-05-15",
+        "",
+        "false"
+      ],
+      "culture": "tr-TR",
+      "expected": "15.05.2024 00:00:00"
+    },
+    {
+      "op": "date",
+      "args": [
+        "2024-05-15",
+        "2024-05-15",
+        "D",
+        "false"
+      ],
+      "culture": "tr-TR",
+      "expected": "15 Mayıs 2024 Çarşamba"
+    },
+    {
+      "op": "date",
+      "args": [
+        "2024-05-15",
+        "2024-05-15",
+        "yyyy-MM-dd",
+        "false"
+      ],
+      "culture": "tr-TR",
+      "expected": "2024-05-15"
+    },
+    {
+      "op": "date",
+      "args": [
+        "2024-05-15",
+        "2024-05-15",
+        "%",
+        "false"
+      ],
+      "culture": "tr-TR",
+      "expected": "!FormatException"
+    },
+    {
+      "op": "date",
+      "args": [
+        "2024-05-15",
+        "2024-05-15",
+        "Q",
+        "false"
+      ],
+      "culture": "tr-TR",
+      "expected": "!FormatException"
+    },
+    {
+      "op": "date",
+      "args": [
+        "0001-01-01",
+        "2024-05-15",
+        "d",
+        "false"
+      ],
+      "culture": "ar-SA",
+      "expected": "1‏‏/1‏‏/0001"
+    },
+    {
+      "op": "playtime",
+      "args": [
+        null,
+        "false"
+      ],
+      "culture": "en-US",
+      "expected": "none"
+    },
+    {
+      "op": "playtime",
+      "args": [
+        null,
+        "true"
+      ],
+      "culture": "en-US",
+      "expected": "none"
+    },
+    {
+      "op": "playtime",
+      "args": [
+        "0",
+        "false"
+      ],
+      "culture": "en-US",
+      "expected": "none"
+    },
+    {
+      "op": "playtime",
+      "args": [
+        "0",
+        "true"
+      ],
+      "culture": "en-US",
+      "expected": "none"
+    },
+    {
+      "op": "playtime",
+      "args": [
+        "1",
+        "false"
+      ],
+      "culture": "en-US",
+      "expected": "1 seconds"
+    },
+    {
+      "op": "playtime",
+      "args": [
+        "1",
+        "true"
+      ],
+      "culture": "en-US",
+      "expected": "1 seconds"
+    },
+    {
+      "op": "playtime",
+      "args": [
+        "59",
+        "false"
+      ],
+      "culture": "en-US",
+      "expected": "59 seconds"
+    },
+    {
+      "op": "playtime",
+      "args": [
+        "59",
+        "true"
+      ],
+      "culture": "en-US",
+      "expected": "59 seconds"
+    },
+    {
+      "op": "playtime",
+      "args": [
+        "60",
+        "false"
+      ],
+      "culture": "en-US",
+      "expected": "1 minutes"
+    },
+    {
+      "op": "playtime",
+      "args": [
+        "60",
+        "true"
+      ],
+      "culture": "en-US",
+      "expected": "1 minutes"
+    },
+    {
+      "op": "playtime",
+      "args": [
+        "3599",
+        "false"
+      ],
+      "culture": "en-US",
+      "expected": "59 minutes"
+    },
+    {
+      "op": "playtime",
+      "args": [
+        "3599",
+        "true"
+      ],
+      "culture": "en-US",
+      "expected": "59 minutes"
+    },
+    {
+      "op": "playtime",
+      "args": [
+        "3600",
+        "false"
+      ],
+      "culture": "en-US",
+      "expected": "1 hours 0 minutes"
+    },
+    {
+      "op": "playtime",
+      "args": [
+        "3600",
+        "true"
+      ],
+      "culture": "en-US",
+      "expected": "1 hours 0 minutes"
+    },
+    {
+      "op": "playtime",
+      "args": [
+        "86399",
+        "false"
+      ],
+      "culture": "en-US",
+      "expected": "23 hours 59 minutes"
+    },
+    {
+      "op": "playtime",
+      "args": [
+        "86399",
+        "true"
+      ],
+      "culture": "en-US",
+      "expected": "23 hours 59 minutes"
+    },
+    {
+      "op": "playtime",
+      "args": [
+        "86400",
+        "false"
+      ],
+      "culture": "en-US",
+      "expected": "24 hours 0 minutes"
+    },
+    {
+      "op": "playtime",
+      "args": [
+        "86400",
+        "true"
+      ],
+      "culture": "en-US",
+      "expected": "1 days 0 hours 0 minutes"
+    },
+    {
+      "op": "playtime",
+      "args": [
+        "90061",
+        "false"
+      ],
+      "culture": "en-US",
+      "expected": "25 hours 1 minutes"
+    },
+    {
+      "op": "playtime",
+      "args": [
+        "90061",
+        "true"
+      ],
+      "culture": "en-US",
+      "expected": "1 days 1 hours 1 minutes"
+    },
+    {
+      "op": "playtime",
+      "args": [
+        "18446744073709551615",
+        "false"
+      ],
+      "culture": "en-US",
+      "expected": "5,124,095,576,030,431 hours 0 minutes"
+    },
+    {
+      "op": "playtime",
+      "args": [
+        "18446744073709551615",
+        "true"
+      ],
+      "culture": "en-US",
+      "expected": "213,503,982,334,601 days 7 hours 0 minutes"
+    },
+    {
+      "op": "playtime",
+      "args": [
+        null,
+        "false"
+      ],
+      "culture": "fr-FR",
+      "expected": "none"
+    },
+    {
+      "op": "playtime",
+      "args": [
+        null,
+        "true"
+      ],
+      "culture": "fr-FR",
+      "expected": "none"
+    },
+    {
+      "op": "playtime",
+      "args": [
+        "0",
+        "false"
+      ],
+      "culture": "fr-FR",
+      "expected": "none"
+    },
+    {
+      "op": "playtime",
+      "args": [
+        "0",
+        "true"
+      ],
+      "culture": "fr-FR",
+      "expected": "none"
+    },
+    {
+      "op": "playtime",
+      "args": [
+        "1",
+        "false"
+      ],
+      "culture": "fr-FR",
+      "expected": "1 seconds"
+    },
+    {
+      "op": "playtime",
+      "args": [
+        "1",
+        "true"
+      ],
+      "culture": "fr-FR",
+      "expected": "1 seconds"
+    },
+    {
+      "op": "playtime",
+      "args": [
+        "59",
+        "false"
+      ],
+      "culture": "fr-FR",
+      "expected": "59 seconds"
+    },
+    {
+      "op": "playtime",
+      "args": [
+        "59",
+        "true"
+      ],
+      "culture": "fr-FR",
+      "expected": "59 seconds"
+    },
+    {
+      "op": "playtime",
+      "args": [
+        "60",
+        "false"
+      ],
+      "culture": "fr-FR",
+      "expected": "1 minutes"
+    },
+    {
+      "op": "playtime",
+      "args": [
+        "60",
+        "true"
+      ],
+      "culture": "fr-FR",
+      "expected": "1 minutes"
+    },
+    {
+      "op": "playtime",
+      "args": [
+        "3599",
+        "false"
+      ],
+      "culture": "fr-FR",
+      "expected": "59 minutes"
+    },
+    {
+      "op": "playtime",
+      "args": [
+        "3599",
+        "true"
+      ],
+      "culture": "fr-FR",
+      "expected": "59 minutes"
+    },
+    {
+      "op": "playtime",
+      "args": [
+        "3600",
+        "false"
+      ],
+      "culture": "fr-FR",
+      "expected": "1 hours 0 minutes"
+    },
+    {
+      "op": "playtime",
+      "args": [
+        "3600",
+        "true"
+      ],
+      "culture": "fr-FR",
+      "expected": "1 hours 0 minutes"
+    },
+    {
+      "op": "playtime",
+      "args": [
+        "86399",
+        "false"
+      ],
+      "culture": "fr-FR",
+      "expected": "23 hours 59 minutes"
+    },
+    {
+      "op": "playtime",
+      "args": [
+        "86399",
+        "true"
+      ],
+      "culture": "fr-FR",
+      "expected": "23 hours 59 minutes"
+    },
+    {
+      "op": "playtime",
+      "args": [
+        "86400",
+        "false"
+      ],
+      "culture": "fr-FR",
+      "expected": "24 hours 0 minutes"
+    },
+    {
+      "op": "playtime",
+      "args": [
+        "86400",
+        "true"
+      ],
+      "culture": "fr-FR",
+      "expected": "1 days 0 hours 0 minutes"
+    },
+    {
+      "op": "playtime",
+      "args": [
+        "90061",
+        "false"
+      ],
+      "culture": "fr-FR",
+      "expected": "25 hours 1 minutes"
+    },
+    {
+      "op": "playtime",
+      "args": [
+        "90061",
+        "true"
+      ],
+      "culture": "fr-FR",
+      "expected": "1 days 1 hours 1 minutes"
+    },
+    {
+      "op": "playtime",
+      "args": [
+        "18446744073709551615",
+        "false"
+      ],
+      "culture": "fr-FR",
+      "expected": "5 124 095 576 030 431 hours 0 minutes"
+    },
+    {
+      "op": "playtime",
+      "args": [
+        "18446744073709551615",
+        "true"
+      ],
+      "culture": "fr-FR",
+      "expected": "213 503 982 334 601 days 7 hours 0 minutes"
+    },
+    {
+      "op": "enum",
+      "args": [
+        "None"
+      ],
+      "culture": "en-US",
+      "expected": "None"
+    },
+    {
+      "op": "enum",
+      "args": [
+        "One"
+      ],
+      "culture": "en-US",
+      "expected": "literal"
+    },
+    {
+      "op": "enum",
+      "args": [
+        "Two"
+      ],
+      "culture": "en-US",
+      "expected": "localized:LOCtwo"
+    },
+    {
+      "op": "enum",
+      "args": [
+        "Both"
+      ],
+      "culture": "en-US",
+      "expected": "Both"
+    },
+    {
+      "op": "enum",
+      "args": [
+        "One, Two"
+      ],
+      "culture": "en-US",
+      "expected": "Both"
+    },
+    {
+      "op": "enum",
+      "args": [
+        "Four"
+      ],
+      "culture": "en-US",
+      "expected": "Four"
+    },
+    {
+      "op": "enum",
+      "args": [
+        "One, Four"
+      ],
+      "culture": "en-US",
+      "expected": ""
+    },
+    {
+      "op": "enum",
+      "args": [
+        "5"
+      ],
+      "culture": "en-US",
+      "expected": ""
+    },
+    {
+      "op": "enum",
+      "args": [
+        "8"
+      ],
+      "culture": "en-US",
+      "expected": ""
+    },
+    {
+      "op": "enum",
+      "args": [
+        "7"
+      ],
+      "culture": "en-US",
+      "expected": ""
+    },
+    {
+      "op": "enum",
+      "args": [
+        "-1"
+      ],
+      "culture": "en-US",
+      "expected": ""
+    },
+    {
+      "op": "enum",
+      "args": [
+        "one"
+      ],
+      "culture": "en-US",
+      "expected": "!ArgumentException"
+    },
+    {
+      "op": "enum",
+      "args": [
+        ""
+      ],
+      "culture": "en-US",
+      "expected": "!ArgumentException"
+    },
+    {
+      "op": "enum",
+      "args": [
+        "  One  "
+      ],
+      "culture": "en-US",
+      "expected": "literal"
+    },
+    {
+      "op": "enum",
+      "args": [
+        "2147483648"
+      ],
+      "culture": "en-US",
+      "expected": "!OverflowException"
+    },
+    {
+      "op": "enum",
+      "args": [
+        "Unknown"
+      ],
+      "culture": "en-US",
+      "expected": "!ArgumentException"
+    }
+  ]
+}
