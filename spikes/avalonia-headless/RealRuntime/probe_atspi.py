@@ -121,6 +121,7 @@ def walk(obj, bus, depth=0, limit=400, out=None):
         "name": None,
         "role": None,
         "description": None,
+        "accessible_id": None,
         "states": [],
         "interfaces": [],
         "text": None,
@@ -136,6 +137,7 @@ def walk(obj, bus, depth=0, limit=400, out=None):
         node["name"] = obj.get_name()
         node["role"] = obj.get_role_name()
         node["description"] = obj.get_description()
+        node["accessible_id"] = obj.get_accessible_id()
         node["path"] = obj.path
     except Exception:
         pass
@@ -232,15 +234,13 @@ def main():
 
     if args.act:
         acted = {}
-        interactive = {}
 
-        def collect(node):
-            if node["actions"] or node["role"] == "entry":
-                interactive[(node["role"], node["name"])] = node
-            for child in node["children"]:
-                collect(child)
-
-        collect(tree)
+        def walk_nodes(root):
+            yield root
+            for i in range(root.get_child_count()):
+                child = root.get_child_at_index(i)
+                if child is not None:
+                    yield from walk_nodes(child)
 
         def obj_for(role, name):
             for node in walk_nodes(target):
@@ -251,20 +251,57 @@ def main():
                     pass
             return None
 
-        def walk_nodes(root):
-            yield root
-            for i in range(root.get_child_count()):
-                child = root.get_child_at_index(i)
-                if child is not None:
-                    yield from walk_nodes(child)
+        def obj_by_id(accessible_id):
+            for node in walk_nodes(target):
+                try:
+                    if node.get_accessible_id() == accessible_id:
+                        return node
+                except Exception:
+                    pass
+            return None
 
-        for role, name in [("check box", "Installed only"),
-                           ("button", "Play Orbit"),
-                           ("button", "Details unavailable")]:
-            obj = obj_for(role, name)
-            acted[f"{role}:{name}"] = do_action(obj) if obj is not None else {"acted": False, "why": "not found"}
+        def checked(obj):
+            return obj.get_state_set().contains(Atspi.StateType.CHECKED) if obj is not None else None
 
+        def describe_target(obj):
+            if obj is None:
+                return None
+            try:
+                return {
+                    "role": obj.get_role_name(),
+                    "name": obj.get_name(),
+                    "accessible_id": obj.get_accessible_id(),
+                }
+            except Exception:
+                return None
+
+        checkbox = obj_for("check box", "Installed only")
         entry = obj_for("entry", "Search games")
+        status = obj_by_id("status")
+        acted["initial"] = {
+            "checked": checked(checkbox),
+            "text": read_text(entry, bus) if entry is not None else None,
+            "status": status.get_name() if status is not None else None,
+        }
+
+        # Toggle, and re-check the same object reference plus its AccessibleId.
+        acted["toggle_target"] = describe_target(checkbox)
+        acted["toggle"] = do_action(checkbox) if checkbox is not None else {"acted": False, "why": "not found"}
+        acted["checked_after_toggle"] = checked(checkbox)
+
+        # Invoke, and read the status label's name through its AccessibleId.
+        play = obj_for("button", "Play Orbit")
+        acted["invoke_target"] = describe_target(play)
+        acted["invoke"] = do_action(play) if play is not None else {"acted": False, "why": "not found"}
+        status = obj_by_id("status")
+        acted["status_after_invoke"] = status.get_name() if status is not None else None
+
+        # Disabled control must be refused.
+        disabled = obj_for("button", "Details unavailable")
+        acted["disabled_target"] = describe_target(disabled)
+        acted["disabled_invoke"] = do_action(disabled) if disabled is not None else {"acted": False, "why": "not found"}
+
+        # Set text, then read the same entry back through org.a11y.atspi.Text.
         if entry is None:
             acted["set_text"] = {"ok": False, "why": "not found"}
         else:
@@ -279,6 +316,9 @@ def main():
                         acted["set_text"] = {"ok": bool(et.set_text_contents("Meadow"))}
                     except Exception as exc2:
                         acted["set_text"] = {"ok": False, "why": str(exc2)}
+
+        acted["text_after_set"] = read_text(entry, bus) if entry is not None else None
+        acted["text_target"] = describe_target(entry)
 
         if args.json:
             result["actions"] = acted

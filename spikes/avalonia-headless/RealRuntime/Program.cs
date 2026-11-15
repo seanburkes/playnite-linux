@@ -92,7 +92,19 @@ public sealed class RealRuntimeApp : Application
 public static class Program
 {
     [STAThread]
-    public static void Main(string[] args) => BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
+    public static void Main(string[] args)
+    {
+        foreach (var key in new[]
+                 {
+                     "XDG_SESSION_TYPE", "WAYLAND_DISPLAY", "DISPLAY", "DBUS_SESSION_BUS_ADDRESS",
+                     "AT_SPI_BUS_ADDRESS", "GTK_A11Y", "ACCESSIBILITY_ENABLED", "NO_AT_BRIDGE",
+                 })
+        {
+            Console.WriteLine($"[env] {key}={Environment.GetEnvironmentVariable(key) ?? "<unset>"}");
+        }
+        Console.Out.Flush();
+        BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
+    }
 
     public static AppBuilder BuildAvaloniaApp()
     {
