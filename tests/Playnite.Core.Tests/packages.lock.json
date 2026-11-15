@@ -144,7 +144,21 @@
       "playnite.core": {
         "type": "Project",
         "dependencies": {
-          "Playnite.SDK.Abstractions": "[1.0.0, )"
+          "Playnite.SDK.Abstractions": "[7.0.0, )"
+        }
+      },
+      "playnite.platform": {
+        "type": "Project",
+        "dependencies": {
+          "Playnite.Core": "[1.0.0, )",
+          "Playnite.SDK.Abstractions": "[7.0.0, )"
+        }
+      },
+      "playnite.platform.linux": {
+        "type": "Project",
+        "dependencies": {
+          "Playnite.Core": "[1.0.0, )",
+          "Playnite.Platform": "[1.0.0, )"
         }
       },
       "playnite.sdk.abstractions": {

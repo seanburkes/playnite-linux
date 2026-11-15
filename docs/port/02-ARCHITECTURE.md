@@ -166,15 +166,22 @@ tests:
 
 ## 4. Platform abstraction
 
-`Playnite.Platform` defines the only OS boundary:
+`Playnite.Platform` defines the UI/platform service boundary. The path leaf's `IPaths`,
+`IEnvironment` and `IFileSystem` contracts live in Core so Core never references Platform;
+`Playnite.Platform.Linux` implements them. `PlaynitePaths` in Core derives v10 filenames
+from the captured roots, and `LinuxPaths` supplies the XDG roots without creating them.
 
 ```csharp
 public interface IPaths {
+    string Home { get; }
+    string Documents { get; }
     string UserData { get; }        // XDG_DATA_HOME/playnite
     string Config { get; }          // XDG_CONFIG_HOME/playnite
     string Cache { get; }           // XDG_CACHE_HOME/playnite
-    string Logs { get; }
+    string State { get; }           // XDG_STATE_HOME/playnite
+    string Logs { get; }            // State/logs
     string Program { get; }         // AppImage/Flatpak mount
+    IReadOnlyList<string> SteamRootCandidates { get; } // ordered probes, not VDF libraries
 }
 
 public interface IProcessLauncher {
@@ -202,7 +209,10 @@ public interface IFilePickerService { ... }
 ```
 
 Linux implementations:
-- XDG base dirs; `XDG_DATA_HOME`, `XDG_CONFIG_HOME`, `XDG_CACHE_HOME`.
+- XDG base dirs: nonempty absolute `XDG_DATA_HOME`, `XDG_CONFIG_HOME`, `XDG_CACHE_HOME`,
+  `XDG_STATE_HOME`; otherwise HOME/.local/share, HOME/.config, HOME/.cache, HOME/.local/state.
+  Each application root adds the single Core `ApplicationDirectoryName` constant. Documents
+  reads a quoted absolute or `$HOME`-relative entry from `user-dirs.dirs`, otherwise HOME/Documents.
 - `xdg-open` via `Process` with argument-list APIs (no shell).
 - Unix domain socket + file lock for single instance.
 - `.desktop` entry + `xdg-mime` for `playnite://`.

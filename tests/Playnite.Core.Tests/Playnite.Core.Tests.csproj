@@ -12,5 +12,9 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="../../src/Playnite.Core/Playnite.Core.csproj" />
+    <ProjectReference Include="../../src/Playnite.Platform.Linux/Playnite.Platform.Linux.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="../golden/paths/*.json" Link="golden/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>
