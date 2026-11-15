@@ -6,8 +6,35 @@ namespace Playnite.Architecture.Tests;
 
 internal static class SourcePolicy
 {
-    internal static IEnumerable<string> Violations(string project, CSharpCompilation compilation)
+    // A renamed or added product must be classified here explicitly. Otherwise a rule that
+    // matches by project name would silently stop covering it and the suite would pass while
+    // the gate was narrower than PORTING.md.
+    internal static readonly string[] KnownProjects =
+    [
+        "Playnite.SDK.Abstractions",
+        "Playnite.SDK",
+        "Playnite.Core",
+        "Playnite.Platform",
+        "Playnite.Platform.Linux",
+        "Playnite.Steam",
+        "Playnite.LegacyImport.Contracts",
+        "Playnite.LegacyImport",
+        "Playnite.Desktop",
+        "Playnite.Cli",
+    ];
+
+    internal static readonly string[] HostProjects = ["Playnite.Desktop", "Playnite.Cli", "Playnite.LegacyImport"];
+    internal static readonly string[] LogicProjects = ["Playnite.Core", "Playnite.SDK.Abstractions", "Playnite.Steam"];
+    internal static readonly string[] UiProjects = ["Playnite.Desktop", "Playnite.SDK"];
+
+    internal static IEnumerable<string> Violations(string project, CSharpCompilation compilation, bool inBenchmarkHarness = false)
     {
+        if (!KnownProjects.Contains(project))
+        {
+            throw new InvalidOperationException(
+                $"Project '{project}' has no source-policy classification; add it to SourcePolicy.KnownProjects and the PORTING.md owner inventory");
+        }
+
         foreach (var tree in compilation.SyntaxTrees)
         {
             var model = compilation.GetSemanticModel(tree);
@@ -41,7 +68,7 @@ internal static class SourcePolicy
                         symbol = alias.Target;
                     }
 
-                    rule = SymbolViolation(project, symbol, node, model);
+                    rule = SymbolViolation(project, symbol, node, model, inBenchmarkHarness);
                 }
 
                 if (rule != null)
@@ -52,7 +79,7 @@ internal static class SourcePolicy
         }
     }
 
-    private static string? SymbolViolation(string project, ISymbol? symbol, SyntaxNode node, SemanticModel model)
+    private static string? SymbolViolation(string project, ISymbol? symbol, SyntaxNode node, SemanticModel model, bool inBenchmarkHarness)
     {
         var type = symbol as INamedTypeSymbol ?? symbol?.ContainingType;
         if (type == null)
@@ -71,7 +98,8 @@ internal static class SourcePolicy
 
         if (name is "System.Runtime.InteropServices.DllImportAttribute" or "System.Runtime.InteropServices.LibraryImportAttribute")
         {
-            // No native imports are approved yet. A reviewed Linux allow-list belongs to its porting unit.
+            // PORTING allows native imports only in Platform.Linux with a reviewed allow-list.
+            // No entry has been reviewed yet, so even Linux rejects them until its unit adds one.
             return project == "Playnite.Platform.Linux"
                 ? "native import needs a reviewed Linux allow-list (currently empty)"
                 : "native import outside Playnite.Platform.Linux";
@@ -79,8 +107,17 @@ internal static class SourcePolicy
 
         if (symbol is IMethodSymbol method)
         {
-            if (name == "System.GC" && method.Name == "Collect"
-                || name == "System.Threading.Thread" && method.Name == "Abort"
+            if (name == "System.GC" && method.Name == "Collect")
+            {
+                // The table's exception is a benchmark/soak harness with a comment. The harness
+                // is declared by PlayniteBenchmarkHarness, which also lifts the symbol ban;
+                // the comment is still required here, so the property alone permits nothing.
+                return inBenchmarkHarness && IsCommented(node)
+                    ? null
+                    : "banned call System.GC.Collect outside a commented benchmark/soak harness";
+            }
+
+            if (name == "System.Threading.Thread" && method.Name == "Abort"
                 || name == "System.AppDomain" && method.Name == "CreateDomain")
             {
                 return $"banned call {type}.{method.Name}";
@@ -148,12 +185,17 @@ internal static class SourcePolicy
     private static bool IsEmpty(BlockSyntax block) => block.Statements.All(s => s is EmptyStatementSyntax || s is BlockSyntax nested && IsEmpty(nested));
 
     private static bool InNamespace(string name, string prefix) => name == prefix || name.StartsWith(prefix + ".", StringComparison.Ordinal);
-    private static bool IsHost(string project) => project is "Playnite.Desktop" or "Playnite.Cli" or "Playnite.LegacyImport";
-    private static bool IsLogic(string project) => project is "Playnite.Core" or "Playnite.SDK.Abstractions" or "Playnite.Steam";
+    private static bool IsHost(string project) => HostProjects.Contains(project);
+    private static bool IsLogic(string project) => LogicProjects.Contains(project);
 
     private static bool IsUiHandler(string project, IMethodSymbol method)
     {
-        if (project is not ("Playnite.Desktop" or "Playnite.SDK") || method.Parameters.Length != 2
+        // Signature-level approximation: PORTING says "UI event handlers only", but Roslyn
+        // source analysis cannot prove that a method is registered with an event. The
+        // architectural project scope is the only boundary available, so Desktop/SDK methods
+        // and lambdas with the conventional (object sender, EventArgs-derived) shape are
+        // permitted; registration and failure logging stay a review obligation.
+        if (!UiProjects.Contains(project) || method.Parameters.Length != 2
             || method.Parameters[0].Type.SpecialType != SpecialType.System_Object)
         {
             return false;
@@ -178,6 +220,11 @@ internal static class SourcePolicy
             return false;
         }
 
+        return IsCommented(node);
+    }
+
+    private static bool IsCommented(SyntaxNode node)
+    {
         var statement = node.AncestorsAndSelf().OfType<StatementSyntax>().FirstOrDefault();
         return statement != null && statement.GetLeadingTrivia().Concat(statement.GetTrailingTrivia())
             .Any(t => t.IsKind(SyntaxKind.SingleLineCommentTrivia) || t.IsKind(SyntaxKind.MultiLineCommentTrivia));

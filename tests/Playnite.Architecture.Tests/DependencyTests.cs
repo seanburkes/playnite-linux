@@ -9,26 +9,39 @@ public sealed class DependencyTests
     [Fact]
     public void Evaluated_product_references_follow_the_allowed_reference_table()
     {
-        var products = ProductGraph.Products.ToArray();
-        Assert.Equal(ProductGraph.AllowedProjects.Keys.Order(), products.Select(p => p.Name).Order());
+        var products = ProductGraph.Products.OrderBy(p => p.Name).ToArray();
+        var rows = ArchitectureTable.ProductRows;
+        // The file tree and the architecture document must describe the same project set.
+        Assert.Equal(rows.Select(r => r.Project).Order(), products.Select(p => p.Name).Order());
         foreach (var project in products)
         {
+            var row = ArchitectureTable.For(project.Name);
             foreach (var dependency in project.Values("ProjectReference"))
             {
-                Assert.True(ProductGraph.AllowedProjects[project.Name].Contains(dependency),
+                Assert.True(row.AllowedProjects.Contains(dependency),
                     $"{project.Name} -> {dependency} violates docs/port/02-ARCHITECTURE.md allowed-reference table");
+                Assert.DoesNotContain(dependency, row.ForbiddenProjects);
             }
 
+            foreach (var banned in row.ForbiddenProjects)
+            {
+                Assert.DoesNotContain(banned, project.Values("ProjectReference"));
+            }
+
+            // Avalonia is additionally clarified below the table: Platform may host
+            // inherently UI-shaped platform services, so the family is allowed there.
+            var allowedPackages = row.AllowedPackages.Append(
+                project.Name is "Playnite.Platform" ? "Avalonia" : string.Empty)
+                .Where(name => name.Length > 0).ToArray();
             foreach (var package in project.DirectPackages().Where(p => p != "Microsoft.CodeAnalysis.BannedApiAnalyzers"))
             {
-                var permitted = project.Name switch
+                var permitted = allowedPackages.Any(allowed => IsFamily(package, allowed));
+                if (project.Name == "Playnite.LegacyImport" && IsFamily(package, "LiteDB"))
                 {
-                    "Playnite.SDK.Abstractions" or "Playnite.LegacyImport.Contracts" => false,
-                    "Playnite.SDK" => IsFamily(package, "Avalonia"),
-                    "Playnite.Core" => new[] { "Microsoft.Data.Sqlite", "Dapper", "Newtonsoft.Json", "YamlDotNet", "NLog" }.Contains(package),
-                    "Playnite.LegacyImport" => package == "LiteDB" && LegacyLiteDbVersion(project),
-                    _ => !IsFamily(package, "Avalonia") || project.Name is "Playnite.Platform" or "Playnite.Platform.Linux" or "Playnite.Desktop"
-                };
+                    // The migration reader must stay on the frozen v10 file-format generation.
+                    permitted = LegacyLiteDbVersion(project);
+                }
+
                 Assert.True(permitted, $"{project.Name} -> package {package} violates the allowed-reference table");
             }
         }
@@ -68,6 +81,9 @@ public sealed class DependencyTests
         foreach (var project in ProductGraph.Products)
         {
             var assembly = Assembly.LoadFrom(project.Values("Output").Single());
+            // NetArchTest passes any rule over an empty type set; an empty product
+            // assembly would silently switch this gate off.
+            Assert.NotEmpty(assembly.GetTypes());
             foreach (var dependency in new[] { "System.Drawing", "Microsoft.Win32", "System.Management", "System.ServiceProcess.ServiceController" })
             {
                 var result = Types.InAssembly(assembly).ShouldNot().HaveDependencyOn(dependency).GetResult();
@@ -84,7 +100,16 @@ public sealed class DependencyTests
             Assert.Equal("true", product.Values("Product").Single());
             Assert.Contains("Microsoft.CodeAnalysis.BannedApiAnalyzers", product.DirectPackages());
             Assert.Contains(product.Values("Analyzer"), a => a.Contains("BannedApiAnalyzers", StringComparison.Ordinal));
-            Assert.Contains(Path.Combine(ProductGraph.Root, "BannedSymbols.txt"), product.Values("AdditionalFile"));
+            var files = product.Values("AdditionalFile");
+            Assert.Contains(Path.Combine(ProductGraph.Root, "BannedSymbols.txt"), files);
+            Assert.Equal(product.Name != "Playnite.Cli", files.Contains(Path.Combine(ProductGraph.Root, "BannedSymbols.Blocking.txt")));
+            Assert.Equal(!product.InBenchmarkHarness, files.Contains(Path.Combine(ProductGraph.Root, "BannedSymbols.GcCollect.txt")));
+            Assert.Equal(product.Name != "Playnite.Platform.Linux", files.Contains(Path.Combine(ProductGraph.Root, "BannedSymbols.Interop.txt")));
+            Assert.Equal(product.Name is "Playnite.Core" or "Playnite.SDK.Abstractions" or "Playnite.Steam",
+                files.Contains(Path.Combine(ProductGraph.Root, "BannedSymbols.Logic.txt")));
+            Assert.Equal(product.Name == "Playnite.Core", files.Contains(Path.Combine(ProductGraph.Root, "BannedSymbols.Core.txt")));
+            Assert.Equal(product.Name is not ("Playnite.Cli" or "Playnite.Desktop" or "Playnite.LegacyImport"),
+                files.Contains(Path.Combine(ProductGraph.Root, "BannedSymbols.Library.txt")));
         }
 
         var runner = new ProductGraph(Path.Combine(ProductGraph.Root, "tests", "Playnite.Architecture.Tests", "Playnite.Architecture.Tests.csproj"));

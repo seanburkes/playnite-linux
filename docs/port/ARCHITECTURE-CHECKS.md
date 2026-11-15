@@ -46,6 +46,30 @@ package restrictions for Core, SDK, Abstractions, Contracts and LegacyImport
 packages to the UI/platform projects. The textual architecture clarification
 allows Avalonia in Platform as well as Platform.Linux.
 
+The allowed-reference table is not duplicated in the test code. `ArchitectureTable`
+parses section 2 of `docs/port/02-ARCHITECTURE.md` at test time, expands the
+document's project shorthands, and drives both the allowed and the "must not
+reference" project columns. A test fails when the document and `src/` disagree
+about the project set, when a table row names an unknown project, when a row has
+no reference allowance, or when a project token no longer resolves. Package
+allowances come from the same row, with two documented additions: Avalonia is
+allowed in `Playnite.Platform` by the clarification below the table, and the
+importer's LiteDB row is version-pinned to 4.1.4.
+
+Scope guards fail closed rather than passing on an empty target set. The product
+enumeration throws on zero or duplicate projects; every product must have source
+files, every executable must have a resolved entry point, and every product
+assembly must contain at least one type, so the NetArchTest rules cannot succeed
+vacuously over an empty assembly. The scaffold's namespace-only `AssemblyMarker`
+files emitted no type, so each now declares the marker type its filename names;
+the non-empty assertion would otherwise fail for eight products. `SourcePolicy`
+refuses an unclassified project
+name, so renaming or adding a product cannot silently narrow the host, logic or
+UI scopes. The banned-symbol attachment matrix is asserted per project (common,
+library, Core, logic, interop, blocking and GC files), so a scope that silently
+drops a file fails a test.
+
+
 Core and Abstractions exclude Avalonia from the entire resolved closure.
 All products exclude Windows-specific packages/explicit assembly dependencies;
 Desktop therefore cannot reference Microsoft.Win32. Desktop/Cli exclude LiteDB
@@ -57,25 +81,35 @@ framework APIs are checked in source and emitted IL.
 
 ## Banned construct coverage
 
-BannedApiAnalyzers consumes documentation-comment IDs; it cannot describe syntax,
-semantic purity or exceptions within a namespace. See its
+BannedApiAnalyzers consumes documentation-comment IDs: it can ban namespaces, types and
+members, but it cannot describe syntax, semantic purity or a comment-based exception. See its
 [official symbol-list format](https://github.com/dotnet/roslyn/blob/main/src/RoslynAnalyzers/Microsoft.CodeAnalysis.BannedApiAnalyzers/BannedApiAnalyzers.Help.md).
-Each context-dependent row is named in `BannedSymbols.txt` and enforced below.
+`BannedConstructInventory.cs` therefore keeps one row for every row of the PORTING.md banned
+table, and `PolicyCoverageTests` fails when the table gains, loses or renames a row without an
+owner. A symbol row must exist in its named `BannedSymbols*.txt` file and resolve against the
+products' reference assemblies (the two package-only symbols that the net11 reference set
+cannot resolve are recorded explicitly); a syntax row must produce its violation from a
+failing probe. Removing a rule, weakening a probe, or adding an unowned PORTING row fails.
 
-| Rule | Automatic enforcement |
-| --- | --- |
-| System.Windows except System.Windows.Input.ICommand | Semantic type/member resolution, including aliases and descendants; ICommand has an explicit positive test |
-| System.Drawing, Microsoft.Win32, System.Management | Namespace symbol bans plus semantic descendant checks, compiled dependencies and package graph |
-| ServiceController, BinaryFormatter | Type bans and semantic checks |
-| Thread.Abort, AppDomain.CreateDomain, GC.Collect | Every framework overload in the common symbol list and semantic checks; a catalog test detects new uncovered overloads |
-| DllImport/LibraryImport | Attribute symbol bans outside Platform.Linux, plus semantic checks; Linux's reviewed native-import allow-list is currently empty, so the source gate rejects imports there too |
-| Shell-string Process.Start | Single-filename and argument-string Start overloads, the two-string ProcessStartInfo constructor and Arguments property are banned; use a ProcessStartInfo with ArgumentList or an IEnumerable<string> argument-list overload. Semantic checks reject UseShellExecute assignments unless the value is constant false |
-| Environment.Exit in library code | Library symbol list and semantic check; only Desktop, Cli and LegacyImport are hosts |
-| Empty catch | Syntax check for every empty catch body, including typed and filtered catches |
-| async void | Semantic checks for methods, local functions and lambdas; UI signature exception described below |
-| Task/ValueTask Result and Task Wait/WaitAll/WaitAny | Semantic checks; only the actual Cli entry point with a comment on the statement is exempt, never helper methods or nested functions |
-| DateTime.Now in Core | Core symbol list and semantic checks |
-| Guid.NewGuid and unseeded Random in logic | Logic symbol list and semantic checks, including Random.Shared; seeded constructors remain permitted |
+| PORTING row | Narrowed condition | Owner | Residual approximation / risk |
+| --- | --- | --- | --- |
+| `System.Windows.*` | `System.Windows.Input.ICommand` only | `SourcePolicy` semantic resolver | BannedApi cannot exclude one type from a namespace ban, so the source resolver owns it. Exact for source; dynamic, reflection and generated code are outside source analysis. |
+| `System.Drawing.*` | none | `BannedSymbols.txt`, source, IL and package graph | Exact. |
+| `Microsoft.Win32.*` | none | `BannedSymbols.txt`, source, IL and package graph | Exact. |
+| `DllImport`/`LibraryImport` | Platform.Linux with a reviewed allow-list | `BannedSymbols.Interop.txt` outside Linux, source everywhere | No import has been reviewed, so Platform.Linux is rejected too; its porting unit must add an allow-list entry. |
+| `System.Management` | none | `BannedSymbols.txt`, source and graph | The namespace is absent from the net11 reference set; the symbol row is ready if a package adds it. |
+| `BinaryFormatter` | none | `BannedSymbols.txt` and source | Exact. |
+| `Thread.Abort` | none | `BannedSymbols.txt` and source | Exact. |
+| `AppDomain.CreateDomain` | `AssemblyLoadContext` if needed | `BannedSymbols.txt` and source | Exact; no replacement wrapper is approved yet. |
+| `Process.Start(string)` with a shell string | `ProcessStartInfo` with `ArgumentList` | `BannedSymbols.txt` (shell overloads, constructor, `Arguments`), source | Exact for the listed shapes; `UseShellExecute` is additionally restricted to constant false. Dynamic values cannot be proven safe. |
+| `Environment.Exit` in library code | Desktop, Cli and LegacyImport are hosts | `BannedSymbols.Library.txt` and source | Exact. |
+| `GC.Collect` | A benchmark/soak harness with a comment on the call | `BannedSymbols.GcCollect.txt` (unless `PlayniteBenchmarkHarness=true`), source | No harness exists yet (p8-003). Until one declares the property, every product call is rejected; the harness must also prove the commented exception in the source test. |
+| `catch { }` | Catch specific, log, rethrow or return a result | `SourcePolicy` syntax check | Only an empty body is rejected. A typed catch that silently swallows still passes and remains a review obligation. |
+| `async void` | UI event handlers only | `SourcePolicy` semantic check | Registration cannot be proven from source. The approximation is a Desktop/SDK `(object sender, EventArgs-derived)` method or lambda; async void local functions are rejected everywhere. Logging handler failures remains a review obligation. |
+| `.Result`/`.Wait()` | Commented top-level Cli entry point | `BannedSymbols.Blocking.txt` (except Cli) and source | The Cli entry-point method is treated as the whole top-level boundary: a commented call anywhere inside it is accepted; helper methods and nested functions are not. |
+| `DateTime.Now` in Core | Other projects are outside the rule | `BannedSymbols.Core.txt` and source | Exact. |
+| `Guid.NewGuid()` in pure logic | Inject an ID or pass one in | `BannedSymbols.Logic.txt` and source | Purity is approximated by the Core, SDK.Abstractions and Steam project scope, so impure members there are also blocked. |
+| `Random` without a seed in logic | Inject a seeded `Random` | `BannedSymbols.Logic.txt` and source | Same project-scope approximation as `Guid.NewGuid`. |
 
 The semantic gate rebuilds a Roslyn compilation from each product's evaluated
 compiler inputs and fails closed on compiler errors before inspecting symbols.
@@ -83,38 +117,41 @@ This avoids regular-expression false positives from comments/string literals,
 and catches aliases, method groups and target-typed construction. Policy tests
 exercise violations and permitted exceptions without adding product logic.
 
-Purity and actual event registration cannot be inferred from a symbol list.
-For this scaffold, the logic scope is all of Core, SDK.Abstractions and Steam;
-IDs/randomness are injected throughout these projects, rather than trying to
-guess which methods are pure. Other projects retain their host/platform duties.
-The UI exception is limited to Desktop/SDK async void methods or lambdas with
-`(object sender, EventArgs-derived args)` signatures; async void local functions
-are rejected everywhere. Whether such a method is really registered as an event
-handler, and whether handler failures are logged, remains a review obligation.
-Likewise these gates cannot infer malicious shell execution hidden behind dynamic
-values, reflection or another process; they enforce the documented API shapes.
-No source suppression or new native-import exemption is introduced by this unit.
+The `System.Windows` resolver, empty-catch syntax rule and `async void` signature
+rule are the only rows BannedApi cannot own at all. Every other row has a symbol
+file, including `.Result`/`.Wait()` (`BannedSymbols.Blocking.txt`) and
+`GC.Collect` (`BannedSymbols.GcCollect.txt`); those two files are deliberately
+scoped to the documented exception and the source policy checks the contextual
+condition. The common file records the exceptions in comments. No source
+suppression or new native-import exemption is introduced by this unit.
 
 ## Local negative proofs
 
-On 2026-11-15 UTC, added a temporary, unused ProjectReference from Core to SDK
-and ran the complete architecture suite. It exited 2 with 38 passed, 1 failed,
-0 skipped (39 cases at that point). The observed failure was:
-
-```text
-Playnite.Core -> Playnite.SDK violates docs/port/02-ARCHITECTURE.md allowed-reference table
-```
-
-The reference was restored in a `finally` block. No violating reference or probe
-file is included in the change. A separate temporary Core source file caused a
-narrow Core build to exit 1, with zero warnings and these two expected errors:
+Earlier negative proofs (2026-11-15 UTC) added a temporary, unused ProjectReference
+from Core to SDK and a temporary Core source file. The full suite failed the
+allowed-reference check, and a narrow Core build exited 1 with zero warnings and
+these expected errors:
 
 ```text
 error RS0030: The symbol 'GC.Collect(int, GCCollectionMode)' is banned in this project: Do not hide resource leaks.
 error RS0030: The symbol 'DateTime.Now' is banned in this project: Inject IClock or TimeProvider.
 ```
 
-Full logs are task evidence outside the repository under
-`/home/sean/src/firstmate/data/p2-002/negative-reference.log` and `negative-api.log`.
-The final clean build/test results are recorded in the p2-002 ledger shard.
-Two independent blind diff reviews remain required before this unit is accepted.
+The 2026-11-15 hardening re-ran both kinds of proof:
+
+- A temporary Core source file referenced `Task<TResult>.Result`, `GC.Collect()`
+  and `System.Drawing.Point`. A narrow Core build exited 1 with zero warnings and
+  three RS0030 errors, proving the new `BannedSymbols.Blocking.txt` row, the moved
+  `BannedSymbols.GcCollect.txt` row, and the namespace ban all fire. Log:
+  `/home/sean/src/firstmate/data/p2-002-harden/negative-api-2026-11-14.log`.
+- With `<PlayniteBenchmarkHarness>true</PlayniteBenchmarkHarness>` set temporarily
+  on Core and the same `GC.Collect()` probe, the narrow build exited 0 with zero
+  warnings, proving the harness opt-out from the GC symbol file while the source
+  policy still requires the comment (covered by the
+  `Gc_collect_requires_a_declared_harness_and_a_comment` theory). Log:
+  `/home/sean/src/firstmate/data/p2-002-harden/harness-exemption-2026-11-14.log`.
+
+Both probes and the property were reverted; the worktree contains no probe file.
+The architecture suite grew from 43 to 57 cases. The final clean build/test
+results are recorded in the p2-002 ledger shard. Two independent blind diff
+reviews remain required before this unit is accepted.

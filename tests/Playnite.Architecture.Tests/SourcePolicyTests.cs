@@ -6,9 +6,6 @@ namespace Playnite.Architecture.Tests;
 
 public sealed class SourcePolicyTests
 {
-    private static readonly MetadataReference[] References = ((string)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES")!)
-        .Split(Path.PathSeparator).Select(path => MetadataReference.CreateFromFile(path)).ToArray();
-
     [Theory]
     [InlineData("Playnite.Core", "System.DateTime.Now;", "DateTime.Now")]
     [InlineData("Playnite.Core", "System.Guid.NewGuid();", "ambient randomness")]
@@ -34,7 +31,7 @@ public sealed class SourcePolicyTests
             source = "class C { void M() { " + expression + " } }";
         }
 
-        Assert.Contains(Check(project, source), v => v.Contains(expected, StringComparison.Ordinal));
+        Assert.Contains(PolicyProbe.Check(project, source), v => v.Contains(expected, StringComparison.Ordinal));
     }
 
     [Theory]
@@ -49,7 +46,7 @@ public sealed class SourcePolicyTests
     [InlineData("namespace Microsoft.Win32.Descendant { class Widget { } } class C { Microsoft.Win32.Descendant.Widget? value; }", "banned Windows")]
     public void Rejects_banned_syntax_and_aliases(string source, string expected)
     {
-        Assert.Contains(Check("Playnite.Core", source), v => v.Contains(expected, StringComparison.Ordinal));
+        Assert.Contains(PolicyProbe.Check("Playnite.Core", source), v => v.Contains(expected, StringComparison.Ordinal));
     }
 
     [Theory]
@@ -65,7 +62,7 @@ public sealed class SourcePolicyTests
     [InlineData("Playnite.Core", "class C { object? M() => System.Diagnostics.Process.Start(\"tool\", new[] { \"value with spaces\" }); }")]
     public void Permits_documented_exceptions(string project, string source)
     {
-        Assert.Empty(Check(project, source));
+        Assert.Empty(PolicyProbe.Check(project, source));
     }
 
     [Theory]
@@ -73,24 +70,35 @@ public sealed class SourcePolicyTests
     [InlineData("class C { static void Main() { } void M() {\n// Not the entry point.\nSystem.Threading.Tasks.Task.CompletedTask.Wait();\n} }")]
     public void Cli_wait_exception_requires_an_entry_point_and_comment(string source)
     {
-        Assert.Contains(Check("Playnite.Cli", source), v => v.Contains("blocking task wait", StringComparison.Ordinal));
+        Assert.Contains(PolicyProbe.Check("Playnite.Cli", source), v => v.Contains("blocking task wait", StringComparison.Ordinal));
+    }
+
+    [Theory]
+    [InlineData("class C { void M() {\n// Benchmark harness warm-up.\nSystem.GC.Collect();\n} }", true, false)]
+    [InlineData("class C { void M() { System.GC.Collect(); } }", true, true)]
+    [InlineData("class C { void M() {\n// Benchmark harness warm-up.\nSystem.GC.Collect();\n} }", false, true)]
+    public void Gc_collect_requires_a_declared_harness_and_a_comment(string source, bool harness, bool rejected)
+    {
+        var violations = PolicyProbe.Check("Playnite.Core", source, harness);
+        Assert.Equal(rejected, violations.Any(v => v.Contains("banned call System.GC.Collect", StringComparison.Ordinal)));
     }
 
     [Fact]
     public void Symbol_catalog_covers_every_forbidden_framework_overload()
     {
-        var compilation = CSharpCompilation.Create("SymbolCatalog", references: References);
-        var banned = File.ReadAllLines(Path.Combine(ProductGraph.Root, "BannedSymbols.txt"))
-            .Where(line => !line.StartsWith("//", StringComparison.Ordinal)).Select(line => line.Split(';')[0]).ToHashSet();
+        var compilation = CSharpCompilation.Create("SymbolCatalog", references: PolicyProbe.References);
+        var common = BannedSymbolFiles.Rows(Path.Combine(ProductGraph.Root, "BannedSymbols.txt"));
+        var gc = BannedSymbolFiles.Rows(Path.Combine(ProductGraph.Root, "BannedSymbols.GcCollect.txt"));
+        var blocking = BannedSymbolFiles.Rows(Path.Combine(ProductGraph.Root, "BannedSymbols.Blocking.txt"));
         foreach (var (typeName, memberName) in new[]
         {
-            ("System.GC", "Collect"), ("System.AppDomain", "CreateDomain"),
-            ("System.Threading.Thread", "Abort"), ("System.Diagnostics.Process", "Start"),
-            ("System.Diagnostics.ProcessStartInfo", ".ctor")
+            ("System.AppDomain", "CreateDomain"), ("System.Threading.Thread", "Abort"),
+            ("System.Diagnostics.Process", "Start"), ("System.Diagnostics.ProcessStartInfo", ".ctor")
         })
         {
-            var type = compilation.GetTypeByMetadataName(typeName)!;
-            var methods = type.GetMembers().OfType<IMethodSymbol>().Where(m => m.Name == memberName);
+            var type = compilation.GetTypeByMetadataName(typeName);
+            Assert.True(type != null, $"catalog target type {typeName} does not resolve");
+            var methods = type!.GetMembers().OfType<IMethodSymbol>().Where(m => m.Name == memberName);
             if (typeName == "System.Diagnostics.Process")
             {
                 methods = methods.Where(m => m.Parameters.Length > 0 && m.Parameters[0].Type.SpecialType == SpecialType.System_String
@@ -101,24 +109,37 @@ public sealed class SourcePolicyTests
                 methods = methods.Where(m => m.Parameters.Length == 2 && m.Parameters[1].Type.SpecialType == SpecialType.System_String);
             }
 
-            Assert.NotEmpty(methods);
-            foreach (var method in methods)
-            {
-                var id = method.GetDocumentationCommentId();
-                Assert.NotNull(id);
-                Assert.Contains(id, banned);
-            }
+            AssertCovered(methods, common, typeName);
+        }
+
+        var gcType = compilation.GetTypeByMetadataName("System.GC");
+        Assert.True(gcType != null, "System.GC does not resolve");
+        AssertCovered(gcType!.GetMembers().OfType<IMethodSymbol>().Where(m => m.Name == "Collect"), gc, "System.GC");
+
+        var task = compilation.GetTypeByMetadataName("System.Threading.Tasks.Task");
+        Assert.True(task != null, "System.Threading.Tasks.Task does not resolve");
+        foreach (var name in new[] { "Wait", "WaitAll", "WaitAny" })
+        {
+            AssertCovered(task!.GetMembers().OfType<IMethodSymbol>().Where(m => m.Name == name), blocking, "System.Threading.Tasks.Task");
+        }
+
+        foreach (var typeName in new[] { "System.Threading.Tasks.Task`1", "System.Threading.Tasks.ValueTask`1" })
+        {
+            var type = compilation.GetTypeByMetadataName(typeName);
+            Assert.True(type != null, $"catalog target type {typeName} does not resolve");
+            var results = type!.GetMembers().OfType<IPropertySymbol>().Where(p => p.Name == "Result");
+            Assert.NotEmpty(results);
+            AssertCovered(results, blocking, typeName);
         }
     }
 
-    private static string[] Check(string project, string source)
+    private static void AssertCovered<T>(IEnumerable<T> symbols, string[] banned, string label) where T : ISymbol
     {
-        var compilation = CSharpCompilation.Create("PolicyProbe",
-            [CSharpSyntaxTree.ParseText(source)], References,
-            new CSharpCompilationOptions(project == "Playnite.Cli" ? OutputKind.ConsoleApplication : OutputKind.DynamicallyLinkedLibrary));
-        // Obsolete-but-banned APIs can produce compiler errors in net11; allow those
-        // diagnostics only when Roslyn still resolves the symbol for policy inspection.
-        Assert.DoesNotContain(compilation.GetDiagnostics(), d => d.Severity == DiagnosticSeverity.Error && d.Id is not ("CS0619" or "SYSLIB0006" or "SYSLIB0024"));
-        return SourcePolicy.Violations(project, compilation).ToArray();
+        var members = symbols.ToArray();
+        Assert.NotEmpty(members);
+        var ids = members.Select(member => member.GetDocumentationCommentId()).ToArray();
+        var missing = ids.Where(id => id == null || !banned.Contains(id)).ToArray();
+        Assert.True(missing.Length == 0,
+            $"{label} has uncovered overloads: {string.Join(", ", missing)}; present ids: {string.Join(" | ", ids)}");
     }
 }

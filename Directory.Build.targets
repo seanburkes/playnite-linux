@@ -13,6 +13,7 @@
       <_ArchitectureInput Include="Product|$(PlayniteProductProject)" />
       <_ArchitectureInput Include="Output|$(TargetPath)" />
       <_ArchitectureInput Include="OutputType|$(OutputType)" />
+      <_ArchitectureInput Include="BenchmarkHarness|$(PlayniteBenchmarkHarness)" />
       <_ArchitectureInput Include="Define|$([System.String]::Copy('$(DefineConstants)').Replace(';', ','))" />
       <_ArchitectureInput Include="@(_ArchitectureDirectReference->'ProjectReference|%(Filename)')" />
       <_ArchitectureDependency Include="@(ReferencePath)" Condition="'%(ReferencePath.FrameworkReferenceName)' == ''" />

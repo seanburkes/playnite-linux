@@ -1,0 +1,23 @@
+// PORTING: .Result and .Wait() are allowed only at a commented top-level Playnite.Cli entry
+// point. BannedApi cannot express a comment exception, so SourcePolicy.cs owns that case and
+// this file is attached to every other product. Task<TResult> inherits Task's Wait members.
+P:System.Threading.Tasks.Task`1.Result;Await the task instead.
+P:System.Threading.Tasks.ValueTask`1.Result;Await the task instead.
+M:System.Threading.Tasks.Task.Wait;Await the task instead.
+M:System.Threading.Tasks.Task.Wait(System.Int32);Await the task instead.
+M:System.Threading.Tasks.Task.Wait(System.TimeSpan);Await the task instead.
+M:System.Threading.Tasks.Task.Wait(System.Threading.CancellationToken);Await the task instead.
+M:System.Threading.Tasks.Task.Wait(System.Int32,System.Threading.CancellationToken);Await the task instead.
+M:System.Threading.Tasks.Task.Wait(System.TimeSpan,System.Threading.CancellationToken);Await the task instead.
+M:System.Threading.Tasks.Task.WaitAll(System.Threading.Tasks.Task[]);Await the tasks instead.
+M:System.Threading.Tasks.Task.WaitAll(System.ReadOnlySpan{System.Threading.Tasks.Task});Await the tasks instead.
+M:System.Threading.Tasks.Task.WaitAll(System.Threading.Tasks.Task[],System.Int32);Await the tasks instead.
+M:System.Threading.Tasks.Task.WaitAll(System.Threading.Tasks.Task[],System.TimeSpan);Await the tasks instead.
+M:System.Threading.Tasks.Task.WaitAll(System.Threading.Tasks.Task[],System.Threading.CancellationToken);Await the tasks instead.
+M:System.Threading.Tasks.Task.WaitAll(System.Threading.Tasks.Task[],System.Int32,System.Threading.CancellationToken);Await the tasks instead.
+M:System.Threading.Tasks.Task.WaitAll(System.Collections.Generic.IEnumerable{System.Threading.Tasks.Task},System.Threading.CancellationToken);Await the tasks instead.
+M:System.Threading.Tasks.Task.WaitAny(System.Threading.Tasks.Task[]);Await the tasks instead.
+M:System.Threading.Tasks.Task.WaitAny(System.Threading.Tasks.Task[],System.Int32);Await the tasks instead.
+M:System.Threading.Tasks.Task.WaitAny(System.Threading.Tasks.Task[],System.TimeSpan);Await the tasks instead.
+M:System.Threading.Tasks.Task.WaitAny(System.Threading.Tasks.Task[],System.Threading.CancellationToken);Await the tasks instead.
+M:System.Threading.Tasks.Task.WaitAny(System.Threading.Tasks.Task[],System.Int32,System.Threading.CancellationToken);Await the tasks instead.
