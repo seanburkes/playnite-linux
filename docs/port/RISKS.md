@@ -41,7 +41,7 @@ Scored: likelihood × impact, 1–5 each. Owner is the role that must act, not t
 - Close a row only with evidence (a test, a spike report, or a shipped mitigation).
 - Do not delete rows; mark them `retired` with the evidence.
 
-## Added after the independent plan review
+## Added after the adversarial plan review
 
 | # | Risk | L | I | Score | Mitigation | Trigger / early warning |
 | --- | --- | ---: | ---: | ---: | --- | --- |

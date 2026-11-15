@@ -4,7 +4,7 @@
 - Reconciled: 2026-11-15 against `main` at `8c5a811`, which contains the p1-009 corpus merge
   `2045697`; this is the READY verdict proposed for captain approval
 - Owner: oracle
-- Reviewer: independent plan review (session `ses_e27629994ffec0IK0wD5lgcnOT`); #25 gate
+- Reviewer: adversarial plan review (session `ses_e27629994ffec0IK0wD5lgcnOT`); #25 gate
   review findings are addressed below; captain approval of the READY verdict is still pending
 - Runs (all verified against the forge; each id below is the workflow named beside it):
   - legacy-oracle v10 suite: https://github.com/seanburkes/playnite-linux/actions/runs/43649562478
