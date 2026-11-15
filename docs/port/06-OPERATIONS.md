@@ -88,9 +88,11 @@ single writer on `main`; workers edit unit shards and never the aggregates thems
 A unit id is lowercase letters, digits, and single hyphens. The units directory is enumerated
 strictly: `README.md`, `removed.tsv`, and correctly named shards are the only accepted entries.
 A subdirectory, wrong-case suffix, backup suffix, trailing space, or other unexpected file is an
-error rather than a silently ignored shard. Ledger rows are append-only: append at the end,
-never edit, delete, duplicate, or reorder existing rows. The base rows must remain an exact
-prefix, and a new row may not carry an instant that sorts ahead of existing history.
+error rather than a silently ignored shard. Ledger history is append-only in content: never
+edit, delete, or duplicate an existing row. Order is not part of the contract; a new row may
+carry any instant, including one older than rows already recorded. The aggregates are ordered
+by instant then unit (queue: wave then unit), and that ordering is generated output owned by
+the parent job. Contributors never hand-order or hand-edit an aggregate.
 
 The shard contract is in [`units/README.md`](units/README.md). Queue columns:
 ```
@@ -109,17 +111,22 @@ python3 scripts/port/build_port_index.py check --shards-only --against origin/ma
 ```
 
 `check --shards-only` validates and regenerates both aggregates in memory without requiring the
-committed files to match. `--against <ref>` also fails when a queue shard or queue aggregate
-row is missing, a ledger shard is missing, or a ledger row is missing or altered at head, or
-when an existing retirement record was edited. The ref must be a strict ancestor of HEAD; HEAD,
-a descendant, and an unrelated commit are refused. CI passes the pull request's base commit (or
-the previous commit on `main`) with `--shards-only`, and on a pull request also passes
-`--forbid-aggregate-changes`, which fails if either aggregate file was modified.
+committed files to match. `--against <ref>` guarantees content against the base as a multiset:
+it fails when a queue shard or queue aggregate row is missing, a ledger shard is missing, a
+ledger row is missing, altered, or duplicated at head, or when an existing retirement record
+was edited. It does not check order, so a new row with an earlier instant passes. The ref must
+be a strict ancestor of HEAD; HEAD, a descendant, and an unrelated commit are refused. CI
+passes the pull request's base commit (or the previous commit on `main`) with `--shards-only`,
+and on a pull request also passes `--forbid-aggregate-changes`, which fails if either aggregate
+file was modified.
 
 The post-merge `port-index` workflow runs only on a push to `main`. It first validates the
 shard tree and history against the previous `main` commit; an invalid shard fails the run with
 no commit. It then runs `build`, verifies the result with `check`, and commits only
-`docs/port/queue.tsv` and `docs/port/ledger.tsv` with a bot-style message. It has no
+`docs/port/queue.tsv` and `docs/port/ledger.tsv` with a bot-style message. Because the history
+check guarantees content rather than order, a row that lands with an earlier instant is
+accepted and `build` sorts it into its generated position, so concurrent merges cannot wedge
+the writer on ordering. It has no
 manual-dispatch path, never accepts a branch/ref input, never force-pushes, and retries once
 against the new `main` if a concurrent update rejects the first push. It never writes a shard.
 A PR already in flight that regenerated the aggregates should drop those two file changes and

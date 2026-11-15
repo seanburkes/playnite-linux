@@ -573,7 +573,7 @@ class PortIndexTests(unittest.TestCase):
         self.assertEqual(status, 1)
         self.assertIn("retirement record for 'p1-001' was deleted", output)
 
-    def test_check_against_base_rejects_reordered_ledger_rows(self):
+    def test_check_against_base_allows_reordered_rows_with_the_same_content(self):
         first = ledger_row("2026-11-14T17:00:00Z", "p1-001", to_status="done")
         second = ledger_row(
             "2026-11-14T17:00:00Z", "p1-001", from_status="done", to_status="released"
@@ -587,9 +587,102 @@ class PortIndexTests(unittest.TestCase):
 
         status, output = self.check_against(base)
 
+        self.assertEqual(status, 0, output)
+        self.assertIn("history matches BASE", output)
+
+    def test_check_against_base_rejects_a_retained_row_plus_a_changed_copy(self):
+        original = ledger_row("2026-11-14T17:00:00Z", "p1-001")
+        base = self.write_base(
+            {"p1-001": queue_row("p1-001")}, {"p1-001": [original]}
+        )
+        self.write_queue_shard("p1-001", queue_row("p1-001"))
+        self.write_ledger_shard(
+            "p1-001", original, ledger_row("2026-11-14T18:00:00Z", "p1-001")
+        )
+        self.build()
+
+        status, output = self.check_against(base)
+
         self.assertEqual(status, 1)
-        self.assertIn("append-only", output)
-        self.assertIn("reordered", output)
+        self.assertIn("matches base row", output)
+        self.assertIn("except its timestamp", output)
+
+    def test_check_against_base_rejects_a_retained_row_plus_a_corrected_copy(self):
+        original = ledger_row("2026-11-14T17:00:00Z", "p1-001")
+        base = self.write_base(
+            {"p1-001": queue_row("p1-001")}, {"p1-001": [original]}
+        )
+        self.write_queue_shard("p1-001", queue_row("p1-001"))
+        self.write_ledger_shard(
+            "p1-001", original, ledger_row("2026-11-14T18:00:00Z", "p1-001")
+        )
+        self.write_corrections(
+            (
+                "p1-001",
+                "2026-11-14T17:00:00Z",
+                "2026-11-14T18:00:00Z",
+                "tester",
+                "wrong timestamp",
+            )
+        )
+        self.build()
+
+        status, output = self.check_against(base)
+
+        self.assertEqual(status, 1)
+        self.assertIn("still present at head alongside the corrected copy", output)
+        self.assertIn("does not append one", output)
+
+    def test_check_against_base_rejects_a_row_moved_to_another_unit(self):
+        row = ledger_row("2026-11-14T17:00:00Z", "p1-001")
+        base = self.write_base(
+            {"p1-001": queue_row("p1-001"), "p1-002": queue_row("p1-002")},
+            {"p1-001": [row], "p1-002": []},
+        )
+        self.write_queue_shard("p1-001", queue_row("p1-001"))
+        self.write_queue_shard("p1-002", queue_row("p1-002"))
+        self.write_ledger_shard("p1-001")
+        self.write_ledger_shard(
+            "p1-002", ledger_row("2026-11-14T17:00:00Z", "p1-002")
+        )
+        self.build()
+
+        status, output = self.check_against(base)
+
+        self.assertEqual(status, 1)
+        self.assertIn("ledger shard 'p1-001'", output)
+        self.assertIn("missing or altered", output)
+
+    def test_ledger_order_is_total_for_rows_sharing_an_instant_and_unit(self):
+        self.write_queue_shard("p1-001", queue_row("p1-001"))
+        released = ledger_row(
+            "2026-11-14T17:00:00Z", "p1-001", from_status="done", to_status="released"
+        )
+        started = ledger_row("2026-11-14T17:00:00Z", "p1-001", to_status="done")
+
+        self.write_ledger_shard("p1-001", released, started)
+        _, first = self.render()
+
+        self.write_ledger_shard("p1-001", started, released)
+        _, second = self.render()
+
+        # The tiebreak is content, not shard position, so the bytes are stable.
+        self.assertEqual(first, second)
+        transitions = [line.split("\t")[3] for line in first.decode().splitlines()[1:]]
+        self.assertEqual(transitions, ["released", "done"])
+
+    def test_check_against_base_rejects_a_duplicated_ledger_row(self):
+        row = ledger_row("2026-11-14T17:00:00Z", "p1-001")
+        base = self.write_base({"p1-001": queue_row("p1-001")}, {"p1-001": [row]})
+        self.write_queue_shard("p1-001", queue_row("p1-001"))
+        self.write_ledger_shard("p1-001", row, row)
+
+        # Introduced duplicates are rejected while the index is built, before the
+        # history comparison: the content set may never grow a second copy of a row.
+        status, output = self.check_against(base)
+
+        self.assertEqual(status, 1)
+        self.assertIn("duplicate ledger row", output)
 
     def test_recorded_retirement_passes(self):
         base = self.write_base(
@@ -726,7 +819,7 @@ class PortIndexTests(unittest.TestCase):
         self.assertEqual(status, 1)
         self.assertIn("missing or altered", output)
 
-    def test_new_backdated_row_fails_with_current_time_guidance(self):
+    def test_new_earlier_sorting_row_passes_and_build_orders_it(self):
         base = self.write_base(
             {"p1-001": queue_row("p1-001")},
             {"p1-001": [ledger_row("2026-11-14T17:00:00Z", "p1-001")]},
@@ -741,18 +834,20 @@ class PortIndexTests(unittest.TestCase):
 
         status, output = self.check_against(base)
 
-        self.assertEqual(status, 1)
-        self.assertIn("sorts before the newest existing ledger row", output)
-        self.assertIn("current time", output)
+        self.assertEqual(status, 0, output)
+        self.assertIn("history matches BASE", output)
+        lines = self.ledger.read_text().splitlines()[1:]
+        self.assertEqual(
+            [line.split("\t")[0] for line in lines],
+            ["2026-11-14T16:00:00Z", "2026-11-14T17:00:00Z"],
+        )
 
-    def test_build_rejects_a_backdated_row_and_leaves_aggregates_untouched(self):
+    def test_build_accepts_a_new_earlier_sorting_row(self):
         self.write_queue_shard("p1-001", queue_row("p1-001"))
         self.write_ledger_shard(
             "p1-001", ledger_row("2026-11-14T17:00:00Z", "p1-001")
         )
         self.build()
-        queue_before = self.queue.read_bytes()
-        ledger_before = self.ledger.read_bytes()
 
         self.write_ledger_shard(
             "p1-001",
@@ -762,12 +857,12 @@ class PortIndexTests(unittest.TestCase):
 
         status, output = self.run_build()
 
-        self.assertEqual(status, 1)
-        self.assertIn("sorts before the newest existing ledger row", output)
-        self.assertIn("current time", output)
-        self.assertIn("aggregates were left unchanged", output)
-        self.assertEqual(self.queue.read_bytes(), queue_before)
-        self.assertEqual(self.ledger.read_bytes(), ledger_before)
+        self.assertEqual(status, 0, output)
+        lines = self.ledger.read_text().splitlines()[1:]
+        self.assertEqual(
+            [line.split("\t")[0] for line in lines],
+            ["2026-11-14T16:00:00Z", "2026-11-14T17:00:00Z"],
+        )
 
     def test_build_accepts_an_appended_row_after_the_newest(self):
         self.write_queue_shard("p1-001", queue_row("p1-001"))
@@ -789,7 +884,7 @@ class PortIndexTests(unittest.TestCase):
             self.ledger.read_text(),
         )
 
-    def test_correction_that_still_sorts_before_existing_history_fails(self):
+    def test_correction_may_still_sort_before_other_units(self):
         base = self.write_base(
             {"p1-001": queue_row("p1-001"), "p1-002": queue_row("p1-002")},
             {
@@ -811,17 +906,34 @@ class PortIndexTests(unittest.TestCase):
                 "2026-11-14T17:00:00Z",
                 "2026-11-14T17:30:00Z",
                 "tester",
-                "merged out of order",
+                "wrong timestamp, corrected to the recorded time",
             )
         )
         self.build()
 
         status, output = self.check_against(base)
 
-        self.assertEqual(status, 1)
-        self.assertIn("strictly after", output)
-        self.assertIn("newest pre-existing ledger row at 2026-11-14T18:00:00Z", output)
-        self.assertIn("may not leave the row before existing history", output)
+        self.assertEqual(status, 0, output)
+        self.assertIn("history matches BASE", output)
+
+    def test_a_correction_may_not_backdate_a_row(self):
+        self.write_queue_shard("p1-001", queue_row("p1-001"))
+        self.write_ledger_shard(
+            "p1-001", ledger_row("2026-11-14T18:00:00Z", "p1-001")
+        )
+        self.write_corrections(
+            (
+                "p1-001",
+                "2026-11-14T18:00:00Z",
+                "2026-11-14T17:00:00Z",
+                "tester",
+                "moved earlier",
+            )
+        )
+
+        with self.assertRaises(port_index.PortIndexError) as raised:
+            self.render()
+        self.assertIn("must be later than previous timestamp", str(raised.exception))
 
     def test_second_correction_for_the_same_unit_is_rejected(self):
         self.write_queue_shard("p1-001", queue_row("p1-001"))
@@ -985,7 +1097,7 @@ class PortIndexTests(unittest.TestCase):
         self.assertIn("history matches BASE", output)
         self.assertIn("notice: ledger correction p1-002", output)
 
-    def test_correction_cannot_launder_a_reordered_base_aggregate(self):
+    def test_check_against_base_ignores_the_base_aggregate_order(self):
         base = self.write_base(
             {"p1-001": queue_row("p1-001"), "p1-002": queue_row("p1-002")},
             {
@@ -1022,11 +1134,10 @@ class PortIndexTests(unittest.TestCase):
 
         status, output = self.check_against(reordered)
 
-        self.assertEqual(status, 1)
-        self.assertIn("base ledger aggregate is not in generated order", output)
-        self.assertIn("may not be used to reorder unrelated rows", output)
+        self.assertEqual(status, 0, output)
+        self.assertIn("history matches BASE", output)
 
-    def test_correction_cannot_hide_a_shard_reorder(self):
+    def test_correction_may_move_its_row_between_shard_positions(self):
         first = ledger_row("2026-11-14T17:00:00Z", "p1-001", to_status="done")
         second = ledger_row(
             "2026-11-14T18:00:00Z", "p1-001", from_status="done", to_status="released"
@@ -1055,8 +1166,8 @@ class PortIndexTests(unittest.TestCase):
 
         status, output = self.check_against(base)
 
-        self.assertEqual(status, 1)
-        self.assertIn("must keep its base position", output)
+        self.assertEqual(status, 0, output)
+        self.assertIn("history matches BASE", output)
 
     def test_check_prints_a_notice_naming_the_correction_record(self):
         base = self.write_base(
@@ -1131,18 +1242,18 @@ class PortIndexTests(unittest.TestCase):
         self.write_queue_shard("p1-001", queue_row("p1-001"))
         return base, first, second
 
-    def test_check_against_base_rejects_a_row_inserted_at_the_front(self):
+    def test_check_against_base_allows_a_row_inserted_at_the_front(self):
         base, first, second = self._base_for_insertion()
-        inserted = ledger_row("2026-11-14T16:00:00Z", "p1-001", actor="backdated")
+        inserted = ledger_row("2026-11-14T16:00:00Z", "p1-001", actor="new")
         self.write_ledger_shard("p1-001", inserted, first, second)
         self.build()
 
         status, output = self.check_against(base)
 
-        self.assertEqual(status, 1)
-        self.assertIn("inserted before or between existing rows", output)
+        self.assertEqual(status, 0, output)
+        self.assertIn("history matches BASE", output)
 
-    def test_check_against_base_rejects_a_row_inserted_between_rows(self):
+    def test_check_against_base_allows_a_row_inserted_between_rows(self):
         base, first, second = self._base_for_insertion()
         inserted = ledger_row("2026-11-14T17:30:00Z", "p1-001", actor="inserted")
         self.write_ledger_shard("p1-001", first, inserted, second)
@@ -1150,19 +1261,19 @@ class PortIndexTests(unittest.TestCase):
 
         status, output = self.check_against(base)
 
-        self.assertEqual(status, 1)
-        self.assertIn("inserted before or between existing rows", output)
+        self.assertEqual(status, 0, output)
+        self.assertIn("history matches BASE", output)
 
-    def test_check_against_base_rejects_a_backdated_appended_row(self):
+    def test_check_against_base_allows_an_earlier_sorting_appended_row(self):
         base, first, second = self._base_for_insertion()
-        backdated = ledger_row("2026-11-14T16:00:00Z", "p1-001", actor="backdated")
-        self.write_ledger_shard("p1-001", first, second, backdated)
+        earlier = ledger_row("2026-11-14T16:00:00Z", "p1-001", actor="earlier")
+        self.write_ledger_shard("p1-001", first, second, earlier)
         self.build()
 
         status, output = self.check_against(base)
 
-        self.assertEqual(status, 1)
-        self.assertIn("backdated row may not sort ahead", output)
+        self.assertEqual(status, 0, output)
+        self.assertIn("history matches BASE", output)
 
     def test_check_against_base_rejects_an_edited_retirement_reason(self):
         base = self.write_base(
