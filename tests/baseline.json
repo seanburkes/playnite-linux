@@ -57,7 +57,8 @@
   },
   "union_capture": {
     "captured_at": "2026-11-15T22:18:23Z",
-    "run_id": "local-fm-p3-001c-union",
-    "notes": "Post-merge local Release MTP run after merging origin/main 73c94cb (#67 Core 277/277) into fm/p3-001c. Playnite.Core.Tests union 316 executed / 316 passed / 0 failed / 0 skipped, replacing the 39 and 277 subset floors with the union; the same merged tree reports Playnite.Architecture.Tests 144 executed / 144 passed and Playnite.Smoke.Tests 4 executed / 4 passed, both above their recorded 103 and 4 floors. The original new_capture, core_capture and new_capture_addendum records above are retained. The pull request's linux-ci run on the merge head revalidates the union; no recorded floor was lowered."
+    "run_id": "43768687792",
+    "run_url": "https://github.com/seanburkes/playnite-linux/actions/runs/43768687792",
+    "notes": "linux-ci run 43768687792 on head 41d4619 produced the union counts below (JUnit artifact), after merging origin/main 73c94cb (#67 Core 277/277) into fm/p3-001c. Playnite.Core.Tests union 316 executed / 316 passed / 0 failed / 0 skipped, replacing the 39 and 277 subset floors with the union; the same run reports Playnite.Architecture.Tests 144 executed / 144 passed and Playnite.Smoke.Tests 4 executed / 4 passed, both above their recorded 103 and 4 floors. The local MTP run captured at 2026-11-15T22:18:23Z pre-checked the same counts. The original new_capture, core_capture and new_capture_addendum records above are retained. No recorded floor was lowered."
   }
 }
