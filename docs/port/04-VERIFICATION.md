@@ -203,8 +203,12 @@ Avalonia makes UI testable in ways WPF v10 was not:
   ever a test gate.
 - **X11/Wayland:** an app-launch and input smoke test, not a screenshot gate.
 
-Accessibility is a gate: every interactive control has an accessible name/role; tab order is
-tested for the main flows; high-contrast theme is smoke-tested.
+Accessibility is **not a v1 requirement** (captain decision, 2026-11-14; Deferred limitations
+D1 in [`00-DECISIONS.md`](00-DECISIONS.md)). Every interactive control should still have a
+usable name/role, tab order is tested for the main flows, and high contrast is smoke-tested as
+quality practice, but v1 makes no screen-reader claim: no end-to-end screen-reader test (for
+example Orca) was performed, and for Avalonia 12.1.6 AT-SPI is only observable under
+X11/XWayland.
 
 ## 7. Property-based and fuzz testing
 

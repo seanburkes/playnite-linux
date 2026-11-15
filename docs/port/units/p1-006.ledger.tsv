@@ -1,0 +1,2 @@
+timestamp	unit	from	to	actor	evidence
+2026-11-15T01:38:00Z	p1-006	todo	deferred	fm/p1-v1-limits	captain gate reconciliation: ADR-003 and ADR-019 defer WebView and the WebKitGTK/WPE engine to v1.1 and make the Phase 1 study a bounded feasibility exercise, not a v1 gate; v1 has no browser-engine dependency, so the row is explicitly deferred rather than left open

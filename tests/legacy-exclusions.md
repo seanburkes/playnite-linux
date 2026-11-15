@@ -13,6 +13,12 @@ Windows shell test:
 These are excluded by VSTest filter, not by editing `legacy/`. The Linux port has its own
 permission/path tests; Windows ACL behaviour is not a port target.
 
+**EX-3 captain authorisation.** The captain explicitly authorised quarantining the flaky
+`ProcessStarterTests.ShellExecuteTest` and accepting an executed baseline of **281 executed /
+3 excluded** (down from the earlier 282/2). The executed-count drop is therefore a recorded
+captain decision about environment flakiness, not a weakened test rule: the test is filtered by
+name, `legacy/` is unmodified, and no other case was removed or skipped.
+
 `FileSystemTests.CheckSumTests` is **not** excluded: it failed because Git's `core.autocrlf`
 changed `TestIni.ini` on Windows. `.gitattributes` now marks `legacy/**` as `-text`, preserving
 the exact bytes.

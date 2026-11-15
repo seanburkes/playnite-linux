@@ -80,7 +80,9 @@ operating model, formal model drafts.
 2. Steam process-tree detection for native and Proton games, including inside Flatpak
    (`flatpak-spawn --host` and PID visibility).
 3. Avalonia 12 headless render + accessibility tree on Linux (headless Skia; X11/Wayland only
-   for app launch smoke).
+   for app launch smoke). Outcome: a real window opens on both stacks, X11/XWayland exposes
+   AT-SPI and Wayland does not; accessibility is an accepted v1 limitation (Deferred
+   limitations D1 in [`00-DECISIONS.md`](00-DECISIONS.md)).
 4. WebView feasibility (WebKitGTK/WPE) — a bounded study for v1.1, not a v1 gate.
 5. Flatpak host launch/tracking: can `flatpak-spawn --host` launch Steam and observe the game
    process without a host helper?
@@ -105,7 +107,8 @@ operating model, formal model drafts.
   transitively, or a banned API.
 - Windows oracle job green.
 - AppImage and Flatpak smoke artifacts produced (can be empty shells).
-- UI pilot has a headless screenshot and an accessibility-tree baseline.
+- UI pilot has a headless screenshot and a semantic-tree baseline; screen-reader accessibility
+  is deferred for v1 (Deferred limitations D1 in [`00-DECISIONS.md`](00-DECISIONS.md)).
 
 ### Phase 3 — Leaves (pure logic)
 
@@ -198,14 +201,18 @@ not a port (ADR-017); the oracle is the recorded Steam corpus plus real-install 
 4. Game edit and metadata display; image picker.
 5. Settings (essential sections first), first-run/import wizard, progress/crash dialogs.
 6. Tray, protocol activation, keyboard shortcuts. Gamepad navigation is deferred.
-7. Headless screenshot and accessibility baselines for each key screen.
+7. Headless screenshot and semantic-tree baselines for each key screen; screen-reader
+   accessibility is deferred for v1 (Deferred limitations D1 in
+   [`00-DECISIONS.md`](00-DECISIONS.md)).
 8. Freeze the SDK UI extension points after the shell pilot (ADR-023).
 **Pilots:** `About`/`MessageBox` and `Library grid` through theme, headless test, packaging.
 **Exit gate:**
 - All v1 flows work on Linux x64 and ARM64.
 - UI executed-case count non-decreasing; no skipped UI tests.
 - Headless Skia screenshot baselines pass; X11/Wayland is an app-launch smoke, not a pixel gate.
-- Accessibility smoke: every interactive control has a name/role.
+- Semantic-tree smoke: key interactive controls have a name/role. This is not a v1
+  screen-reader gate; accessibility is deferred (Deferred limitations D1 in
+  [`00-DECISIONS.md`](00-DECISIONS.md)).
 - No WPF types in the dependency graph.
 - SDK UI surface frozen and documented.
 

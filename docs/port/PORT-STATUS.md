@@ -1,8 +1,8 @@
 # Port status
 
-**Phase:** 1 — freeze the oracle (in progress)
-**Updated:** 2026-11-14
-**Next gate:** Phase 1 exit (oracle harness + fixtures + spikes)
+**Phase:** 1 — oracle frozen; Phase 1 gate READY, Phase 2 awaiting captain approval
+**Updated:** 2026-11-15
+**Next gate:** Captain approval of the READY Phase 1 gate, then Phase 2
 
 ## Done
 
@@ -34,17 +34,22 @@
       Abstractions + UI, executed-case ratchet, all oracle paths guarded.
 - [x] Curated official/public UI reference index (p1-004, reference-only; no images
       committed).
+- [x] Oracle harness settings/library goldens (p1-002, 21 payloads) and fixture v10 library
+      (p1-003, 18 payloads) committed and verified.
+- [x] Steam process tracking (p1-007) and Flatpak host probe (p1-010) accepted on real runs.
+- [x] Avalonia real Wayland/X11 launch and AT-SPI evidence (p1-008); Wayland accessibility is
+      an accepted v1 limitation (Deferred limitations D1).
+- [x] Real Steam artifact corpus committed (p1-009, 11 paths with verifiable `SHA256SUMS`).
+- [x] Phase 1 gate reconciled to READY in `docs/port/gates/P1-oracle.md`; p1-006 WebView is
+      deferred to v1.1 and is not a v1 gate.
 
 ## In flight
 
-- [ ] Oracle harness: settings bytes + library export (manifest v0 done).
-- [ ] Fixture v10 library for migration; real Steam artifact capture.
-- [ ] Steam process/Flatpak tracking spike.
-- [ ] Avalonia headless screenshot + accessibility spike.
+None. Every Phase 1 item is merged or explicitly deferred; Phase 2 has not started and awaits
+captain approval of the READY gate.
 
 ## Not started
 
-- Oracle harness byte diff and golden corpus.
 - Phase 2 solution/projects/analyzers.
 - Any production code.
 
@@ -69,8 +74,6 @@
 - Windows oracle CI needs a runner image with .NET Framework MSBuild. `Playnite.Deps` is
   publicly reachable, but it is a mutable third-party feed; the SHA-256 pin in `oracle-lock/`
   is the reproducibility control, and redistribution needs a license review.
-- LiteDB 4 basic read/write passes on `net11.0`; the v10-specific mapper/collection layout still
-  needs a fixture-based verification.
 - Steam is greenfield: no v10 implementation exists to port, so its oracle is a recorded
   artifact corpus + real-install acceptance, not a v10 diff.
 
@@ -80,7 +83,7 @@
 | --- | ---: | --- |
 | Legacy C# LOC | 143,152 | `scan_legacy.py` |
 | Legacy XAML LOC | 68,226 | `scan_legacy.py` |
-| Legacy executed cases (oracle) | 282 passed, 2 excluded | `tests/baseline.json` |
+| Legacy executed cases (oracle) | 281 passed, 3 excluded | `tests/baseline.json` |
 | Windows-only files (non-WPF) | 72 | `scan_legacy.py` |
 | New tests | 0 | — |
 | Ported parity rows | 0 | `surface-parity.tsv` |
