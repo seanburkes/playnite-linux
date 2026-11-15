@@ -6,3 +6,5 @@ tests/baseline.json        @seanburkes
 docs/formal/               @seanburkes
 oracle-lock/               @seanburkes
 docs/port/surface-parity.tsv @seanburkes
+tools/LegacyOracle/        @seanburkes
+tools/V10LibraryFixture/   @seanburkes

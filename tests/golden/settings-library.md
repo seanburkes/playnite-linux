@@ -9,17 +9,29 @@ not normalise, sort, re-encode, or hand-patch them.
   `1a47c7f2dde3ca9ee0447d6ad8512705a8680fec` (p1-003, PR #13).
 - `SHA256SUMS` file SHA-256:
   `8a0777b50420c8030f71b01efeb1b88126af48998cd01de3cd3c773849f096f5`.
-- All 18 `library/` entries in that manifest were checked against the committed tree before
-  the goldens were written. No fixture byte was modified.
+- The p1-003 fixture validation, not `GenerateSettings`, checked all 18 `library/` entries in
+  that manifest against the committed fixture tree before the library goldens were copied;
+  `GenerateSettings` emits only the three settings payloads and reads no fixture. `Validate`
+  re-checks the same 18 entries against `tests/fixtures/v10/SHA256SUMS` on every run. No
+  fixture byte was modified.
 
-## Windows run
+## Windows runs
 
-- Run: https://github.com/seanburkes/playnite-linux/actions/runs/43653446375
-  (`settings-library-oracle`, `workflow_dispatch`, branch `fm/p1-002-goldens`).
-- Harness commit: `6e4635bb31ad212551de6032ee9fa1bbe9bf5514`.
-- The run built `tools/LegacyOracle` only, ran the synthetic comparator/safety self-test,
-  then ran `Verify.ps1 -Mode GenerateSettings`. The downloaded artifact was
+- Generation run: https://github.com/seanburkes/playnite-linux/actions/runs/43653446375
+  (`settings-library-oracle`, `workflow_dispatch`, branch `fm/p1-002-goldens`). It built
+  `tools/LegacyOracle` only, ran the synthetic comparator/safety self-test, then ran
+  `Verify.ps1 -Mode GenerateSettings`. The downloaded artifact was
   `p1-002-generated-settings`; the payloads came from `payload/settings/`.
+- Validation run: https://github.com/seanburkes/playnite-linux/actions/runs/43653802671
+  (`settings-library-oracle`, `pull_request`, same branch, head
+  `2ad85049c35324d05b932d1b8ebb2e9d3bfef940`). Both jobs were green; the `validate` job rebuilt
+  the 21 payloads from the committed fixture and ran `Verify.ps1 -Mode Validate` against
+  `tests/golden`, which is the run that compared these goldens byte-for-byte. The generation
+  run did not accept them.
+- Harness commit: `6e4635bb31ad212551de6032ee9fa1bbe9bf5514`.
+- Golden inventory: `tests/golden/settings-library.sha256` (file SHA-256
+  `f8e76eb15fdff4db5df4c9dbbd6402cac7dfa119b31b40a87784bec3cd29ee9b`) pins all 21 payload
+  paths and hashes; the three settings payload hashes are also listed under Goldens below.
 - Cross-run repeat: the same three settings payload hashes were produced earlier by
   https://github.com/seanburkes/playnite-linux/actions/runs/43627447663.
 
@@ -41,9 +53,9 @@ These seeds pin `InstallInstanceId`, `BackgroundImageAnimation`, and the fullscr
 `SaveSettings()` output after authentic defaulting/migrations; the loader was never pointed
 at the seeds directly for writing.
 
-The library inputs are the 18 approved fixture files. `library-export` copies the directory
-tree byte-for-byte and does not open LiteDB, enumerate game objects, or define a semantic
-export format.
+In `Validate` (and `Generate`), the library inputs are the 18 approved fixture files;
+`GenerateSettings` reads no fixture. `library-export` copies the directory tree byte-for-byte
+and does not open LiteDB, enumerate game objects, or define a semantic export format.
 
 ## Goldens
 
@@ -54,7 +66,8 @@ export format.
 - `settings/windowPositions.json`
   `eb850cb616e97ff7dfa8f6c10d7288123680c0cd1401788fc9fa04bd1dbce415`
 - `library/`: the 18 approved fixture files with the hashes pinned in
-  `tests/fixtures/v10/SHA256SUMS`; see `settings-library.sha256` for all 21 golden hashes.
+  `tests/fixtures/v10/SHA256SUMS`; see `settings-library.sha256` for all 21 golden hashes. The
+  manifest's own SHA-256 is listed under Windows runs so the hash chain can be re-derived.
 
 `settings-first`, `settings-second` (save of the first save), and `settings-repeat` (repeat
 from the seed) were byte-identical, and the golden payloads equal that emitted set exactly.
@@ -84,8 +97,19 @@ The 18 library goldens are byte-identical to the committed fixture tree.
 - The 21-file inventory and `settings-library.sha256` cover exactly the approved paths. The
   `Validate` mode is the acceptance consumer: it reproduces the 21 payloads, compares them
   byte-for-byte to these goldens, and requires the fixture tree and goldens to stay
-  unchanged during the run.
+  unchanged during the run. The validation run above is that comparison.
 - The library payloads are the approved v10 fixture bytes, unmodified.
+
+## Harness drift and stale goldens
+
+`Validate` never trusts the committed bytes on the input side: it rebuilds the 21 payloads
+from the harness and compares them to `tests/golden`. A harness-only change that alters
+emitted bytes therefore fails the `validate` job unless the goldens are regenerated in the
+same change; stale goldens cannot silently keep passing. `tools/LegacyOracle/` and
+`tools/V10LibraryFixture/` are protected paths, so that paired harness+golden change needs the
+`oracle-change` label and a second review. `Test-Validation.ps1` also flips one byte in a
+disposable copy of this committed corpus and requires the same whole-set comparator to reject
+it, then checks that the real `tests/golden` tree is byte-identical before and after.
 
 ## What these goldens do not prove
 
@@ -96,8 +120,8 @@ The 18 library goldens are byte-identical to the committed fixture tree.
 - They do not cover other ambient conditions (locale, DPI, GPU, multiple monitors, other
   Windows versions). The machine-dependent primary-screen index is supplied as seed data,
   not derived, so the default `Monitor` computation is not exercised.
-- They do not cover settings or fixture mutations beyond the verifier's explicit negative
-  checks. Comparator negatives in `Test-Validation.ps1` run on synthetic unit bytes, not on
-  these goldens.
+- They do not cover arbitrary settings or fixture mutations; only the explicit negative checks
+  run. `Test-Validation.ps1` includes a one-byte mutation of a disposable copy of these
+  committed payloads, but that is not exhaustive fuzzing.
 - They are not acceptance by themselves: tests/golden changes still require the
   `oracle-change` label, independent review, and merge.
