@@ -338,6 +338,39 @@ class LinuxTestResultPolicyTests(unittest.TestCase):
         self.assertIn("Scaffold: declared empty but executed case count 1; record it "
                       "in the counted baseline", self.summary.read_text())
 
+    def test_new_zero_case_project_declared_empty_fails(self):
+        previous = self.record_previous(None, present=("Suite",))
+        self.record_baseline(
+            {"Suite": {"executed": 43, "passed": 43}},
+            empty={"Scaffold": "marker-only project; no test methods yet"})
+        self.assertEqual(1, self.check(
+            self.project(outcomes=["pass"] * 43),
+            self.project("Scaffold", exit_code=8),
+            previous=previous))
+        self.assertIn("Scaffold: declared empty but did not exist at the base commit",
+                      self.summary.read_text())
+
+    def test_existing_zero_case_project_declared_empty_still_passes(self):
+        previous = self.record_previous(
+            None, present=("Suite", "Scaffold"))
+        self.record_baseline(
+            {"Suite": {"executed": 43, "passed": 43}},
+            empty={"Scaffold": "marker-only project; no test methods yet"})
+        self.assertEqual(0, self.check(
+            self.project(outcomes=["pass"] * 43),
+            self.project("Scaffold", exit_code=8),
+            previous=previous))
+
+    def test_new_project_with_cases_in_counted_baseline_passes(self):
+        previous = self.record_previous(None, present=("Suite",))
+        self.record_baseline(
+            {"Suite": {"executed": 43, "passed": 43},
+             "Scaffold": {"executed": 2, "passed": 2}})
+        self.assertEqual(0, self.check(
+            self.project(outcomes=["pass"] * 43),
+            self.project("Scaffold", outcomes=["pass", "pass"]),
+            previous=previous))
+
     def test_undeclared_zero_case_project_fails(self):
         previous = self.record_previous(None, present=("Suite", "Scaffold"))
         self.record_baseline({"Suite": {"executed": 43, "passed": 43}})
@@ -428,6 +461,55 @@ class LinuxTestResultPolicyTests(unittest.TestCase):
                                   "approved_by": "oracle-change review"}})
         self.assertEqual(0, self.check(
             self.project(outcomes=["pass"] * 43), previous=previous))
+
+    def test_retired_declared_empty_project_replacement_must_exist(self):
+        previous = self.record_previous(
+            None, present=("Suite", "Scaffold"),
+            empty={"Scaffold": "marker-only project; no test methods yet"})
+        self.record_baseline(
+            {"Suite": {"executed": 43, "passed": 43}},
+            removed={"Scaffold": {"reason": "replaced",
+                                  "approved_by": "oracle-change review",
+                                  "replaced_by": "MissingSuite",
+                                  "replacement_executed": 0}})
+        self.assertEqual(1, self.check(
+            self.project(outcomes=["pass"] * 43), previous=previous))
+        self.assertIn("Scaffold: removal record names replacement MissingSuite, which "
+                      "is not in the current baseline", self.summary.read_text())
+
+    def test_retired_declared_empty_project_replacement_count_must_match(self):
+        previous = self.record_previous(
+            None, present=("Suite", "Scaffold"),
+            empty={"Scaffold": "marker-only project; no test methods yet"})
+        self.record_baseline(
+            {"Suite": {"executed": 43, "passed": 43},
+             "NewSuite": {"executed": 43, "passed": 43}},
+            removed={"Scaffold": {"reason": "replaced",
+                                  "approved_by": "oracle-change review",
+                                  "replaced_by": "NewSuite",
+                                  "replacement_executed": 42}})
+        self.assertEqual(1, self.check(
+            self.project(outcomes=["pass"] * 43),
+            self.project("NewSuite", outcomes=["pass"] * 43),
+            previous=previous))
+        self.assertIn("Scaffold: removal record states replacement count 42 but "
+                      "NewSuite records 43", self.summary.read_text())
+
+    def test_retired_declared_empty_project_with_valid_replacement_passes(self):
+        previous = self.record_previous(
+            None, present=("Suite", "Scaffold"),
+            empty={"Scaffold": "marker-only project; no test methods yet"})
+        self.record_baseline(
+            {"Suite": {"executed": 43, "passed": 43},
+             "NewSuite": {"executed": 43, "passed": 43}},
+            removed={"Scaffold": {"reason": "replaced",
+                                  "approved_by": "oracle-change review",
+                                  "replaced_by": "NewSuite",
+                                  "replacement_executed": 43}})
+        self.assertEqual(0, self.check(
+            self.project(outcomes=["pass"] * 43),
+            self.project("NewSuite", outcomes=["pass"] * 43),
+            previous=previous))
 
     def test_declared_empty_project_must_still_run(self):
         self.record_baseline(

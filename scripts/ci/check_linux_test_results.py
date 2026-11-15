@@ -10,12 +10,16 @@ and an approver; the protected-path ``oracle-change`` gate makes that record a
 second-reviewer decision.
 
 A project may be absent from the counted baseline only when it is declared in
-``empty_projects`` with a non-empty reason, executes zero cases, and reports
-MTP exit 8. Exit 0 with zero cases is never accepted, declared or not. A
+``empty_projects`` with a non-empty reason, executes zero cases, reports MTP
+exit 8, and already existed as a test project at the base commit. A newly
+added zero-case project cannot be declared empty; it must be counted once it
+has cases. Exit 0 with zero cases is never accepted, declared or not. A
 declaration is immutable history: a later baseline may move the project into
 ``new`` as a counted entry or retire it through ``removed_projects``, but it may
 not drop the declaration or edit its reason. A declared-empty project that
-gains a case fails until it is counted.
+gains a case fails until it is counted. A retirement record for a formerly
+empty project is validated like any other, including ``replaced_by`` and
+``replacement_executed``.
 
 An undeclared zero-case project fails only once a counted new-suite baseline
 exists. While ``new`` is null, the bootstrap-empty path still accepts MTP exit
@@ -138,6 +142,11 @@ def validate_baseline_policy(current_path, current_document, current, removed,
     """Return failures for a baseline that lowers, deletes or loses history."""
     failures = []
     for project in sorted(empty):
+        if project not in previous_projects:
+            failures.append(
+                f"{project}: declared empty but did not exist at the base commit; "
+                "a newly added zero-case project cannot be exempted from the counted "
+                "baseline")
         if current is not None and project in current:
             failures.append(f"{project}: declared empty but also recorded in the "
                             "counted baseline")
@@ -155,7 +164,21 @@ def validate_baseline_policy(current_path, current_document, current, removed,
             # floor now lives in ``new``.
             continue
         elif project in removed:
-            # Explicit reviewed retirement.
+            record = removed[project]
+            replacement = record.get("replaced_by")
+            if replacement is not None:
+                replacement_row = (current or {}).get(replacement)
+                if replacement_row is None:
+                    failures.append(
+                        f"{project}: removal record names replacement {replacement}, "
+                        "which is not in the current baseline")
+                else:
+                    replacement_count = baseline_count(replacement_row, "executed")
+                    stated = record.get("replacement_executed")
+                    if stated is not None and stated != replacement_count:
+                        failures.append(
+                            f"{project}: removal record states replacement count {stated} "
+                            f"but {replacement} records {replacement_count}")
             continue
         else:
             failures.append(
