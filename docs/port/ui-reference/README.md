@@ -160,7 +160,7 @@ gate, and no item here is required for p1-004 or Phase 1 exit.
 - [ ] Genuine `main-library.png`, `details.png`, `settings.png` captured and decoded.
 - [ ] Actual version/runtime/dimensions/scenarios and hashes recorded in provenance.
 - [ ] Synthetic-only/privacy and authenticity review complete.
-- [ ] Two adversarial blind diff-only reviews arranged by firstmate; reviewers do
+- [ ] Two adversarial diff-only reviews arranged by firstmate; reviewers do
   not edit. The owner decides the merge.
 - [ ] Queue/ledger updated with genuine capture evidence. No image or behavioural
   verification is claimed by this document.

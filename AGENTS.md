@@ -49,7 +49,7 @@ oracle. New code is in `src/` (Phase 1 onward). Do not modify the Windows app.
 - Read the parity row and the v10 reference file before implementing.
 - Prefer copying/adapting v10 code over inventing a new shape; keep names 1:1 where practical.
 - Every implemented unit gets a test and an oracle reference. "It compiles" is not evidence.
-- Two blind reviews for every unit: diff only, "assume this is wrong". Reviewer never edits.
+- Two adversarial reviews for every unit: diff only, "assume this is wrong". Reviewer never edits.
 - If the same failure happens twice, fix the generator (analyzer, template, standing rule),
   not the artifact.
 - If a workaround needs a paragraph to justify, the code is wrong. Fix the code.

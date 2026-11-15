@@ -608,8 +608,9 @@ zero third-party plugins is a claim without a corpus.
 
 ## ADR-024 — Single-owner review model
 
-**Context.** This repository has one human owner. Every pull request and every review is that
-same person, even when an agent or model produces the review text. Several documents described
+**Context.** This repository has one human owner. Every pull request is merged by that person,
+and every review is made on their behalf: when an agent or model produces the review text, the
+model is working for the owner, not acting as a second person. Several documents described
 a "second reviewer" or "independent review" as a merge gate, and some described CODEOWNERS as
 an approval requirement. Neither is true. Branch protection on the default branch requires a
 pull request, the five required status checks (`inventory-and-parity`, `formal`,
@@ -687,8 +688,9 @@ do not eliminate it, so review claims are stated as assistance, never as indepen
 
 ## Deferred limitations for v1 (not ADRs)
 
-These are accepted v1 limitations recorded after the ADR list was closed at ADR-023. They are
-not new architectural decisions and do not renumber the ADR list.
+These are accepted v1 limitations recorded after the original ADR list was closed at ADR-023;
+ADR-024 is a later governance decision. They are not new architectural decisions and do not
+renumber the ADR list.
 
 ### D1 — Wayland accessibility (AT-SPI) is unavailable for Avalonia 12.1.6
 

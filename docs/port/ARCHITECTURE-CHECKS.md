@@ -322,5 +322,5 @@ to the enforced table, exception allowlist or symbol vocabulary needs the
 `oracle-change` label and the protected-path gate. This PR itself changes those files,
 so it needs that label to pass the oracle gate.
 The architecture suite count is recorded in the p2-002 ledger shard alongside
-the clean build/test results. Two adversarial blind diff reviews remain required
+the clean build/test results. Two adversarial diff reviews remain required
 before this unit is accepted.

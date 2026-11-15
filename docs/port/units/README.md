@@ -103,10 +103,10 @@ that did exist when it was recorded. `check` prints a notice naming every correc
 accepts, so a reviewer sees which record authorized the history rewrite.
 
 A correction is a captain-authorised operation, not something a contributor can self-approve.
-It requires the same review gate as an oracle change: the `oracle-change` label plus a second
-reviewer, in addition to the normal two blind reviews. CI enforces the record's shape and
-history, not who approved it; human review of the record against the corrected row is the
-authority boundary.
+It requires the same review gate as an oracle change: the `oracle-change` label through the
+protected-path gate, in addition to the normal two adversarial reviews. CI enforces the
+record's shape and history, not who approved it; human review of the record against the
+corrected row is the authority boundary.
 
 `build` does not reject a row by its instant; it validates every shard and writes both
 aggregates in generated order. After the correction, regenerate local aggregates with `build`

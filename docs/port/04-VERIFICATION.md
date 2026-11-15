@@ -334,7 +334,7 @@ modes. One waiver cannot hide all three.
 - [ ] Resource lifetime: dispose/cancel paths tested.
 - [ ] Logging and error messages match v10 where consumed.
 - [ ] `legacy/` untouched; test/golden paths untouched.
-- [ ] Two blind reviews (diff only, "assume this is wrong"); fixes applied.
+- [ ] Two adversarial reviews (diff only, "assume this is wrong"); fixes applied.
 - [ ] Ledger row updated; commit message names the row and oracle.
 - [ ] CI green, including oracle and counts.
 

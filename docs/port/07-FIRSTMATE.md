@@ -84,7 +84,7 @@ not used until the posture changes.
 
 - One unit per worktree; branch `port/<phase>-<unit>`.
 - Workers run only the narrow check named in the task; the parent builds.
-- Two blind reviewers per unit, diff only; a fixer applies findings.
+- Two adversarial reviews per unit, diff only; a fixer applies findings.
 - `legacy/`, `tests/golden/`, `tests/fixtures/`, `tests/baseline.json`, and `docs/formal/`
   are protected. An `oracle-change` task is separate and goes through the protected-path gate.
 - At two failed attempts, stop and escalate; do not thrash.

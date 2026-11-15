@@ -257,8 +257,8 @@ labelled as synthetic.
 
 ## Open questions for the reviewer
 
-1. Approve the eleven exact destination paths above, with the `oracle-change` label and a second
-   reviewer, so a separate change can copy them into `tests/fixtures/steam/real/`.
+1. Approve the eleven exact destination paths above through the `oracle-change` route and the
+   protected-path gate, so a separate change can copy them into `tests/fixtures/steam/real/`.
 2. Confirm the corpus location (`tests/fixtures/steam/real/`) and the `/home/test` substitution
    convention, or direct a different one.
 3. Confirm that a real Proton-title launch and a real Flatpak-hosted launch remain Phase 2

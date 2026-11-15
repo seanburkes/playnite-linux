@@ -301,11 +301,11 @@ discovered and run cannot be retired. Prior removal records are immutable, and `
 plus `replacement_executed` must be a string and a nonnegative integer. A recorded rename must
 carry the retired project's executed floor to the replacement. Test discovery for the run uses
 the same test-project filter as the base list. `tests/baseline.json`, the Linux, plan-guards,
-legacy-oracle, settings-library-oracle, windows-fixture-validation and port-index workflows,
-`.github/CODEOWNERS`, and `scripts/ci/`, `scripts/port/`, `scripts/formal/` are CODEOWNED and
-in the protected-path set, so changing the policy surface requires the declared
-`oracle-change` route through the protected-path gate. The protected-path step itself is
-asserted to have no `continue-on-error` and to exit nonzero on a violation. An absent base
+legacy-oracle, settings-library-oracle, windows-fixture-validation, packaging and port-index
+workflows, `.github/CODEOWNERS`, `packaging/`, and `scripts/ci/`, `scripts/port/`, `scripts/formal/`
+are CODEOWNED and in the protected-path set, so changing the policy surface requires the
+declared `oracle-change` route through the protected-path gate. The protected-path step itself
+is asserted to have no `continue-on-error` and to exit nonzero on a violation. An absent base
 commit (a brand-new branch's first push) keeps the first-baseline addition path open.
 
 The Windows oracle remains independent, with its existing triggers and VSTest filters:
