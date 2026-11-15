@@ -221,7 +221,7 @@ mandatory. Empty scaffold assemblies are not evidence of tested application beha
 The pre-baseline bootstrap policy is deliberately self-closing. The workflow runs **every**
 discovered project, records each exit code, then calls
 `scripts/ci/check_linux_test_results.py`. It checks out full history, resolves one comparison
-base through `scripts/ci/resolve_base_sha.py`, and materialises that commit's
+base in the workflow from the event fields, and materialises that commit's
 `tests/baseline.json` plus its test-project list (`list_test_projects.py`, not every
 `tests/**/*.csproj`) for that call. A pull-request or merge-queue event with no usable base SHA
 fails closed; only a push before the branch's first commit may open the first-baseline path.
@@ -246,16 +246,20 @@ passed/failed/skipped counts, coverage and capture provenance. Python policy tes
 `scripts/ci/` exercise the bootstrap-to-baseline transition and these failure paths in CI.
 
 The enforcement scripts are self-protecting. Before the protected-path gate or the results
-checker runs, the workflow materialises `scripts/ci` from the comparison base and executes the
-base copy. If the base commit contains a script but it cannot be materialised, the job fails
-instead of falling back. Only while the base genuinely lacks a script does the head copy run,
-with a named `BOOTSTRAP` warning; once `main` contains the script, every later run uses the
-base copy. This keeps a pull request from weakening the gate or the results check in its own
-checkout. The protected-path diff is taken from the merge base to `HEAD`, so a PR branched
-before a protected-path change landed on `main` is not charged for that main-side change;
-failure to compute the merge base fails closed. The merge-queue protected-path step re-reads
-the PR's `oracle-change` label through the API because merge-group events do not carry PR
-labels.
+checker runs, the workflow selects a materialiser from the comparison base and uses it to
+materialise `scripts/ci`; the protected-path gate, results checker, and base project lister
+then run from the base copy. If the base commit contains a script but it cannot be
+materialised, the job fails instead of falling back. Only while the base genuinely lacks a
+script (including the materialiser itself) does the head copy run, with a named `BOOTSTRAP`
+warning; once `main` contains the script, every later run uses the base copy. The base SHA
+comes directly from the event fields in the workflow, not from a PR-controlled helper. This
+keeps a pull request from weakening the gate, the results check, or the base project list in
+its own checkout. The protected-path diff is taken from the merge base to `HEAD`, so a PR
+branched before a protected-path change landed on `main` is not charged for that main-side
+change; failure to compute the merge base fails closed. The merge-queue protected-path step
+re-reads the PR's `oracle-change` label through the API because merge-group events do not
+carry PR labels. It fails closed on a batched group, which does not identify exactly one PR,
+and reports that single-PR limitation explicitly.
 
 The committed baseline is a ratchet. A change may add the first non-null `new` object only when
 its counts meet or exceed the observed run and it names every observed project, so a first

@@ -101,13 +101,39 @@ def commit(repo, message):
     return git(repo, "rev-parse", "HEAD")
 
 
-def materialise(repo, base, runner_temp, output):
-    script = run_block(LINUX_CI, "Materialise the base policy scripts")
+def materialise(repo, base, runner_temp, output, workflow=LINUX_CI):
+    runner_temp = Path(runner_temp)
+    runner_temp.mkdir(parents=True, exist_ok=True)
+    script = run_block(workflow, "Select the policy materialiser")
     env = os.environ.copy()
     env.update({"BASE_SHA": base, "RUNNER_TEMP": str(runner_temp),
                 "GITHUB_OUTPUT": str(output)})
-    return subprocess.run(["bash", "-e", "-c", script], cwd=repo, env=env,
-                          capture_output=True, text=True, check=False)
+    selected = subprocess.run(["bash", "-e", "-c", script], cwd=repo, env=env,
+                              capture_output=True, text=True, check=False)
+    if selected.returncode != 0:
+        return selected, {}
+    values = outputs(output)
+    path = Path(values["path"])
+    if not path.is_absolute():
+        candidate = repo / path
+        path = candidate if candidate.exists() else ROOT / path
+    run = subprocess.run(["bash", str(path), base, str(runner_temp), str(output)],
+                         cwd=repo, capture_output=True, text=True, check=False)
+    return run, outputs(output)
+
+
+def resolve_base(workflow, event, pull_request_base="", merge_group_base="",
+                 push_before="", output=None, repo=ROOT):
+    if output is None:
+        output = Path(tempfile.mkdtemp()) / "resolve-output"
+    script = run_block(workflow, "Resolve the comparison base commit")
+    env = os.environ.copy()
+    env.update({"EVENT_NAME": event, "PULL_REQUEST_BASE": pull_request_base,
+                "MERGE_GROUP_BASE": merge_group_base, "PUSH_BEFORE": push_before,
+                "GITHUB_OUTPUT": str(output)})
+    result = subprocess.run(["bash", "-e", "-c", script], cwd=repo, env=env,
+                            capture_output=True, text=True, check=False)
+    return result, outputs(output) if output.exists() else {}
 
 
 def outputs(path):
@@ -144,6 +170,8 @@ class CiPolicyTests(unittest.TestCase):
             "Oracle artifacts require an explicit oracle-change merge-queue entry")
         self.assertIn("github.event_name == 'merge_group'", step)
         self.assertIn("gh api", step)
+        self.assertIn("commits/", step)
+        self.assertIn("one PR per group", step)
         self.assertIn("oracle-change", step)
         self.assertIn("steps.policy_scripts.outputs.gate", step)
         self.assertNotIn("continue-on-error", step)
@@ -231,9 +259,8 @@ class CiPolicyTests(unittest.TestCase):
             commit(repo, "weaken head gate")
             runner_temp = repo / "runner"
             output = repo / "output"
-            result = materialise(repo, base, runner_temp, output)
+            result, values = materialise(repo, base, runner_temp, output)
             self.assertEqual(0, result.returncode, result.stdout + result.stderr)
-            values = outputs(output)
             self.assertEqual("base", values["gate_source"])
             self.assertEqual("base", values["checker_source"])
             selected = Path(values["gate"])
@@ -249,7 +276,7 @@ class CiPolicyTests(unittest.TestCase):
             gate.mkdir(parents=True)
             (gate / "not-a-script").write_text("x\n")
             base = committed_repo(repo)
-            result = materialise(repo, base, repo / "runner", repo / "output")
+            result, _ = materialise(repo, base, repo / "runner", repo / "output")
             self.assertNotEqual(0, result.returncode)
             self.assertIn("could not be materialised", result.stdout)
 
@@ -263,9 +290,8 @@ class CiPolicyTests(unittest.TestCase):
             checker.write_text("import sys\nsys.exit(0)\n")
             commit(repo, "weaken head checker")
             output = repo / "output"
-            result = materialise(repo, base, repo / "runner", output)
+            result, values = materialise(repo, base, repo / "runner", output)
             self.assertEqual(0, result.returncode, result.stdout + result.stderr)
-            values = outputs(output)
             self.assertEqual("base", values["checker_source"])
             run_checker = subprocess.run([sys.executable, values["checker"]],
                                          capture_output=True, text=True, check=False)
@@ -280,10 +306,9 @@ class CiPolicyTests(unittest.TestCase):
                 "import sys\nsys.exit(0)\n")
             commit(repo, "add policy")
             output = repo / "output"
-            result = materialise(repo, base, repo / "runner", output)
+            result, values = materialise(repo, base, repo / "runner", output)
             self.assertEqual(0, result.returncode, result.stdout + result.stderr)
             self.assertIn("BOOTSTRAP", result.stdout)
-            values = outputs(output)
             self.assertEqual("head", values["gate_source"])
             self.assertEqual("scripts/ci/check_protected_paths.py", values["gate"])
 
@@ -297,25 +322,82 @@ class CiPolicyTests(unittest.TestCase):
             gate.write_text("import sys\nsys.exit(0)\n")
             commit(repo, "weaken head gate")
             output = repo / "output"
-            result = materialise(repo, base, repo / "runner", output)
+            result, values = materialise(repo, base, repo / "runner", output)
             self.assertEqual(0, result.returncode, result.stdout + result.stderr)
-            values = outputs(output)
             run_gate = subprocess.run([sys.executable, values["gate"]],
                                       capture_output=True, text=True, check=False)
             self.assertEqual(1, run_gate.returncode)
 
+    def test_materialise_blocks_identical_and_work_in_both_workflows(self):
+        self.assertEqual(run_block(LINUX_CI, "Select the policy materialiser"),
+                         run_block(PLAN_GUARDS, "Select the policy materialiser"))
+        self.assertEqual(run_block(LINUX_CI, "Materialise the base policy scripts"),
+                         run_block(PLAN_GUARDS, "Materialise the base policy scripts"))
+        real_materialiser = (SCRIPTS / "materialise_policy.sh").read_text()
+        for workflow in (LINUX_CI, PLAN_GUARDS):
+            with self.subTest(workflow=workflow.name), \
+                    tempfile.TemporaryDirectory() as temporary:
+                repo = Path(temporary)
+                scripts = repo / "scripts" / "ci"
+                scripts.mkdir(parents=True)
+                (scripts / "materialise_policy.sh").write_text(real_materialiser)
+                (scripts / "check_protected_paths.py").write_text(
+                    "import sys\nsys.exit(1)\n")
+                (scripts / "check_linux_test_results.py").write_text(
+                    "import sys\nsys.exit(0)\n")
+                (scripts / "list_test_projects.py").write_text("print('Real.Tests')\n")
+                base = committed_repo(repo)
+                (scripts / "materialise_policy.sh").write_text(
+                    "#!/usr/bin/env bash\nexit 0\n")
+                commit(repo, "weaken head materialiser")
+                result, values = materialise(repo, base, repo / "runner",
+                                             repo / "output", workflow)
+                self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+                self.assertEqual("base", values["source"])
+                for key in ("checker", "gate", "lister"):
+                    self.assertEqual("base", values[f"{key}_source"])
+
+    def test_edited_lister_cannot_drop_a_project(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary)
+            scripts = repo / "scripts" / "ci"
+            scripts.mkdir(parents=True)
+            (scripts / "list_test_projects.py").write_text(
+                (SCRIPTS / "list_test_projects.py").read_text())
+            project = repo / "tests" / "Real.Tests" / "Real.Tests.csproj"
+            project.parent.mkdir(parents=True)
+            project.write_text("<Project><PropertyGroup><IsTestProject>true"
+                               "</IsTestProject></PropertyGroup></Project>\n")
+            base = committed_repo(repo)
+            (scripts / "list_test_projects.py").write_text("print('')\n")
+            commit(repo, "weaken head lister")
+            result, values = materialise(repo, base, repo / "runner", repo / "output")
+            self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+            self.assertEqual("base", values["lister_source"])
+            listed = subprocess.run([sys.executable, values["lister"],
+                                     "--ref", base], cwd=repo,
+                                    capture_output=True, text=True, check=False)
+            self.assertEqual(0, listed.returncode, listed.stderr)
+            self.assertIn("Real.Tests", listed.stdout.splitlines())
+
     def test_merge_queue_and_base_resolution_are_wired(self):
+        resolver = run_block(LINUX_CI, "Resolve the comparison base commit")
+        materialiser = run_block(LINUX_CI, "Select the policy materialiser")
         for workflow in (LINUX_CI, PLAN_GUARDS):
             text = workflow.read_text()
             with self.subTest(workflow=workflow.name):
                 self.assertIn("merge_group:", text)
-                self.assertIn("resolve_base_sha.py", text)
+                self.assertNotIn("resolve_base_sha.py", text)
                 self.assertIn("github.event.merge_group.base_sha", text)
+                self.assertEqual(resolver,
+                                 run_block(workflow, "Resolve the comparison base commit"))
+                self.assertEqual(materialiser,
+                                 run_block(workflow, "Select the policy materialiser"))
         self.assertIn("fetch-depth: 0", LINUX_CI.read_text())
         capture = step_block(LINUX_CI, "Capture the committed policy baseline")
         self.assertIn("previous-baseline.json", capture)
         self.assertIn("previous-projects.txt", capture)
-        self.assertIn("list_test_projects.py", capture)
+        self.assertIn("steps.policy_scripts.outputs.lister", capture)
         step_block(LINUX_CI, "Materialise the base policy scripts")
         checker = LINUX_CI.read_text()
         self.assertIn("PREVIOUS_BASELINE_STATE", checker)
@@ -325,28 +407,41 @@ class CiPolicyTests(unittest.TestCase):
         self.assertIn("--previous-projects ", checker)
 
     def test_pull_request_with_no_base_sha_fails_closed(self):
-        result = run("resolve_base_sha.py", "--event", "pull_request",
-                     "--pull-request-base", "")
-        self.assertEqual(1, result.returncode)
-        self.assertIn("pull_request event has no usable base SHA", result.stdout)
+        for workflow in (LINUX_CI, PLAN_GUARDS):
+            result, _ = resolve_base(workflow, "pull_request", pull_request_base="")
+            self.assertEqual(1, result.returncode)
+            self.assertIn("pull_request event has no usable base SHA", result.stdout)
 
     def test_merge_group_with_no_base_sha_fails_closed(self):
-        result = run("resolve_base_sha.py", "--event", "merge_group",
-                     "--merge-group-base", "")
-        self.assertEqual(1, result.returncode)
-        self.assertIn("merge_group event has no usable base SHA", result.stdout)
+        for workflow in (LINUX_CI, PLAN_GUARDS):
+            result, _ = resolve_base(workflow, "merge_group", merge_group_base="")
+            self.assertEqual(1, result.returncode)
+            self.assertIn("merge_group event has no usable base SHA", result.stdout)
 
     def test_merge_group_uses_its_base_sha(self):
-        result = run("resolve_base_sha.py", "--event", "merge_group",
-                     "--merge-group-base", "a" * 40)
+        result, values = resolve_base(LINUX_CI, "merge_group",
+                                      merge_group_base="a" * 40)
         self.assertEqual(0, result.returncode)
-        self.assertEqual("a" * 40, result.stdout.strip())
+        self.assertEqual("a" * 40, values["sha"])
 
     def test_first_push_without_a_before_sha_allows_first_baseline(self):
-        result = run("resolve_base_sha.py", "--event", "push",
-                     "--push-before", "0" * 40)
+        result, values = resolve_base(LINUX_CI, "push", push_before="0" * 40)
         self.assertEqual(0, result.returncode)
-        self.assertEqual("", result.stdout.strip())
+        self.assertEqual("", values["sha"])
+
+    def test_edited_resolver_cannot_change_the_base(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary)
+            malicious = repo / "scripts" / "ci" / "resolve_base_sha.py"
+            malicious.parent.mkdir(parents=True)
+            malicious.write_text("print('b' * 40)\n")
+            committed_repo(repo)
+            output = repo / "output"
+            result, values = resolve_base(LINUX_CI, "pull_request",
+                                          pull_request_base="a" * 40,
+                                          output=output, repo=repo)
+            self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+            self.assertEqual("a" * 40, values["sha"])
 
     def test_worktree_project_discovery_uses_the_same_filter(self):
         with tempfile.TemporaryDirectory() as temporary:

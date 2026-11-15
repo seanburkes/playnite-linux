@@ -1,7 +1,10 @@
 import contextlib
 import io
 import json
+import os
 from pathlib import Path
+import subprocess
+import sys
 import tempfile
 import unittest
 import xml.etree.ElementTree as ET
@@ -430,6 +433,27 @@ class LinuxTestResultPolicyTests(unittest.TestCase):
             previous=(previous, projects)))
         self.assertIn("OldSuite: removal record must state the replacement count",
                       self.summary.read_text())
+
+    def test_previous_state_environment_is_honoured(self):
+        self.record_baseline({"Suite": {"executed": 1, "passed": 1}})
+        project = self.project(outcomes=["pass"])
+        env = os.environ.copy()
+        env.update({"PREVIOUS_BASELINE_STATE": "present",
+                    "PREVIOUS_PROJECTS_STATE": "present"})
+        result = subprocess.run(
+            [sys.executable,
+             str(Path(__file__).with_name("check_linux_test_results.py")),
+             "--projects", project,
+             "--results-directory", str(self.results),
+             "--baseline", str(self.baseline),
+             "--previous-baseline", str(self.root / "missing-baseline.json"),
+             "--previous-projects", str(self.root / "missing-projects.txt"),
+             "--summary", str(self.summary)],
+            env=env, capture_output=True, text=True, check=False)
+        self.assertEqual(1, result.returncode, result.stdout + result.stderr)
+        summary = self.summary.read_text()
+        self.assertIn("previous committed baseline was expected", summary)
+        self.assertIn("previous test project list was expected", summary)
 
 
 if __name__ == "__main__":
