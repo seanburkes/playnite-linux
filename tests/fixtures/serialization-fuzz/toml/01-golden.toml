@@ -1,0 +1,13 @@
+Count = 7
+Enabled = true
+Name = "héllo \"q\" \\ 日本語\nline"
+Omitted = "present"
+Ratio = 0.5
+Tags = ["a", "ü"]
+[Children]
+[Children.c1]
+Label = "x"
+Values = [1, 2]
+[First]
+Label = "y"
+Values = []

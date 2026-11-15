@@ -78,9 +78,12 @@ public static class TomlSerialization
         {
             return TomlSerializer.Deserialize<T>(toml, CreateOptions());
         }
-        catch (TomlException exception)
+        catch (Exception exception)
         {
-            throw new SerializationException(FormatNames.Toml, Describe(exception), exception);
+            throw new SerializationException(
+                FormatNames.Toml,
+                $"the document could not be read: {Describe(exception)}",
+                exception);
         }
     }
 
@@ -97,9 +100,10 @@ public static class TomlSerialization
         };
     }
 
-    private static string Describe(TomlException exception)
+    private static string Describe(Exception exception)
     {
-        if (exception.Message.Contains("does not support null", StringComparison.OrdinalIgnoreCase))
+        if (exception is TomlException
+            && exception.Message.Contains("does not support null", StringComparison.OrdinalIgnoreCase))
         {
             return "null is not representable in TOML; omit the member or use a sentinel value.";
         }

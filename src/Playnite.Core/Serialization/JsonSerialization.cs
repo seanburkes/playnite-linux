@@ -112,9 +112,12 @@ public static class JsonSerialization
         {
             throw;
         }
-        catch (JsonException exception)
+        catch (Exception exception)
         {
-            throw new SerializationException(FormatNames.Json, exception.Message, exception);
+            throw new SerializationException(
+                FormatNames.Json,
+                $"the document could not be read: {exception.Message}",
+                exception);
         }
     }
 }

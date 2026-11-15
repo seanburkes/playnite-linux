@@ -41,9 +41,12 @@ public static class YamlSerialization
         {
             return serializer.Serialize(obj);
         }
-        catch (YamlException exception)
+        catch (Exception exception)
         {
-            throw new SerializationException(FormatNames.Yaml, exception.Message, exception);
+            throw new SerializationException(
+                FormatNames.Yaml,
+                $"the document could not be read: {exception.Message}",
+                exception);
         }
     }
 
@@ -81,9 +84,12 @@ public static class YamlSerialization
         {
             throw;
         }
-        catch (YamlException exception)
+        catch (Exception exception)
         {
-            throw new SerializationException(FormatNames.Yaml, exception.Message, exception);
+            throw new SerializationException(
+                FormatNames.Yaml,
+                $"the document could not be read: {exception.Message}",
+                exception);
         }
     }
 }
