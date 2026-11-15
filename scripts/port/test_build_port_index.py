@@ -62,6 +62,11 @@ class PortIndexTests(unittest.TestCase):
         body = "".join(row + "\n" for row in rows)
         (self.units / f"{unit_id}.ledger.tsv").write_text(header + "\n" + body)
 
+    def write_corrections(self, *records, header=None):
+        header = header or port_index.CORRECTIONS_HEADER
+        body = "".join("\t".join(record) + "\n" for record in records)
+        (self.units / port_index.CORRECTIONS_NAME).write_text(header + "\n" + body)
+
     def render(self):
         return port_index.render(self.units)
 
@@ -87,7 +92,7 @@ class PortIndexTests(unittest.TestCase):
             )
         self.assertEqual(status, 0)
 
-    def write_base(self, queue_shards, ledger_shards=None, removed=None):
+    def write_base(self, queue_shards, ledger_shards=None, removed=None, corrections=None):
         """Materialise a base checkout and return its snapshot."""
         base = self.root / "base" / "docs" / "port"
         base_units = base / "units"
@@ -108,6 +113,11 @@ class PortIndexTests(unittest.TestCase):
             )
             (base_units / "removed.tsv").write_text(
                 port_index.REMOVED_HEADER + "\n" + body
+            )
+        if corrections:
+            body = "".join("\t".join(record) + "\n" for record in corrections)
+            (base_units / port_index.CORRECTIONS_NAME).write_text(
+                port_index.CORRECTIONS_HEADER + "\n" + body
             )
 
         base_index = port_index.build_index(base_units)
@@ -607,6 +617,153 @@ class PortIndexTests(unittest.TestCase):
         status, output = self.check_against(base)
 
         self.assertEqual(status, 0, output)
+
+    def test_timestamp_correction_with_matching_record_passes(self):
+        base = self.write_base(
+            {"p1-001": queue_row("p1-001"), "p1-002": queue_row("p1-002")},
+            {
+                "p1-001": [ledger_row("2026-11-14T17:00:00Z", "p1-001")],
+                "p1-002": [ledger_row("2026-11-14T18:00:00Z", "p1-002")],
+            },
+        )
+        self.write_queue_shard("p1-001", queue_row("p1-001"))
+        self.write_queue_shard("p1-002", queue_row("p1-002"))
+        self.write_ledger_shard(
+            "p1-001", ledger_row("2026-11-14T19:00:00Z", "p1-001")
+        )
+        self.write_ledger_shard(
+            "p1-002", ledger_row("2026-11-14T18:00:00Z", "p1-002")
+        )
+        self.write_corrections(
+            (
+                "p1-001",
+                "2026-11-14T17:00:00Z",
+                "2026-11-14T19:00:00Z",
+                "tester",
+                "merged out of order",
+            )
+        )
+        self.build()
+
+        status, output = self.check_against(base)
+
+        self.assertEqual(status, 0, output)
+        self.assertIn("history matches BASE", output)
+
+    def test_timestamp_change_without_a_correction_record_fails(self):
+        base = self.write_base(
+            {"p1-001": queue_row("p1-001")},
+            {"p1-001": [ledger_row("2026-11-14T17:00:00Z", "p1-001")]},
+        )
+        self.write_queue_shard("p1-001", queue_row("p1-001"))
+        self.write_ledger_shard(
+            "p1-001", ledger_row("2026-11-14T19:00:00Z", "p1-001")
+        )
+        self.build()
+
+        status, output = self.check_against(base)
+
+        self.assertEqual(status, 1)
+        self.assertIn("without a matching record", output)
+        self.assertIn("ledger-corrections.tsv", output)
+
+    def test_correction_that_edits_another_field_fails(self):
+        base = self.write_base(
+            {"p1-001": queue_row("p1-001")},
+            {"p1-001": [ledger_row("2026-11-14T17:00:00Z", "p1-001", actor="alice")]},
+        )
+        self.write_queue_shard("p1-001", queue_row("p1-001"))
+        self.write_ledger_shard(
+            "p1-001", ledger_row("2026-11-14T19:00:00Z", "p1-001", actor="bob")
+        )
+        self.write_corrections(
+            (
+                "p1-001",
+                "2026-11-14T17:00:00Z",
+                "2026-11-14T19:00:00Z",
+                "tester",
+                "merged out of order",
+            )
+        )
+        self.build()
+
+        status, output = self.check_against(base)
+
+        self.assertEqual(status, 1)
+        self.assertIn("only the timestamp may change", output)
+
+    def test_one_correction_cannot_move_multiple_rows(self):
+        first = ledger_row("2026-11-14T17:00:00Z", "p1-001")
+        second = ledger_row("2026-11-14T18:00:00Z", "p1-001", to_status="done")
+        base = self.write_base(
+            {"p1-001": queue_row("p1-001")}, {"p1-001": [first, second]}
+        )
+        self.write_queue_shard("p1-001", queue_row("p1-001"))
+        self.write_ledger_shard(
+            "p1-001",
+            ledger_row("2026-11-14T19:00:00Z", "p1-001"),
+            ledger_row("2026-11-14T20:00:00Z", "p1-001", to_status="done"),
+        )
+        self.write_corrections(
+            (
+                "p1-001",
+                "2026-11-14T17:00:00Z",
+                "2026-11-14T19:00:00Z",
+                "tester",
+                "merged out of order",
+            )
+        )
+        self.build()
+
+        status, output = self.check_against(base)
+
+        self.assertEqual(status, 1)
+        self.assertIn("missing or altered", output)
+
+    def test_new_backdated_row_fails_with_current_time_guidance(self):
+        base = self.write_base(
+            {"p1-001": queue_row("p1-001")},
+            {"p1-001": [ledger_row("2026-11-14T17:00:00Z", "p1-001")]},
+        )
+        self.write_queue_shard("p1-001", queue_row("p1-001"))
+        self.write_ledger_shard(
+            "p1-001",
+            ledger_row("2026-11-14T17:00:00Z", "p1-001"),
+            ledger_row("2026-11-14T16:00:00Z", "p1-001", to_status="done"),
+        )
+        self.build()
+
+        status, output = self.check_against(base)
+
+        self.assertEqual(status, 1)
+        self.assertIn("sorts before the newest existing ledger row", output)
+        self.assertIn("current time", output)
+
+    def test_existing_correction_records_are_append_only(self):
+        base = self.write_base(
+            {"p1-001": queue_row("p1-001")},
+            {"p1-001": [ledger_row("2026-11-14T18:00:00Z", "p1-001")]},
+            corrections=[
+                (
+                    "p1-001",
+                    "2026-11-14T17:00:00Z",
+                    "2026-11-14T18:00:00Z",
+                    "tester",
+                    "merged out of order",
+                )
+            ],
+        )
+        self.write_queue_shard("p1-001", queue_row("p1-001"))
+        self.write_ledger_shard(
+            "p1-001", ledger_row("2026-11-14T18:00:00Z", "p1-001")
+        )
+        self.build()
+
+        status, output = self.check_against(base)
+
+        self.assertEqual(status, 1)
+        self.assertIn("append-only", output)
+        self.assertIn("ledger-corrections.tsv", output)
 
     def _base_for_insertion(self):
         first = ledger_row("2026-11-14T17:00:00Z", "p1-001", to_status="done")
