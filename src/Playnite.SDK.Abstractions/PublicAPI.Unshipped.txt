@@ -1,1 +1,7 @@
 #nullable enable
+Playnite.SDK.Data.DontSerializeAttribute
+Playnite.SDK.Data.DontSerializeAttribute.DontSerializeAttribute() -> void
+Playnite.SDK.Data.SerializationPropertyNameAttribute
+Playnite.SDK.Data.SerializationPropertyNameAttribute.PropertyName.get -> string!
+Playnite.SDK.Data.SerializationPropertyNameAttribute.PropertyName.set -> void
+Playnite.SDK.Data.SerializationPropertyNameAttribute.SerializationPropertyNameAttribute(string! propertyName) -> void
