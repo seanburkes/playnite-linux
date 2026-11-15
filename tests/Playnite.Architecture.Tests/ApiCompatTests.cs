@@ -11,7 +11,7 @@ public sealed class ApiCompatTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task ApiCompat_accepts_the_baseline_and_rejects_a_changed_identity_type(bool breakIdentity)
+    public async Task ApiCompat_accepts_the_baseline_and_rejects_a_removed_member(bool breakIdentity)
     {
         var project = ProductGraph.Products.Single(p => p.Name == "Playnite.SDK.Abstractions");
         var scratch = Path.Combine(Path.GetTempPath(), "playnite-apicompat-" + Guid.NewGuid().ToString("N"));
@@ -23,7 +23,7 @@ public sealed class ApiCompatTests
             {
                 var options = new CSharpParseOptions(LanguageVersion.Preview, preprocessorSymbols: project.Values("Define").Single().Split(','));
                 var trees = project.Values("Source").Select(path =>
-                    CSharpSyntaxTree.ParseText(File.ReadAllText(path).Replace("Guid Id { get; }", "string Id { get; }", StringComparison.Ordinal), options, path));
+                    CSharpSyntaxTree.ParseText(File.ReadAllText(path).Replace("Guid Id { get; }", string.Empty, StringComparison.Ordinal), options, path));
                 var compilation = CSharpCompilation.Create(project.Name, trees,
                     project.Values("Reference").Select(path => MetadataReference.CreateFromFile(path)),
                     new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary, nullableContextOptions: NullableContextOptions.Enable));

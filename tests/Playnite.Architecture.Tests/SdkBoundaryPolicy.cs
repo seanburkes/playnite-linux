@@ -17,6 +17,15 @@ internal static class SdkBoundaryPolicy
             {
                 yield return "Core cannot reference the UI SDK, even transitively";
             }
+
+            foreach (var dependency in direct.Concat(closure).Distinct(StringComparer.OrdinalIgnoreCase)
+                .Where(dependency => dependency.StartsWith("Playnite.", StringComparison.OrdinalIgnoreCase)))
+            {
+                if (!ArchitectureTable.For(project).AllowedProjects.Contains(dependency, StringComparer.OrdinalIgnoreCase))
+                {
+                    yield return $"Core resolved Playnite dependency {dependency} is not in the architecture table's allowed project list";
+                }
+            }
         }
 
         if (project is "Playnite.Core" or "Playnite.SDK.Abstractions")
@@ -37,8 +46,10 @@ internal static class SdkBoundaryPolicy
     internal static string? UiSymbolViolation(INamedTypeSymbol type)
     {
         var ns = type.ContainingNamespace.ToDisplayString();
+        var assembly = type.ContainingAssembly.Name;
         return IsFamily(ns, "Avalonia") || IsFamily(ns, "Playnite.Platform")
-            || IsFamily(ns, "Playnite.SDK.Controls") || type.ContainingAssembly.Name == "Playnite.SDK"
+            || IsFamily(ns, "Playnite.SDK.Controls") || assembly.Equals("Playnite.SDK", StringComparison.OrdinalIgnoreCase)
+            || IsFamily(assembly, "Avalonia") || IsFamily(assembly, "Playnite.Platform") || IsFamily(assembly, "Playnite.SDK.Controls")
             ? $"UI/platform type in SDK Abstractions: {type}"
             : null;
     }
