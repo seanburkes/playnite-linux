@@ -1,0 +1,2 @@
+timestamp	unit	from	to	actor	evidence
+2026-11-15T05:56:16Z	p2-ui-pilot	todo	in-progress	fm/p2-ui-pilot	spikes/ui-shell/README.md; six xunit v3 facts pass zero skips with DISPLAY and WAYLAND_DISPLAY unset; 1200x800 scale 1 PNG 69092 bytes SHA-256 f5bde1e9872e6a44ee7fb4d1a1dd409cdb577b7e6c0588314c5096f36a5d10e5; three captures and two process runs byte-identical; 640x800/1200x800 semantic layouts; independent blind reviews pending

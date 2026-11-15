@@ -1,0 +1,16 @@
+<Styles xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:local="using:UiShellSpike">
+  <Style Selector="Window">
+    <Setter Property="Background" Value="{DynamicResource CanvasBrush}" />
+    <Setter Property="Foreground" Value="{DynamicResource TextBrush}" />
+    <Setter Property="FontFamily" Value="{DynamicResource BodyFont}" />
+    <Setter Property="FontSize" Value="{DynamicResource BodySize}" />
+  </Style>
+  <Style Selector="TextBlock.heading"><Setter Property="FontSize" Value="{DynamicResource HeadingSize}" /><Setter Property="FontWeight" Value="SemiBold" /></Style>
+  <Style Selector="TextBlock.muted"><Setter Property="Foreground" Value="{DynamicResource MutedBrush}" /></Style>
+  <Style Selector="Border.surface"><Setter Property="Background" Value="{DynamicResource SurfaceBrush}" /><Setter Property="Padding" Value="{DynamicResource CardPadding}" /></Style>
+  <Style Selector="ListBox"><Setter Property="Background" Value="{DynamicResource CanvasBrush}" /><Setter Property="Padding" Value="0" /></Style>
+  <Style Selector="ListBoxItem"><Setter Property="Padding" Value="0" /><Setter Property="Margin" Value="{DynamicResource CardMargin}" /></Style>
+  <Style Selector="local|CoverArt"><Setter Property="Height" Value="{DynamicResource CoverHeight}" /></Style>
+  <Style Selector="Window.narrow local|CoverArt"><Setter Property="Height" Value="{DynamicResource CompactCoverHeight}" /></Style>
+  <Style Selector="ListBoxItem:selected Border.surface"><Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}" /><Setter Property="BorderThickness" Value="{DynamicResource SelectionBorder}" /></Style>
+</Styles>

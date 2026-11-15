@@ -1,0 +1,5 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:sys="clr-namespace:System;assembly=System.Runtime">
+  <FontFamily x:Key="BodyFont">avares://Avalonia.Fonts.Inter/Assets#Inter</FontFamily>
+  <sys:Double x:Key="BodySize">14</sys:Double>
+  <sys:Double x:Key="HeadingSize">24</sys:Double>
+</ResourceDictionary>
