@@ -23,9 +23,9 @@
       "skipped": 0
     },
     "Playnite.Core.Tests": {
-      "total": 1191,
-      "executed": 1191,
-      "passed": 1191,
+      "total": 1254,
+      "executed": 1254,
+      "passed": 1254,
       "failed": 0,
       "skipped": 0
     },
@@ -80,5 +80,12 @@
     "run_url": "https://github.com/seanburkes/playnite-linux/actions/runs/43773267320",
     "commit": "486cc9d31756101f828e8c359ffb2a5a7a7e8c62",
     "notes": "Counts independently parsed from the actual linux-test-results JUnit artifacts for linux-ci run 43773267320: Core 1191 executed / 1191 passed / 0 failed / 0 skipped, Architecture 144 / 144 / 0 / 0, Smoke 4 / 4 / 0 / 0, all MTP exit 0. Core rises from the existing actual-CI 412 floor by 779 cases (755 frozen-v10 model observations, 2 golden coverage/provenance cases and 22 additional model behavior cases). Architecture and Smoke floors remain unchanged, empty_projects remains unchanged, all historical capture records are retained, and no count was lowered. The source run is on the model implementation head delivered in https://github.com/seanburkes/playnite-linux/pull/72, not on this baseline-only follow-up; any subsequent manifest tests are additional to this evidenced 1191 floor. Additive real-CI baseline update authorized under oracle-change by firstmate steering p3-004/001 and follow-up p3-004/005."
+  },
+  "p3_004_union_capture": {
+    "captured_at": "2026-11-15T23:29:19Z",
+    "run_id": 43774480101,
+    "run_url": "https://github.com/seanburkes/playnite-linux/actions/runs/43774480101",
+    "commit": "2eab4b283a939c8df295b8c691ca0baceea1e2db",
+    "notes": "Final model-unit baseline correction authorized by firstmate steering p3-004/006 following both adversarial reviews of https://github.com/seanburkes/playnite-linux/pull/74. The previous 1191 floor covered models but left the 63 already-merged manifest cases unprotected. Actual linux-ci run 43774480101 tested the model/manifest union at head 2eab4b283a939c8df295b8c691ca0baceea1e2db. Its downloaded linux-test-results JUnit testcase elements and MTP exit files independently confirm Core 1254 executed / 1254 passed / 0 failed / 0 skipped, Architecture 144 / 144 / 0 / 0, Smoke 4 / 4 / 0 / 0, all exit 0. Core now records the complete 1254 union floor (1191 + 63 manifest cases), not the earlier model-only subset. The earlier p3_004_capture and all other historical records remain intact. Architecture/Smoke floors and empty_projects are unchanged; no floor is lowered."
   }
 }
