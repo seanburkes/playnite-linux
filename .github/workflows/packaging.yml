@@ -59,13 +59,15 @@ jobs:
             sha256sum appimagetool.AppImage runtime-x86_64
             stat --printf='Artifact: %n — %s bytes\n' "$image"
             cat squashfs-root/usr/lib/playnite/{cli,desktop}/*.runtimeconfig.json
-          } >> "$GITHUB_STEP_SUMMARY"
+          } | tee -a "$GITHUB_STEP_SUMMARY"
       - name: Install pinned Flatpak tooling and runtime branch
         if: matrix.format == 'Flatpak'
         run: |
           set -euo pipefail
           sudo apt-get update
-          sudo apt-get install --yes --no-install-recommends flatpak-builder=1.4.2-1build2 flatpak=1.14.6-1ubuntu0.1
+          sudo apt-get install --yes --no-install-recommends flatpak-builder=1.4.2-1build2 flatpak=1.14.6-1ubuntu0.1 elfutils=0.190-1.1ubuntu0.1
+          command -v eu-strip
+          eu-strip --version
           flatpak-builder --version
           flatpak --version
           test "$(flatpak-builder --version)" = 'flatpak-builder-1.4.2'
@@ -92,13 +94,13 @@ jobs:
           flatpak info --user --show-permissions "$id"
           {
             echo '## Flatpak: PASS'
-            echo 'flatpak-builder 1.4.2-1build2; Flatpak 1.14.6-1ubuntu0.1; SDK 11.0.100; .NET runtime 11.0.0; linux-x64'
+            echo 'flatpak-builder 1.4.2-1build2; Flatpak 1.14.6-1ubuntu0.1; elfutils 0.190-1.1ubuntu0.1; SDK 11.0.100; .NET runtime 11.0.0; linux-x64'
             stat --printf='Artifact: %n — %s bytes\n' artifacts/*.flatpak
             for ref in org.freedesktop.Platform/x86_64/25.08 org.freedesktop.Sdk/x86_64/25.08; do
               echo "$ref commit: $(flatpak info --user --show-commit "$ref")"
             done
             cat "$installed"/files/lib/playnite/{cli,desktop}/*.runtimeconfig.json
-          } >> "$GITHUB_STEP_SUMMARY"
+          } | tee -a "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v4
         with:
           name: Playnite-Linux-x86_64-${{ matrix.format }}
