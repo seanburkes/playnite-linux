@@ -448,11 +448,13 @@ class CiPolicyTests(unittest.TestCase):
                                       merge_group_base=sha)
         self.assertEqual(0, result.returncode, result.stdout + result.stderr)
         self.assertEqual(sha, values["sha"])
+        self.assertEqual(sha, values["recorded"])
 
     def test_first_push_without_a_before_sha_allows_first_baseline(self):
         result, values = resolve_base(LINUX_CI, "push", push_before="0" * 40)
         self.assertEqual(0, result.returncode)
         self.assertEqual("", values["sha"])
+        self.assertEqual("", values["recorded"])
 
     def test_edited_resolver_cannot_change_the_base(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -467,6 +469,7 @@ class CiPolicyTests(unittest.TestCase):
                                           output=output, repo=repo)
             self.assertEqual(0, result.returncode, result.stdout + result.stderr)
             self.assertEqual(base, values["sha"])
+            self.assertEqual(base, values["recorded"])
 
     def test_forged_ancestor_cannot_replace_the_event_base(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -480,6 +483,7 @@ class CiPolicyTests(unittest.TestCase):
                                           pull_request_base=base, repo=repo)
             self.assertEqual(0, result.returncode, result.stdout + result.stderr)
             self.assertEqual(base, values["sha"])
+            self.assertEqual(base, values["recorded"])
 
     def test_stale_pr_is_not_charged_for_main_legacy_change(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -500,7 +504,7 @@ class CiPolicyTests(unittest.TestCase):
                          cwd=repo)
             self.assertEqual(0, result.returncode, result.stdout + result.stderr)
 
-    def test_resolved_base_must_exist_and_be_an_ancestor(self):
+    def test_resolved_base_must_exist_and_descendant_resolves_to_fork(self):
         with tempfile.TemporaryDirectory() as temporary:
             repo = Path(temporary)
             base = committed_repo(repo)
@@ -512,10 +516,28 @@ class CiPolicyTests(unittest.TestCase):
             self.assertEqual(1, result.returncode)
             self.assertIn("is not a commit in this checkout", result.stdout)
             git(repo, "checkout", "-q", base)
-            result, _ = resolve_base(LINUX_CI, "pull_request",
-                                     pull_request_base=second, repo=repo)
-            self.assertEqual(1, result.returncode)
-            self.assertIn("is not an ancestor of HEAD", result.stdout)
+            result, values = resolve_base(LINUX_CI, "pull_request",
+                                          pull_request_base=second, repo=repo)
+            self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+            self.assertEqual(base, values["sha"])
+            self.assertEqual(second, values["recorded"])
+
+    def test_stale_live_pr_base_resolves_to_fork_point(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary)
+            base = committed_repo(repo)
+            git(repo, "checkout", "-q", "-b", "pr")
+            (repo / "README.md").write_text("pr change\n")
+            commit(repo, "pr change")
+            git(repo, "checkout", "-q", "main")
+            (repo / "README.md").write_text("main change\n")
+            main_tip = commit(repo, "main change")
+            git(repo, "checkout", "-q", "pr")
+            result, values = resolve_base(LINUX_CI, "pull_request",
+                                          pull_request_base=main_tip, repo=repo)
+            self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+            self.assertEqual(base, values["sha"])
+            self.assertEqual(main_tip, values["recorded"])
 
     def test_capture_rejects_a_base_without_a_baseline(self):
         with tempfile.TemporaryDirectory() as temporary:

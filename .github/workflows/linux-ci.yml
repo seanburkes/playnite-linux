@@ -44,33 +44,39 @@ jobs:
         run: |
           set -euo pipefail
           case "$EVENT_NAME" in
-            pull_request) base="$PULL_REQUEST_BASE" ;;
-            merge_group) base="$MERGE_GROUP_BASE" ;;
-            push) base="$PUSH_BEFORE" ;;
+            pull_request) event_base="$PULL_REQUEST_BASE" ;;
+            merge_group) event_base="$MERGE_GROUP_BASE" ;;
+            push) event_base="$PUSH_BEFORE" ;;
             *)
               echo "::error::Unsupported event $EVENT_NAME; cannot resolve a policy base"
               exit 1
               ;;
           esac
           if [ "$EVENT_NAME" = "push" ]; then
-            if [ -z "$base" ] || printf '%s' "$base" | grep -Eq '^0+$'; then
-              base=""
+            if [ -z "$event_base" ] || printf '%s' "$event_base" | grep -Eq '^0+$'; then
+              event_base=""
             fi
-          elif [ -z "$base" ] || printf '%s' "$base" | grep -Eq '^0+$'; then
+          elif [ -z "$event_base" ] || printf '%s' "$event_base" | grep -Eq '^0+$'; then
             echo "::error::$EVENT_NAME event has no usable base SHA; refusing to open the first-baseline path"
             exit 1
           fi
-          if [ -n "$base" ]; then
-            if ! git cat-file -e "$base^{commit}" 2>/dev/null; then
-              echo "::error::Resolved base $base is not a commit in this checkout"
+          if [ -n "$event_base" ]; then
+            if ! git cat-file -e "$event_base^{commit}" 2>/dev/null; then
+              echo "::error::Event base $event_base is not a commit in this checkout"
               exit 1
             fi
-            if ! git merge-base --is-ancestor "$base" HEAD; then
-              echo "::error::Resolved base $base is not an ancestor of HEAD"
+            if ! fork=$(git merge-base "$event_base" HEAD); then
+              echo "::error::Cannot compute the fork point of $event_base and HEAD"
               exit 1
             fi
+            if [ -z "$fork" ]; then
+              echo "::error::Cannot compute the fork point of $event_base and HEAD"
+              exit 1
+            fi
+          else
+            fork=""
           fi
-          printf 'sha=%s\n' "$base" >> "$GITHUB_OUTPUT"
+          printf 'sha=%s\nrecorded=%s\n' "$fork" "$event_base" >> "$GITHUB_OUTPUT"
 
       - name: Select the policy materialiser
         id: policy_materialiser

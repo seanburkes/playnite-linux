@@ -92,13 +92,32 @@ def stale_pr_repo(root):
     return base, main_tip
 
 
-def run_step(script, repo, base_sha):
+def run_step(script, repo, base_sha, recorded_base=None):
     env = os.environ.copy()
     env["BASE_SHA"] = base_sha
+    env["RECORDED_BASE"] = recorded_base or base_sha
     env["RUNNER_TEMP"] = str(repo / "runner")
     (repo / "runner").mkdir(exist_ok=True)
     return subprocess.run(["bash", "-e", "-c", script], cwd=repo, env=env,
                           capture_output=True, text=True, check=False)
+
+
+def outputs(path):
+    return dict(line.split("=", 1) for line in path.read_text().splitlines()
+                if "=" in line)
+
+
+def resolve_policy(repo, event, pull_request_base="", merge_group_base="",
+                   push_before=""):
+    script = run_block(PLAN_GUARDS, "Resolve the comparison base commit")
+    output = repo / "policy-output"
+    env = os.environ.copy()
+    env.update({"EVENT_NAME": event, "PULL_REQUEST_BASE": pull_request_base,
+                "MERGE_GROUP_BASE": merge_group_base,
+                "PUSH_BEFORE": push_before, "GITHUB_OUTPUT": str(output)})
+    result = subprocess.run(["bash", "-e", "-c", script], cwd=repo, env=env,
+                            capture_output=True, text=True, check=False)
+    return result, outputs(output) if output.exists() else {}
 
 
 def merge_main(repo, keep_old_aggregates=False):
@@ -110,6 +129,21 @@ def merge_main(repo, keep_old_aggregates=False):
             "docs/port/ledger.tsv")
         commit(repo, "carry base aggregates")
     return main_tip
+
+
+def merge_main_then_advance(repo, edit_aggregate=False):
+    _, merged_main = stale_pr_repo(repo)
+    git(repo, "merge", "--no-ff", "-q", "-m", "merge main", "main")
+    if edit_aggregate:
+        queue = repo / "docs" / "port" / "queue.tsv"
+        queue.write_text(queue.read_text() + "edited in merge\n")
+        commit(repo, "edit aggregate in merge")
+    git(repo, "checkout", "-q", "main")
+    write_shard(repo, "p-newer")
+    build(repo)
+    newer_main = commit(repo, "main advanced again")
+    git(repo, "checkout", "-q", "pr")
+    return merged_main, newer_main
 
 
 class AggregateOwnershipTests(unittest.TestCase):
@@ -156,13 +190,14 @@ class AggregateOwnershipTests(unittest.TestCase):
                               repo, main_tip)
             self.assertEqual(0, result.returncode, result.stdout + result.stderr)
 
-    def test_merge_main_pr_carrying_recorded_base_aggregates_passes(self):
+    def test_merge_main_pr_carrying_old_aggregates_fails(self):
         with tempfile.TemporaryDirectory() as temporary:
             repo = Path(temporary)
             main_tip = merge_main(repo, keep_old_aggregates=True)
             result = run_step(run_block(PLAN_GUARDS, "Port aggregates are generated on main"),
                               repo, main_tip)
-            self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+            self.assertEqual(1, result.returncode)
+            self.assertIn("changed: docs/port/queue.tsv", result.stderr)
 
     def test_merge_commit_with_divergent_aggregate_fails(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -226,6 +261,48 @@ class AggregateOwnershipTests(unittest.TestCase):
                               repo, main_tip)
             self.assertEqual(1, result.returncode, result.stdout + result.stderr)
             self.assertIn("changed: docs/port/queue.tsv", result.stderr)
+
+    def test_stale_live_pr_whole_chain_passes(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary)
+            _, main_tip = stale_pr_repo(repo)
+            resolved, values = resolve_policy(repo, "pull_request",
+                                              pull_request_base=main_tip)
+            self.assertEqual(0, resolved.returncode, resolved.stdout + resolved.stderr)
+            result = run_step(run_block(PLAN_GUARDS, "Port aggregates are generated on main"),
+                              repo, values["sha"], values["recorded"])
+            self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+
+    def test_stale_pr_that_merged_newer_main_whole_chain_passes(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary)
+            _, newer_main = merge_main_then_advance(repo)
+            resolved, values = resolve_policy(repo, "pull_request",
+                                              pull_request_base=newer_main)
+            self.assertEqual(0, resolved.returncode, resolved.stdout + resolved.stderr)
+            result = run_step(run_block(PLAN_GUARDS, "Port aggregates are generated on main"),
+                              repo, values["sha"], values["recorded"])
+            self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+
+    def test_aggregate_edited_in_merge_commit_whole_chain_fails(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary)
+            _, newer_main = merge_main_then_advance(repo, edit_aggregate=True)
+            resolved, values = resolve_policy(repo, "pull_request",
+                                              pull_request_base=newer_main)
+            self.assertEqual(0, resolved.returncode, resolved.stdout + resolved.stderr)
+            result = run_step(run_block(PLAN_GUARDS, "Port aggregates are generated on main"),
+                              repo, values["sha"], values["recorded"])
+            self.assertEqual(1, result.returncode)
+            self.assertIn("changed: docs/port/queue.tsv", result.stderr)
+
+    def test_missing_event_base_whole_chain_fails_closed(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary)
+            stale_pr_repo(repo)
+            resolved, _ = resolve_policy(repo, "pull_request", pull_request_base="")
+            self.assertEqual(1, resolved.returncode)
+            self.assertIn("pull_request event has no usable base SHA", resolved.stdout)
 
     def test_missing_merge_base_fails_closed(self):
         with tempfile.TemporaryDirectory() as temporary:

@@ -626,60 +626,33 @@ def _git_bytes(root: Path, *args: str) -> bytes | None:
     return completed.stdout if completed.returncode == 0 else None
 
 
-def _is_ancestor(root: Path, ancestor: str, descendant: str) -> bool:
-    completed = subprocess.run(
-        ["git", "-C", str(root), "merge-base", "--is-ancestor", ancestor, descendant],
-        capture_output=True)
-    return completed.returncode == 0
+def changed_aggregates(root: Path, ref: str, queue: Path, ledger: Path,
+                       recorded_base: str | None = None) -> list[str]:
+    """Paths of generated aggregates changed outside both base sides.
 
-
-def _base_side_refs(root: Path, commit: str, merge_base: str) -> set[str]:
-    """Commits whose aggregate snapshots are legitimate base sides.
-
-    The recorded base and merge base always count. A merge commit that brought an
-    ancestor of the recorded base into this branch also contributes the merge base
-    of that base-side parent and the PR-side parent. That is the fork point a
-    merge-main PR carried forward; it is not an aggregate edit.
-    """
-    refs = {commit, merge_base}
-    merges = _git(
-        root, "rev-list", "--first-parent", "--merges", f"{merge_base}..HEAD"
-    ).decode("ascii", "replace").split()
-    for merge in merges:
-        fields = _git(root, "rev-list", "--parents", "-n", "1", merge).decode(
-            "ascii", "replace").split()
-        parents = fields[1:]
-        for parent in parents:
-            if parent == commit or _is_ancestor(root, parent, commit):
-                other = next((candidate for candidate in parents
-                              if candidate != parent), None)
-                if other:
-                    fork = _git(root, "merge-base", commit, other).decode(
-                        "ascii", "replace").strip()
-                    if fork:
-                        refs.add(fork)
-                break
-    return refs
-
-
-def changed_aggregates(root: Path, ref: str, queue: Path, ledger: Path) -> list[str]:
-    """Paths of generated aggregates changed outside any legitimate base side.
-
+    `ref` is the fork point (the merge base of the recorded event base and HEAD).
     The comparison is three-dot: a stale branch must not appear to revert aggregate
-    changes that landed on main after it forked. A file whose HEAD content equals a
-    base-side snapshot (the recorded base, the merge base, or the fork point carried
-    across a merge of the recorded base) is not an aggregate edit. Any other
+    changes that landed on main after it forked. A file whose HEAD content equals
+    the fork point or the recorded event base is not an aggregate edit. Any other
     content, and every add/delete/rename, still fails.
     """
     resolved = _git(root, "rev-parse", "--verify", "--quiet", f"{ref}^{{commit}}").strip()
-    commit = resolved.decode("ascii", "replace")
-    if not commit:
+    fork = resolved.decode("ascii", "replace")
+    if not fork:
         raise PortIndexError(f"cannot resolve base ref {ref!r}")
     merge_base = (
-        _git(root, "merge-base", commit, "HEAD").strip().decode("ascii", "replace")
+        _git(root, "merge-base", fork, "HEAD").strip().decode("ascii", "replace")
     )
     if not merge_base:
         raise PortIndexError(f"no merge base between {ref!r} and HEAD")
+    recorded = fork
+    if recorded_base is not None:
+        resolved_recorded = _git(
+            root, "rev-parse", "--verify", "--quiet", f"{recorded_base}^{{commit}}"
+        ).strip().decode("ascii", "replace")
+        if not resolved_recorded:
+            raise PortIndexError(f"cannot resolve recorded base {recorded_base!r}")
+        recorded = resolved_recorded
     paths = (_repo_relative(queue, root), _repo_relative(ledger, root))
     listing = _git(
         root, "diff", "--name-only", "-z", merge_base, "HEAD", "--", *paths
@@ -687,7 +660,7 @@ def changed_aggregates(root: Path, ref: str, queue: Path, ledger: Path) -> list[
     changed = [name for name in listing.decode("utf-8", "replace").split("\0") if name]
     if not changed:
         return []
-    base_sides = _base_side_refs(root, commit, merge_base)
+    base_sides = {merge_base, recorded}
     allowed: dict[str, set[bytes]] = {name: set() for name in changed}
     for side in base_sides:
         for name in changed:
@@ -1134,6 +1107,15 @@ def main(
             "docs/port/ledger.tsv (the pull request ownership gate)"
         ),
     )
+    parser.add_argument(
+        "--recorded-base",
+        metavar="REF",
+        default=None,
+        help=(
+            "recorded event base whose aggregate content is the other legitimate "
+            "base side for --forbid-aggregate-changes"
+        ),
+    )
     args = parser.parse_args(argv)
 
     try:
@@ -1157,7 +1139,8 @@ def main(
             )
             return 1
         try:
-            changed = changed_aggregates(root, args.against, queue, ledger)
+            changed = changed_aggregates(root, args.against, queue, ledger,
+                                         args.recorded_base)
         except PortIndexError as exc:
             print(f"error: {exc}", file=sys.stderr)
             return 1
