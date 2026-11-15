@@ -14,7 +14,7 @@ public sealed class LinuxPathsTests
     [InlineData("XDG_STATE_HOME", "State", ".local/state")]
     public void XdgBaseDirectoriesIgnoreUnsetEmptyAndRelativeValues(string variable, string property, string fallback)
     {
-        foreach (var value in new string?[] { null, "", "relative", "./relative", "~/relative" })
+        foreach (var value in new string?[] { null, "", " ", "\t", "relative", "relative/", "./relative", "../relative", "~/relative", "~" })
         {
             var environment = new MemoryEnvironment();
             environment.Variables[variable] = value;
@@ -84,6 +84,96 @@ public sealed class LinuxPathsTests
         var fileSystem = new MemoryFileSystem();
         fileSystem.AddFile("/configuration/user-dirs.dirs", content);
         Assert.Equal(expected, new LinuxPaths(environment, fileSystem).Documents);
+    }
+
+    [Fact]
+    public void EachXdgOverrideOnlyMovesItsOwnRoot()
+    {
+        var environment = new MemoryEnvironment();
+        environment.Variables["XDG_CACHE_HOME"] = "/custom-cache";
+        var paths = new LinuxPaths(environment, new MemoryFileSystem());
+        Assert.Equal("/custom-cache/playnite", paths.Cache);
+        Assert.Equal("/home/test-user/.local/share/playnite", paths.UserData);
+        Assert.Equal("/home/test-user/.config/playnite", paths.Config);
+        Assert.Equal("/home/test-user/.local/state/playnite", paths.State);
+        Assert.Equal("/home/test-user/.local/state/playnite/logs", paths.Logs);
+    }
+
+    [Fact]
+    public void RootHomeAndRootOverridesStayAbsoluteAndNormalized()
+    {
+        var environment = new MemoryEnvironment { Home = "/" };
+        environment.Variables["XDG_STATE_HOME"] = "/";
+        var paths = new LinuxPaths(environment, new MemoryFileSystem());
+        Assert.Equal("/", paths.Home);
+        Assert.Equal("/.local/share/playnite", paths.UserData);
+        Assert.Equal("/.config/playnite", paths.Config);
+        Assert.Equal("/.cache/playnite", paths.Cache);
+        Assert.Equal("/playnite", paths.State);
+        Assert.Equal("/playnite/logs", paths.Logs);
+        Assert.Equal("/Documents", paths.Documents);
+    }
+
+    [Fact]
+    public void SubdirectoriesAreDerivedFromTheResolvedXdgRoots()
+    {
+        var environment = new MemoryEnvironment();
+        environment.Variables["XDG_DATA_HOME"] = "/d";
+        environment.Variables["XDG_CONFIG_HOME"] = "/c";
+        environment.Variables["XDG_CACHE_HOME"] = "/k";
+        environment.Variables["XDG_STATE_HOME"] = "/s";
+        var paths = new LinuxPaths(environment, new MemoryFileSystem());
+        Assert.Equal("/d/playnite/Extensions", paths.ExtensionsUserDataPath);
+        Assert.Equal("/d/playnite/ExtensionsData", paths.ExtensionsDataPath);
+        Assert.Equal("/d/playnite/Themes", paths.ThemesUserDataPath);
+        Assert.Equal("/c/playnite/config.json", paths.ConfigFilePath);
+        Assert.Equal("/c/playnite/Backup/config.json", paths.BackupConfigFilePath);
+        Assert.Equal("/k/playnite/images", paths.ImagesCachePath);
+        Assert.Equal("/k/playnite/JITProfiles", paths.JitProfilesPath);
+        Assert.Equal("/s/playnite/safestart.flag", paths.SafeStartupFlagFile);
+        Assert.Equal("/s/playnite/logs/playnite.log", paths.LogPath);
+        Assert.Equal("/opt/playnite/Localization", paths.LocalizationsPath);
+    }
+
+    [Fact]
+    public void DocumentsFallsBackToHomeDocumentsWhenUserDirsIsAbsent()
+    {
+        Assert.Equal("/home/test-user/Documents", new LinuxPaths(new MemoryEnvironment(), new MemoryFileSystem()).Documents);
+    }
+
+    [Fact]
+    public void DocumentsIgnoresRelativeConfigOverrideWhenLocatingUserDirs()
+    {
+        var environment = new MemoryEnvironment();
+        environment.Variables["XDG_CONFIG_HOME"] = "relative-config";
+        var fileSystem = new MemoryFileSystem();
+        fileSystem.AddFile("/home/test-user/.config/user-dirs.dirs", "XDG_DOCUMENTS_DIR=\"/from-home-config\"");
+        fileSystem.AddFile("/working/relative-config/user-dirs.dirs", "XDG_DOCUMENTS_DIR=\"/from-cwd\"");
+        Assert.Equal("/from-home-config", new LinuxPaths(environment, fileSystem).Documents);
+    }
+
+    [Theory]
+    [InlineData("XDG_DOCUMENTS_DIR=\"/first\"\nXDG_DOCUMENTS_DIR=\"/second\"", "/second")]
+    [InlineData("XDG_DOCUMENTS_DIR=\"/first\"\nXDG_DOCUMENTS_DIR=\"relative\"", "/first")]
+    [InlineData("XDG_DOCUMENTS_DIR=\"/first\"\r\nXDG_DOWNLOAD_DIR=\"/download\"\r\n", "/first")]
+    public void DocumentsUsesTheLastValidUserDirsAssignment(string content, string expected)
+    {
+        var fileSystem = new MemoryFileSystem();
+        fileSystem.AddFile("/home/test-user/.config/user-dirs.dirs", content);
+        Assert.Equal(expected, new LinuxPaths(new MemoryEnvironment(), fileSystem).Documents);
+    }
+
+    [Theory]
+    [InlineData("XDG_DOCUMENTS_DIR=\"$HOME/Documents/../Docs/\"", "/home/test-user/Docs")]
+    [InlineData("XDG_DOCUMENTS_DIR=\"/disk/sub/../文書//\"", "/disk/文書")]
+    [InlineData("XDG_DOCUMENTS_DIR=\"$HOMEFOO/Documents\"", "/home/test-user/Documents")]
+    [InlineData("XDG_DOCUMENTS_DIR=\"$HOME/Sub\\Dir\"", "/home/test-user/Documents")]
+    [InlineData("XDG_DOCUMENTS_DIR=\"$HOME/Sub`Dir\"", "/home/test-user/Documents")]
+    public void DocumentsExpandsOnlyHomeAndNormalizesTheAcceptedValue(string content, string expected)
+    {
+        var fileSystem = new MemoryFileSystem();
+        fileSystem.AddFile("/home/test-user/.config/user-dirs.dirs", content);
+        Assert.Equal(expected, new LinuxPaths(new MemoryEnvironment(), fileSystem).Documents);
     }
 
     [Fact]

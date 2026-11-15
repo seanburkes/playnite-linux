@@ -47,4 +47,21 @@ public sealed class LinuxEnvironmentTests
             }
         }
     }
+
+    [Fact]
+    public void RelativeHomeIsCapturedVerbatimAndRejectedByPaths()
+    {
+        var original = Environment.GetEnvironmentVariable("HOME");
+        try
+        {
+            Environment.SetEnvironmentVariable("HOME", "relative");
+            var environment = new LinuxEnvironment();
+            Assert.Equal("relative", environment.Home);
+            Assert.Throws<ArgumentException>(() => new LinuxPaths(environment, new TestDoubles.MemoryFileSystem()));
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("HOME", original);
+        }
+    }
 }

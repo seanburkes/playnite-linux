@@ -18,14 +18,17 @@ and case-sensitive `MemoryFileSystem` without touching host files or environment
 
 Unset, empty and relative overrides (including `~`) are ignored; root `/` is a valid absolute
 override. All resulting roots are absolute and lexically normalized. HOME must resolve to an
-absolute path; `LinuxEnvironment` uses the OS user-profile directory if HOME is absent/relative.
-It also captures cwd, program directory and all environment variables (including locale/TZ).
-Tests supply explicit HOME/cwd/program values, never the developer's profile.
+absolute path; `LinuxEnvironment` uses the OS user-profile directory only when HOME is unset or
+empty, keeps any other value verbatim, and `LinuxPaths` rejects a non-absolute HOME rather than
+silently substituting another home. It also captures cwd, program directory and all environment
+variables (including locale/TZ). Tests supply explicit HOME/cwd/program values, never the
+developer's profile.
 
 Documents uses XDG_CONFIG_HOME/user-dirs.dirs (or HOME/.config/user-dirs.dirs). A quoted
-absolute path or leading `$HOME` expansion is supported; absent/malformed/relative entries
-fall back to HOME/Documents. Shell substitutions are never executed. Escaped shell strings
-and arbitrary environment expansion are not supported by this leaf and fall back safely.
+absolute path or leading `$HOME` expansion is supported, and the last valid assignment wins as
+in xdg-user-dirs and GLib; absent/malformed/relative entries fall back to HOME/Documents. Only
+the exact `$HOME` token expands. Shell substitutions are never executed, and escaped shell
+strings or arbitrary environment expansion fall back safely.
 
 Steam **candidates** follow Steam spec §1.2: absolute STEAM_ROOT, HOME/.steam/steam,
 HOME/.local/share/Steam, then the Flatpak path. Exact normalized duplicates are removed,
@@ -61,8 +64,12 @@ the requested filesystem surface and have no async lifecycle or cancellation res
 - `PathsTests.LegacyDerivedHelpersMatchGolden`: every ported pure helper and POSIX deltas.
 - `PathsTests.NormalizationIsIdempotentAndPreservesRootForGeneratedPaths`: generated names,
   Unicode, spaces, backslashes, trailing separators and dot segments.
-- `LinuxPathsTests`: all four XDG variables unset/empty/relative/absolute, captured values,
-  documents data, Steam candidate order, derived golden properties and no implicit creation.
+- `LinuxPathsTests`: all four XDG variables unset/empty/whitespace/relative/absolute, captured
+  values, one override moved at a time, root `/` normalization, derived subdirectory joins,
+  documents data (last valid assignment, missing file, only exact `$HOME` expansion), Steam
+  candidate order, derived golden properties and no implicit creation.
+- `LinuxEnvironmentTests`: controlled capture, and a relative HOME kept verbatim then rejected
+  by `LinuxPaths` instead of consulting the developer's profile.
 - `FileSystemTests`: the same idempotence/ancestor-existence contract against memory and an
   isolated temporary directory; fake case sensitivity, collisions and missing-file errors.
 - Existing architecture suite runs unchanged; no architecture allowance is widened.

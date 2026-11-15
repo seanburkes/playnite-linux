@@ -15,8 +15,10 @@ public sealed class LinuxEnvironment : IEnvironment
     {
         variables = Environment.GetEnvironmentVariables().Cast<DictionaryEntry>()
             .ToDictionary(entry => (string)entry.Key, entry => (string?)entry.Value, StringComparer.Ordinal);
+        // Only an unset/empty HOME reaches the passwd entry; .NET returns any other HOME verbatim,
+        // so a relative HOME is kept as captured and rejected by LinuxPaths.
         var home = GetVariable("HOME");
-        Home = Paths.IsFullPath(home) ? home! : Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        Home = string.IsNullOrEmpty(home) ? Environment.GetFolderPath(Environment.SpecialFolder.UserProfile) : home;
         CurrentDirectory = Environment.CurrentDirectory;
         ProgramDirectory = AppContext.BaseDirectory;
     }

@@ -37,39 +37,43 @@ public sealed class LinuxPaths : PlaynitePaths
     }
 
     // user-dirs.dirs is data, never shell input. Only the documented $HOME expansion is allowed.
+    // As in xdg-user-dirs and GLib, the last valid assignment wins.
     private static string DocumentsDirectory(IEnvironment environment, IFileSystem fileSystem)
     {
+        var documents = Path.Combine(environment.Home, "Documents");
         var file = Path.Combine(BaseDirectory(environment, "XDG_CONFIG_HOME", ".config"), "user-dirs.dirs");
-        if (fileSystem.FileExists(file))
+        if (!fileSystem.FileExists(file))
         {
-            foreach (var line in fileSystem.ReadAllText(file).Split('\n'))
+            return documents;
+        }
+
+        foreach (var line in fileSystem.ReadAllText(file).Split('\n'))
+        {
+            var assignment = line.Trim();
+            const string key = "XDG_DOCUMENTS_DIR=";
+            if (!assignment.StartsWith(key, StringComparison.Ordinal))
             {
-                var assignment = line.Trim();
-                const string key = "XDG_DOCUMENTS_DIR=";
-                if (!assignment.StartsWith(key, StringComparison.Ordinal))
-                {
-                    continue;
-                }
+                continue;
+            }
 
-                var value = assignment[key.Length..];
-                if (value.Length < 2 || value[0] != '"' || value[^1] != '"')
-                {
-                    continue;
-                }
+            var value = assignment[key.Length..];
+            if (value.Length < 2 || value[0] != '"' || value[^1] != '"')
+            {
+                continue;
+            }
 
-                value = value[1..^1];
-                if (value == "$HOME" || value.StartsWith("$HOME/", StringComparison.Ordinal))
-                {
-                    value = environment.Home + value[5..];
-                }
+            value = value[1..^1];
+            if (value == "$HOME" || value.StartsWith("$HOME/", StringComparison.Ordinal))
+            {
+                value = environment.Home + value[5..];
+            }
 
-                if (Paths.IsFullPath(value) && !value.Contains('$') && !value.Contains('`') && !value.Contains('\\'))
-                {
-                    return value;
-                }
+            if (Paths.IsFullPath(value) && !value.Contains('$') && !value.Contains('`') && !value.Contains('\\'))
+            {
+                documents = value;
             }
         }
 
-        return Path.Combine(environment.Home, "Documents");
+        return documents;
     }
 }
