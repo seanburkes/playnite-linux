@@ -171,6 +171,36 @@ class CiPolicyTests(unittest.TestCase):
             errors = build_port_index.document_path_errors(repo)
             self.assertEqual(1, len(errors))
             self.assertIn("docs/proof.md:2:", errors[0])
+            units = repo / "docs" / "port" / "units"
+            units.mkdir(parents=True)
+            fields = ["p1-001", "W1", "repo", "Thing", "-", "todo", "tester", "-", "-",
+                      "$HOME/private-proof"]
+            (units / "p1-001.queue.tsv").write_text(
+                build_port_index.QUEUE_HEADER + "\n" + "\t".join(fields) + "\n")
+            with self.assertRaisesRegex(build_port_index.PortIndexError,
+                                        r"p1-001\.queue\.tsv:2:"):
+                build_port_index.build_index(units)
+
+    def test_local_path_exception_note_records_only_four_ledger_rows(self):
+        sys.path.insert(0, str(ROOT / "scripts" / "port"))
+        try:
+            import build_port_index
+        finally:
+            sys.path.remove(str(ROOT / "scripts" / "port"))
+        note = (ROOT / "docs/port/LOCAL-PATH-EXCEPTIONS.md").read_text()
+        rows = [line.split("|") for line in note.splitlines() if line.startswith("| p2-")]
+        expected = {
+            ("p2-002", "2026-11-15T05:49:30Z"),
+            ("p2-002", "2026-11-15T06:30:00Z"),
+            ("p2-002", "2026-11-15T06:49:00Z"),
+            ("p2-ci-cost", "2026-11-15T19:36:12Z"),
+        }
+        self.assertEqual(4, len(rows))
+        self.assertEqual(expected, {(row[1].strip(), row[2].strip()) for row in rows})
+        hashes = {row[3].strip().strip("`") for row in rows}
+        allowance = build_port_index.local_path_allowance("docs/port/ledger.tsv")
+        self.assertEqual(4, sum(allowance.values()))
+        self.assertEqual(hashes, set(allowance))
 
     def test_plan_guards_rechecks_label_changes(self):
         trigger = PLAN_GUARDS.read_text().split("  pull_request:\n", 1)[1]
@@ -231,7 +261,8 @@ class CiPolicyTests(unittest.TestCase):
                      ".github/workflows/packaging.yml", "packaging",
                      ".github/CODEOWNERS",
                      "tests/baseline.json",
-                     "scripts/ci", "scripts/port", "scripts/formal"):
+                     "scripts/ci", "scripts/port", "scripts/formal",
+                     "docs/port/LOCAL-PATH-EXCEPTIONS.md"):
             with self.subTest(path=path):
                 self.assertTrue(any(path == protected or
                                     path.startswith(protected.rstrip("/") + "/")
