@@ -12,6 +12,7 @@ env:
   PROTECTED_PATHS: >-
     tests/golden tests/fixtures tests/baseline.json docs/formal
     docs/port/surface-parity.tsv tools/LegacyOracle tools/V10LibraryFixture
+    .github/workflows/linux-ci.yml scripts/ci
 
 jobs:
   inventory-and-parity:

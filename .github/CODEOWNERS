@@ -1,4 +1,4 @@
-# Oracle and plan ownership. A porting change may not approve its own oracle change.
+# Oracle, plan, and CI-policy ownership. A porting change may not approve its own oracle change.
 legacy/                    @seanburkes
 tests/golden/              @seanburkes
 tests/fixtures/            @seanburkes
@@ -8,3 +8,5 @@ oracle-lock/               @seanburkes
 docs/port/surface-parity.tsv @seanburkes
 tools/LegacyOracle/        @seanburkes
 tools/V10LibraryFixture/   @seanburkes
+.github/workflows/linux-ci.yml @seanburkes
+scripts/ci/                @seanburkes

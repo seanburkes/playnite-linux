@@ -33,12 +33,24 @@ class LinuxTestResultPolicyTests(unittest.TestCase):
         ET.ElementTree(report).write(directory / f"{name}.xml")
         return f"/tests/{name}/{name}.csproj"
 
-    def record_baseline(self, projects):
-        self.baseline.write_text(json.dumps({"legacy": {"executed": 281}, "new": projects}))
+    def record_baseline(self, projects, removed=None, path=None):
+        document = {"legacy": {"executed": 281}, "new": projects}
+        if removed is not None:
+            document["removed_projects"] = removed
+        (path or self.baseline).write_text(json.dumps(document))
 
-    def check(self, *projects):
+    def record_previous(self, projects, present=(), removed=None):
+        previous = self.root / "previous-baseline.json"
+        self.record_baseline(projects, removed=removed, path=previous)
+        projects_file = self.root / "previous-projects.txt"
+        projects_file.write_text("".join(f"{name}\n" for name in present))
+        return previous, projects_file
+
+    def check(self, *projects, previous=None):
+        previous_baseline, previous_projects = previous or (None, None)
         with contextlib.redirect_stdout(io.StringIO()):
-            return check_results(projects, self.results, self.baseline, self.summary)
+            return check_results(projects, self.results, self.baseline, self.summary,
+                                 previous_baseline, previous_projects)
 
     def test_empty_exit_8_is_explicitly_recorded_before_baseline(self):
         self.assertEqual(0, self.check(self.project(exit_code=8)))
@@ -117,6 +129,129 @@ class LinuxTestResultPolicyTests(unittest.TestCase):
 
     def test_no_projects_is_a_failure(self):
         self.assertEqual(1, self.check())
+
+    def test_baseline_lowered_in_the_same_pull_request_fails(self):
+        previous = self.record_previous(
+            {"Suite": {"executed": 43, "passed": 43}}, present=("Suite",))
+        self.record_baseline({"Suite": {"executed": 42, "passed": 42}})
+        self.assertEqual(1, self.check(
+            self.project(outcomes=["pass"] * 43), previous=previous))
+        summary = self.summary.read_text()
+        self.assertIn("Suite: baseline executed count 42 is below the previous "
+                      "committed baseline 43", summary)
+        self.assertIn("Suite: baseline passed count 42 is below the previous "
+                      "committed baseline 43", summary)
+
+    def test_passed_count_cannot_fall_while_executed_is_unchanged(self):
+        previous = self.record_previous(
+            {"Suite": {"executed": 43, "passed": 43}}, present=("Suite",))
+        self.record_baseline({"Suite": {"executed": 43, "passed": 42}})
+        self.assertEqual(1, self.check(
+            self.project(outcomes=["pass"] * 43), previous=previous))
+        self.assertIn("Suite: baseline passed count 42 is below the previous "
+                      "committed baseline 43", self.summary.read_text())
+
+    def test_baseline_file_cannot_be_deleted(self):
+        previous = self.record_previous(None, present=("Suite",))
+        self.baseline.unlink()
+        self.assertEqual(1, self.check(self.project(exit_code=8), previous=previous))
+        self.assertIn("baseline file", self.summary.read_text())
+        self.assertIn("was deleted; the committed baseline cannot be removed",
+                      self.summary.read_text())
+
+    def test_recorded_baseline_cannot_be_reset_to_null(self):
+        previous = self.record_previous(
+            {"Suite": {"executed": 43, "passed": 43}}, present=("Suite",))
+        self.record_baseline(None)
+        self.assertEqual(1, self.check(self.project(exit_code=8), previous=previous))
+        self.assertIn("new-suite baseline was reset to null; the committed baseline "
+                      "cannot be cleared", self.summary.read_text())
+
+    def test_test_project_deleted_after_baseline_fails(self):
+        previous = self.record_previous(
+            {"Suite": {"executed": 43, "passed": 43}}, present=("Suite",))
+        self.record_baseline({"Other": {"executed": 1, "passed": 1}})
+        self.assertEqual(1, self.check(
+            self.project("Other", outcomes=["pass"]), previous=previous))
+        summary = self.summary.read_text()
+        self.assertIn("Suite: test project from the previous committed baseline is "
+                      "missing", summary)
+        self.assertIn("Suite: test project existed at the base commit but was not run",
+                      summary)
+
+    def test_test_project_deleted_before_first_baseline_is_not_zero_tests(self):
+        previous = self.record_previous(None, present=("Suite",))
+        self.assertEqual(1, self.check(
+            self.project("Other", outcomes=["pass"]), previous=previous))
+        self.assertIn("Suite: test project existed at the base commit but was not run",
+                      self.summary.read_text())
+
+    def test_test_project_emptied_after_baseline_fails(self):
+        previous = self.record_previous(
+            {"Suite": {"executed": 43, "passed": 43}}, present=("Suite",))
+        self.record_baseline({"Suite": {"executed": 0, "passed": 0}})
+        self.assertEqual(1, self.check(self.project(), previous=previous))
+        summary = self.summary.read_text()
+        self.assertIn("Suite: baseline executed count 0 is below the previous "
+                      "committed baseline 43", summary)
+        self.assertIn("zero executed tests", summary)
+
+    def test_test_project_renamed_after_baseline_fails(self):
+        previous = self.record_previous(
+            {"OldSuite": {"executed": 43, "passed": 43}}, present=("OldSuite",))
+        self.record_baseline({"NewSuite": {"executed": 43, "passed": 43}})
+        self.assertEqual(1, self.check(
+            self.project("NewSuite", outcomes=["pass"] * 43), previous=previous))
+        summary = self.summary.read_text()
+        self.assertIn("OldSuite: test project from the previous committed baseline is "
+                      "missing", summary)
+        self.assertIn("OldSuite: test project existed at the base commit but was not run",
+                      summary)
+
+    def test_legitimate_first_baseline_addition_passes(self):
+        previous = self.record_previous(None, present=("Suite",))
+        self.record_baseline({"Suite": {"executed": 43, "passed": 43}})
+        self.assertEqual(0, self.check(
+            self.project(outcomes=["pass"] * 43), previous=previous))
+
+    def test_dotted_project_name_is_not_truncated(self):
+        name = "Playnite.Architecture.Tests"
+        previous = self.record_previous(None, present=(name,))
+        self.record_baseline({name: {"executed": 43, "passed": 43}})
+        self.assertEqual(0, self.check(
+            self.project(name, outcomes=["pass"] * 43), previous=previous))
+
+    def test_reviewed_removal_record_allows_a_project_to_retire(self):
+        previous = self.record_previous(
+            {"OldSuite": {"executed": 43, "passed": 43}}, present=("OldSuite",))
+        self.record_baseline(
+            {"NewSuite": {"executed": 43, "passed": 43}},
+            removed={"OldSuite": {"reason": "project folded into NewSuite",
+                                  "approved_by": "oracle-change review"}})
+        self.assertEqual(0, self.check(
+            self.project("NewSuite", outcomes=["pass"] * 43), previous=previous))
+
+    def test_removal_record_needs_a_reviewer(self):
+        previous = self.record_previous(
+            {"OldSuite": {"executed": 43, "passed": 43}}, present=("OldSuite",))
+        self.record_baseline(
+            {"NewSuite": {"executed": 1, "passed": 1}},
+            removed={"OldSuite": {"reason": "project folded into NewSuite"}})
+        self.assertEqual(1, self.check(
+            self.project("NewSuite", outcomes=["pass"]), previous=previous))
+        self.assertIn("needs a non-empty approved_by", self.summary.read_text())
+
+    def test_removal_record_cannot_name_a_project_that_still_ran(self):
+        previous = self.record_previous(
+            {"Suite": {"executed": 43, "passed": 43}}, present=("Suite",))
+        self.record_baseline(
+            None,
+            removed={"Suite": {"reason": "gone",
+                               "approved_by": "oracle-change review"}})
+        self.assertEqual(1, self.check(
+            self.project(outcomes=["pass"] * 43), previous=previous))
+        self.assertIn("Suite: removal record conflicts with a project that still ran",
+                      self.summary.read_text())
 
 
 if __name__ == "__main__":
