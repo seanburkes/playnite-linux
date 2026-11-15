@@ -1,0 +1,131 @@
+name: packaging
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  merge_group:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    name: ${{ matrix.format }} packaging smoke
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        format: [AppImage, Flatpak]
+    env:
+      DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+      DOTNET_NOLOGO: "1"
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - name: Publish the existing shell and CLI; assemble package inputs
+        run: bash packaging/assemble.sh "$RUNNER_TEMP/package"
+      - name: Test packaging validation and launcher routing
+        run: python3 -m unittest discover -s packaging -p 'test_*.py' -v
+      - name: Build and smoke the AppImage
+        if: matrix.format == 'AppImage'
+        working-directory: ${{ runner.temp }}/package
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 3 -o appimagetool.AppImage https://github.com/AppImage/appimagetool/releases/download/1.9.1/appimagetool-x86_64.AppImage
+          curl --fail --location --retry 3 -o runtime-x86_64 https://github.com/AppImage/type2-runtime/releases/download/20251108/runtime-x86_64
+          echo 'ed4ce84f0d9caff66f50bcca6ff6f35aae54ce8135408b3fa33abfc3cb384eb0  appimagetool.AppImage' | sha256sum --check --strict
+          echo '2fca8b443c92510f1483a883f60061ad09b46b978b2631c807cd873a47ec260d  runtime-x86_64' | sha256sum --check --strict
+          chmod +x appimagetool.AppImage
+          mkdir artifacts
+          ARCH=x86_64 ./appimagetool.AppImage --appimage-extract-and-run --no-appstream --runtime-file runtime-x86_64 AppDir artifacts/Playnite-Linux-x86_64.AppImage
+          image="$RUNNER_TEMP/package/artifacts/Playnite-Linux-x86_64.AppImage"
+          test -s "$image"
+          version=$(timeout 30s "$image" --appimage-extract-and-run --version)
+          printf 'Packaged CLI version: %s\n' "$version"
+          test "$version" = '1.0.0.0'
+          timeout 30s "$image" --appimage-extract-and-run --headless --smoke
+          "$image" --appimage-extract
+          python3 "$GITHUB_WORKSPACE/packaging/verify-entry.py" squashfs-root
+          {
+            echo '## AppImage: PASS'
+            echo "Source commit: $(cat source-commit.txt)"
+            echo 'appimagetool 1.9.1; type2-runtime 20251108; SDK 11.0.100; .NET runtime 11.0.0; linux-x64'
+            ./appimagetool.AppImage --appimage-extract-and-run --version
+            sha256sum appimagetool.AppImage runtime-x86_64
+            stat --printf='Artifact: %n — %s bytes\n' "$image"
+            cat squashfs-root/usr/lib/playnite/{cli,desktop}/*.runtimeconfig.json
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: Install pinned Flatpak tooling and runtime branch
+        if: matrix.format == 'Flatpak'
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends \
+            flatpak-builder=1.4.2-1build2 flatpak=1.14.6-1ubuntu0.1 elfutils=0.190-1.1ubuntu0.1 \
+            librsvg2-common=2.58.0+dfsg-1ubuntu0.1 libgdk-pixbuf2.0-bin=2.42.10+dfsg-3ubuntu3.3
+          command -v eu-strip
+          eu-strip --version
+          flatpak-builder --version
+          flatpak --version
+          test "$(flatpak-builder --version)" = 'flatpak-builder-1.4.2'
+          test "$(flatpak --version)" = 'Flatpak 1.14.6'
+          # Flatpak's host-side export validator needs the SVG GDK loader, not just librsvg2-2.
+          gdk-pixbuf-thumbnailer -s 128 packaging/io.github.playnite_linux.Playnite.svg "$RUNNER_TEMP/icon-check.png"
+          test -s "$RUNNER_TEMP/icon-check.png"
+          # Ubuntu runner AppArmor otherwise blocks bubblewrap's unprivileged namespaces.
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          flatpak remote-add --user --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
+          python3 packaging/verify-flatpak.py packaging/io.github.playnite_linux.Playnite.json
+          python3 -c 'import json; locks=json.load(open("packaging/flatpak-runtime-lock.json")); print("\n".join(f"{ref}\t{commit}" for ref, commit in locks.items()))' > "$RUNNER_TEMP/runtime-lock.tsv"
+          while IFS=$'\t' read -r ref commit; do
+            flatpak install --user --noninteractive flathub "$ref"
+            flatpak update --user --noninteractive --no-related --commit="$commit" "$ref"
+            actual=$(flatpak info --user --show-commit "$ref")
+            test "$actual" = "$commit"
+          done < "$RUNNER_TEMP/runtime-lock.tsv"
+      - name: Build, install bundle and smoke the sandboxed Flatpak
+        if: matrix.format == 'Flatpak'
+        working-directory: ${{ runner.temp }}/package
+        run: |
+          set -euo pipefail
+          id=io.github.playnite_linux.Playnite
+          flatpak-builder --user --disable-rofiles-fuse --repo=repo build "$id.json"
+          mkdir artifacts
+          flatpak build-bundle repo "artifacts/Playnite-Linux-x86_64.flatpak" "$id"
+          test -s artifacts/Playnite-Linux-x86_64.flatpak
+          flatpak install --user --noninteractive artifacts/Playnite-Linux-x86_64.flatpak
+          version=$(timeout 30s flatpak run --user "$id" --version)
+          printf 'Packaged CLI version: %s\n' "$version"
+          test "$version" = '1.0.0.0'
+          timeout 30s flatpak run --user "$id" --headless --smoke
+          installed=$(flatpak info --user --show-location "$id")
+          python3 "$GITHUB_WORKSPACE/packaging/verify-entry.py" "$installed/files" .
+          flatpak info --user --show-permissions "$id" > "$RUNNER_TEMP/flatpak-permissions.ini"
+          python3 "$GITHUB_WORKSPACE/packaging/verify-flatpak.py" "$id.json" "$RUNNER_TEMP/flatpak-permissions.ini"
+          {
+            echo '## Flatpak: PASS'
+            echo "Source commit: $(cat source-commit.txt)"
+            echo 'flatpak-builder 1.4.2-1build2; Flatpak 1.14.6-1ubuntu0.1; elfutils 0.190-1.1ubuntu0.1; SDK 11.0.100; .NET runtime 11.0.0; linux-x64'
+            echo 'SVG loader librsvg2-common 2.58.0+dfsg-1ubuntu0.1; GDK thumbnailer 2.42.10+dfsg-3ubuntu3.3'
+            stat --printf='Artifact: %n — %s bytes\n' artifacts/*.flatpak
+            while IFS=$'\t' read -r ref expected; do
+              commit=$(flatpak info --user --show-commit "$ref")
+              test "$commit" = "$expected"
+              echo "$ref commit: $commit"
+            done < "$RUNNER_TEMP/runtime-lock.tsv"
+            cat "$RUNNER_TEMP/flatpak-permissions.ini"
+            cat "$installed"/files/lib/playnite/{cli,desktop}/*.runtimeconfig.json
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Playnite-Linux-x86_64-${{ matrix.format }}
+          path: ${{ runner.temp }}/package/artifacts/*
+          if-no-files-found: error

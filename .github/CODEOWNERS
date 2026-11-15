@@ -18,6 +18,8 @@ tools/V10LibraryFixture/   @seanburkes
 .github/workflows/settings-library-oracle.yml @seanburkes
 .github/workflows/windows-fixture-validation.yml @seanburkes
 .github/workflows/port-index.yml @seanburkes
+.github/workflows/packaging.yml @seanburkes
+packaging/                 @seanburkes
 .github/CODEOWNERS         @seanburkes
 scripts/ci/                @seanburkes
 scripts/port/              @seanburkes

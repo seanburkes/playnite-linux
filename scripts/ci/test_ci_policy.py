@@ -161,6 +161,7 @@ class CiPolicyTests(unittest.TestCase):
                      ".github/workflows/settings-library-oracle.yml",
                      ".github/workflows/windows-fixture-validation.yml",
                      ".github/workflows/port-index.yml",
+                     ".github/workflows/packaging.yml", "packaging",
                      ".github/CODEOWNERS",
                      "tests/baseline.json",
                      "scripts/ci", "scripts/port", "scripts/formal"):
@@ -214,6 +215,32 @@ class CiPolicyTests(unittest.TestCase):
             result = run("check_protected_paths.py", "--base", base,
                          "--paths", ".github/workflows/linux-ci.yml", cwd=repo)
             self.assertEqual(0, result.returncode, result.stderr)
+
+    def test_packaging_deletion_or_weakening_is_gated(self):
+        changes = {
+            ".github/workflows/packaging.yml": (None, "continue-on-error: true\n"),
+            "packaging/io.github.playnite_linux.Playnite.json":
+                (None, '{"finish-args": ["--filesystem=host"]}\n'),
+            "packaging/verify-entry.py": (None, "raise SystemExit(0)\n"),
+        }
+        for name, replacements in changes.items():
+            for replacement in replacements:
+                with self.subTest(path=name, replacement=replacement), \
+                        tempfile.TemporaryDirectory() as temporary:
+                    repo = Path(temporary)
+                    path = repo / name
+                    path.parent.mkdir(parents=True)
+                    path.write_text((ROOT / name).read_text())
+                    base = committed_repo(repo)
+                    if replacement is None:
+                        path.unlink()
+                    else:
+                        path.write_text(replacement)
+                    commit(repo, "delete or weaken packaging")
+                    result = run("check_protected_paths.py", "--base", base,
+                                 "--paths", *protected_paths(), cwd=repo)
+                    self.assertEqual(1, result.returncode, result.stdout + result.stderr)
+                    self.assertIn(name, result.stdout)
 
     def test_pr_branched_before_main_protected_change_is_not_charged(self):
         with tempfile.TemporaryDirectory() as temporary:
