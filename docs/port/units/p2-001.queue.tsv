@@ -1,2 +1,2 @@
 id	wave	area	unit	depends	status	owner	oracle	test	notes
-p2-001	W2	scaffold	Solution/projects/props	p1-001	in-progress	core	-	build	12 net11.0 projects; Release build 0 warnings/0 errors; ready for two blind reviews
+p2-001	W2	scaffold	Solution/projects/props	p1-001	done	core	-	build	Merged in PR https://github.com/seanburkes/playnite-linux/pull/29 at 9afd818; 2/2 checks on PR head 3d5fd09 (inventory-and-parity, formal; linux-ci did not exist yet); pre-merge reviews A and B at data/p1-tooling-review-a/review-p2-001.md and data/p1-tooling-review-b/review-p2-001.md found no P1/P2 and three P3 scope/dependency notes; 12 net11.0 projects; Release build 0 warnings/0 errors; aggregates parent-owned
