@@ -1,0 +1,3 @@
+M:System.Guid.NewGuid;Pass an ID or inject IGuidProvider.
+M:System.Random.#ctor;Inject a seeded Random.
+P:System.Random.Shared;Inject a seeded Random.

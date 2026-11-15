@@ -1,0 +1,28 @@
+<Project>
+  <Target Name="CaptureDirectArchitectureReferences" BeforeTargets="IncludeTransitiveProjectReferences;ResolveReferences"
+          Condition="'$(PlayniteProductProject)' == 'true' Or '$(IsTestProject)' == 'true'">
+    <ItemGroup>
+      <_ArchitectureDirectReference Include="@(ProjectReference)" />
+    </ItemGroup>
+  </Target>
+  <!-- Capture evaluated compiler inputs: XML text and emitted IL miss unused references. -->
+  <Target Name="WriteArchitectureInputs" BeforeTargets="CoreCompile" DependsOnTargets="ResolveReferences"
+          Condition="'$(PlayniteProductProject)' == 'true' Or '$(IsTestProject)' == 'true'">
+    <ItemGroup>
+      <_ArchitectureInput Include="Project|$(MSBuildProjectName)" />
+      <_ArchitectureInput Include="Product|$(PlayniteProductProject)" />
+      <_ArchitectureInput Include="Output|$(TargetPath)" />
+      <_ArchitectureInput Include="OutputType|$(OutputType)" />
+      <_ArchitectureInput Include="Define|$([System.String]::Copy('$(DefineConstants)').Replace(';', ','))" />
+      <_ArchitectureInput Include="@(_ArchitectureDirectReference->'ProjectReference|%(Filename)')" />
+      <_ArchitectureDependency Include="@(ReferencePath)" Condition="'%(ReferencePath.FrameworkReferenceName)' == ''" />
+      <_ArchitectureInput Include="@(_ArchitectureDependency->'Dependency|%(Filename)')" />
+      <_ArchitectureInput Include="@(ReferencePath->'Reference|%(FullPath)')" />
+      <_ArchitectureInput Include="@(Compile->'Source|%(FullPath)')" />
+      <_ArchitectureInput Include="@(Analyzer->'Analyzer|%(Filename)')" />
+      <_ArchitectureInput Include="@(AdditionalFiles->'AdditionalFile|%(FullPath)')" />
+    </ItemGroup>
+    <WriteLinesToFile File="$(MSBuildProjectDirectory)/obj/architecture/$(Configuration)/inputs.txt"
+                      Lines="@(_ArchitectureInput)" Overwrite="true" WriteOnlyWhenDifferent="true" />
+  </Target>
+</Project>
