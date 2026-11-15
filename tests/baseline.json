@@ -44,7 +44,8 @@
   },
   "new_capture_addendum": {
     "captured_at": "2026-11-15T21:44:51Z",
-    "run_id": "local-fm-p3-001c",
-    "notes": "Follow-up local Release MTP run on branch fm/p3-001c, recorded alongside run 43740834379 rather than replacing it. Recorded floor versus current run: Playnite.Architecture.Tests floor 103 executed / 103 passed, current 144 executed / 144 passed; Playnite.Smoke.Tests floor 4 executed / 4 passed, current 4 executed / 4 passed; Playnite.Core.Tests moved from empty_projects (0 executed, MTP exit 8 in run 43740834379) into the counted baseline at 39 executed / 39 passed. The pull request's linux-ci run revalidates the current counts; no recorded floor was lowered."
+    "run_id": "43766757966",
+    "run_url": "https://github.com/seanburkes/playnite-linux/actions/runs/43766757966",
+    "notes": "linux-ci run 43766757966 on head 02ab787 produced the counts below (JUnit artifact), recorded alongside the original run 43740834379 rather than replacing it. The local MTP run captured at 2026-11-15T21:44:51Z pre-checked the same counts. Recorded floor versus current run: Playnite.Architecture.Tests floor 103 executed / 103 passed, current 144 executed / 144 passed; Playnite.Smoke.Tests floor 4 executed / 4 passed, current 4 executed / 4 passed; Playnite.Core.Tests moved from empty_projects (0 executed, MTP exit 8 in run 43740834379) into the counted baseline at 39 executed / 39 passed. No recorded floor was lowered."
   }
 }
