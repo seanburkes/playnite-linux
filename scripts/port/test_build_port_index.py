@@ -45,11 +45,11 @@ def ledger_row(
 
 class PortIndexTests(unittest.TestCase):
     def test_local_path_categories_name_the_offending_document_row(self):
-        paths = ("$HOME/config", "${HOME}/config", "~/.local", r"C:\Users\alice\proof.log",
+        paths = ("$HOME/task-proof", "${HOME}/task-proof", "~/task-proof", r"C:\Users\alice\proof.log",
                  r"C:\Home\alice\proof.log", "C:/Home/alice/proof.log",
-                 "/srv/firstmate/data/task/log", "firstmate/state/task.status",
-                 "/pool/.treehouse/repo/docs")
-        paths += tuple(f"/{root}/alice/proof.log" for root in port_index.LOCAL_ABSOLUTE_ROOTS)
+                 "/home/alice/firstmate/state/task.status", "/Users/alice/proof",
+                 "/root/proof", "/pool/.treehouse/repo/docs")
+        paths += tuple(f"{root}/task/proof.log" for root in port_index.LOCAL_TASK_ROOTS)
         for path in paths:
             with self.subTest(path=path):
                 errors = port_index.local_path_errors("heading\nproof: " + path,
@@ -64,12 +64,34 @@ class PortIndexTests(unittest.TestCase):
             "data/proof.log\nhttps://example.invalid/review",
             "docs/proof.md"))
 
+    def test_conventional_home_and_system_paths_are_allowed(self):
+        paths = ("~/.steam", "~/.local/share/Steam", "$HOME/.steam", "${HOME}/.config",
+                 "~/.local", "$HOME/config", "docs/firstmate/data/proof.md", "/dev/null",
+                 "/proc/meminfo", "/usr/bin", "/etc", "/sys", "/bin", "/sbin", "/lib",
+                 "/run", "/media", "/Volumes", "/tmp", "/var", "/mnt", "/opt", "/srv")
+        for path in paths:
+            with self.subTest(path=path):
+                self.assertEqual([], port_index.local_path_errors(
+                    "Generic reference: " + path, "docs/proof.md"))
+
+    def test_generic_markdown_label_does_not_exempt_private_link_target(self):
+        for line in ("[~/.steam](/home/alice/firstmate/data/proof)",
+                     "[~/.local/share/Steam]($HOME/tasks/private-proof)",
+                     "~/.steam/firstmate/data/private-proof",
+                     "~/.steam plus /home/alice/private-proof",
+                     "/dev/null plus /home/alice/private-proof"):
+            with self.subTest(line=line):
+                self.assertEqual(1, len(port_index.local_path_errors(line, "docs/proof.md")))
+
     def test_remote_urls_do_not_hide_a_local_path_on_the_same_line(self):
-        url = "https://api.example.org/users/alice/home/root/firstmate/data/.treehouse/task"
-        for line in (url, f"`{url}`", f"[review]({url})", f"<{url}>"):
+        target = "api.example.org/users/alice/home/root/firstmate/data/.treehouse/task"
+        urls = [scheme + target for scheme in ("https://", "git://", "sftp://", "//", "")]
+        for url in urls:
+            self.assertEqual([], port_index.local_path_errors(url, "docs/proof.md"))
+        for line in (urls[0], f"`{urls[1]}`", f"[review]({urls[2]})", f"<{urls[3]}>", urls[4]):
             with self.subTest(line=line):
                 self.assertEqual([], port_index.local_path_errors(line, "docs/proof.md"))
-                errors = port_index.local_path_errors(line + " proof: /opt/private/log",
+                errors = port_index.local_path_errors(line + " proof: /home/alice/private/log",
                                                       "docs/proof.md")
                 self.assertEqual(1, len(errors))
                 self.assertIn("docs/proof.md:1:", errors[0])
@@ -78,7 +100,7 @@ class PortIndexTests(unittest.TestCase):
         with patch.object(port_index, "PRE_GUARD_COMMIT", "f" * 40):
             port_index.local_path_allowance.cache_clear()
             with self.assertRaises(port_index.PortIndexError):
-                port_index.local_path_errors("/opt/private/proof", "docs/proof.md")
+                port_index.local_path_errors("/home/alice/private/proof", "docs/proof.md")
         port_index.local_path_allowance.cache_clear()
 
     def test_markdown_in_every_documentation_location_is_scanned(self):
