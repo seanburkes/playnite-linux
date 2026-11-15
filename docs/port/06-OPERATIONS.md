@@ -196,8 +196,12 @@ branch protection.
 `actions/setup-dotnet`'s `global-json-file` input and checks `dotnet --version` for equality.
 The equality check rejects unintended SDK patch roll-forward from a runner's preinstalled
 SDKs. NuGet/test-runner versions remain pinned by central versions and package lock files.
-The Linux test command explicitly selects VSTest, runs without case filters, and uploads
-per-project TRX files in `linux-test-results`. It discovers project files rather than gating
+The Linux test command explicitly selects Microsoft.Testing.Platform through .NET 11's
+`DOTNET_TEST_RUNNER` setting, runs without case filters, and uses the pinned xUnit runner's
+`--fail-skips on --fail-warns on` options. It uploads per-project TRX and JUnit files in
+`linux-test-results`. The preceding solution restore and Release build produce the test
+binaries and project assets used by `--no-build --no-restore`; a discovered project without
+those outputs fails rather than being skipped. It discovers project files rather than gating
 on test source or case count: `Playnite.Architecture.Tests` runs whenever its `.csproj` exists,
 including today's scaffold and the tests added by p2-002. An absent architecture project emits
 a notice; a present project's build or test failure fails the job. The core project is
@@ -233,7 +237,7 @@ export baseline_results
 while IFS= read -r project; do
   name=$(basename "$project" .csproj)
   dotnet run --project "$project" --configuration Release --no-build --no-restore -- \
-    -jUnit "$baseline_results/$name.xml" -failSkips -failWarns
+    -result-junit "$baseline_results/$name.xml" -failSkips -failWarns
 done < <(find "$PWD/tests" -name '*.csproj' -not -path '*/obj/*' -not -path '*/bin/*' | sort)
 python3 - <<'PY'
 import json

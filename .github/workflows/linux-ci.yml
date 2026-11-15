@@ -17,7 +17,7 @@ jobs:
     env:
       DOTNET_CLI_TELEMETRY_OPTOUT: "1"
       DOTNET_NOLOGO: "1"
-      DOTNET_TEST_RUNNER: VSTest
+      DOTNET_TEST_RUNNER: Microsoft.Testing.Platform
       TESTINGPLATFORM_TELEMETRY_OPTOUT: "1"
     steps:
       - uses: actions/checkout@v4
@@ -58,10 +58,11 @@ jobs:
           for project in "${projects[@]}"; do
             name=$(basename "$project" .csproj)
             echo "Running $name" >> "$GITHUB_STEP_SUMMARY"
-            dotnet test "$project" --configuration Release --no-build --no-restore \
-              --logger "trx;LogFileName=$name.trx" \
+            dotnet test --project "$project" --configuration Release --no-build --no-restore \
+              --report-xunit-trx --report-xunit-trx-filename "$name.trx" \
+              --report-xunit-junit --report-xunit-junit-filename "$name.xml" \
               --results-directory "$RUNNER_TEMP/linux-test-results/$name" \
-              -warnaserror -- xUnit.FailSkips=true xUnit.FailWarns=true
+              --fail-skips on --fail-warns on
           done
 
       - name: Upload Linux test results
