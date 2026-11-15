@@ -155,6 +155,23 @@ def capture(repo, base, runner_temp, output, lister=None):
 
 
 class CiPolicyTests(unittest.TestCase):
+    def test_documentation_has_no_new_absolute_local_paths(self):
+        sys.path.insert(0, str(ROOT / "scripts" / "port"))
+        try:
+            import build_port_index
+        finally:
+            sys.path.remove(str(ROOT / "scripts" / "port"))
+        self.assertEqual([], build_port_index.document_path_errors(ROOT))
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary)
+            (repo / "docs").mkdir()
+            path = repo / "docs" / "proof.md"
+            path.write_text("heading\n/home/alice/private-proof\n")
+            committed_repo(repo)
+            errors = build_port_index.document_path_errors(repo)
+            self.assertEqual(1, len(errors))
+            self.assertIn("docs/proof.md:2:", errors[0])
+
     def test_plan_guards_rechecks_label_changes(self):
         trigger = PLAN_GUARDS.read_text().split("  pull_request:\n", 1)[1]
         self.assertEqual(

@@ -43,6 +43,64 @@ def ledger_row(
 
 
 class PortIndexTests(unittest.TestCase):
+    def test_local_path_categories_name_the_offending_document_row(self):
+        paths = ("/home/alice/proof.log", "/Users/alice/proof.log", "/root/proof.log",
+                 r"C:\Users\alice\proof.log", "/srv/firstmate/data/task/log",
+                 "firstmate/state/task.status", "/pool/.treehouse/repo/docs")
+        for path in paths:
+            with self.subTest(path=path):
+                errors = port_index.local_path_errors("heading\nproof: " + path,
+                                                      "docs/proof.md")
+                self.assertEqual(len(errors), 1)
+                self.assertIn("docs/proof.md:2:", errors[0])
+                self.assertNotIn(path, errors[0])
+
+    def test_repository_relative_references_are_allowed(self):
+        self.assertEqual([], port_index.local_path_errors(
+            "scripts/ci/test_ci_policy.py\ndocs/port/units/p2-ci-cost.ledger.tsv\n"
+            "data/proof.log\n$HOME/config\nhttps://example.invalid/review",
+            "docs/proof.md"))
+
+    def test_local_path_in_queue_or_ledger_fails_render(self):
+        for kind in ("queue", "ledger"):
+            with self.subTest(kind=kind):
+                self.write_queue_shard("p1-001", queue_row(
+                    "p1-001", notes="/home/alice/proof" if kind == "queue" else ""))
+                if kind == "ledger":
+                    self.write_ledger_shard("p1-001", ledger_row(
+                        "2026-11-15T00:00:00Z", "p1-001", evidence="/home/alice/proof"))
+                with self.assertRaisesRegex(
+                        port_index.PortIndexError, rf"p1-001\.{kind}\.tsv:2:"):
+                    self.render()
+
+    def test_historical_exceptions_are_exact_file_and_content_bound(self):
+        for name in ("p2-002", "p2-ci-cost"):
+            label = f"docs/port/units/{name}.ledger.tsv"
+            lines = (port_index.ROOT / label).read_text().splitlines()
+            for line in lines:
+                if not port_index.LOCAL_PATH.search(line):
+                    continue
+                with self.subTest(unit=name, timestamp=line.split("\t")[0]):
+                    self.assertEqual([], port_index.local_path_errors(line, label))
+                    self.assertTrue(port_index.local_path_errors(line + " edited", label))
+                    self.assertTrue(port_index.local_path_errors(line, "docs/copied.md"))
+                    self.assertTrue(port_index.local_path_errors(line + "\n" + line, label))
+
+    def test_build_and_check_reject_document_paths_before_writing_aggregates(self):
+        self.write_queue_shard("p1-001", queue_row("p1-001"))
+        (self.root / "docs/proof.md").write_text("heading\n/home/alice/proof\n")
+        for mode in ("build", "check"):
+            with self.subTest(mode=mode):
+                stderr = io.StringIO()
+                with redirect_stderr(stderr):
+                    status = port_index.main([mode, "--shards-only"],
+                                             root=self.root, units=self.units,
+                                             queue=self.queue, ledger=self.ledger)
+                self.assertEqual(1, status)
+                self.assertIn("docs/proof.md:2:", stderr.getvalue())
+                self.assertFalse(self.queue.exists())
+                self.assertFalse(self.ledger.exists())
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory(prefix="p1-011-")
         self.root = Path(self.temp.name)

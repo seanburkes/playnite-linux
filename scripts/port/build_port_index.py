@@ -46,6 +46,7 @@ from __future__ import annotations
 
 import argparse
 import difflib
+import hashlib
 import os
 import re
 import subprocess
@@ -60,6 +61,93 @@ ROOT = Path(__file__).resolve().parents[2]
 UNITS = ROOT / "docs" / "port" / "units"
 QUEUE = ROOT / "docs" / "port" / "queue.tsv"
 LEDGER = ROOT / "docs" / "port" / "ledger.tsv"
+
+LOCAL_PATH = re.compile(
+    r"/(?:home|Users|root)(?:/|\b)|"
+    r"[A-Za-z]:[\\/](?:Users|Documents and Settings)(?:[\\/]|\b)|"
+    r"firstmate[\\/](?:data|state)(?:[\\/]|\b)|\.treehouse(?:[\\/]|\b)",
+    re.IGNORECASE,
+)
+# Exact pre-guard lines only; see docs/port/LOCAL-PATH-EXCEPTIONS.md.
+LOCAL_PATH_EXCEPTIONS = {
+    "docs/port/06-OPERATIONS.md": {
+        "a13eb8ee06c92eec70f9e001ac0f87035bc11eccd8e15a7e97c83a0271c86926",
+        "031f509b4f17e702cf346ce9b1c624ceec785150580b804ae1b191bef66f1d76",
+        "9652e10ff8c0f2d1e67e0b6ba02f464c8b2a44ebbb5f41b4e72ebe401dd56d1c",
+    },
+    "docs/port/07-FIRSTMATE.md": {
+        "0a682c0fd67ea978f1f9f75fda303796077061353f0eb2e35386f72913012cff",
+        "921b02fb751da919edeae705db455e43ccf2316b5661e239ad24ba04a91add8e",
+        "5b6d8f878e65a4e4d03cdb7a831632b8ee248daf20baf4b5779d12475ccd0f38",
+    },
+    "docs/port/08-STEAM-SPEC.md": {
+        "a0ce67ccb5c09f03ec392bd7e76a83c96777f7e11b89b782c9a5984ec7b2b53f",
+    },
+    "docs/port/HANDOFF-2026-11-14.md": {
+        "4726936fddae5fa3aef6be25e3dbd9290079229adc1cc4589a1629ed8d59e583",
+        "b33cc46a2393554627570482e7feaccbf2c2283e0f01ed448f11d3215add4f72",
+        "530aba180479f8a071ec8d607f708a23a472288134511eaf8f5163a9aa7168ac",
+    },
+    "docs/port/p1-009-steam-corpus-proposal.md": {
+        "2081a4de964630e64556ddbf34d987ee168519eaf5a8ca7652d4a2c992114490",
+        "9cece94d5ff21a68f4f97bd87cdf7433d5290ff3986fd311f7a459cddfb82dfb",
+        "beef9ecb877ead399384f27d33328104a14b98e5c0000ecb9ed5fc42227d7d9b",
+        "1bec7e4f2cc03557536b1742916d73a0b519b29b91b15ca5d681e743cfb9de18",
+        "106d2de516a2844bd8006b18af0c8e637e184b9e3c365d0619ad450d5f2f54f6",
+        "de0bf05d0723c1dd7895b73b6e02c9fb10b2eb99c644e9fa3eed49f7ee72d39b",
+        "de8c61d186728aba493f70bc243c23bf9987f04d995ea1f11acf7634d6128311",
+        "981072d68a390ea45bc6ccd4c41c64da92ba294c79bd9a15c78efa6461c77cf2",
+        "62249f8f083da83c6316fa117726126664016dc2d07d9ed7888f7b3b60048021",
+        "6e378ec52448e2a821d5b29aecde866b11992e3908cfb7b137142d941e3330c3",
+        "08e0c3928b79f8e6f32b313c3ba46e01d3546592b67dedb139814500be9a6ef7",
+    },
+    "docs/port/units/p2-002.ledger.tsv": {
+        "b02112a1a036cb33f262c8f392a4d3a9e5d21fc4022d817d3599337f97aabc29",
+        "352d5a6b7b0be9aa4875060cea973c62b7a0384b827ba8606d965e0f230e0e01",
+        "d28753330deb3b3927270edbffdd380541f924cfd7f9982d314705fc9a4508c8",
+    },
+    "docs/port/units/p2-ci-cost.ledger.tsv": {
+        "1e65eafe7f62f8192f5ac778f624dd69ae23450766b449c687ad0f5ec5d24207",
+    },
+}
+LOCAL_PATH_EXCEPTIONS["docs/port/ledger.tsv"] = (
+    LOCAL_PATH_EXCEPTIONS["docs/port/units/p2-002.ledger.tsv"]
+    | LOCAL_PATH_EXCEPTIONS["docs/port/units/p2-ci-cost.ledger.tsv"]
+)
+
+
+def local_path_errors(text: str, label: str) -> list[str]:
+    """Reject new local paths; each exact historical line is allowed once per file."""
+    allowed = LOCAL_PATH_EXCEPTIONS.get(label, set()).copy()
+    errors = []
+    for lineno, line in enumerate(text.splitlines(), start=1):
+        if not LOCAL_PATH.search(line):
+            continue
+        digest = hashlib.sha256(line.encode("utf-8")).hexdigest()
+        if digest in allowed:
+            allowed.remove(digest)
+        else:
+            errors.append(f"{label}:{lineno}: absolute local path in row; "
+                          "use a repository-relative reference")
+    return errors
+
+
+def document_path_errors(root: Path) -> list[str]:
+    """Scan documentation, including staged/new files, without inspecting oracle data."""
+    paths = list((root / "docs").rglob("*"))
+    paths.extend(path for path in root.iterdir() if path.suffix.lower() == ".md")
+    errors = []
+    for path in sorted(paths):
+        if not path.is_file() or path.suffix.lower() not in {".md", ".tsv", ".txt", ".rst", ".adoc"}:
+            continue
+        label = path.relative_to(root).as_posix()
+        try:
+            text = path.read_bytes().decode("utf-8")
+        except (OSError, UnicodeDecodeError) as exc:
+            errors.append(f"{label}: cannot read documentation: {exc}")
+            continue
+        errors.extend(local_path_errors(text, label))
+    return errors
 
 QUEUE_COLUMNS = [
     "id", "wave", "area", "unit", "depends",
@@ -163,6 +251,9 @@ def _parse_shard_bytes(
     except UnicodeDecodeError as exc:
         raise PortIndexError(f"{label}: invalid UTF-8: {exc}") from exc
     lines = text.splitlines()
+    path_errors = local_path_errors(text, "docs/port/units/" + Path(label).name)
+    if path_errors:
+        raise PortIndexError("\n".join(path_errors))
     if not lines:
         raise PortIndexError(f"{label}: empty shard")
     if lines[0] != header:
@@ -1119,6 +1210,9 @@ def main(
     args = parser.parse_args(argv)
 
     try:
+        path_errors = document_path_errors(root)
+        if path_errors:
+            raise PortIndexError("\n".join(path_errors))
         index = build_index(units)
         queue_bytes, ledger_bytes = render_index(index)
     except PortIndexError as exc:

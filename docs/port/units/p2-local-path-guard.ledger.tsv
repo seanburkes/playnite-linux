@@ -1,0 +1,2 @@
+timestamp	unit	from	to	actor	evidence
+2026-11-15T19:57:57Z	p2-local-path-guard	todo	in-progress	fm/p2-ci-cost	86 generator tests and 122 CI policy tests passed; new local paths fail shard rendering and documentation validation with file and row diagnostics before aggregate writes; exact-file exact-content pre-guard exceptions reject modified, copied and duplicated lines; four historical ledger rows remain byte-identical; exception note at docs/port/LOCAL-PATH-EXCEPTIONS.md; generator and policy guard in scripts/port/build_port_index.py and scripts/ci/test_ci_policy.py
