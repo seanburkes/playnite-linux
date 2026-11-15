@@ -141,15 +141,29 @@ def outputs(path):
                 if "=" in line)
 
 
+def capture(repo, base, runner_temp, output, lister=None):
+    runner_temp = Path(runner_temp)
+    runner_temp.mkdir(parents=True, exist_ok=True)
+    lister = lister or SCRIPTS / "list_test_projects.py"
+    return subprocess.run(
+        ["bash", str(SCRIPTS / "capture_policy_state.sh"), base,
+         str(runner_temp), str(output), str(lister)],
+        cwd=repo, capture_output=True, text=True, check=False)
+
+
 class CiPolicyTests(unittest.TestCase):
     def test_ci_policy_surface_is_protected_and_codeowned(self):
         paths = protected_paths()
         owners = codeowners()
         for path in (".github/workflows/linux-ci.yml",
                      ".github/workflows/plan-guards.yml",
+                     ".github/workflows/legacy-oracle.yml",
+                     ".github/workflows/settings-library-oracle.yml",
+                     ".github/workflows/windows-fixture-validation.yml",
+                     ".github/workflows/port-index.yml",
                      ".github/CODEOWNERS",
                      "tests/baseline.json",
-                     "scripts/ci"):
+                     "scripts/ci", "scripts/port", "scripts/formal"):
             with self.subTest(path=path):
                 self.assertIn(path, paths)
                 key = path if path in owners else path + "/"
@@ -254,6 +268,10 @@ class CiPolicyTests(unittest.TestCase):
             gate.write_text("import sys\nsys.exit(1)\n")
             (repo / "scripts" / "ci" / "check_linux_test_results.py").write_text(
                 "import sys\nsys.exit(0)\n")
+            (repo / "scripts" / "ci" / "list_test_projects.py").write_text(
+                "print('Real.Tests')\n")
+            (repo / "scripts" / "ci" / "capture_policy_state.sh").write_text(
+                "#!/usr/bin/env bash\nexit 0\n")
             base = committed_repo(repo)
             gate.write_text("import sys\nsys.exit(0)\n")
             commit(repo, "weaken head gate")
@@ -263,6 +281,8 @@ class CiPolicyTests(unittest.TestCase):
             self.assertEqual(0, result.returncode, result.stdout + result.stderr)
             self.assertEqual("base", values["gate_source"])
             self.assertEqual("base", values["checker_source"])
+            self.assertEqual("base", values["lister_source"])
+            self.assertEqual("base", values["capture_source"])
             selected = Path(values["gate"])
             self.assertTrue(selected.is_relative_to(runner_temp))
             run_gate = subprocess.run([sys.executable, str(selected)],
@@ -346,6 +366,8 @@ class CiPolicyTests(unittest.TestCase):
                 (scripts / "check_linux_test_results.py").write_text(
                     "import sys\nsys.exit(0)\n")
                 (scripts / "list_test_projects.py").write_text("print('Real.Tests')\n")
+                (scripts / "capture_policy_state.sh").write_text(
+                    "#!/usr/bin/env bash\nexit 0\n")
                 base = committed_repo(repo)
                 (scripts / "materialise_policy.sh").write_text(
                     "#!/usr/bin/env bash\nexit 0\n")
@@ -354,7 +376,7 @@ class CiPolicyTests(unittest.TestCase):
                                              repo / "output", workflow)
                 self.assertEqual(0, result.returncode, result.stdout + result.stderr)
                 self.assertEqual("base", values["source"])
-                for key in ("checker", "gate", "lister"):
+                for key in ("checker", "gate", "lister", "capture"):
                     self.assertEqual("base", values[f"{key}_source"])
 
     def test_edited_lister_cannot_drop_a_project(self):
@@ -395,9 +417,11 @@ class CiPolicyTests(unittest.TestCase):
                                  run_block(workflow, "Select the policy materialiser"))
         self.assertIn("fetch-depth: 0", LINUX_CI.read_text())
         capture = step_block(LINUX_CI, "Capture the committed policy baseline")
-        self.assertIn("previous-baseline.json", capture)
-        self.assertIn("previous-projects.txt", capture)
+        self.assertIn("steps.policy_scripts.outputs.capture", capture)
         self.assertIn("steps.policy_scripts.outputs.lister", capture)
+        capture_script = (SCRIPTS / "capture_policy_state.sh").read_text()
+        self.assertIn("previous-baseline.json", capture_script)
+        self.assertIn("previous-projects.txt", capture_script)
         step_block(LINUX_CI, "Materialise the base policy scripts")
         checker = LINUX_CI.read_text()
         self.assertIn("PREVIOUS_BASELINE_STATE", checker)
@@ -419,10 +443,11 @@ class CiPolicyTests(unittest.TestCase):
             self.assertIn("merge_group event has no usable base SHA", result.stdout)
 
     def test_merge_group_uses_its_base_sha(self):
+        sha = git(ROOT, "rev-parse", "HEAD")
         result, values = resolve_base(LINUX_CI, "merge_group",
-                                      merge_group_base="a" * 40)
-        self.assertEqual(0, result.returncode)
-        self.assertEqual("a" * 40, values["sha"])
+                                      merge_group_base=sha)
+        self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+        self.assertEqual(sha, values["sha"])
 
     def test_first_push_without_a_before_sha_allows_first_baseline(self):
         result, values = resolve_base(LINUX_CI, "push", push_before="0" * 40)
@@ -435,13 +460,109 @@ class CiPolicyTests(unittest.TestCase):
             malicious = repo / "scripts" / "ci" / "resolve_base_sha.py"
             malicious.parent.mkdir(parents=True)
             malicious.write_text("print('b' * 40)\n")
-            committed_repo(repo)
+            base = committed_repo(repo)
             output = repo / "output"
             result, values = resolve_base(LINUX_CI, "pull_request",
-                                          pull_request_base="a" * 40,
+                                          pull_request_base=base,
                                           output=output, repo=repo)
             self.assertEqual(0, result.returncode, result.stdout + result.stderr)
-            self.assertEqual("a" * 40, values["sha"])
+            self.assertEqual(base, values["sha"])
+
+    def test_resolved_base_must_exist_and_be_an_ancestor(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary)
+            base = committed_repo(repo)
+            (repo / "README.md").write_text("second\n")
+            second = commit(repo, "second")
+            missing = "a" * 40
+            result, _ = resolve_base(LINUX_CI, "pull_request",
+                                     pull_request_base=missing, repo=repo)
+            self.assertEqual(1, result.returncode)
+            self.assertIn("is not a commit in this checkout", result.stdout)
+            git(repo, "checkout", "-q", base)
+            result, _ = resolve_base(LINUX_CI, "pull_request",
+                                     pull_request_base=second, repo=repo)
+            self.assertEqual(1, result.returncode)
+            self.assertIn("is not an ancestor of HEAD", result.stdout)
+
+    def test_capture_rejects_a_base_without_a_baseline(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary)
+            base = committed_repo(repo)
+            result = capture(repo, base, repo / "runner", repo / "output")
+            self.assertEqual(1, result.returncode)
+            self.assertIn("has no tests/baseline.json; refusing to open the ratchet",
+                          result.stdout)
+
+    def test_capture_first_push_is_the_only_absent_state(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary)
+            committed_repo(repo)
+            output = repo / "output"
+            result = capture(repo, "", repo / "runner", output)
+            self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+            values = outputs(output)
+            self.assertEqual("absent", values["baseline_state"])
+            self.assertEqual("absent", values["projects_state"])
+
+    def test_capture_copies_the_base_baseline_and_project_list(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary)
+            baseline = repo / "tests" / "baseline.json"
+            baseline.parent.mkdir(parents=True)
+            baseline.write_text('{"legacy": {"executed": 281}, "new": null}\n')
+            project = repo / "tests" / "Real.Tests" / "Real.Tests.csproj"
+            project.parent.mkdir(parents=True)
+            project.write_text("<Project><PropertyGroup><IsTestProject>true"
+                               "</IsTestProject></PropertyGroup></Project>\n")
+            base = committed_repo(repo)
+            runner = repo / "runner"
+            output = repo / "output"
+            result = capture(repo, base, runner, output)
+            self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+            values = outputs(output)
+            self.assertEqual("present", values["baseline_state"])
+            self.assertEqual("present", values["projects_state"])
+            self.assertTrue((runner / "previous-baseline.json").exists())
+            self.assertIn("Real.Tests",
+                          (runner / "previous-projects.txt").read_text().splitlines())
+
+    def test_frozen_step_uses_the_shared_merge_base_gate(self):
+        step = step_block(
+            PLAN_GUARDS,
+            "Frozen snapshot and dependency pin are unconditionally immutable")
+        self.assertIn("steps.policy_scripts.outputs.gate", step)
+        self.assertIn("--paths legacy oracle-lock", step)
+        self.assertIn("legacy/ and oracle-lock/ are frozen; no label overrides this.",
+                      step)
+        self.assertIn("set -euo pipefail", step)
+
+    def test_custom_gate_error_text_is_used(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary)
+            base = committed_repo(repo)
+            frozen = repo / "legacy" / "file.cs"
+            frozen.parent.mkdir(parents=True)
+            frozen.write_text("changed\n")
+            commit(repo, "change legacy")
+            result = run("check_protected_paths.py", "--base", base,
+                         "--paths", "legacy",
+                         "--error", "legacy/ and oracle-lock/ are frozen; no label overrides this.",
+                         cwd=repo)
+            self.assertEqual(1, result.returncode)
+            self.assertIn("legacy/ and oracle-lock/ are frozen; no label overrides this.",
+                          result.stdout)
+
+    def test_list_test_project_markers(self):
+        sys.path.insert(0, str(SCRIPTS))
+        try:
+            import list_test_projects
+        finally:
+            sys.path.remove(str(SCRIPTS))
+        self.assertTrue(list_test_projects.is_test_project(
+            "<IsTestProject>true</IsTestProject>"))
+        self.assertTrue(list_test_projects.is_test_project("Microsoft.NET.Test.Sdk"))
+        self.assertFalse(list_test_projects.is_test_project("<Project />"))
 
     def test_worktree_project_discovery_uses_the_same_filter(self):
         with tempfile.TemporaryDirectory() as temporary:

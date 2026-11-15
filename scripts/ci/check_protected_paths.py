@@ -32,6 +32,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--base", required=True)
     parser.add_argument("--paths", nargs="+", required=True)
+    parser.add_argument("--error", default="Protected oracle artifacts changed. "
+                        "Use a separate oracle-change PR with a second reviewer.")
     parser.add_argument("--repo", type=Path, default=Path.cwd())
     args = parser.parse_args()
     try:
@@ -41,8 +43,7 @@ def main():
         return 1
     if not changed:
         return 0
-    print("::error::Protected oracle artifacts changed. Use a separate "
-          "oracle-change PR with a second reviewer.")
+    print(f"::error::{args.error}")
     for path in changed:
         print(path)
     return 1

@@ -60,6 +60,16 @@ jobs:
             echo "::error::$EVENT_NAME event has no usable base SHA; refusing to open the first-baseline path"
             exit 1
           fi
+          if [ -n "$base" ]; then
+            if ! git cat-file -e "$base^{commit}" 2>/dev/null; then
+              echo "::error::Resolved base $base is not a commit in this checkout"
+              exit 1
+            fi
+            if ! git merge-base --is-ancestor "$base" HEAD; then
+              echo "::error::Resolved base $base is not an ancestor of HEAD"
+              exit 1
+            fi
+          fi
           printf 'sha=%s\n' "$base" >> "$GITHUB_OUTPUT"
 
       - name: Select the policy materialiser
@@ -95,22 +105,10 @@ jobs:
         shell: bash
         env:
           BASE_SHA: ${{ steps.policy_base.outputs.sha }}
+          CAPTURE: ${{ steps.policy_scripts.outputs.capture }}
+          LISTER: ${{ steps.policy_scripts.outputs.lister }}
         run: |
-          set -euo pipefail
-          if [ -z "${BASE_SHA:-}" ]; then
-            echo "::notice::No base commit for this first push; first-baseline policy applies"
-            printf 'baseline_state=absent\nprojects_state=absent\n' >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          if git cat-file -e "$BASE_SHA:tests/baseline.json" 2>/dev/null; then
-            git show "$BASE_SHA:tests/baseline.json" > "$RUNNER_TEMP/previous-baseline.json"
-            printf 'baseline_state=present\n' >> "$GITHUB_OUTPUT"
-          else
-            printf 'baseline_state=absent\n' >> "$GITHUB_OUTPUT"
-          fi
-          python3 "${{ steps.policy_scripts.outputs.lister }}" --ref "$BASE_SHA" \
-            > "$RUNNER_TEMP/previous-projects.txt"
-          printf 'projects_state=present\n' >> "$GITHUB_OUTPUT"
+          bash "$CAPTURE" "$BASE_SHA" "$RUNNER_TEMP" "$GITHUB_OUTPUT" "$LISTER"
 
       - name: Verify the result and baseline policy
         run: python3 -m unittest discover -s scripts/ci -p 'test_*.py'

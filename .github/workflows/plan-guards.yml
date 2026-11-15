@@ -15,7 +15,9 @@ env:
     tests/golden tests/fixtures tests/baseline.json docs/formal
     docs/port/surface-parity.tsv tools/LegacyOracle tools/V10LibraryFixture
     .github/workflows/linux-ci.yml .github/workflows/plan-guards.yml
-    .github/CODEOWNERS scripts/ci
+    .github/workflows/legacy-oracle.yml .github/workflows/settings-library-oracle.yml
+    .github/workflows/windows-fixture-validation.yml .github/workflows/port-index.yml
+    .github/CODEOWNERS scripts/ci scripts/port scripts/formal
 
 jobs:
   inventory-and-parity:
@@ -56,6 +58,16 @@ jobs:
             echo "::error::$EVENT_NAME event has no usable base SHA; refusing to open the first-baseline path"
             exit 1
           fi
+          if [ -n "$base" ]; then
+            if ! git cat-file -e "$base^{commit}" 2>/dev/null; then
+              echo "::error::Resolved base $base is not a commit in this checkout"
+              exit 1
+            fi
+            if ! git merge-base --is-ancestor "$base" HEAD; then
+              echo "::error::Resolved base $base is not an ancestor of HEAD"
+              exit 1
+            fi
+          fi
           printf 'sha=%s\n' "$base" >> "$GITHUB_OUTPUT"
 
       - name: Select the policy materialiser
@@ -90,14 +102,13 @@ jobs:
         if: >-
           github.event_name == 'pull_request' ||
           github.event_name == 'merge_group'
+        shell: bash
         run: |
-          changed=$(git diff --name-only \
-            "${{ steps.policy_base.outputs.sha }}" HEAD -- legacy oracle-lock)
-          if [ -n "$changed" ]; then
-            echo "::error::legacy/ and oracle-lock/ are frozen; no label overrides this."
-            printf '%s\n' "$changed"
-            exit 1
-          fi
+          set -euo pipefail
+          python3 "${{ steps.policy_scripts.outputs.gate }}" \
+            --base "${{ steps.policy_base.outputs.sha }}" \
+            --paths legacy oracle-lock \
+            --error "legacy/ and oracle-lock/ are frozen; no label overrides this."
 
       - name: Oracle artifacts require an explicit oracle-change PR
         if: >-

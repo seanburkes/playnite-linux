@@ -224,12 +224,13 @@ discovered project, records each exit code, then calls
 base in the workflow from the event fields, and materialises that commit's
 `tests/baseline.json` plus its test-project list (`list_test_projects.py`, not every
 `tests/**/*.csproj`) for that call. A pull-request or merge-queue event with no usable base SHA
-fails closed; only a push before the branch's first commit may open the first-baseline path.
-A supplied-but-missing or unreadable previous baseline or project list is a hard failure, not a
-silent return to bootstrap. Only MTP exit **8** accompanied
+fails closed; only a push before the branch's first commit may report an absent baseline.
+When the base commit exists, `tests/baseline.json` must exist and be readable; a missing or
+empty base baseline is a hard failure, not an absent state. A supplied-but-missing or
+unreadable previous baseline or project list is a hard failure, not a silent return to
+bootstrap. Only MTP exit **8** accompanied
 by a valid JUnit report declaring and containing **zero cases** is non-failing while no
-new-suite baseline is recorded (`tests/baseline.json` has `new: null`, or no baseline file
-exists). Each such project
+new-suite baseline is recorded (`tests/baseline.json` has `new: null`). Each such project
 gets a prominent **NO TESTS EXIST YET** notice in the log and job summary, plus a recorded
 zero count; the result is `bootstrap-empty`, never a tested behavior claim. Missing, malformed
 or inconsistent reports fail. Every other nonzero exit, exit 8 with nonempty results, any
@@ -256,7 +257,9 @@ comes directly from the event fields in the workflow, not from a PR-controlled h
 keeps a pull request from weakening the gate, the results check, or the base project list in
 its own checkout. The protected-path diff is taken from the merge base to `HEAD`, so a PR
 branched before a protected-path change landed on `main` is not charged for that main-side
-change; failure to compute the merge base fails closed. The merge-queue protected-path step
+change; failure to compute the merge base fails closed. The frozen `legacy/`/`oracle-lock/`
+step uses the same merge-base diff through the shared gate and has no label override. The
+merge-queue protected-path step
 re-reads the PR's `oracle-change` label through the API because merge-group events do not
 carry PR labels. It fails closed on a batched group, which does not identify exactly one PR,
 and reports that single-PR limitation explicitly.
@@ -271,9 +274,10 @@ protected baseline, carrying a non-empty `reason` and `approved_by`; a project t
 discovered and run cannot be retired. Prior removal records are immutable, and `replaced_by`
 plus `replacement_executed` must be a string and a nonnegative integer. A recorded rename must
 carry the retired project's executed floor to the replacement. Test discovery for the run uses
-the same test-project filter as the base list. `tests/baseline.json`, `.github/workflows/linux-ci.yml`,
-`.github/workflows/plan-guards.yml`, `.github/CODEOWNERS`, and the `scripts/ci/`
-checker/tests are CODEOWNED and in the protected-path set, so changing the policy surface
+the same test-project filter as the base list. `tests/baseline.json`, the Linux, plan-guards,
+legacy-oracle, settings-library-oracle, windows-fixture-validation and port-index workflows,
+`.github/CODEOWNERS`, and `scripts/ci/`, `scripts/port/`, `scripts/formal/` are CODEOWNED and
+in the protected-path set, so changing the policy surface
 requires the `oracle-change` route and a second reviewer. The protected-path step itself is
 asserted to have no `continue-on-error` and to exit nonzero on a violation. An absent base
 commit (a brand-new branch's first push) keeps the first-baseline addition path open.

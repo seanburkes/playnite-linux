@@ -16,6 +16,7 @@ archived=0
 if [ -n "$base" ] && { \
   git cat-file -e "$base:scripts/ci/check_linux_test_results.py" 2>/dev/null || \
   git cat-file -e "$base:scripts/ci/check_protected_paths.py" 2>/dev/null || \
+  git cat-file -e "$base:scripts/ci/capture_policy_state.sh" 2>/dev/null || \
   git cat-file -e "$base:scripts/ci/list_test_projects.py" 2>/dev/null; }; then
   rm -rf "$root"
   mkdir -p "$root"
@@ -25,7 +26,8 @@ fi
 
 for spec in "checker:check_linux_test_results.py" \
             "gate:check_protected_paths.py" \
-            "lister:list_test_projects.py"; do
+            "lister:list_test_projects.py" \
+            "capture:capture_policy_state.sh"; do
   key=${spec%%:*}
   script=${spec#*:}
   if [ -n "$base" ] && git cat-file -e "$base:scripts/ci/$script" 2>/dev/null; then
