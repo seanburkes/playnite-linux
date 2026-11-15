@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Classify MTP results; empty scaffolds are allowed only before a new-suite baseline.
+"""Classify MTP results; zero-case scaffolds must be declared before a baseline.
 
 The committed baseline is a ratchet. When a previous committed baseline is
 supplied, a change may add the first non-null ``new`` object, but it may never
@@ -9,11 +9,17 @@ by a ``removed_projects`` record in the protected baseline that names a reason
 and an approver; the protected-path ``oracle-change`` gate makes that record a
 second-reviewer decision.
 
-A project may also be absent from the counted baseline only when it is declared
-in ``empty_projects`` with a non-empty reason and still executes zero cases.
-Declaring a project empty is explicit: if it gains a case, the run fails until
-that project is moved into ``new`` as a counted entry. Undeclared zero-case
-projects fail once any new-suite baseline is recorded.
+A project may be absent from the counted baseline only when it is declared in
+``empty_projects`` with a non-empty reason, executes zero cases, and reports
+MTP exit 8. Exit 0 with zero cases is never accepted, declared or not. A
+declaration is immutable history: a later baseline may move the project into
+``new`` as a counted entry or retire it through ``removed_projects``, but it may
+not drop the declaration or edit its reason. A declared-empty project that
+gains a case fails until it is counted.
+
+An undeclared zero-case project fails only once a counted new-suite baseline
+exists. While ``new`` is null, the bootstrap-empty path still accepts MTP exit
+8; that remains the state until the first baseline is recorded.
 
 ``--previous-projects`` lists the project names present at the base commit, so
 deleting a project before the first baseline is recorded is still a failure
@@ -127,7 +133,8 @@ def baseline_count(row, field):
 
 def validate_baseline_policy(current_path, current_document, current, removed,
                              previous_document, previous, previous_removed,
-                             previous_projects, current_projects, empty):
+                             previous_projects, current_projects, empty,
+                             previous_empty):
     """Return failures for a baseline that lowers, deletes or loses history."""
     failures = []
     for project in sorted(empty):
@@ -136,6 +143,24 @@ def validate_baseline_policy(current_path, current_document, current, removed,
                             "counted baseline")
         if project in removed:
             failures.append(f"{project}: declared empty but also recorded as removed")
+
+    for project, previous_reason in sorted(previous_empty.items()):
+        if project in empty:
+            if empty[project] != previous_reason:
+                failures.append(
+                    f"{project}: declared empty reason was edited; declarations are "
+                    "immutable")
+        elif current is not None and project in current:
+            # Explicit empty-to-counted transition: the project gained cases and its
+            # floor now lives in ``new``.
+            continue
+        elif project in removed:
+            # Explicit reviewed retirement.
+            continue
+        else:
+            failures.append(
+                f"{project}: prior empty_projects declaration was dropped; restore it, "
+                "record the project in the counted baseline, or record a reviewed removal")
 
     if previous_document is not None and current_document is None:
         failures.append(f"baseline file {current_path} was deleted; the committed "
@@ -157,6 +182,10 @@ def validate_baseline_policy(current_path, current_document, current, removed,
                     failures.append(
                         f"{project}: baseline {field} count {current_count} is below the "
                         f"previous committed baseline {previous_count}")
+        elif project in empty:
+            failures.append(
+                f"{project}: counted baseline entry cannot move into empty_projects; "
+                "restore the counted entry")
         elif project in removed:
             record = removed[project]
             replacement = record.get("replaced_by")
@@ -201,7 +230,8 @@ def validate_baseline_policy(current_path, current_document, current, removed,
         if "replacement_executed" in record and "replaced_by" not in record:
             failures.append(f"{project}: removal record states a replacement count "
                             "without a replaced_by project")
-        if previous is not None and project not in previous and project not in previous_projects:
+        if (previous is not None and project not in previous
+                and project not in previous_projects and project not in previous_empty):
             failures.append(f"{project}: removal record names a project with no previous "
                             "baseline entry or base-commit project")
         if current is not None and project in current:
@@ -254,7 +284,7 @@ def classify(project, exit_code, counts, baseline, empty):
         if counts["total"] != 0:
             return "fail", (f"declared empty but executed case count "
                             f"{counts['executed']}; record it in the counted baseline")
-        if exit_code in (0, 8):
+        if exit_code == 8:
             return "declared-empty", "declared zero-case scaffold; no tests yet"
         return "fail", f"unaccepted MTP exit code {exit_code}"
     if exit_code == 8 and counts["total"] == 0 and baseline is None:
@@ -295,6 +325,7 @@ def check_results(projects, results, baseline_path, summary_path,
     previous_document = None
     previous = None
     previous_removed = {}
+    previous_empty = {}
     if previous_baseline_state not in ("present", "absent"):
         failures.append(f"invalid previous baseline state: {previous_baseline_state}")
     elif previous_baseline_state == "present":
@@ -306,6 +337,7 @@ def check_results(projects, results, baseline_path, summary_path,
                 previous_document = load_document(previous_baseline_path)
                 previous = read_new_baseline(previous_document)
                 previous_removed = read_removed_projects(previous_document)
+                previous_empty = read_empty_projects(previous_document)
             except (OSError, ValueError) as error:
                 previous_document = previous = None
                 failures.append(f"Invalid previous committed baseline: {error}")
@@ -333,7 +365,7 @@ def check_results(projects, results, baseline_path, summary_path,
     failures.extend(validate_baseline_policy(
         baseline_path, current_document, baseline, removed,
         previous_document, previous, previous_removed,
-        previous_projects, project_names, empty))
+        previous_projects, project_names, empty, previous_empty))
 
     rows = {}
     summary = ["\n### Linux test counts\n",

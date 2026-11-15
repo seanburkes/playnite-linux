@@ -314,6 +314,18 @@ class LinuxTestResultPolicyTests(unittest.TestCase):
                          record["projects"]["Scaffold"]["outcome"])
         self.assertIn("DECLARED EMPTY", self.summary.read_text())
 
+    def test_declared_empty_project_with_zero_cases_exit_0_fails(self):
+        previous = self.record_previous(None, present=("Suite", "Scaffold"))
+        self.record_baseline(
+            {"Suite": {"executed": 43, "passed": 43}},
+            empty={"Scaffold": "marker-only project; no test methods yet"})
+        self.assertEqual(1, self.check(
+            self.project(outcomes=["pass"] * 43),
+            self.project("Scaffold", exit_code=0),
+            previous=previous))
+        self.assertIn("Scaffold: unaccepted MTP exit code 0",
+                      self.summary.read_text())
+
     def test_declared_empty_project_that_gains_a_case_fails(self):
         previous = self.record_previous(None, present=("Suite", "Scaffold"))
         self.record_baseline(
@@ -352,6 +364,70 @@ class LinuxTestResultPolicyTests(unittest.TestCase):
             previous=previous))
         self.assertIn("Suite: baseline executed count 42 is below the previous "
                       "committed baseline 43", self.summary.read_text())
+
+    def test_declared_empty_project_moving_to_counted_baseline_passes(self):
+        empty = {"Scaffold": "marker-only project; no test methods yet"}
+        previous = self.record_previous(
+            None, present=("Suite", "Scaffold"), empty=empty)
+        self.record_baseline(
+            {"Suite": {"executed": 43, "passed": 43},
+             "Scaffold": {"executed": 2, "passed": 2}})
+        self.assertEqual(0, self.check(
+            self.project(outcomes=["pass"] * 43),
+            self.project("Scaffold", outcomes=["pass", "pass"]),
+            previous=previous))
+
+    def test_counted_entry_moving_to_declared_empty_fails(self):
+        previous = self.record_previous(
+            {"Suite": {"executed": 43, "passed": 43},
+             "Scaffold": {"executed": 2, "passed": 2}},
+            present=("Suite", "Scaffold"))
+        self.record_baseline(
+            {"Suite": {"executed": 43, "passed": 43}},
+            empty={"Scaffold": "marker-only project; no test methods yet"})
+        self.assertEqual(1, self.check(
+            self.project(outcomes=["pass"] * 43),
+            self.project("Scaffold", exit_code=8),
+            previous=previous))
+        self.assertIn("Scaffold: counted baseline entry cannot move into "
+                      "empty_projects", self.summary.read_text())
+
+    def test_declared_empty_project_dropped_without_a_transition_fails(self):
+        empty = {"Scaffold": "marker-only project; no test methods yet"}
+        previous = self.record_previous(
+            None, present=("Suite", "Scaffold"), empty=empty)
+        self.record_baseline({"Suite": {"executed": 43, "passed": 43}})
+        self.assertEqual(1, self.check(
+            self.project(outcomes=["pass"] * 43),
+            self.project("Scaffold", exit_code=8),
+            previous=previous))
+        self.assertIn("Scaffold: prior empty_projects declaration was dropped",
+                      self.summary.read_text())
+
+    def test_declared_empty_project_reason_cannot_be_edited(self):
+        previous = self.record_previous(
+            None, present=("Suite", "Scaffold"),
+            empty={"Scaffold": "marker-only project; no test methods yet"})
+        self.record_baseline(
+            {"Suite": {"executed": 43, "passed": 43}},
+            empty={"Scaffold": "some other reason"})
+        self.assertEqual(1, self.check(
+            self.project(outcomes=["pass"] * 43),
+            self.project("Scaffold", exit_code=8),
+            previous=previous))
+        self.assertIn("Scaffold: declared empty reason was edited",
+                      self.summary.read_text())
+
+    def test_declared_empty_project_retired_with_approval_passes(self):
+        previous = self.record_previous(
+            None, present=("Suite", "Scaffold"),
+            empty={"Scaffold": "marker-only project; no test methods yet"})
+        self.record_baseline(
+            {"Suite": {"executed": 43, "passed": 43}},
+            removed={"Scaffold": {"reason": "scaffold retired",
+                                  "approved_by": "oracle-change review"}})
+        self.assertEqual(0, self.check(
+            self.project(outcomes=["pass"] * 43), previous=previous))
 
     def test_declared_empty_project_must_still_run(self):
         self.record_baseline(
