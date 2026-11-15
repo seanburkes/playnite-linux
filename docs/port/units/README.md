@@ -10,6 +10,7 @@ Each unit owns a shard in this directory:
 | `<unit-id>.queue.tsv` | The exact queue header plus exactly one queue row. |
 | `<unit-id>.ledger.tsv` | Optional; the exact ledger header plus zero or more append-only ledger rows. |
 | `removed.tsv` | Optional; the exact `unit`/`reason`/`approved-by` header plus one row per retired unit. |
+| `ledger-corrections.tsv` | Optional; documented one-off timestamp corrections. See below. |
 | `README.md` | This contract. |
 
 A shard uses the same columns, order, and TSV syntax as the aggregate it feeds. The queue
@@ -58,6 +59,30 @@ existing history, and a new row may not carry a backdated instant that sorts ahe
 queue shard and queue aggregate row present at `<ref>` must still be present at head; ledger
 shards and rows may only be removed by a recorded retirement. In CI the base is the pull
 request's base commit (or the previous commit on `main`).
+
+A newly added ledger row must use the current time. The generator rejects an appended row whose
+instant sorts before the newest row already recorded at the base ref, and tells the author to
+use the current time instead of a backdated timestamp.
+
+### One-off timestamp corrections
+
+Append-only history has one documented exception: a row that already landed with a wrong
+timestamp may be corrected once, in a change that also adds a matching record to
+`ledger-corrections.tsv`:
+
+```
+unit	previous-timestamp	corrected-timestamp	actor	reason
+p2-001	2026-11-15T01:51:31Z	2026-11-15T03:30:55Z	fm/p2-ledger-fix	merged out of order: #28 landed before #29, so this row sorted ahead of already-committed history
+```
+
+The record must be new in that change and match a base row exactly: same unit, same previous
+instant, and the corrected row keeps every other field and its position. A correction may only
+move a row later, and one record authorizes one row; any other timestamp edit, field edit,
+deletion, insertion, or reorder still fails. Correction records are themselves append-only, so
+an earlier correction cannot be reused to rewrite a row again. After the correction, regenerate
+local aggregates with `build` to verify, but leave `docs/port/queue.tsv` and
+`docs/port/ledger.tsv` out of the pull request; the post-merge `port-index` workflow commits
+them.
 
 ## Retiring a unit
 

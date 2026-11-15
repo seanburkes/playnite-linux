@@ -1,0 +1,2 @@
+unit	previous-timestamp	corrected-timestamp	actor	reason
+p2-001	2026-11-15T01:51:31Z	2026-11-15T03:30:55Z	fm/p2-ledger-fix	merged out of order: #28 landed before #29, so this row sorted ahead of already-committed history
