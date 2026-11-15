@@ -70,9 +70,12 @@ solution-wide restore.
 path, rejects an existing scratch, rejects overlap with the repo, executable, library,
 library manifest and protected goldens in either direction, and rejects linked ancestors.
 `Test-Validation.ps1` exercises that preflight plus the whole-set comparator on disposable
-synthetic unit bytes. It also drives the built executable's own overlap/link/existing
-destination negatives and checks the source bytes/file set are unchanged. Those tests are
-bounded tooling checks, not v10 fixture or Windows acceptance evidence.
+synthetic unit bytes, then runs the same comparator on the committed 21-payload corpus: it
+assembles a disposable emitted set from `tests/golden`, requires it to pass, flips exactly one
+byte in one copied payload and requires rejection, and verifies `tests/golden` is byte-identical
+before and after. It also drives the built executable's own overlap/link/existing destination
+negatives and checks the source bytes/file set are unchanged. Those tests are bounded tooling
+checks, not v10 fixture or Windows acceptance evidence.
 
 `Verify.ps1` compares the three primary settings bytes after write/read/write and an
 independent repeat, asserts the seeded public values survived serialization, and checks the
@@ -92,6 +95,11 @@ Mode behaviour:
   a one-byte emitted or golden change, a missing/extra/renamed path, a bad/duplicate/traversal
   manifest line, or a missing protected corpus. Absent fixture/goldens are reported as
   acceptance pending, never as success, and no mode updates or accepts goldens.
+
+`Validate` regenerates the payloads from the harness on every run, so a harness-only change
+that alters emitted bytes fails against stale goldens; the committed bytes are never trusted as
+the input side. `tools/LegacyOracle/` and `tools/V10LibraryFixture/` are protected paths, so a
+paired harness+golden change needs the `oracle-change` label and a second review.
 
 Manifest formats are deliberately dead simple and hash-pinned:
 

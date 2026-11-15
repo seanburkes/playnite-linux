@@ -97,6 +97,39 @@ Assert-Rejected { Assert-Goldens $emitted (Join-Path $Scratch 'absent-goldens') 
 Assert-Goldens $emitted $golden
 $checks++
 
+# Real committed corpus: exercise the SAME whole-set comparator on the protected payloads.
+# tests/golden is only read; the emitted set is assembled in scratch from committed bytes, so
+# exactly one flipped byte in exactly one copied payload must be rejected against the stale
+# committed golden. This is also the harness-drift direction: changed emitted bytes cannot
+# keep committed goldens passing in Validate.
+$committedGolden = Join-Path $repo 'tests/golden'
+$beforeCommitted = Get-TreeState $committedGolden
+$committedEmitted = Join-Path $Scratch 'committed-emitted'
+foreach ($group in @('settings', 'library')) {
+    New-Item -ItemType Directory -Path (Join-Path $committedEmitted $group) | Out-Null
+}
+foreach ($name in $PayloadFiles) {
+    $source = Join-Path $committedGolden $name
+    $target = Join-Path $committedEmitted $name
+    [IO.File]::WriteAllBytes($target, [IO.File]::ReadAllBytes($source))
+}
+Assert-Goldens $committedEmitted $committedGolden
+$checks++
+Write-Host "ACCEPTED: committed $($PayloadFiles.Count)-payload corpus and manifest"
+
+$committedPath = Join-Path $committedEmitted 'settings/config.json'
+$committedOriginal = [IO.File]::ReadAllBytes($committedPath)
+$committedChanged = $committedOriginal.Clone()
+$committedChanged[0] = $committedChanged[0] -bxor 1
+[IO.File]::WriteAllBytes($committedPath, $committedChanged)
+Assert-Rejected { Assert-Goldens $committedEmitted $committedGolden } 'one-byte mutation in a copy of the committed corpus'
+[IO.File]::WriteAllBytes($committedPath, $committedOriginal)
+Assert-Goldens $committedEmitted $committedGolden
+$checks++
+Assert-TreeUnchanged $committedGolden $beforeCommitted 'Committed goldens changed during the real-corpus negative.'
+$checks++
+Write-Host 'PASS: committed corpus accepted; one-byte copy rejected; tests/golden unchanged.'
+
 # p1-003's approved SHA256SUMS pins the bundle root and prefixes library entries.
 $libraryManifest = Join-Path $Scratch 'SHA256SUMS'
 $libraryLines = @($lines | Where-Object { $_ -cmatch '  library/' })
@@ -178,6 +211,6 @@ if ($Exe) {
 }
 
 Assert-Goldens $emitted $golden
-Write-Host "PASS: $checks bounded comparator/safety checks on synthetic unit data only; no v10 fixture, golden, or Windows acceptance claim."
+Write-Host "PASS: $checks bounded comparator/safety checks; synthetic unit data plus the committed tests/golden payloads (copy-only one-byte negative); no v10 fixture regeneration, protected write, or Windows acceptance claim."
 # Expected-failure oracle invocations leave LASTEXITCODE nonzero; do not leak it as this script's exit.
 exit 0
