@@ -1,0 +1,26 @@
+// PORTING.md banned table. Namespace descendants and the ICommand exception are
+// checked semantically by ProductSourceTests, because symbol lists cannot express exclusions.
+N:System.Drawing;Use cross-platform image services.
+N:Microsoft.Win32;Use platform interfaces.
+N:System.Management;Use Linux platform services.
+T:System.ServiceProcess.ServiceController;Windows services are not supported.
+T:System.Runtime.Serialization.Formatters.Binary.BinaryFormatter;Use an approved serializer.
+M:System.Threading.Thread.Abort;Use cancellation.
+M:System.Threading.Thread.Abort(System.Object);Use cancellation.
+M:System.AppDomain.CreateDomain(System.String);Use AssemblyLoadContext.
+M:System.Diagnostics.Process.Start(System.String);Use ProcessStartInfo.ArgumentList.
+M:System.Diagnostics.Process.Start(System.String,System.String,System.Security.SecureString,System.String);Use ProcessStartInfo.ArgumentList.
+M:System.Diagnostics.Process.Start(System.String,System.String);Use ProcessStartInfo.ArgumentList.
+M:System.Diagnostics.Process.Start(System.String,System.String,System.String,System.Security.SecureString,System.String);Use ProcessStartInfo.ArgumentList.
+M:System.Diagnostics.ProcessStartInfo.#ctor(System.String,System.String);Use ProcessStartInfo.ArgumentList.
+P:System.Diagnostics.ProcessStartInfo.Arguments;Use ArgumentList.
+M:System.GC.Collect;Do not hide resource leaks.
+M:System.GC.Collect(System.Int32);Do not hide resource leaks.
+M:System.GC.Collect(System.Int32,System.GCCollectionMode);Do not hide resource leaks.
+M:System.GC.Collect(System.Int32,System.GCCollectionMode,System.Boolean);Do not hide resource leaks.
+M:System.GC.Collect(System.Int32,System.GCCollectionMode,System.Boolean,System.Boolean);Do not hide resource leaks.
+// Scoped symbol bans: Environment.Exit (Library), DateTime.Now (Core),
+// Guid.NewGuid and unseeded Random (Logic), DllImport/LibraryImport (Interop).
+// Contextual source tests: System.Windows.* except ICommand, catch {}, async void
+// except UI event handlers, Task.Result/Wait except commented top-level CLI,
+// ProcessStartInfo.Arguments/UseShellExecute (shell strings), and namespace descendants.
