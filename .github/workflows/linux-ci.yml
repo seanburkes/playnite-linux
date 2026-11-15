@@ -1,0 +1,73 @@
+name: linux-ci
+
+# plan-guards runs alongside this workflow on the same unfiltered events. It
+# owns inventory/parity, protected paths, port-index validation, and TLC.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  linux-build-and-test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+      DOTNET_NOLOGO: "1"
+      DOTNET_TEST_RUNNER: VSTest
+      TESTINGPLATFORM_TELEMETRY_OPTOUT: "1"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Verify the exact pinned SDK is selected
+        run: |
+          expected=$(jq -r '.sdk.version' global.json)
+          actual=$(dotnet --version)
+          if [ "$actual" != "$expected" ]; then
+            echo "::error::Expected SDK $expected from global.json; selected $actual"
+            exit 1
+          fi
+
+      - name: Restore locked dependencies (warnings are errors)
+        run: dotnet restore Playnite.slnx --locked-mode -warnaserror
+
+      - name: Build Release (warnings are errors)
+        run: dotnet build Playnite.slnx --configuration Release --no-restore -warnaserror
+
+      - name: Run every new-suite test project
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f "$GITHUB_WORKSPACE/tests/Playnite.Core.Tests/Playnite.Core.Tests.csproj"
+          mapfile -t projects < <(find "$GITHUB_WORKSPACE/tests" -name '*.csproj' \
+            -not -path '*/obj/*' -not -path '*/bin/*' | sort)
+          if [ "${#projects[@]}" -eq 0 ]; then
+            echo "::error::No new-suite test projects found"
+            exit 1
+          fi
+          if [ ! -f "$GITHUB_WORKSPACE/tests/Playnite.Architecture.Tests/Playnite.Architecture.Tests.csproj" ]; then
+            echo "::notice::Architecture test project is not present yet; p2-002 will add it"
+          fi
+          for project in "${projects[@]}"; do
+            name=$(basename "$project" .csproj)
+            echo "Running $name" >> "$GITHUB_STEP_SUMMARY"
+            dotnet test "$project" --configuration Release --no-build --no-restore \
+              --logger "trx;LogFileName=$name.trx" \
+              --results-directory "$RUNNER_TEMP/linux-test-results/$name" \
+              -warnaserror -- xUnit.FailSkips=true xUnit.FailWarns=true
+          done
+
+      - name: Upload Linux test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-test-results
+          path: ${{ runner.temp }}/linux-test-results/**
+          if-no-files-found: warn
