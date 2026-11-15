@@ -6,6 +6,10 @@ name: port-index
 # to refs/heads/main and never edits a unit shard. There is deliberately no
 # manual-dispatch path: a dispatched run has no "previous main" history to
 # validate against and must never be able to write main.
+#
+# main is protected by a ruleset. The default GITHUB_TOKEN cannot push to it,
+# so this workflow authenticates with a repository-scoped write deploy key that
+# is the only bypass actor on the ruleset. The key is used for nothing else.
 
 on:
   push:
@@ -33,6 +37,26 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+
+      # The ruleset's sole bypass actor is this deploy key. Authenticate the
+      # remote with it before any fetch or push, and pin GitHub's published
+      # ed25519 host key instead of trusting a live scan.
+      - name: Authenticate with the aggregate-writer deploy key
+        env:
+          DEPLOY_KEY: ${{ secrets.PORT_INDEX_DEPLOY_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "${DEPLOY_KEY:-}" ]; then
+            echo "::error::PORT_INDEX_DEPLOY_KEY is not configured"
+            exit 1
+          fi
+          key="$RUNNER_TEMP/port-index-deploy"
+          known="$RUNNER_TEMP/port-index-known-hosts"
+          install -m 600 /dev/null "$key"
+          printf '%s\n' "$DEPLOY_KEY" > "$key"
+          printf '%s\n' 'github.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl' > "$known"
+          git remote set-url origin "git@github.com:${GITHUB_REPOSITORY}.git"
+          printf 'GIT_SSH_COMMAND=ssh -i %s -o IdentitiesOnly=yes -o UserKnownHostsFile=%s\n' "$key" "$known" >> "$GITHUB_ENV"
 
       - name: Regenerate, validate, and commit aggregates
         env:
