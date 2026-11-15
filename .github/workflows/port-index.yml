@@ -16,7 +16,7 @@ on:
     branches: [main]
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: port-index-main
@@ -56,7 +56,7 @@ jobs:
           printf '%s\n' "$DEPLOY_KEY" > "$key"
           printf '%s\n' 'github.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl' > "$known"
           git remote set-url origin "git@github.com:${GITHUB_REPOSITORY}.git"
-          printf 'GIT_SSH_COMMAND=ssh -i %s -o IdentitiesOnly=yes -o UserKnownHostsFile=%s\n' "$key" "$known" >> "$GITHUB_ENV"
+          printf 'GIT_SSH_COMMAND=ssh -i %s -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o GlobalKnownHostsFile=/dev/null -o UserKnownHostsFile=%s\n' "$key" "$known" >> "$GITHUB_ENV"
 
       - name: Regenerate, validate, and commit aggregates
         env:
@@ -109,3 +109,8 @@ jobs:
 
           echo "::error::could not update main after a concurrent update; main was left unchanged"
           exit 1
+
+      - name: Remove aggregate-writer SSH credentials
+        if: always()
+        run: |
+          rm -f -- "$RUNNER_TEMP/port-index-deploy" "$RUNNER_TEMP/port-index-known-hosts"
