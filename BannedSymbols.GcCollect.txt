@@ -1,0 +1,8 @@
+// PORTING: GC.Collect is allowed only in a benchmark/soak harness with a comment. A harness
+// opts out of this symbol file with <PlayniteBenchmarkHarness>true</PlayniteBenchmarkHarness>;
+// SourcePolicy.cs still rejects the call unless the statement carries a comment.
+M:System.GC.Collect;Do not hide resource leaks.
+M:System.GC.Collect(System.Int32);Do not hide resource leaks.
+M:System.GC.Collect(System.Int32,System.GCCollectionMode);Do not hide resource leaks.
+M:System.GC.Collect(System.Int32,System.GCCollectionMode,System.Boolean);Do not hide resource leaks.
+M:System.GC.Collect(System.Int32,System.GCCollectionMode,System.Boolean,System.Boolean);Do not hide resource leaks.

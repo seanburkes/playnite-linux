@@ -13,7 +13,9 @@ permissions:
 env:
   PROTECTED_PATHS: >-
     tests/golden tests/fixtures tests/baseline.json docs/formal
-    docs/port/surface-parity.tsv tools/LegacyOracle tools/V10LibraryFixture
+    docs/port/surface-parity.tsv docs/port/02-ARCHITECTURE.md docs/port/PORTING.md
+    docs/port/BenchmarkHarnessAllowlist.props BannedSymbols*.txt
+    tools/LegacyOracle tools/V10LibraryFixture
     .github/workflows/linux-ci.yml .github/workflows/plan-guards.yml
     .github/workflows/legacy-oracle.yml .github/workflows/settings-library-oracle.yml
     .github/workflows/windows-fixture-validation.yml .github/workflows/port-index.yml
