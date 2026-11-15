@@ -17,8 +17,9 @@ PORT_INDEX_BASE_REF environment variable is only a local convenience fallback.
 Pull requests validate the shard tree only. `--shards-only` skips the byte
 comparison against the committed aggregates, which are generated on main by the
 post-merge `port-index` workflow. `--forbid-aggregate-changes` fails when the
-change against `--against` edits either aggregate, so a pull request owns only
-its unit shards.
+branch changed either aggregate since its merge base with `--against`, so a pull
+request owns only its unit shards and a stale branch does not appear to revert
+aggregates that landed on main.
 
 The migration PR that first adds `docs/port/units` is the one legitimate
 pre-migration base: `--allow-pre-migration-base` acknowledges the history skip
@@ -481,17 +482,26 @@ def _repo_relative(path: Path, root: Path) -> str:
 
 
 def changed_aggregates(root: Path, ref: str, queue: Path, ledger: Path) -> list[str]:
-    """Paths of the generated aggregate files changed between `ref` and HEAD."""
+    """Paths of the generated aggregates changed on this branch since its merge base.
+
+    The comparison is three-dot: a stale branch must not appear to revert aggregate
+    changes that landed on main after it forked.
+    """
     resolved = _git(root, "rev-parse", "--verify", "--quiet", f"{ref}^{{commit}}").strip()
     commit = resolved.decode("ascii", "replace")
     if not commit:
         raise PortIndexError(f"cannot resolve base ref {ref!r}")
+    merge_base = (
+        _git(root, "merge-base", commit, "HEAD").strip().decode("ascii", "replace")
+    )
+    if not merge_base:
+        raise PortIndexError(f"no merge base between {ref!r} and HEAD")
     listing = _git(
         root,
         "diff",
         "--name-only",
         "-z",
-        commit,
+        merge_base,
         "HEAD",
         "--",
         _repo_relative(queue, root),

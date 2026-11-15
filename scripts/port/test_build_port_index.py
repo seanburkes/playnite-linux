@@ -865,6 +865,64 @@ class PortIndexTests(unittest.TestCase):
         self.assertEqual(status, 1)
         self.assertIn("expected 10 columns", output)
 
+    def test_post_merge_writer_refuses_an_invalid_shard_tree(self):
+        self.write_queue_shard("p1-001", queue_row("p1-001"))
+        self.build()
+        base = self.start_git_history()
+        queue_before = self.queue.read_bytes()
+        ledger_before = self.ledger.read_bytes()
+        self.write_queue_shard(
+            "p1-001", "\t".join(queue_row("p1-001").split("\t")[:-1])
+        )
+        self.commit("broken shard")
+
+        # This is the writer's validate-before-write step. It must fail and leave
+        # the aggregates untouched rather than committing a laundered deletion.
+        status, output = self.check_with_git("--shards-only", "--against", base)
+
+        self.assertEqual(status, 1)
+        self.assertIn("expected 10 columns", output)
+        self.assertEqual(self.queue.read_bytes(), queue_before)
+        self.assertEqual(self.ledger.read_bytes(), ledger_before)
+
+    def test_aggregate_gate_uses_the_merge_base_when_main_moves_ahead(self):
+        self.write_queue_shard("p1-001", queue_row("p1-001"))
+        self.build()
+        base = self.start_git_history()
+        self.write_queue_shard("p1-001", queue_row("p1-001", status="in-progress"))
+        self.build()
+        main_tip = self.commit("main regenerates aggregates")
+
+        self.git("checkout", "-q", "-b", "feature", base)
+        self.write_queue_shard("p1-001", queue_row("p1-001", status="done"))
+        self.commit("feature changes only its shard")
+
+        two_dot = self.git(
+            "diff", "--name-only", main_tip, "HEAD", "--", "docs/port/queue.tsv"
+        )
+        self.assertIn("docs/port/queue.tsv", two_dot)
+
+        changed = port_index.changed_aggregates(
+            self.root, main_tip, self.queue, self.ledger
+        )
+
+        self.assertEqual(changed, [])
+
+    def test_port_index_workflow_is_push_main_only_and_validates_before_build(self):
+        workflow = (
+            port_index.ROOT / ".github" / "workflows" / "port-index.yml"
+        ).read_text(encoding="utf-8")
+
+        self.assertNotIn("workflow_dispatch", workflow)
+        self.assertNotIn("[skip port-index]", workflow)
+        self.assertNotIn("--force", workflow)
+        self.assertIn("refs/heads/main", workflow)
+        self.assertIn("GITHUB_EVENT_NAME", workflow)
+        self.assertLess(
+            workflow.index("check --shards-only --against \"$BASE_SHA\""),
+            workflow.index("build_port_index.py build"),
+        )
+
     def test_shards_only_still_rejects_a_deleted_queue_shard(self):
         self.write_queue_shard("p1-001", queue_row("p1-001"))
         self.write_queue_shard("p1-002", queue_row("p1-002"))

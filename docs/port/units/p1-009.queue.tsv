@@ -1,2 +1,2 @@
 id	wave	area	unit	depends	status	owner	oracle	test	notes
-p1-009	W1	steam	Steam spec + real artifact corpus	p1-003	todo	steam	steam-spec/fixtures	test:steam-spec	not started; greenfield; ADR-017; redacted real Steam artifact corpus and reviewed written Steam spec missing
+p1-009	W1	steam	Steam spec + real artifact corpus	p1-003	in-progress	steam	steam-spec/fixtures	test:steam-spec	written spec merged in PR #14 (ea4d558); corrected corpus proposal merged in PR #18 (663e02c) with 11 exact protected paths and hashes; the 11 tests/fixtures/steam/real payloads are not committed and await captain approval; captain must also decide whether the corpus keeps real installed-library identities or replaces game ids/names
