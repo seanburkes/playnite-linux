@@ -8,6 +8,8 @@ The icon is a packaging-only shell mark, not a final product asset.
 other arguments dispatch to the packaged desktop shell. Both are self-contained
 .NET **11.0.0**, published with the **11.0.100** SDK from `global.json`.
 RID-specific restore happens in a source export, never in the tracked lockfiles.
+Assembly rejects dirty checkouts and reads both product and packaging inputs from
+one exported commit; the commit is emitted in the workflow summary.
 
 Run `bash packaging/assemble.sh /absolute/new/scratch-directory` from the checkout.
 The result contains `AppDir/`, `payload/`, and the staged Flatpak manifest.
@@ -20,8 +22,9 @@ Flatpak uses **flatpak-builder 1.4.2** (Ubuntu `1.4.2-1build2`) and
 (Ubuntu `0.190-1.1ubuntu0.1`) for native library stripping. The manifest pins both
 Freedesktop runtime and SDK to **25.08**. Their exact OSTree commits, the
 bundled .NET runtime versions, tool versions and artifact byte sizes are recorded
-in each successful workflow summary. Runtime branch updates are not byte-reproducible;
-the summary records precisely which commits were tested.
+in each successful workflow summary. `flatpak-runtime-lock.json` pins both runtime
+refs to exact OSTree commits; CI deploys those commits before building and verifies
+them again after the installed artifact smoke.
 
 The host SVG export validator needs `librsvg2-common=2.58.0+dfsg-1ubuntu0.1`;
 the workflow also installs `libgdk-pixbuf2.0-bin=2.42.10+dfsg-3ubuntu3.3` and
@@ -29,6 +32,8 @@ decodes the icon with GDK before building, so missing loaders or invalid icons f
 
 The Flatpak has display/IPC/GPU access only: no network, home, host filesystem,
 or unrestricted D-Bus permissions. Per-app Flatpak storage remains available.
+CI validates the exact manifest finish-args and the installed effective permissions,
+including rejecting additional filesystem access or D-Bus policy sections.
 CI builds a bundle, installs that bundle into the user installation, verifies its
 installed desktop paths, runs the sandboxed version CLI and headless desktop smoke,
 then uploads the bundle. AppImage CI similarly tests the actual assembled image,

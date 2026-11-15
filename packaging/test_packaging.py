@@ -1,4 +1,5 @@
 import os
+import json
 from pathlib import Path
 import shutil
 import subprocess
@@ -30,7 +31,7 @@ class PackagingTests(unittest.TestCase):
         shutil.copyfile(PACKAGING / self.icon.name, self.icon)
 
     def verify(self):
-        return subprocess.run(["python3", str(PACKAGING / "verify-entry.py"),
+        return subprocess.run(["python3", "-O", str(PACKAGING / "verify-entry.py"),
                                str(self.prefix), "."], capture_output=True, text=True)
 
     def test_complete_entry_resolves(self):
@@ -77,3 +78,32 @@ class PackagingTests(unittest.TestCase):
         (self.prefix / "lib/playnite/cli/Playnite.Cli").write_text("#!/bin/sh\nexit 23\n")
         result = subprocess.run([str(launcher), "--version"], env=os.environ.copy())
         self.assertEqual(result.returncode, 23)
+
+    def test_flatpak_permission_allowlist_rejects_broad_access(self):
+        manifest = json.loads((PACKAGING / f"{APP_ID}.json").read_text())
+        path = self.root / "manifest.json"
+        report = self.root / "permissions.ini"
+        narrow = "[Context]\nshared=ipc;\nsockets=x11;wayland;fallback-x11;\ndevices=dri;\n"
+        for broad_manifest, broad_effective in ((False, False), (True, False), (False, True)):
+            with self.subTest(manifest=broad_manifest, effective=broad_effective):
+                content = dict(manifest)
+                if broad_manifest:
+                    content["finish-args"] = [*content["finish-args"], "--filesystem=home"]
+                path.write_text(json.dumps(content))
+                report.write_text(narrow + ("filesystems=host;\n" if broad_effective else ""))
+                result = subprocess.run(["python3", "-O", str(PACKAGING / "verify-flatpak.py"),
+                                         str(path), str(report)], capture_output=True, text=True)
+                self.assertEqual(result.returncode == 0, not (broad_manifest or broad_effective),
+                                 result.stdout + result.stderr)
+
+    def test_assembly_rejects_dirty_input_before_publishing(self):
+        repo = self.root / "repo"
+        repo.mkdir()
+        subprocess.run(["git", "init", "-q", str(repo)], check=True)
+        script = repo / "assemble.sh"
+        shutil.copyfile(PACKAGING / "assemble.sh", script)
+        result = subprocess.run(["bash", str(script), str(self.root / "output")],
+                                capture_output=True, text=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("requires a clean committed checkout", result.stderr)
+        self.assertFalse((self.root / "output").exists())
