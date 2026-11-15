@@ -1,2 +1,2 @@
 id	wave	area	unit	depends	status	owner	oracle	test	notes
-p3-006	W3	leaves	Search/filter/sort	p3-004	todo	core	property:filter	test:filter	
+p3-006	W3	leaves	Search/filter/sort	p3-004	in-progress	fm/p3-006	legacy:GameDatabase_Filters.cs;SearchViewModel.cs;ComparableList.cs	QueryPropertyTests;QueryDateAndFilterTests	Firstmate-approved stored-field boundary; metadata text filters and metadata/library game sorts deferred; docs/port/p3-006-queries.md; local Core 1365 and Architecture 144 passed; CI and independent reviews pending
