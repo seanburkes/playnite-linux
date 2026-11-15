@@ -172,11 +172,12 @@ commit. It has no manual-dispatch path and never force-pushes.
 
 The contract is in [`units/README.md`](units/README.md). Unit ids are lowercase letters,
 digits, and single hyphens; the units directory accepts only `README.md`, `removed.tsv`, and
-correctly named shards, so a misnamed file fails instead of silently vanishing. Ledger rows
-are append-only: the base rows must stay an exact prefix, so append new rows, never edit,
-delete, duplicate, insert before existing history, or reorder existing ones.
-`check --against <ref>` fails when a base shard, queue row, or ledger row is missing at head,
-and requires `<ref>` to be a strict ancestor of HEAD. Retiring a unit is explicit: delete its
+correctly named shards, so a misnamed file fails instead of silently vanishing. Ledger history
+is append-only in content: never edit, delete, or duplicate an existing row. Add new rows in
+any position, including with an earlier instant than rows already recorded; the generated
+aggregates are ordered by the parent job, never by hand. `check --against <ref>` fails when a
+base shard, queue row, or ledger row is missing or altered at head, and requires `<ref>` to be
+a strict ancestor of HEAD. Retiring a unit is explicit: delete its
 shards and add a new `removed.tsv` row with a reason and a non-empty `approved-by` in the same
 change; retirement records are immutable and captain-authorized, enforced by human review.
 `check --shards-only` is the CI pull request gate; a shard with a missing or reordered header,

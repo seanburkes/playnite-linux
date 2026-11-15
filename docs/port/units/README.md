@@ -45,54 +45,62 @@ filename/id disagreement, ledger rows for a unit without a queue shard, and unex
 in this directory. To inspect what main will generate, run `build` in a scratch checkout and
 discard the two aggregate files; never include them in the PR.
 
-## Ledger history is append-only
+## Ledger history is append-only in content
 
-Ledger rows are append-only history. A later commit may append new rows at the end of a unit's
-ledger shard, but it may never edit an existing row, delete one, duplicate one, or reorder
-existing rows. A duplicate is the same unit, instant, and transition content; timestamps that
-name the same instant (for example `Z` and `+00:00`) are compared as instants.
+Ledger history is append-only in content. A later commit may add rows to a unit's ledger shard,
+but it may never edit an existing row, delete one, or duplicate one. A duplicate is the same
+unit, instant, and transition content; timestamps that name the same instant (for example `Z`
+and `+00:00`) are compared as instants.
 
 `check --against <ref>` enforces this against a base commit that must be a strict ancestor of
-HEAD: the base ledger rows must be an exact prefix of the head rows, and the base ledger
-aggregate must be an exact prefix of the regenerated ledger. A row may not be inserted before
-existing history, and a new row may not carry a backdated instant that sorts ahead of it. Every
-queue shard and queue aggregate row present at `<ref>` must still be present at head; ledger
-shards and rows may only be removed by a recorded retirement. In CI the base is the pull
-request's base commit (or the previous commit on `main`).
+HEAD, per unit, as a multiset: every base ledger row must still exist at head with identical
+field values. Order is not part of the guarantee, so a new row may carry any instant, including
+one older than rows already recorded, and a row may be appended in any position. A head row
+that matches a base row on every field except its timestamp is treated as a timestamp edit, not
+a new event, and is rejected unless a correction names that unit and previous/corrected pair,
+so retaining an old row and adding a changed copy cannot launder an edit. Every queue
+shard and queue aggregate row present at `<ref>` must still be present at head; ledger shards
+and rows may only be removed by a recorded retirement. In CI the base is the pull request's
+base commit (or the previous commit on `main`).
 
-A newly added ledger row must use the current time. The generator rejects an appended row whose
-instant sorts before the newest row already recorded at the base ref, and tells the author to
-use the current time instead of a backdated timestamp.
+## Ordering is generated, not authored
+
+`docs/port/ledger.tsv` is ordered by instant, then unit, then the row's remaining fields, so
+rows that share an instant and unit order by content rather than by their position in a shard.
+`docs/port/queue.tsv` is ordered by wave, then unit. That ordering is derived output: `build`
+produces it, and the post-merge
+`port-index` workflow on `main` is the only writer that commits it. Contributors never
+hand-order or hand-edit an aggregate. The parent job's regeneration normalises order after
+every merge, so a row that lands with an instant earlier than existing history simply sorts
+into its generated position on the next run.
 
 ### One-off timestamp corrections
 
-Append-only history has one documented exception: a row that already landed with a wrong
-timestamp may be corrected once, in a change that also adds a matching record to
-`ledger-corrections.tsv`:
+A row that already landed with a wrong timestamp may be corrected once, in a change that also
+adds a matching record to `ledger-corrections.tsv`:
 
 ```
 unit	previous-timestamp	corrected-timestamp	actor	reason
 p2-001	2026-11-15T01:51:31Z	2026-11-15T03:30:55Z	fm/p2-ledger-fix	merged out of order: #28 landed before #29, so this row sorted ahead of already-committed history
 ```
 
+That is the record already in `ledger-corrections.tsv`; records are append-only, so its text is
+kept verbatim even though the rule it describes is no longer how ordering is handled.
+
 The record must be new in that change and match a base row exactly: same unit, same previous
-instant, and the corrected row keeps every other field and its position. A correction may only
-move a row later, and it must move it strictly after the newest pre-existing ledger row, not
-merely later than its own previous timestamp; otherwise the row would still sort ahead of
-history and the correction would not fix the ordering. At most one correction is allowed per
-unit. A second record for the same unit, including one whose previous timestamp is an earlier
-correction's corrected value, is rejected, so corrections cannot chain across changes.
+instant, and the corrected row keeps every other field. A correction is a move: the previous
+row must be gone from the head shard, not retained beside the corrected copy. A correction may
+only move a row later, never earlier; it corrects recorded content, not ordering. At most one correction is allowed
+per unit. A second record for the same unit, including one whose previous timestamp is an
+earlier correction's corrected value, is rejected, so corrections cannot chain across changes.
 Correction records are themselves append-only, so an earlier correction cannot be reused.
 
 A new correction must be recorded while its unit is live. A record whose unit never existed, or
 whose unit has no queue or ledger shard other than through retirement, is a dead record and is
 rejected; a record added in the same change that retires the unit is also rejected. A historical
 correction stays valid after a later retirement, because the append-only record describes a row
-that did exist when it was recorded. A correction may only move its own row. The base ledger
-aggregate must already be in generated order, and unaffected rows keep their relative order, so
-a correction cannot launder a pre-existing reorder of unrelated rows. `check` prints a notice
-naming every correction record it accepts, so a reviewer sees which record authorized the
-history rewrite.
+that did exist when it was recorded. `check` prints a notice naming every correction record it
+accepts, so a reviewer sees which record authorized the history rewrite.
 
 A correction is a captain-authorised operation, not something a contributor can self-approve.
 It requires the same review gate as an oracle change: the `oracle-change` label plus a second
@@ -100,9 +108,8 @@ reviewer, in addition to the normal two blind reviews. CI enforces the record's 
 history, not who approved it; human review of the record against the corrected row is the
 authority boundary.
 
-`build` enforces the same backdate rule as `check --against`, comparing new rows with the
-committed aggregate it is about to replace. A backdated row fails before either aggregate is
-written, leaving both untouched. After the correction, regenerate local aggregates with `build`
+`build` does not reject a row by its instant; it validates every shard and writes both
+aggregates in generated order. After the correction, regenerate local aggregates with `build`
 to verify, but leave `docs/port/queue.tsv` and `docs/port/ledger.tsv` out of the pull request;
 the post-merge `port-index` workflow commits them.
 
@@ -133,7 +140,8 @@ On a pull request, CI validates the shard tree itself:
 
 - `check --shards-only --against <base>` parses the shards (schema, one row per unit id,
   filename/id agreement, duplicate rejection, strict enumeration) and enforces the ledger
-  prefix/append-only and retirement history against the pull request base.
+  content-set and retirement history against the pull request base. Ordering is not checked
+  on a pull request; the parent regeneration owns it.
 - `--forbid-aggregate-changes` fails the pull request when it changes
   `docs/port/queue.tsv` or `docs/port/ledger.tsv`, even when the new content is exactly what
   `build` would produce. Edit only your unit shard and leave the aggregates to the parent step.
