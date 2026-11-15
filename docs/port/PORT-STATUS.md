@@ -1,14 +1,13 @@
 # Port status
 
-**Phase:** 2 — scaffolding and Phase 2 kickoff (the Phase 1 READY gate was accepted)
+**Phase:** 2 complete — scaffolding exit evidence recorded; owner acceptance pending
 **Updated:** 2026-11-15
-**Next gate:** Phase 2 exit — Linux build/test green, architecture and Windows oracle CI,
-packaging smoke, UI pilot
+**Next gate:** Phase 3 exit (after the Phase 2 exit verdict is accepted)
 
 ## Done
 
 - [x] Frozen v10.64 source imported to `legacy/` (24 MB, no history).
-- [x] 23 ADRs recorded (Linux-first, .NET 11, Avalonia 12, SQLite migration, SDK split,
+- [x] 24 ADRs recorded (Linux-first, .NET 11, Avalonia 12, SQLite migration, SDK split,
       theme format, v1 scope, architectures, packaging, verification, operations).
 - [x] Inventory: 143,152 C# LOC, 68,226 XAML LOC, 726 C# files, 275 XAML files,
       204 test methods (82 parameterised cases), 72 files with Windows-only APIs.
@@ -52,14 +51,35 @@ packaging smoke, UI pilot
       marker).
 - [x] Phase 1 gate reconciled to READY in `docs/port/gates/P1-oracle.md`; p1-006 WebView is
       deferred to v1.1 and is not a v1 gate.
+- [x] Phase 2 solution/projects, shared build/package configuration, analyzers, architecture
+      rules, Linux CI, empty Avalonia/CLI smoke and SDK Abstractions/PublicAPI scaffold merged.
+- [x] Gate tree `a2b66339a41130b40da0b42b94df7984227cf81c`: Linux run
+      [43758217982](https://github.com/seanburkes/playnite-linux/actions/runs/43758217982)
+      passed Architecture 144/144 and Smoke 4/4, zero failures/skips; Core is declared empty
+      (0 cases, MTP exit 8, explicit notice), not a counted passing suite.
+- [x] AppImage and Flatpak packaging run
+      [43758217954](https://github.com/seanburkes/playnite-linux/actions/runs/43758217954)
+      passed on the same tree: 43,731,448-byte AppImage and 34,190,272-byte Flatpak.
+- [x] Fresh Windows oracle run
+      [43758406267](https://github.com/seanburkes/playnite-linux/actions/runs/43758406267)
+      succeeded on the gate tree: 281/281 passed, zero failures/skips, unchanged three
+      authorised exclusions; downloaded TRX and counts agree.
+- [x] New-suite baseline recorded from run 43740834379: Architecture 103/103, Smoke 4/4,
+      Core declared empty; current 144/4 counts preserve the ratchet.
+- [x] Standalone fake-data UI pilot, headless PNG and hardened semantic-tree baseline merged:
+      https://github.com/seanburkes/playnite-linux/pull/38 (`9edf2bb`),
+      https://github.com/seanburkes/playnite-linux/pull/51 (`858eb66`),
+      https://github.com/seanburkes/playnite-linux/pull/54 (`5ce8536`). Not product integration.
+- [x] First Linux performance proxies recorded in `PERFORMANCE.md` by
+      https://github.com/seanburkes/playnite-linux/pull/52; empty-library-open remains
+      NOT MEASURED, explicitly deferred to Phase 4 because no library/database/open API exists.
+- [x] Merged Phase 2 hardening board reconciled in shards; stale UI follow-up notes removed.
+      `gates/P2-scaffolding.md` records run identities, hashes, declared deferrals and residuals.
 
 ## In flight
 
-Phase 2 kickoff units, none started; p2-001 is the entry point:
-
-- p2-001 solution/projects/props; p2-002 analyzers + architecture tests; p2-003 Linux CI +
-  Windows oracle CI; p2-004 empty Avalonia app + CLI smoke; p2-005 packaging smoke; p2-006
-  SDK Abstractions project + PublicAPI.
+No implementation units. Only this `p2-exit` documentation/reconciliation PR is in review;
+after its merge there are no Phase 2 units in flight. Phase 3 has not started.
 
 ## Not started
 
@@ -72,9 +92,13 @@ Phase 2 kickoff units, none started; p2-001 is the entry point:
   end-to-end screen-reader test (for example Orca) was performed, so screen-reader behaviour
   is not claimed. This is a v1 deferral, not an open Phase 1 gate item.
 - **p1-006 — WebView** is deferred to v1.1 by ADR-019; v1 has no browser-engine dependency.
-- **p1-guard-protect** (extend the protected-path check to the guard workflow,
-  `.github/CODEOWNERS` and the port-index generator) is carried into Phase 2 hardening; it is
-  not an open Phase 1 gate item.
+- **Empty-library-open:** NOT MEASURED, deferred to Phase 4; startup/working-set proxies
+  are not readiness, first-frame or loaded-library measurements. Two same-host warm-cache
+  repeats do not establish a distribution.
+- **ADR-024:** single-owner adversarial assistance is not independent approval. The owner
+  exception was taken; correlated blind spots and owner-controlled protection remain risks.
+- **Path guard:** merged hardening is not exhaustive; bypass and over-blocking classes may
+  remain, detailed in `gates/P2-scaffolding.md`. Historical ledger exceptions stay immutable.
 - **Bounded evidence:** the Steam acceptance is single-title/single-host; the Flatpak probe
   ran on an EOL runtime; the X11 accessibility evidence is XWayland, not bare Xorg.
 
@@ -94,13 +118,11 @@ Phase 2 kickoff units, none started; p2-001 is the entry point:
 
 ## Blockers
 
-- Herdr server is not running in this session (`HERDR_ENV` unset). Firstmate can use tmux; no
-  execution blocker.
-- Windows oracle CI needs a runner image with .NET Framework MSBuild. `Playnite.Deps` is
-  publicly reachable, but it is a mutable third-party feed; the SHA-256 pin in `oracle-lock/`
-  is the reproducibility control, and redistribution needs a license review.
-- Steam is greenfield: no v10 implementation exists to port, so its oracle is a recorded
-  artifact corpus + real-install acceptance, not a v10 diff.
+- No unwaived Phase 2 runtime-evidence blocker. The exit PR's owner review/acceptance and
+  merge are still pending; the gate records the library-open deferral rather than measuring it.
+- Release work still needs dependency redistribution/license review. Steam remains greenfield
+  with corpus/real-install acceptance rather than a v10 implementation diff; neither is an
+  unreported scaffolding test pass.
 
 ## Metrics
 
@@ -110,6 +132,7 @@ Phase 2 kickoff units, none started; p2-001 is the entry point:
 | Legacy XAML LOC | 68,226 | `scan_legacy.py` |
 | Legacy executed cases (oracle) | 281 passed, 3 excluded | `tests/baseline.json` |
 | Windows-only files (non-WPF) | 72 | `scan_legacy.py` |
-| New tests at Phase 2 start | 0 | `tests/baseline.json` (`new` is null) |
+| New-suite recorded baseline | 103 architecture + 4 smoke; Core declared empty | `tests/baseline.json`, run 43740834379 |
+| Current new-suite cases | 144 architecture + 4 smoke; zero failures/skips | run 43758217982 on `a2b6633` |
 | Ported parity rows | 0 | `surface-parity.tsv` (0 of 96 rows ported) |
 | Open ADRs | 0 | `00-DECISIONS.md` |
