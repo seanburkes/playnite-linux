@@ -239,7 +239,9 @@ Linux implementations:
   v1 ships English plus cleanly mapped translations; partial locales are marked as such
   (ADR-022).
 - **Accessibility:** AutomationProperties, keyboard navigation, focus order, high contrast.
-  Headless tests assert names/roles for key controls.
+  Headless tests assert names/roles for key controls. v1 does not claim AT-SPI/screen-reader
+  accessibility on Wayland: for Avalonia 12.1.6 it is only observable under X11/XWayland; see
+  Deferred limitations D1 in [`00-DECISIONS.md`](00-DECISIONS.md).
 - **Fullscreen fast-follow:** shared ViewModels; a separate shell with 10-foot layout, gamepad
   navigation, and a large-screen theme.
 

@@ -603,3 +603,44 @@ zero third-party plugins is a claim without a corpus.
 - Less SDK churn; the UI informs the contract.
 - v1 ships a preview SDK with honest claims.
 - The add-on ecosystem migration is a post-v1 project.
+
+---
+
+## Deferred limitations for v1 (not ADRs)
+
+These are accepted v1 limitations recorded after the ADR list was closed at ADR-023. They are
+not new architectural decisions and do not renumber the ADR list.
+
+### D1 — Wayland accessibility (AT-SPI) is unavailable for Avalonia 12.1.6
+
+**Status.** Accepted v1 limitation and deferred item, by captain decision on 2026-11-14.
+Accessibility is **not a v1 requirement**, and this limitation is not a Phase 1 gate blocker.
+
+**Evidence (merged).** `spikes/avalonia-headless/REAL-RUNTIME.md`, merged in PR #24
+(`ff1da20`):
+
+- A real window opens on both native Wayland (`Avalonia.Wayland.WindowImpl`,
+  `xwayland=false`) and X11/XWayland (`Avalonia.X11.X11Window`, `xwayland=true`) at 640x480
+  with compositor screenshots and matching Tab/Space traversal.
+- X11/XWayland exposes the full AT-SPI tree (names, roles, states, `AccessibleId`s) and drives
+  toggle/click/select/text actions.
+- Wayland exposes no AT-SPI tree at all, even with app-logged `AT_SPI_BUS_ADDRESS`,
+  `ACCESSIBILITY_ENABLED=1`, `GTK_A11Y=atspi`, `NO_AT_BRIDGE=0` and a live
+  `org.a11y.Bus.GetAddress`; `Avalonia.Wayland.dll` carries no AT-SPI symbols while
+  `Avalonia.X11.dll` does. A zenity/GTK 4 native-Wayland control probe was visible through the
+  same bus, so the probe was not the problem.
+
+**What the evidence does not show.** No end-to-end screen-reader test (for example Orca) was
+performed; speech output, caret tracking and browse mode are untested and are not claimed. A
+bare Xorg session and generic (uinput/ydotool) input injection were also not tested.
+
+**Scope.** For Avalonia 12.1.6, accessible-to-screen-reader behaviour is only observable under
+X11/XWayland. v1 does not claim screen-reader accessibility on Wayland, and no v1 gate requires
+it. Keyboard navigation, AutomationProperties and semantic-tree tests remain in the product and
+test plan as quality practices; they are not a screen-reader claim.
+
+**Possible future directions.** (a) Document an X11/XWayland fallback for accessibility users
+as a workaround, not a default; (b) track upstream Avalonia Wayland AT-SPI work and re-run the
+probe on each major upgrade; (c) plan a later accessibility milestone with an Orca end-to-end
+pass, a bare Xorg session, generic input injection, focus order and high-contrast checks.
+Revisit on an Avalonia major upgrade or at v1.1.
