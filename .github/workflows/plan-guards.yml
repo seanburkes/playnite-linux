@@ -8,6 +8,7 @@ on:
 
 permissions:
   contents: read
+  pull-requests: read
 
 env:
   PROTECTED_PATHS: >-
@@ -38,6 +39,42 @@ jobs:
             --push-before "${{ github.event.before }}")
           printf 'sha=%s\n' "$base" >> "$GITHUB_OUTPUT"
 
+      - name: Materialise the base policy scripts
+        id: policy_scripts
+        shell: bash
+        env:
+          BASE_SHA: ${{ steps.policy_base.outputs.sha }}
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/base-policy"
+          archived=0
+          if [ -n "${BASE_SHA:-}" ] && { \
+            git cat-file -e "$BASE_SHA:scripts/ci/check_linux_test_results.py" 2>/dev/null || \
+            git cat-file -e "$BASE_SHA:scripts/ci/check_protected_paths.py" 2>/dev/null; }; then
+            rm -rf "$root"
+            mkdir -p "$root"
+            git archive --format=tar "$BASE_SHA" scripts/ci | tar -x -C "$root"
+            archived=1
+          fi
+          for spec in "checker:check_linux_test_results.py" \
+                      "gate:check_protected_paths.py"; do
+            key=${spec%%:*}
+            script=${spec#*:}
+            if [ -n "${BASE_SHA:-}" ] && \
+               git cat-file -e "$BASE_SHA:scripts/ci/$script" 2>/dev/null; then
+              if [ "$archived" -ne 1 ] || [ ! -f "$root/scripts/ci/$script" ]; then
+                echo "::error::Base commit contains scripts/ci/$script but it could not be materialised"
+                exit 1
+              fi
+              printf '%s=%s\n' "$key" "$root/scripts/ci/$script" >> "$GITHUB_OUTPUT"
+              printf '%s_source=base\n' "$key" >> "$GITHUB_OUTPUT"
+            else
+              echo "::warning::BOOTSTRAP: base commit has no scripts/ci/$script; running the head copy for this transition only"
+              printf '%s=%s\n' "$key" "scripts/ci/$script" >> "$GITHUB_OUTPUT"
+              printf '%s_source=head\n' "$key" >> "$GITHUB_OUTPUT"
+            fi
+          done
+
       - name: Frozen snapshot and dependency pin are unconditionally immutable
         if: >-
           github.event_name == 'pull_request' ||
@@ -56,7 +93,28 @@ jobs:
           github.event_name == 'pull_request' &&
           !contains(github.event.pull_request.labels.*.name, 'oracle-change')
         run: |
-          python3 scripts/ci/check_protected_paths.py \
+          python3 "${{ steps.policy_scripts.outputs.gate }}" \
+            --base "${{ steps.policy_base.outputs.sha }}" \
+            --paths $PROTECTED_PATHS
+
+      - name: Oracle artifacts require an explicit oracle-change merge-queue entry
+        if: github.event_name == 'merge_group'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          ref="${{ github.event.merge_group.head_ref }}"
+          pr=$(printf '%s' "$ref" | sed -n 's|.*/pr-\([0-9][0-9]*\)-.*|\1|p')
+          if [ -z "$pr" ]; then
+            echo "::error::Cannot resolve the pull request from merge-group ref $ref"
+            exit 1
+          fi
+          labels=$(gh api "repos/${{ github.repository }}/pulls/$pr" --jq '.labels[].name')
+          if printf '%s\n' "$labels" | grep -qx 'oracle-change'; then
+            echo "oracle-change label present for PR $pr"
+            exit 0
+          fi
+          python3 "${{ steps.policy_scripts.outputs.gate }}" \
             --base "${{ steps.policy_base.outputs.sha }}" \
             --paths $PROTECTED_PATHS
 

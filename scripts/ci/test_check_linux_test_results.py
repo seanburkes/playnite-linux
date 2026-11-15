@@ -285,6 +285,81 @@ class LinuxTestResultPolicyTests(unittest.TestCase):
         self.assertIn("Suite: first baseline executed count 0 is below observed 43",
                       self.summary.read_text())
 
+    def test_first_baseline_cannot_omit_an_observed_project(self):
+        previous = self.record_previous(None, present=("Suite", "OtherSuite"))
+        self.record_baseline({"Suite": {"executed": 43, "passed": 43}})
+        self.assertEqual(1, self.check(
+            self.project(outcomes=["pass"] * 43),
+            self.project("OtherSuite", outcomes=["pass"]),
+            previous=previous))
+        self.assertIn("OtherSuite: observed test project was omitted from the first "
+                      "baseline", self.summary.read_text())
+
+    def test_removal_replacement_must_exist(self):
+        previous, projects = self.record_previous(
+            {"OldSuite": {"executed": 43, "passed": 43}}, present=("OldSuite",))
+        self.record_baseline(
+            {"NewSuite": {"executed": 43, "passed": 43}},
+            removed={"OldSuite": {"reason": "renamed",
+                                  "approved_by": "oracle-change review",
+                                  "replaced_by": "MissingSuite",
+                                  "replacement_executed": 43}})
+        self.assertEqual(1, self.check(
+            self.project("NewSuite", outcomes=["pass"] * 43),
+            previous=(previous, projects)))
+        self.assertIn("OldSuite: removal record names replacement MissingSuite, which is "
+                      "not in the current baseline", self.summary.read_text())
+
+    def test_removal_replacement_count_must_match(self):
+        previous, projects = self.record_previous(
+            {"OldSuite": {"executed": 43, "passed": 43}}, present=("OldSuite",))
+        self.record_baseline(
+            {"NewSuite": {"executed": 43, "passed": 43}},
+            removed={"OldSuite": {"reason": "renamed",
+                                  "approved_by": "oracle-change review",
+                                  "replaced_by": "NewSuite",
+                                  "replacement_executed": 42}})
+        self.assertEqual(1, self.check(
+            self.project("NewSuite", outcomes=["pass"] * 43),
+            previous=(previous, projects)))
+        self.assertIn("OldSuite: removal record states replacement count 42 but "
+                      "NewSuite records 43", self.summary.read_text())
+
+    def test_removal_replacement_count_requires_replacement(self):
+        previous, projects = self.record_previous(
+            {"OldSuite": {"executed": 43, "passed": 43}}, present=("OldSuite",))
+        self.record_baseline(
+            {"NewSuite": {"executed": 43, "passed": 43}},
+            removed={"OldSuite": {"reason": "renamed",
+                                  "approved_by": "oracle-change review",
+                                  "replacement_executed": 43}})
+        self.assertEqual(1, self.check(
+            self.project("NewSuite", outcomes=["pass"] * 43),
+            previous=(previous, projects)))
+        self.assertIn("OldSuite: removal record states a replacement count without a "
+                      "replaced_by project", self.summary.read_text())
+
+    def test_removal_record_replacement_types_are_checked(self):
+        for record, message in (
+                ({"replaced_by": 42}, "invalid replaced_by"),
+                ({"replacement_executed": "43"}, "invalid replacement_executed"),
+                ({"replaced_by": "NewSuite", "replacement_executed": -1},
+                 "invalid replacement_executed")):
+            with self.subTest(record=record):
+                self.record_previous(
+                    {"OldSuite": {"executed": 43, "passed": 43}},
+                    present=("OldSuite",))
+                self.record_baseline(
+                    {"NewSuite": {"executed": 43, "passed": 43}},
+                    removed={"OldSuite": {"reason": "renamed",
+                                          "approved_by": "oracle-change review",
+                                          **record}})
+                self.assertEqual(1, self.check(
+                    self.project("NewSuite", outcomes=["pass"] * 43),
+                    previous=(self.root / "previous-baseline.json",
+                              self.root / "previous-projects.txt")))
+                self.assertIn(message, self.summary.read_text())
+
     def test_prior_removal_record_cannot_be_deleted(self):
         previous, projects = self.record_previous(
             {"NewSuite": {"executed": 43, "passed": 43}},

@@ -16,6 +16,7 @@ rather than zero tests.
 
 import argparse
 import json
+import os
 from pathlib import Path
 import sys
 import xml.etree.ElementTree as ET
@@ -67,6 +68,14 @@ def read_removed_projects(document):
             value = record.get(field)
             if not isinstance(value, str) or not value.strip():
                 raise ValueError(f"removal record for {project} needs a non-empty {field}")
+        if "replaced_by" in record and (not isinstance(record["replaced_by"], str)
+                                        or not record["replaced_by"].strip()):
+            raise ValueError(f"removal record for {project} has an invalid replaced_by")
+        if "replacement_executed" in record and (
+                type(record["replacement_executed"]) is not int
+                or record["replacement_executed"] < 0):
+            raise ValueError(
+                f"removal record for {project} has an invalid replacement_executed")
     return removed
 
 
@@ -338,6 +347,9 @@ def check_results(projects, results, baseline_path, summary_path,
                     failures.append(
                         f"{project}: first baseline {field} count {recorded} is below "
                         f"observed {seen}; record the observed floor")
+        for project in sorted(set(rows) - set(baseline)):
+            failures.append(
+                f"{project}: observed test project was omitted from the first baseline")
 
     if not projects:
         failures.append("no test projects were supplied")
@@ -370,9 +382,13 @@ def main():
     parser.add_argument("--previous-projects-state", choices=("present", "absent"))
     parser.add_argument("--summary", type=Path, required=True)
     args = parser.parse_args()
+    previous_baseline_state = (args.previous_baseline_state
+                               or os.environ.get("PREVIOUS_BASELINE_STATE") or None)
+    previous_projects_state = (args.previous_projects_state
+                               or os.environ.get("PREVIOUS_PROJECTS_STATE") or None)
     return check_results(args.projects, args.results_directory, args.baseline,
                          args.summary, args.previous_baseline, args.previous_projects,
-                         args.previous_baseline_state, args.previous_projects_state)
+                         previous_baseline_state, previous_projects_state)
 
 
 if __name__ == "__main__":

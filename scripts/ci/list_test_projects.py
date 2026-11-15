@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
-"""List test projects present at a commit.
+"""List test projects at a commit or in the working tree.
 
-The base project list is a policy input, so only projects that identify as test
-projects contribute: an ``IsTestProject`` marker or the test SDK reference. A
-fixture or helper project under ``tests/`` must not create a phantom project
-that a later change can "delete".
+Only projects that identify as test projects contribute: an ``IsTestProject``
+marker or the test SDK reference. A fixture or helper project under ``tests/``
+must not create a phantom project in either discovery mode.
 """
 
 import argparse
@@ -22,6 +21,10 @@ def project_name(value):
     return name[:-len(".csproj")] if name.endswith(".csproj") else name
 
 
+def is_test_project(content):
+    return TEST_PROJECT.search(content) is not None
+
+
 def list_test_projects(ref, repo):
     tree = subprocess.run(
         ["git", "ls-tree", "-r", "--name-only", ref, "--", "tests"],
@@ -33,23 +36,39 @@ def list_test_projects(ref, repo):
         project = subprocess.run(
             ["git", "show", f"{ref}:{path}"],
             cwd=repo, capture_output=True, text=True, check=True)
-        if TEST_PROJECT.search(project.stdout):
+        if is_test_project(project.stdout):
             names.add(project_name(path))
     return sorted(names)
 
 
+def list_worktree_projects(root):
+    projects = []
+    for path in sorted((root / "tests").rglob("*.csproj")):
+        if "obj" in path.parts or "bin" in path.parts:
+            continue
+        if is_test_project(path.read_text()):
+            projects.append(str(path.resolve()))
+    return projects
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--ref", required=True)
+    parser.add_argument("--ref")
+    parser.add_argument("--worktree", type=Path)
     parser.add_argument("--repo", type=Path, default=Path.cwd())
     args = parser.parse_args()
+    if bool(args.ref) == bool(args.worktree):
+        parser.error("give exactly one of --ref or --worktree")
     try:
-        names = list_test_projects(args.ref, args.repo)
+        if args.worktree:
+            for project in list_worktree_projects(args.worktree):
+                print(project)
+        else:
+            for name in list_test_projects(args.ref, args.repo):
+                print(name)
     except (OSError, subprocess.SubprocessError) as error:
-        print(f"::error::Cannot list base test projects: {error}")
+        print(f"::error::Cannot list test projects: {error}")
         return 1
-    for name in names:
-        print(name)
     return 0
 
 

@@ -245,15 +245,29 @@ each project's object must contain a nonnegative integer `executed` count and ma
 passed/failed/skipped counts, coverage and capture provenance. Python policy tests in
 `scripts/ci/` exercise the bootstrap-to-baseline transition and these failure paths in CI.
 
+The enforcement scripts are self-protecting. Before the protected-path gate or the results
+checker runs, the workflow materialises `scripts/ci` from the comparison base and executes the
+base copy. If the base commit contains a script but it cannot be materialised, the job fails
+instead of falling back. Only while the base genuinely lacks a script does the head copy run,
+with a named `BOOTSTRAP` warning; once `main` contains the script, every later run uses the
+base copy. This keeps a pull request from weakening the gate or the results check in its own
+checkout. The protected-path diff is taken from the merge base to `HEAD`, so a PR branched
+before a protected-path change landed on `main` is not charged for that main-side change;
+failure to compute the merge base fails closed. The merge-queue protected-path step re-reads
+the PR's `oracle-change` label through the API because merge-group events do not carry PR
+labels.
+
 The committed baseline is a ratchet. A change may add the first non-null `new` object only when
-its counts meet or exceed the observed run, so a first baseline cannot record zero and leave a
-false floor. It may not delete `tests/baseline.json`, reset `new` to null, lower a retained
+its counts meet or exceed the observed run and it names every observed project, so a first
+baseline cannot record zero or omit a project and leave a false floor. It may not delete
+`tests/baseline.json`, reset `new` to null, lower a retained
 project's `executed` or `passed` count, or silently delete or rename a project that was present
 at the base commit. Retiring a project requires a reviewed `removed_projects` entry in the
 protected baseline, carrying a non-empty `reason` and `approved_by`; a project that is still
-discovered and run cannot be retired. Prior removal records are immutable. A recorded rename
-(`replaced_by` plus `replacement_executed`) must carry the retired project's executed floor to
-the replacement. `tests/baseline.json`, `.github/workflows/linux-ci.yml`,
+discovered and run cannot be retired. Prior removal records are immutable, and `replaced_by`
+plus `replacement_executed` must be a string and a nonnegative integer. A recorded rename must
+carry the retired project's executed floor to the replacement. Test discovery for the run uses
+the same test-project filter as the base list. `tests/baseline.json`, `.github/workflows/linux-ci.yml`,
 `.github/workflows/plan-guards.yml`, `.github/CODEOWNERS`, and the `scripts/ci/`
 checker/tests are CODEOWNED and in the protected-path set, so changing the policy surface
 requires the `oracle-change` route and a second reviewer. The protected-path step itself is

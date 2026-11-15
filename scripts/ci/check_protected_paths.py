@@ -7,9 +7,21 @@ import subprocess
 import sys
 
 
-def protected_changes(base, paths, repo):
+def merge_base(base, repo):
     result = subprocess.run(
-        ["git", "diff", "--name-only", base, "HEAD", "--", *paths],
+        ["git", "merge-base", base, "HEAD"],
+        cwd=repo, capture_output=True, text=True, check=False)
+    value = result.stdout.strip()
+    if result.returncode != 0 or not value:
+        raise RuntimeError(result.stderr.strip()
+                           or f"cannot compute merge base for {base}")
+    return value
+
+
+def protected_changes(base, paths, repo):
+    fork_point = merge_base(base, repo)
+    result = subprocess.run(
+        ["git", "diff", "--name-only", fork_point, "HEAD", "--", *paths],
         cwd=repo, capture_output=True, text=True, check=False)
     if result.returncode != 0:
         raise RuntimeError(result.stderr.strip() or "git diff failed")

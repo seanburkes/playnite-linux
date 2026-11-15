@@ -43,6 +43,42 @@ jobs:
             --push-before "${{ github.event.before }}")
           printf 'sha=%s\n' "$base" >> "$GITHUB_OUTPUT"
 
+      - name: Materialise the base policy scripts
+        id: policy_scripts
+        shell: bash
+        env:
+          BASE_SHA: ${{ steps.policy_base.outputs.sha }}
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/base-policy"
+          archived=0
+          if [ -n "${BASE_SHA:-}" ] && { \
+            git cat-file -e "$BASE_SHA:scripts/ci/check_linux_test_results.py" 2>/dev/null || \
+            git cat-file -e "$BASE_SHA:scripts/ci/check_protected_paths.py" 2>/dev/null; }; then
+            rm -rf "$root"
+            mkdir -p "$root"
+            git archive --format=tar "$BASE_SHA" scripts/ci | tar -x -C "$root"
+            archived=1
+          fi
+          for spec in "checker:check_linux_test_results.py" \
+                      "gate:check_protected_paths.py"; do
+            key=${spec%%:*}
+            script=${spec#*:}
+            if [ -n "${BASE_SHA:-}" ] && \
+               git cat-file -e "$BASE_SHA:scripts/ci/$script" 2>/dev/null; then
+              if [ "$archived" -ne 1 ] || [ ! -f "$root/scripts/ci/$script" ]; then
+                echo "::error::Base commit contains scripts/ci/$script but it could not be materialised"
+                exit 1
+              fi
+              printf '%s=%s\n' "$key" "$root/scripts/ci/$script" >> "$GITHUB_OUTPUT"
+              printf '%s_source=base\n' "$key" >> "$GITHUB_OUTPUT"
+            else
+              echo "::warning::BOOTSTRAP: base commit has no scripts/ci/$script; running the head copy for this transition only"
+              printf '%s=%s\n' "$key" "scripts/ci/$script" >> "$GITHUB_OUTPUT"
+              printf '%s_source=head\n' "$key" >> "$GITHUB_OUTPUT"
+            fi
+          done
+
       - name: Capture the committed policy baseline
         id: policy_baseline
         shell: bash
@@ -85,11 +121,14 @@ jobs:
 
       - name: Run every new-suite test project
         shell: bash
+        env:
+          PREVIOUS_BASELINE_STATE: ${{ steps.policy_baseline.outputs.baseline_state }}
+          PREVIOUS_PROJECTS_STATE: ${{ steps.policy_baseline.outputs.projects_state }}
         run: |
           set -euo pipefail
           test -f "$GITHUB_WORKSPACE/tests/Playnite.Core.Tests/Playnite.Core.Tests.csproj"
-          mapfile -t projects < <(find "$GITHUB_WORKSPACE/tests" -name '*.csproj' \
-            -not -path '*/obj/*' -not -path '*/bin/*' | sort)
+          mapfile -t projects < <(python3 scripts/ci/list_test_projects.py \
+            --worktree "$GITHUB_WORKSPACE")
           if [ "${#projects[@]}" -eq 0 ]; then
             echo "::error::No new-suite test projects found"
             exit 1
@@ -116,14 +155,12 @@ jobs:
           # The previous committed baseline and base project list make the
           # baseline a ratchet: lowering, resetting, deleting or silently
           # dropping a project fails instead of reopening bootstrap.
-          python3 scripts/ci/check_linux_test_results.py \
+          python3 "${{ steps.policy_scripts.outputs.checker }}" \
             --projects "${projects[@]}" \
             --results-directory "$RUNNER_TEMP/linux-test-results" \
             --baseline "$GITHUB_WORKSPACE/tests/baseline.json" \
             --previous-baseline "$RUNNER_TEMP/previous-baseline.json" \
-            --previous-baseline-state "${{ steps.policy_baseline.outputs.baseline_state }}" \
             --previous-projects "$RUNNER_TEMP/previous-projects.txt" \
-            --previous-projects-state "${{ steps.policy_baseline.outputs.projects_state }}" \
             --summary "$GITHUB_STEP_SUMMARY"
 
       - name: Install Xvfb for native window smoke
