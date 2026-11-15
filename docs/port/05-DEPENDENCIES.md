@@ -55,8 +55,8 @@ Versions are the current stable lines observed on 2026-11-13. Pin exact versions
 | Stryker.NET | — | Mutation | **dotnet-stryker** | 5.1.0 | Nightly |
 | NetArchTest / ArchUnitNET | — | Architecture | **NetArchTest.Rules** | 1.3.2 | Or ArchUnitNET 0.13.5 |
 | BannedApiAnalyzers | — | API bans | **Microsoft.CodeAnalysis.BannedApiAnalyzers** | latest | |
-| PublicApiAnalyzers | — | SDK surface | **Microsoft.CodeAnalysis.PublicApiAnalyzers** | latest | |
-| ApiCompat | — | v6→v7 report | **Microsoft.DotNet.ApiCompat.Tool** | latest | CI report |
+| PublicApiAnalyzers | — | SDK surface | **Microsoft.CodeAnalysis.PublicApiAnalyzers** | 5.6.0 | Private build dependency of SDK.Abstractions; shipped/unshipped declarations; warnings are errors |
+| ApiCompat | — | SDK compatibility | **Microsoft.DotNet.ApiCompat.Task** | 11.0.100 | Private build dependency of SDK.Abstractions; validates against committed reference assembly on build; full v6→v7 report remains deferred |
 | Microsoft.PowerShell.SDK | GAC 5.1 | Script plugins | **Microsoft.PowerShell.SDK** | 7.7.0 | Cross-platform `pwsh`; not v1 required |
 | Tmds.DBus.Protocol | — | Notifications/tray | **Tmds.DBus.Protocol** | 0.95.2 | Only if Avalonia tray/notification APIs are insufficient |
 

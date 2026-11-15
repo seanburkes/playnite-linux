@@ -1,4 +1,4 @@
-# Architecture and banned-API gates (p2-002)
+# Architecture and banned-API gates (p2-002, p2-006)
 
 The policy comes from `02-ARCHITECTURE.md` §2 and `PORTING.md`'s banned table.
 The frozen reference is `legacy/source/Playnite/Playnite.csproj`: its WPF/Win32,
@@ -87,6 +87,87 @@ Core/Desktop/both SDK assemblies transitively. Framework reference-pack
 catalogs are not treated as application dependencies: net11 exposes Win32 and
 Drawing reference assemblies even to an empty project. Actual uses of those
 framework APIs are checked in source and emitted IL.
+
+## SDK Abstractions boundary and API guards (p2-006)
+
+The scaffold's `Playnite.SDK.Abstractions` is now a versioned `net11.0` contracts
+assembly, matching Core's framework. Its public namespaces remain `Playnite.SDK`,
+`.Models`, `.Data`, `.Events` and `.Plugins` to preserve the oracle's names; the
+assembly split does not force a namespace rename. Core already directly referenced
+Abstractions in the scaffold, and the UI SDK already referenced it too. Those edges
+are retained, not replaced with artificial product logic to manufacture a consumer.
+The target diagram in `02-ARCHITECTURE.md` groups the SDK conceptually; the actual
+Core edge is to **Abstractions, never the Avalonia UI SDK** (ADR-018).
+
+The initial public surface is deliberately seven complete, small contracts, consumed
+by the architecture/contract tests; it is not an application feature or full v6 port:
+
+| Contract | Frozen oracle under `legacy/source/PlayniteSDK/` | Adaptation |
+| --- | --- | --- |
+| `Models.IIdentifiable` | `Models/IIdentifiable.cs` | Guid identity unchanged |
+| `Models.InstallationStatus` | `Models/InstallationStatus.cs` | Numeric values and localization attributes unchanged |
+| `Data.IDataSerializer` | `Data/DataSerialization.cs` | All 27 interface methods; explicit nullable results/outputs and nullable serialization inputs |
+| `Plugins.LibraryGetGamesArgs` | `Plugins/LibraryPlugin.cs` | Retains parameterless constructor and getter/internal setter; adds token constructor so a host in another assembly can supply live cancellation |
+| `Plugins.MetadataField` | `Plugins/MetadataPlugin.cs` | All 19 names and numeric values unchanged |
+| `Events.OnApplicationStartedEventArgs` | `Events/ApplicationEvents.cs` | Complete payload-free event contract, not a fake event implementation |
+| `SdkVersions` | `SdkVersions.cs` | Reads its own assembly version, now 7.0.0.0 |
+
+`IDataSerializer` contains no serializer implementation, globals, or fake-success
+methods. Its nullable outputs preserve the v10 implementation's ability to deserialize
+JSON `null` successfully (`legacy/source/Playnite/Common/Serialization.cs`); a true
+Try result does not promise a non-null object. The full Game/DatabaseObject model,
+collections and database API, game events, plugin base classes, library/metadata
+providers, serializer implementations and static Serialization facade, host facade,
+UI contracts, plugin loading and the full v6→v7 breaking-change report are **not yet
+ported**. Existing surface-parity rows remain planned; this unit does not redefine
+those protected oracle rows as implemented.
+
+### Enforcement and proving tests
+
+`SdkBoundaryPolicy.GraphViolations` consumes the same evaluated direct edges and
+resolved dependency closure as the existing gates. The source rule is part of
+`SourcePolicy`, so `Product_compiler_inputs_obey_the_banned_construct_table` applies
+it to actual compiler inputs, not a separate test-only scan.
+
+| Rule | Proving test in `SdkBoundaryTests` |
+| --- | --- |
+| Core must directly reference Abstractions | `Missing_Core_abstractions_reference_is_rejected` |
+| Core must not reference UI SDK, directly or transitively | `Core_UI_SDK_reference_is_rejected_even_when_transitive` |
+| Core/Abstractions exclude Avalonia; Abstractions also excludes all other product assemblies and Windows platform dependency families, directly or transitively | `Abstractions_forbidden_dependency_is_rejected_directly_and_transitively`; existing Core/Avalonia policy proofs remain |
+| Abstractions cannot use Avalonia, Platform or SDK.Controls namespace types, including aliases/nested generic arrays | `Abstractions_rejects_UI_or_platform_types_even_behind_an_alias` |
+| No type from the UI SDK assembly can be used, regardless of its namespace | `Any_type_from_the_UI_SDK_assembly_is_rejected_regardless_of_namespace` |
+| Valid BCL contracts remain allowed, including the documented ICommand exception | `BCL_contracts_remain_allowed` |
+
+`Evaluated_Core_and_abstractions_obey_the_SDK_boundary` runs the graph rule on the
+real projects. The existing Windows/source/interop bans still apply. Build-only
+PublicApiAnalyzers and ApiCompat.Task are private package references on Abstractions;
+they are explicitly classified as tooling, not new runtime allowances in the table.
+
+PublicApiAnalyzers **5.6.0** automatically consumes `PublicAPI.Shipped.txt` and
+`PublicAPI.Unshipped.txt` from the Abstractions directory. Warnings are build errors.
+`PublicApiTests` verifies the evaluated attachment and warning policy, accepts the
+committed surface, and proves that an untracked addition yields **RS0016** and a
+removed shipped member yields **RS0017**, using the actual analyzer assembly and
+committed API files.
+
+Microsoft.DotNet.ApiCompat.Task **11.0.100** runs after `CoreCompile` in ordinary
+builds, with `ApiCompatValidateAssemblies=true` and the committed reference baseline
+`src/Playnite.SDK.Abstractions/api-baseline/Playnite.SDK.Abstractions.dll` on the left.
+It is not pack-only, is not regenerated by a build, and has no suppressions.
+`ApiCompatTests.ApiCompat_accepts_the_baseline_and_rejects_a_changed_identity_type`
+invokes Microsoft's MSBuild task with resolved framework references: the real output
+passes, while an otherwise identical compilation with `IIdentifiable.Id` changed from
+Guid to string fails with **CP0002**. No public-API analyzer is involved in that
+negative test, so updating the declaration files cannot mask the binary break.
+The baseline README records its provenance and checksum.
+
+Local Release validation on 2026-11-15: narrow architecture-project build succeeded
+with **0 warnings / 0 errors**; the full architecture suite passed **103 cases, 0
+failed, 0 skipped** (the original 76 plus 27 new cases). Two actual narrow negative
+builds were also run and reverted: an untracked public class failed with RS0016;
+changing Id to string **and updating the text API declaration to match** failed with
+CP0002/CP0006. Proof logs are under `/home/sean/src/firstmate/data/p2-006/`.
+Independent blind reviews and CI acceptance remain the merge authority's gates.
 
 ## Banned construct coverage
 

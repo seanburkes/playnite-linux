@@ -20,7 +20,13 @@
       <_ArchitectureInput Include="@(ReferencePath->'Reference|%(FullPath)')" />
       <_ArchitectureInput Include="@(Compile->'Source|%(FullPath)')" />
       <_ArchitectureInput Include="@(Analyzer->'Analyzer|%(Filename)')" />
+      <_ArchitectureInput Include="@(Analyzer->'AnalyzerPath|%(FullPath)')" />
       <_ArchitectureInput Include="@(AdditionalFiles->'AdditionalFile|%(FullPath)')" />
+      <_ArchitectureInput Include="WarningsAsErrors|$(TreatWarningsAsErrors)" />
+      <_ArchitectureInput Include="ApiCompatEnabled|$(ApiCompatValidateAssemblies)" />
+      <_ArchitectureInput Include="ApiCompatBaseline|$(ApiCompatContractAssembly)" />
+      <_ArchitectureInput Include="ApiCompatTask|$(DotNetApiCompatTaskAssembly)" />
+      <_ArchitectureInput Include="RoslynPath|$(RoslynTargetsPath)/bincore" />
     </ItemGroup>
     <WriteLinesToFile File="$(MSBuildProjectDirectory)/obj/architecture/$(Configuration)/inputs.txt"
                       Lines="@(_ArchitectureInput)" Overwrite="true" WriteOnlyWhenDifferent="true" />

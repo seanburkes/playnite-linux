@@ -98,6 +98,11 @@ internal static class SourcePolicy
 
         var name = type.OriginalDefinition.ToDisplayString();
         var ns = type.ContainingNamespace.ToDisplayString();
+        if (project == "Playnite.SDK.Abstractions" && SdkBoundaryPolicy.UiSymbolViolation(type) is { } boundaryViolation)
+        {
+            return boundaryViolation;
+        }
+
         if (InNamespace(ns, "System.Windows") && name != "System.Windows.Input.ICommand"
             || InNamespace(ns, "System.Drawing") || InNamespace(ns, "Microsoft.Win32") || InNamespace(ns, "System.Management")
             || name is "System.ServiceProcess.ServiceController" or "System.Runtime.Serialization.Formatters.Binary.BinaryFormatter")
