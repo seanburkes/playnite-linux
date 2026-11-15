@@ -14,6 +14,13 @@ unless a unit is explicitly retired in `docs/port/units/removed.tsv`, and <ref>
 must be a strict ancestor of HEAD. CI passes the ref with `--against`; the
 PORT_INDEX_BASE_REF environment variable is only a local convenience fallback.
 
+A newly appended ledger row may not carry an instant older than the newest row
+at the base ref; it must use the current time. The only exception to append-only
+history is a timestamp correction recorded in
+`docs/port/units/ledger-corrections.tsv` in the same change. One record may move
+one existing base row later in time and may not change any other field, delete a
+row, or reorder rows. Correction records are themselves append-only.
+
 Pull requests validate the shard tree only. `--shards-only` skips the byte
 comparison against the committed aggregates, which are generated on main by the
 post-merge `port-index` workflow. `--forbid-aggregate-changes` fails when the
@@ -60,6 +67,11 @@ README_NAME = "README.md"
 REMOVED_NAME = "removed.tsv"
 REMOVED_COLUMNS = ["unit", "reason", "approved-by"]
 REMOVED_HEADER = "\t".join(REMOVED_COLUMNS)
+CORRECTIONS_NAME = "ledger-corrections.tsv"
+CORRECTIONS_COLUMNS = [
+    "unit", "previous-timestamp", "corrected-timestamp", "actor", "reason",
+]
+CORRECTIONS_HEADER = "\t".join(CORRECTIONS_COLUMNS)
 
 # Conservative unit-id shape: lowercase letters, digits and single hyphens.
 # No dots, whitespace, path separators, or empty ids.
@@ -67,7 +79,7 @@ _UNIT_ID = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)*")
 _WAVE = re.compile(r"W(\d+)")
 
 ALLOWED_UNIT_FILES = (
-    f"{README_NAME}, {REMOVED_NAME}, "
+    f"{README_NAME}, {REMOVED_NAME}, {CORRECTIONS_NAME}, "
     f"<unit-id>{QUEUE_SUFFIX} and <unit-id>{LEDGER_SUFFIX}"
 )
 
@@ -95,12 +107,32 @@ class LedgerRow:
 
 
 @dataclass(frozen=True)
+class LedgerCorrection:
+    """One recorded, one-off timestamp correction of an existing ledger row."""
+
+    fields: tuple[str, ...]
+
+    @property
+    def unit(self) -> str:
+        return self.fields[0]
+
+    @property
+    def previous(self) -> str:
+        return self.fields[1]
+
+    @property
+    def corrected(self) -> str:
+        return self.fields[2]
+
+
+@dataclass(frozen=True)
 class ShardIndex:
     """The validated head shards."""
 
     queue: dict[str, QueueRow]
     ledger: dict[str, tuple[LedgerRow, ...]]
     removed: dict[str, tuple[str, ...]]
+    corrections: tuple[LedgerCorrection, ...]
 
 
 @dataclass(frozen=True)
@@ -112,6 +144,7 @@ class BaseSnapshot:
     queue_aggregate: tuple[tuple[str, ...], ...]
     ledger_aggregate: tuple[tuple[str, ...], ...]
     removed: dict[str, tuple[str, ...]]
+    corrections: tuple[tuple[str, ...], ...] = ()
 
 
 def _parse_shard_bytes(
@@ -176,12 +209,15 @@ def _read_aggregate(path: Path, header: str) -> tuple[tuple[str, ...], ...]:
     return tuple(rows)
 
 
-def _discover(units: Path) -> tuple[list[Path], list[Path], Path | None, list[str]]:
+def _discover(
+    units: Path,
+) -> tuple[list[Path], list[Path], Path | None, Path | None, list[str]]:
     """Enumerate the units directory, rejecting anything not part of the contract."""
     errors: list[str] = []
     queue_paths: list[Path] = []
     ledger_paths: list[Path] = []
     removed_path: Path | None = None
+    corrections_path: Path | None = None
 
     for entry in sorted(units.iterdir(), key=lambda path: path.name):
         name = entry.name
@@ -194,6 +230,12 @@ def _discover(units: Path) -> tuple[list[Path], list[Path], Path | None, list[st
                 errors.append(f"{entry}: {REMOVED_NAME} must be a regular file")
             else:
                 removed_path = entry
+            continue
+        if name == CORRECTIONS_NAME:
+            if not entry.is_file():
+                errors.append(f"{entry}: {CORRECTIONS_NAME} must be a regular file")
+            else:
+                corrections_path = entry
             continue
 
         suffix = None
@@ -222,7 +264,7 @@ def _discover(units: Path) -> tuple[list[Path], list[Path], Path | None, list[st
         else:
             ledger_paths.append(entry)
 
-    return queue_paths, ledger_paths, removed_path, errors
+    return queue_paths, ledger_paths, removed_path, corrections_path, errors
 
 
 def _collect_queue(paths: list[Path]) -> tuple[dict[str, QueueRow], list[str]]:
@@ -334,6 +376,42 @@ def _collect_removed(path: Path) -> dict[str, tuple[str, ...]]:
     return removed
 
 
+def _collect_corrections(path: Path) -> tuple[LedgerCorrection, ...]:
+    """Read and validate the recorded ledger timestamp corrections."""
+    parsed = _read_shard(path, CORRECTIONS_HEADER, CORRECTIONS_COLUMNS)
+    corrections: list[LedgerCorrection] = []
+    seen: dict[tuple[str, datetime], int] = {}
+    for lineno, fields in parsed:
+        unit_id, previous, corrected, actor, reason = fields
+        if not _UNIT_ID.fullmatch(unit_id):
+            raise PortIndexError(
+                f"{path}:{lineno}: invalid unit id {unit_id!r} in correction record"
+            )
+        try:
+            previous_instant = _timestamp(previous)
+            corrected_instant = _timestamp(corrected)
+        except ValueError as exc:
+            raise PortIndexError(f"{path}:{lineno}: {exc}") from exc
+        if corrected_instant <= previous_instant:
+            raise PortIndexError(
+                f"{path}:{lineno}: corrected timestamp {corrected!r} must be later "
+                f"than previous timestamp {previous!r}"
+            )
+        if not actor.strip():
+            raise PortIndexError(f"{path}:{lineno}: correction record needs an actor")
+        if not reason.strip():
+            raise PortIndexError(f"{path}:{lineno}: correction record needs a reason")
+        key = (unit_id, previous_instant)
+        if key in seen:
+            raise PortIndexError(
+                f"{path}:{lineno}: duplicate correction record for {unit_id!r} at "
+                f"{previous}; first recorded at line {seen[key]}"
+            )
+        seen[key] = lineno
+        corrections.append(LedgerCorrection(tuple(fields)))
+    return tuple(corrections)
+
+
 def _timestamp(value: str) -> datetime:
     try:
         parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
@@ -342,6 +420,13 @@ def _timestamp(value: str) -> datetime:
     if parsed.tzinfo is None:
         raise ValueError(f"timestamp {value!r} needs a UTC offset")
     return parsed.astimezone(timezone.utc)
+
+
+def _timestamp_or_none(value: str) -> datetime | None:
+    try:
+        return _timestamp(value)
+    except ValueError:
+        return None
 
 
 def _wave_key(wave: str) -> tuple[int, int, str]:
@@ -356,7 +441,7 @@ def build_index(units: Path) -> ShardIndex:
     if not units.is_dir():
         raise PortIndexError(f"{units}: shard directory not found")
 
-    queue_paths, ledger_paths, removed_path, errors = _discover(units)
+    queue_paths, ledger_paths, removed_path, corrections_path, errors = _discover(units)
     queue_rows, queue_errors = _collect_queue(queue_paths)
     errors.extend(queue_errors)
     if not queue_rows and not errors:
@@ -377,9 +462,16 @@ def build_index(units: Path) -> ShardIndex:
                 f"{removed_path}: {unit_id!r} is recorded as retired but its shard still exists"
             )
 
+    corrections: tuple[LedgerCorrection, ...] = ()
+    if corrections_path is not None:
+        try:
+            corrections = _collect_corrections(corrections_path)
+        except PortIndexError as exc:
+            errors.append(str(exc))
+
     if errors:
         raise PortIndexError("\n".join(errors))
-    return ShardIndex(queue_rows, ledger_rows, removed)
+    return ShardIndex(queue_rows, ledger_rows, removed, corrections)
 
 
 def _ordered_ledger_rows(index: ShardIndex) -> tuple[LedgerRow, ...]:
@@ -454,12 +546,20 @@ def snapshot_from_dir(units: Path, queue: Path, ledger: Path) -> BaseSnapshot | 
     if removed_path.exists():
         removed = _collect_removed(removed_path)
 
+    base_corrections: tuple[tuple[str, ...], ...] = ()
+    corrections_path = units / CORRECTIONS_NAME
+    if corrections_path.exists():
+        base_corrections = tuple(
+            correction.fields for correction in _collect_corrections(corrections_path)
+        )
+
     return BaseSnapshot(
         queue_shards=queue_shards,
         ledger_shards=ledger_shards,
         queue_aggregate=_read_aggregate(queue, QUEUE_HEADER),
         ledger_aggregate=_read_aggregate(ledger, LEDGER_HEADER),
         removed=removed,
+        corrections=base_corrections,
     )
 
 
@@ -583,6 +683,56 @@ def _is_subsequence(base_rows: tuple[tuple[str, ...], ...], head_rows: list[tupl
     return True
 
 
+def _newest_ledger_instant(snapshot: BaseSnapshot) -> datetime | None:
+    """The newest ledger instant present at the base ref, if any."""
+    instants: list[datetime] = []
+    for rows in snapshot.ledger_shards.values():
+        for row in rows:
+            try:
+                instants.append(_timestamp(row[0]))
+            except ValueError:
+                continue
+    for row in snapshot.ledger_aggregate:
+        if len(row) < 2:
+            continue
+        try:
+            instants.append(_timestamp(row[0]))
+        except ValueError:
+            continue
+    return max(instants) if instants else None
+
+
+def _apply_aggregate_corrections(
+    rows: list[tuple[str, ...]],
+    used_corrections: list[tuple[LedgerCorrection, tuple[str, ...]]],
+) -> list[tuple[str, ...]]:
+    """Reflect authorized timestamp corrections in the base aggregate rows.
+
+    Only rows that a used correction names are changed, and only their timestamp;
+    the corrected rows are re-sorted so a row moved later lands where the generated
+    aggregate will place it. Without corrections the base order is left untouched.
+    """
+    if not used_corrections:
+        return list(rows)
+    corrected = list(rows)
+    for correction, base_row in used_corrections:
+        previous = _timestamp(correction.previous)
+        for position, row in enumerate(corrected):
+            if len(row) < 2 or row[1] != correction.unit:
+                continue
+            try:
+                instant = _timestamp(row[0])
+            except ValueError:
+                continue
+            if instant == previous and tuple(row[2:]) == tuple(base_row[2:]):
+                corrected[position] = (correction.corrected, *row[1:])
+                break
+    corrected.sort(
+        key=lambda row: (_timestamp(row[0]), row[1] if len(row) > 1 else "")
+    )
+    return corrected
+
+
 def validate_history(index: ShardIndex, base: BaseSnapshot) -> list[str]:
     """Reject silent loss or rewriting of units and ledger history."""
     errors: list[str] = []
@@ -650,7 +800,61 @@ def validate_history(index: ShardIndex, base: BaseSnapshot) -> list[str]:
                     "identities, so retire the old unit and add a genuinely new one"
                 )
 
-    # Ledger shards are append-only: base rows must remain an exact prefix.
+    # Correction records are append-only too, and only a record new in this change
+    # may authorize a timestamp edit.
+    head_corrections = tuple(correction.fields for correction in index.corrections)
+    base_corrections = tuple(base.corrections)
+    new_corrections: list[LedgerCorrection] = []
+    if head_corrections[: len(base_corrections)] != base_corrections:
+        errors.append(
+            f"docs/port/units/{CORRECTIONS_NAME}: correction records are append-only; "
+            "existing records may not be deleted, edited, or reordered"
+        )
+    else:
+        new_corrections = list(index.corrections[len(base_corrections):])
+
+    corrections_by_unit: dict[str, list[LedgerCorrection]] = {}
+    for correction in new_corrections:
+        corrections_by_unit.setdefault(correction.unit, []).append(correction)
+        if correction.unit not in base_ledger_ids:
+            errors.append(
+                f"ledger correction for {correction.unit!r} at {correction.previous}: "
+                "no ledger shard for that unit exists at the base ref"
+            )
+        elif correction.unit not in head_ledger_ids:
+            errors.append(
+                f"ledger correction for {correction.unit!r} at {correction.previous}: "
+                "the unit has no ledger shard at head"
+            )
+
+    newest_base = _newest_ledger_instant(base)
+    newest_base_text = (
+        newest_base.strftime("%Y-%m-%dT%H:%M:%SZ") if newest_base is not None else ""
+    )
+
+    def backdated_error(unit_id: str, row: tuple[str, ...]) -> str | None:
+        if newest_base is None:
+            return None
+        instant = _timestamp_or_none(row[0])
+        if instant is None or instant >= newest_base:
+            return None
+        return (
+            f"ledger shard {unit_id!r}: new row at {row[0]} sorts before the newest "
+            f"existing ledger row at {newest_base_text}; append new ledger rows using "
+            "the current time, not a backdated timestamp"
+        )
+
+    # A brand-new ledger shard may only append rows at or after existing history.
+    for unit_id in sorted(head_ledger_ids - base_ledger_ids):
+        for row in index.ledger[unit_id]:
+            message = backdated_error(unit_id, row.fields)
+            if message:
+                errors.append(message)
+
+    used_corrections: list[tuple[LedgerCorrection, tuple[str, ...]]] = []
+
+    # Ledger shards are append-only: base rows must remain an exact prefix, except
+    # for a timestamp that a matching, newly recorded correction authorizes.
     for unit_id in sorted(base_ledger_ids):
         if unit_id in newly_retired:
             continue
@@ -662,31 +866,125 @@ def validate_history(index: ShardIndex, base: BaseSnapshot) -> list[str]:
             continue
         base_rows = base.ledger_shards[unit_id]
         head_rows = [row.fields for row in index.ledger[unit_id]]
-        if tuple(head_rows[: len(base_rows)]) == base_rows:
-            continue
-        if _is_subsequence(base_rows, head_rows):
-            detail = (
-                "new rows were inserted before or between existing rows; append new "
-                "rows at the end of the shard"
-            )
+        replacements: dict[int, LedgerCorrection] = {}
+        for correction in corrections_by_unit.get(unit_id, []):
+            previous = _timestamp(correction.previous)
+            matches = [
+                position
+                for position, row in enumerate(base_rows)
+                if _timestamp(row[0]) == previous
+            ]
+            if len(matches) != 1:
+                errors.append(
+                    f"ledger correction for {unit_id!r} at {correction.previous}: no "
+                    "unique base ledger row carries that timestamp"
+                )
+                continue
+            position = matches[0]
+            if position in replacements:
+                errors.append(
+                    f"ledger correction for {unit_id!r} at {correction.previous}: "
+                    "another correction in this change already targets that base row"
+                )
+                continue
+            replacements[position] = correction
+
+        expected = [
+            (replacements[position].corrected, *row[1:])
+            if position in replacements
+            else row
+            for position, row in enumerate(base_rows)
+        ]
+        prefix_ok = tuple(head_rows[: len(base_rows)]) == tuple(expected)
+        if prefix_ok:
+            for position, correction in replacements.items():
+                used_corrections.append((correction, base_rows[position]))
         else:
-            missing = next((row for row in base_rows if row not in head_rows), None)
-            detail = (
-                "existing rows were reordered"
-                if missing is None
-                else f"row {missing!r} is missing or altered"
+            for position, correction in replacements.items():
+                base_row = base_rows[position]
+                corrected_instant = _timestamp(correction.corrected)
+                candidate = next(
+                    (
+                        index_
+                        for index_, row in enumerate(head_rows)
+                        if _timestamp_or_none(row[0]) == corrected_instant
+                    ),
+                    None,
+                )
+                if candidate is None:
+                    if (
+                        position < len(head_rows)
+                        and _timestamp_or_none(head_rows[position][0])
+                        == _timestamp(base_row[0])
+                    ):
+                        errors.append(
+                            f"ledger correction for {unit_id!r} at "
+                            f"{correction.previous}: recorded but not applied; the base "
+                            "row still carries its previous timestamp"
+                        )
+                elif tuple(head_rows[candidate][1:]) != tuple(base_row[1:]):
+                    errors.append(
+                        f"ledger correction for {unit_id!r} at {correction.previous}: "
+                        "only the timestamp may change, but another field differs"
+                    )
+                elif candidate != position:
+                    errors.append(
+                        f"ledger correction for {unit_id!r} at {correction.previous}: "
+                        "the corrected row must keep its base position"
+                    )
+
+            if not replacements:
+                timestamp_changed = next(
+                    (
+                        base_row
+                        for position, base_row in enumerate(base_rows)
+                        if position < len(head_rows)
+                        and head_rows[position] != base_row
+                        and tuple(head_rows[position][1:]) == tuple(base_row[1:])
+                        and _timestamp_or_none(head_rows[position][0])
+                        != _timestamp_or_none(base_row[0])
+                    ),
+                    None,
+                )
+                if timestamp_changed is not None:
+                    errors.append(
+                        f"ledger shard {unit_id!r}: base row timestamp "
+                        f"{timestamp_changed[0]} was changed without a matching record "
+                        f"in docs/port/units/{CORRECTIONS_NAME}; a timestamp edit "
+                        "requires a documented correction"
+                    )
+
+            if _is_subsequence(base_rows, head_rows):
+                detail = (
+                    "new rows were inserted before or between existing rows; append new "
+                    "rows at the end of the shard"
+                )
+            else:
+                missing = next((row for row in base_rows if row not in head_rows), None)
+                detail = (
+                    "existing rows were reordered"
+                    if missing is None
+                    else f"row {missing!r} is missing or altered"
+                )
+            errors.append(
+                f"ledger shard {unit_id!r}: existing rows are append-only, but {detail}"
             )
-        errors.append(
-            f"ledger shard {unit_id!r}: existing rows are append-only, but {detail}"
-        )
+
+        if prefix_ok and len(head_rows) > len(base_rows):
+            for row in head_rows[len(base_rows):]:
+                message = backdated_error(unit_id, row)
+                if message:
+                    errors.append(message)
 
     # Base ledger aggregate rows must remain an exact prefix of the generated ledger.
+    # Only timestamp corrections accepted above may alter a base aggregate row.
     head_aggregate = [row.fields for row in _ordered_ledger_rows(index)]
     base_aggregate = [
         row
         for row in base.ledger_aggregate
         if len(row) >= 2 and row[1] not in newly_retired
     ]
+    base_aggregate = _apply_aggregate_corrections(base_aggregate, used_corrections)
     for position, expected in enumerate(base_aggregate):
         actual = head_aggregate[position] if position < len(head_aggregate) else None
         if actual == expected:
