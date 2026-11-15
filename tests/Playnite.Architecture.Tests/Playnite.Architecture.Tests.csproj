@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <IsTestProject>true</IsTestProject>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit.v3.core.mtp-v2" />
+    <PackageReference Include="xunit.v3.assert" />
+    <PackageReference Include="xunit.runner.visualstudio" PrivateAssets="all" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../src/Playnite.SDK.Abstractions/Playnite.SDK.Abstractions.csproj" />
+    <ProjectReference Include="../../src/Playnite.SDK/Playnite.SDK.csproj" />
+    <ProjectReference Include="../../src/Playnite.Core/Playnite.Core.csproj" />
+    <ProjectReference Include="../../src/Playnite.Platform/Playnite.Platform.csproj" />
+    <ProjectReference Include="../../src/Playnite.Platform.Linux/Playnite.Platform.Linux.csproj" />
+    <ProjectReference Include="../../src/Playnite.Steam/Playnite.Steam.csproj" />
+    <ProjectReference Include="../../src/Playnite.LegacyImport.Contracts/Playnite.LegacyImport.Contracts.csproj" />
+    <ProjectReference Include="../../src/Playnite.LegacyImport/Playnite.LegacyImport.csproj" />
+    <ProjectReference Include="../../src/Playnite.Desktop/Playnite.Desktop.csproj" />
+    <ProjectReference Include="../../src/Playnite.Cli/Playnite.Cli.csproj" />
+  </ItemGroup>
+</Project>

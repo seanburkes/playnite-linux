@@ -1,0 +1,18 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Playnite.SDK.Abstractions/Playnite.SDK.Abstractions.csproj" />
+    <Project Path="src/Playnite.SDK/Playnite.SDK.csproj" />
+    <Project Path="src/Playnite.Core/Playnite.Core.csproj" />
+    <Project Path="src/Playnite.Platform/Playnite.Platform.csproj" />
+    <Project Path="src/Playnite.Platform.Linux/Playnite.Platform.Linux.csproj" />
+    <Project Path="src/Playnite.Steam/Playnite.Steam.csproj" />
+    <Project Path="src/Playnite.LegacyImport.Contracts/Playnite.LegacyImport.Contracts.csproj" />
+    <Project Path="src/Playnite.LegacyImport/Playnite.LegacyImport.csproj" />
+    <Project Path="src/Playnite.Desktop/Playnite.Desktop.csproj" />
+    <Project Path="src/Playnite.Cli/Playnite.Cli.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Playnite.Core.Tests/Playnite.Core.Tests.csproj" />
+    <Project Path="tests/Playnite.Architecture.Tests/Playnite.Architecture.Tests.csproj" />
+  </Folder>
+</Solution>

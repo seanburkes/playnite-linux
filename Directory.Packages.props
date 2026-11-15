@@ -1,0 +1,12 @@
+<Project>
+  <!-- Only the new port uses central versions; Phase 1 retains its existing pins. -->
+  <PropertyGroup Condition="$(MSBuildProjectDirectory.StartsWith('$(MSBuildThisFileDirectory)src$([System.IO.Path]::DirectorySeparatorChar)')) Or $(MSBuildProjectDirectory.StartsWith('$(MSBuildThisFileDirectory)tests$([System.IO.Path]::DirectorySeparatorChar)'))">
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.12.0" />
+    <PackageVersion Include="xunit.v3.core.mtp-v2" Version="4.0.3" />
+    <PackageVersion Include="xunit.v3.assert" Version="4.0.3" />
+    <PackageVersion Include="xunit.runner.visualstudio" Version="3.1.5" />
+  </ItemGroup>
+</Project>

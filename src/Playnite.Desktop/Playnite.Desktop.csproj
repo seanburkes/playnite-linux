@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <ProjectReference Include="../Playnite.Core/Playnite.Core.csproj" />
+    <ProjectReference Include="../Playnite.SDK/Playnite.SDK.csproj" />
+    <ProjectReference Include="../Playnite.Platform/Playnite.Platform.csproj" />
+    <ProjectReference Include="../Playnite.Steam/Playnite.Steam.csproj" />
+    <ProjectReference Include="../Playnite.LegacyImport.Contracts/Playnite.LegacyImport.Contracts.csproj" />
+  </ItemGroup>
+</Project>

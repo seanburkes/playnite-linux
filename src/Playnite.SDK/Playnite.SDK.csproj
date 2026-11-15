@@ -1,0 +1,5 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <ProjectReference Include="../Playnite.SDK.Abstractions/Playnite.SDK.Abstractions.csproj" />
+  </ItemGroup>
+</Project>

@@ -1,2 +1,2 @@
 id	wave	area	unit	depends	status	owner	oracle	test	notes
-p2-001	W2	scaffold	Solution/projects/props	p1-001	todo	core	-	build	no warnings
+p2-001	W2	scaffold	Solution/projects/props	p1-001	in-progress	core	-	build	12 net11.0 projects; Release build 0 warnings/0 errors; ready for two blind reviews

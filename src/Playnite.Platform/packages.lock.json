@@ -1,0 +1,16 @@
+{
+  "version": 2,
+  "dependencies": {
+    "net11.0": {
+      "playnite.core": {
+        "type": "Project",
+        "dependencies": {
+          "Playnite.SDK.Abstractions": "[1.0.0, )"
+        }
+      },
+      "playnite.sdk.abstractions": {
+        "type": "Project"
+      }
+    }
+  }
+}
