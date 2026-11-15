@@ -1,5 +1,19 @@
-// PORTING.md banned table. Namespace descendants and the ICommand exception are
-// checked semantically by ProductSourceTests, because symbol lists cannot express exclusions.
+// PORTING.md banned-construct inventory. Every symbol-level row lives in this file or in a
+// scoped BannedSymbols.*.txt file; docs/port/ARCHITECTURE-CHECKS.md names the owner of every
+// PORTING row and a test fails when a row has no owner.
+//
+// BannedApiAnalyzers cannot express these rows, so tests/Playnite.Architecture.Tests/
+// SourcePolicy.cs owns them:
+//   System.Windows.* - a namespace ban would also ban the sole allowed cross-platform type,
+//     System.Windows.Input.ICommand, and BannedApi has no allow-exception syntax. A semantic
+//     resolver checks every System.Windows type and permits exactly ICommand (positive test).
+//   catch { } - a syntax rule (empty catch body), not a symbol.
+//   async void - a syntax/signature rule, not a symbol.
+// Rows whose PORTING exception is conditional keep a scoped symbol file:
+//   .Result/.Wait() - BannedSymbols.Blocking.txt, attached to every product except Playnite.Cli
+//     because the exception is a commented top-level Cli entry point, which is semantic.
+//   GC.Collect - BannedSymbols.GcCollect.txt, attached to every product except a declared
+//     benchmark/soak harness; SourcePolicy still requires the comment on the call.
 N:System.Drawing;Use cross-platform image services.
 N:Microsoft.Win32;Use platform interfaces.
 N:System.Management;Use Linux platform services.
@@ -14,13 +28,7 @@ M:System.Diagnostics.Process.Start(System.String,System.String);Use ProcessStart
 M:System.Diagnostics.Process.Start(System.String,System.String,System.String,System.Security.SecureString,System.String);Use ProcessStartInfo.ArgumentList.
 M:System.Diagnostics.ProcessStartInfo.#ctor(System.String,System.String);Use ProcessStartInfo.ArgumentList.
 P:System.Diagnostics.ProcessStartInfo.Arguments;Use ArgumentList.
-M:System.GC.Collect;Do not hide resource leaks.
-M:System.GC.Collect(System.Int32);Do not hide resource leaks.
-M:System.GC.Collect(System.Int32,System.GCCollectionMode);Do not hide resource leaks.
-M:System.GC.Collect(System.Int32,System.GCCollectionMode,System.Boolean);Do not hide resource leaks.
-M:System.GC.Collect(System.Int32,System.GCCollectionMode,System.Boolean,System.Boolean);Do not hide resource leaks.
-// Scoped symbol bans: Environment.Exit (Library), DateTime.Now (Core),
-// Guid.NewGuid and unseeded Random (Logic), DllImport/LibraryImport (Interop).
-// Contextual source tests: System.Windows.* except ICommand, catch {}, async void
-// except UI event handlers, Task.Result/Wait except commented top-level CLI,
-// ProcessStartInfo.Arguments/UseShellExecute (shell strings), and namespace descendants.
+// Scoped symbol bans: Environment.Exit (Library), DateTime.Now (Core), Guid.NewGuid and
+// unseeded Random (Logic), DllImport/LibraryImport (Interop), blocking task members
+// (Blocking, except Cli), GC.Collect (GcCollect, except a declared harness), and
+// ProcessStartInfo.UseShellExecute/namespace-descendant checks in SourcePolicy.
