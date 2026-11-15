@@ -32,3 +32,6 @@ the headless platform, not that a real X11/Wayland window, the Playnite shell, o
 renders identically. `automation-tree.json` is Avalonia's managed automation-peer model, not
 AT-SPI, a screen reader, or any other Linux accessibility bridge. Nothing here launches Steam or a
 game process, and this spike is not a visual-parity, performance, or acceptance gate.
+
+Real-runtime follow-up: `REAL-RUNTIME.md` records the separate GUI launch on Wayland and
+X11/XWayland, including what the AT-SPI screen-reader path does and does not expose.
