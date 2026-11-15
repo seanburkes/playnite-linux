@@ -45,7 +45,7 @@ def ledger_row(
 
 class PortIndexTests(unittest.TestCase):
     def test_local_path_categories_name_the_offending_document_row(self):
-        paths = ("$HOME/task-proof", "${HOME}/task-proof", "~/task-proof", r"C:\Users\alice\proof.log",
+        paths = ("$HOME/task-proof", "${HOME}/task-proof", "~alice/task-proof", r"C:\Users\alice\proof.log",
                  r"C:\Home\alice\proof.log", "C:/Home/alice/proof.log",
                  "/home/alice/firstmate/state/task.status", "/Users/alice/proof",
                  "/root/proof", "/pool/.treehouse/repo/docs")
@@ -65,7 +65,9 @@ class PortIndexTests(unittest.TestCase):
             "docs/proof.md"))
 
     def test_conventional_home_and_system_paths_are_allowed(self):
-        paths = ("~/.steam", "~/.local/share/Steam", "$HOME/.steam", "${HOME}/.config",
+        paths = ("~/.steam", "~/.steam/steam", "~/.local/share/Steam", "~/.config/playnite",
+                 "~/conventional/example", "~alice", "~24", "~204", "~50",
+                 "//path/to", "//path/to code comment", "$HOME/.steam", "${HOME}/.config",
                  "~/.local", "$HOME/config", "docs/firstmate/data/proof.md", "/dev/null",
                  "/proc/meminfo", "/usr/bin", "/etc", "/sys", "/bin", "/sbin", "/lib",
                  "/run", "/media", "/Volumes", "/tmp", "/var", "/mnt", "/opt", "/srv")
@@ -84,11 +86,13 @@ class PortIndexTests(unittest.TestCase):
                 self.assertEqual(1, len(port_index.local_path_errors(line, "docs/proof.md")))
 
     def test_alternate_personal_path_spellings_are_rejected(self):
-        paths = ("~alice", "~alice/private-proof", "%USERPROFILE%",
+        paths = ("~alice/private-proof", "%USERPROFILE%", "%HOMEDRIVE%%HOMEPATH%",
+                 "%APPDATA%", "%LOCALAPPDATA%", "$env:HOMEDRIVE", "$env:HOMEPATH",
+                 "$env:APPDATA", "$env:LOCALAPPDATA",
                  "$env:USERPROFILE", r"C:\\Users\\alice\\proof",
                  r"C:\/Users\/alice\/proof", r"firstmate\\data\\task",
                  r"firstmate\/data\/task", r"\\server\share\proof",
-                 "//server/share/proof",
+                 "//machine-name/share/proof",
                  r"\\server.example.org\share\proof",
                  "%2Fhome%2Falice%2Fproof", "%252Fhome%252Falice%252Fproof",
                  "C%3A%5CUsers%5Calice%5Cproof", "%25USERPROFILE%25%5Cproof",

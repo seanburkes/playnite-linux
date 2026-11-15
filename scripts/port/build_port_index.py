@@ -66,12 +66,15 @@ LEDGER = ROOT / "docs" / "port" / "ledger.tsv"
 
 # Task directories, not standard system roots. Changes are protected policy changes.
 LOCAL_TASK_ROOTS = ("/tmp/opencode", "/srv/firstmate", "/var/lib/firstmate")
-HOME_PREFIX = r"(?:\$(?:HOME\b|\{HOME\})|~)[\\/]"
+HOME_PREFIX = r"\$(?:HOME\b|\{HOME\})[\\/]"
+WINDOWS_HOME_VARIABLE = r"(?:USERPROFILE|HOMEDRIVE|HOMEPATH|APPDATA|LOCALAPPDATA)"
 LOCAL_PATH = re.compile(
     r"(?<![\w])/(?:home|Users|root)/[^\s/]+|"
     r"(?<![\w])(?:" + "|".join(map(re.escape, LOCAL_TASK_ROOTS)) + r")(?:/|\b)|"
     r"(?<![\w])" + HOME_PREFIX + r"[^\s/]+|"
-    r"(?<![\w./-])~[\w.-]+|%USERPROFILE%|\$env:USERPROFILE\b|"
+    r"(?<![\w./-])~[\w.-]+/|%" + WINDOWS_HOME_VARIABLE + r"%|"
+    r"\$env:" + WINDOWS_HOME_VARIABLE + r"\b|"
+    r"(?<![\w])~/(?:[^\s/]+/)*firstmate/(?:data|state)(?:/|\b)|"
     r"(?<![\w])[A-Za-z]:[\\/](?:Users|Home|Documents and Settings)(?:[\\/]|\b)|"
     r"(?<![\w./-])/?firstmate/(?:data|state)(?:/|\b)|"
     r"(?<![\w.-])\.treehouse/",
@@ -83,7 +86,11 @@ REMOTE_URL = re.compile(
     r"(?::\d+)?/[^\s<>()\[\]{}|,;`\"']+",
     re.IGNORECASE,
 )
-UNC_PATH = re.compile(r"(?<![\w])(?:\\\\|//)[^\\/\s]+[\\/]+[^\\/\s]+")
+UNC_PATH = re.compile(
+    r"(?<![\w])(?:\\\\[^\\/\s]+[\\/]+|"
+    r"//[a-z0-9][a-z0-9.-]*[.-][a-z0-9.-]+/)[^\\/\s]+",
+    re.IGNORECASE,
+)
 GENERIC_HOME_PATH = re.compile(
     r"(?<![\w])" + HOME_PREFIX
     + r"(?:\.steam|\.local/share/Steam|\.local|\.config|config)(?![\w/\\.-])",

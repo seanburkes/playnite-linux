@@ -5,9 +5,12 @@ The local-path guard starts from fixed main commit
 New personal home-directory, orchestrator data/state, and worktree references must use
 repository-relative evidence instead. Named user homes, home-variable/tilde task paths,
 Windows Users/Home paths, and the small protected `LOCAL_TASK_ROOTS` tuple are covered.
-Conventional Steam/config home references and standard system paths are not private evidence
-and remain allowed. Generic home allowances match exact path tokens, not whole lines or
-Markdown labels: a private link target or another private path on that line is still checked.
+Unnamed-user tilde paths, including conventional Steam/config subdirectories, and standard
+system paths are not private evidence and remain allowed. Named-user tilde paths require a
+separator after the username; approximate-number prose is not a path. Windows profile,
+home-drive/home-path and application-data environment forms remain personal references.
+Allowances never exempt whole lines or Markdown labels: a private link target or another
+private path on that line is still checked.
 Repository-relative orchestrator documentation paths are allowed; data/state paths anchored
 in a personal home or a configured task root, or a bare orchestrator data/state directory,
 are not. Named-user tilde forms, Windows profile environment forms, escaped/mixed separators,
@@ -45,7 +48,21 @@ elsewhere on the same line still fails; a file URI does not receive this remote-
 Markdown delimiters and punctuation terminate a remote target, so an adjacent private target
 cannot be swallowed by the URL exemption. Remote targets are removed before decoding;
 remaining percent encoding is decoded to stability and separators are normalized before
-matching. Protocol-relative domain URLs remain remote URLs; unqualified share paths are UNC.
+matching. Protocol-relative domain URLs remain remote URLs. Backslash UNC shares are checked;
+forward-slash shares require a host-like first segment containing a dot or hyphen, so ordinary
+double-slash code comments are not treated as shares.
+
+## Capped scope and residual limitations
+
+This is a bounded documentation guard, not a general path classifier or a secret scanner.
+Unnamed tilde references are conventional unless they contain an explicit task-data or
+worktree marker. Single-label forward-slash shares cannot reliably be distinguished from
+code comments and are allowed; domain-like protocol-relative targets remain exempt URLs.
+Custom machine-local roots outside the configured task roots and paths that contain no
+recognized personal/task marker are not detected. Arbitrary encodings beyond percent escapes
+and separator normalization are outside scope. The remote-target parser uses common prose
+and Markdown delimiters rather than implementing every URL grammar. These residual classes
+are documented instead of adding another enumeration of spellings or application paths.
 
 The scan covers Markdown, TSV, text, reStructuredText, and AsciiDoc under `docs/`, root Markdown,
 and Markdown under `spikes/`, `tests/`, `tools/`, `packaging/`, and `src/`, including new files
