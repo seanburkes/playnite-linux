@@ -928,12 +928,62 @@ class PortIndexTests(unittest.TestCase):
                 "dead record",
             )
         )
+        self.build()
 
         status, output = self.check_against(base)
 
         self.assertEqual(status, 1)
-        self.assertIn("no queue shard", output)
-        self.assertIn("dead correction record", output)
+        self.assertIn("retired in this change", output)
+        self.assertIn("correction only while the unit is live", output)
+        self.assertIn("no ledger shard at head", output)
+
+    def test_correction_for_a_unit_that_never_had_a_ledger_shard_is_rejected(self):
+        self.write_queue_shard("p1-001", queue_row("p1-001"))
+        self.write_corrections(
+            (
+                "p1-001",
+                "2026-11-14T17:00:00Z",
+                "2026-11-14T18:00:00Z",
+                "tester",
+                "no ledger row to correct",
+            )
+        )
+
+        with self.assertRaises(port_index.PortIndexError) as raised:
+            self.render()
+        self.assertIn("no ledger shard to correct", str(raised.exception))
+
+    def test_historical_correction_survives_a_later_retirement(self):
+        correction = (
+            "p1-002",
+            "2026-11-14T17:00:00Z",
+            "2026-11-14T18:00:00Z",
+            "tester",
+            "merged out of order",
+        )
+        base = self.write_base(
+            {"p1-001": queue_row("p1-001"), "p1-002": queue_row("p1-002")},
+            {
+                "p1-001": [ledger_row("2026-11-14T17:00:00Z", "p1-001")],
+                "p1-002": [ledger_row("2026-11-14T18:00:00Z", "p1-002")],
+            },
+            corrections=[correction],
+        )
+        self.write_queue_shard("p1-001", queue_row("p1-001"))
+        self.write_ledger_shard(
+            "p1-001", ledger_row("2026-11-14T17:00:00Z", "p1-001")
+        )
+        (self.units / "removed.tsv").write_text(
+            port_index.REMOVED_HEADER + "\np1-002\tretired\tcaptain\n"
+        )
+        self.write_corrections(correction)
+        self.build()
+
+        status, output = self.check_against(base)
+
+        self.assertEqual(status, 0, output)
+        self.assertIn("history matches BASE", output)
+        self.assertIn("notice: ledger correction p1-002", output)
 
     def test_correction_cannot_launder_a_reordered_base_aggregate(self):
         base = self.write_base(

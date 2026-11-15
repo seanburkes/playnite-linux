@@ -21,8 +21,8 @@ The only exception to append-only history is a timestamp correction recorded in
 `docs/port/units/ledger-corrections.tsv` in the same change. At most one record
 per unit may move one existing base row strictly past the newest pre-existing
 row, and it may not change any other field, delete a row, or reorder rows. A
-record names a live unit with queue and ledger shards; correction records are
-themselves append-only.
+record names a unit that was live when it was recorded, so a later retirement
+does not invalidate it; correction records are themselves append-only.
 
 Pull requests validate the shard tree only. `--shards-only` skips the byte
 comparison against the committed aggregates, which are generated on main by the
@@ -472,14 +472,18 @@ def build_index(units: Path) -> ShardIndex:
         except PortIndexError as exc:
             errors.append(str(exc))
 
-    # A correction must name a live unit. Without a queue shard it is a dead
-    # record that can never be applied, so reject it in build and check alike.
+    # A correction must name a unit that existed when it was recorded. A retired
+    # unit has no shards today, so a historical correction stays valid after a
+    # later retirement; only a unit that never existed, or that still exists
+    # without the shard the correction needs, is a dead record.
     for correction in corrections:
+        if correction.unit in removed:
+            continue
         if correction.unit not in queue_rows:
             errors.append(
                 f"docs/port/units/{CORRECTIONS_NAME}: correction for "
                 f"{correction.unit!r} at {correction.previous}: no queue shard for "
-                "that unit (dead correction record)"
+                "that unit and it is not retired (dead correction record)"
             )
         elif correction.unit not in ledger_rows:
             errors.append(
@@ -918,6 +922,21 @@ def validate_history(index: ShardIndex, base: BaseSnapshot) -> list[str]:
     corrections_by_unit: dict[str, list[LedgerCorrection]] = {}
     for correction in new_corrections:
         corrections_by_unit.setdefault(correction.unit, []).append(correction)
+        # A new correction must be recorded while its unit is live. A historical
+        # record is untouched by a later retirement, but a record added in the
+        # same change that retires the unit is a dead record for a deleted row.
+        if correction.unit in newly_retired:
+            errors.append(
+                f"ledger correction for {correction.unit!r} at {correction.previous}: "
+                "the unit is retired in this change; record a correction only while "
+                "the unit is live"
+            )
+        elif correction.unit not in base_queue_ids:
+            errors.append(
+                f"ledger correction for {correction.unit!r} at {correction.previous}: "
+                "no queue shard for that unit exists at the base ref (dead "
+                "correction record)"
+            )
         if correction.unit not in base_ledger_ids:
             errors.append(
                 f"ledger correction for {correction.unit!r} at {correction.previous}: "

@@ -84,8 +84,11 @@ unit. A second record for the same unit, including one whose previous timestamp 
 correction's corrected value, is rejected, so corrections cannot chain across changes.
 Correction records are themselves append-only, so an earlier correction cannot be reused.
 
-A correction must name a live unit: a record whose unit has no queue shard (or no ledger shard)
-is a dead record and is rejected. A correction may only move its own row. The base ledger
+A new correction must be recorded while its unit is live. A record whose unit never existed, or
+whose unit has no queue or ledger shard other than through retirement, is a dead record and is
+rejected; a record added in the same change that retires the unit is also rejected. A historical
+correction stays valid after a later retirement, because the append-only record describes a row
+that did exist when it was recorded. A correction may only move its own row. The base ledger
 aggregate must already be in generated order, and unaffected rows keep their relative order, so
 a correction cannot launder a pre-existing reorder of unrelated rows. `check` prints a notice
 naming every correction record it accepts, so a reviewer sees which record authorized the
