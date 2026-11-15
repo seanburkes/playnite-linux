@@ -182,6 +182,26 @@ class AggregateOwnershipTests(unittest.TestCase):
                               repo, main_tip)
             self.assertEqual(0, result.returncode, result.stdout + result.stderr)
 
+    def test_recorded_base_environment_is_honoured(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary)
+            base = base_repo(repo)
+            git(repo, "checkout", "-q", "-b", "recorded")
+            write_shard(repo, "p-recorded")
+            build(repo)
+            recorded = commit(repo, "recorded base aggregates")
+            git(repo, "checkout", "-q", "main")
+            git(repo, "checkout", "-q", "-b", "pr")
+            git(repo, "checkout", recorded, "--", "docs/port/queue.tsv",
+                "docs/port/ledger.tsv")
+            commit(repo, "carry recorded-base aggregates")
+            script = run_block(PLAN_GUARDS, "Port aggregates are generated on main")
+            result = run_step(script, repo, base, recorded)
+            self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+            result = run_step(script, repo, base, base)
+            self.assertEqual(1, result.returncode)
+            self.assertIn("changed: docs/port/queue.tsv", result.stderr)
+
     def test_merge_main_pr_with_current_main_aggregates_passes(self):
         with tempfile.TemporaryDirectory() as temporary:
             repo = Path(temporary)

@@ -204,8 +204,7 @@ jobs:
             echo "::warning::BOOTSTRAP: base commit has no scripts/port/build_port_index.py; using the head tool"
           fi
           python3 "$head_tool" check --shards-only \
-            --against "$merge_base" --forbid-aggregate-changes \
-            --recorded-base "$RECORDED_BASE"
+            --against "$merge_base" --forbid-aggregate-changes
 
       - name: Port shards are valid and history is preserved
         shell: bash

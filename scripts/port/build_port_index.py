@@ -1138,9 +1138,11 @@ def main(
                 file=sys.stderr,
             )
             return 1
+        recorded_base = (args.recorded_base
+                         or os.environ.get("RECORDED_BASE") or None)
         try:
             changed = changed_aggregates(root, args.against, queue, ledger,
-                                         args.recorded_base)
+                                         recorded_base)
         except PortIndexError as exc:
             print(f"error: {exc}", file=sys.stderr)
             return 1
