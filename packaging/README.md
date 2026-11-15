@@ -23,6 +23,10 @@ bundled .NET runtime versions, tool versions and artifact byte sizes are recorde
 in each successful workflow summary. Runtime branch updates are not byte-reproducible;
 the summary records precisely which commits were tested.
 
+The host SVG export validator needs `librsvg2-common=2.58.0+dfsg-1ubuntu0.1`;
+the workflow also installs `libgdk-pixbuf2.0-bin=2.42.10+dfsg-3ubuntu3.3` and
+decodes the icon with GDK before building, so missing loaders or invalid icons fail early.
+
 The Flatpak has display/IPC/GPU access only: no network, home, host filesystem,
 or unrestricted D-Bus permissions. Per-app Flatpak storage remains available.
 CI builds a bundle, installs that bundle into the user installation, verifies its

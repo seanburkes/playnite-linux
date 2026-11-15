@@ -48,7 +48,9 @@ jobs:
           ARCH=x86_64 ./appimagetool.AppImage --appimage-extract-and-run --no-appstream --runtime-file runtime-x86_64 AppDir artifacts/Playnite-Linux-x86_64.AppImage
           image="$RUNNER_TEMP/package/artifacts/Playnite-Linux-x86_64.AppImage"
           test -s "$image"
-          test "$(timeout 30s "$image" --appimage-extract-and-run --version)" = '1.0.0.0'
+          version=$(timeout 30s "$image" --appimage-extract-and-run --version)
+          printf 'Packaged CLI version: %s\n' "$version"
+          test "$version" = '1.0.0.0'
           timeout 30s "$image" --appimage-extract-and-run --headless --smoke
           "$image" --appimage-extract
           python3 "$GITHUB_WORKSPACE/packaging/verify-entry.py" squashfs-root
@@ -65,13 +67,18 @@ jobs:
         run: |
           set -euo pipefail
           sudo apt-get update
-          sudo apt-get install --yes --no-install-recommends flatpak-builder=1.4.2-1build2 flatpak=1.14.6-1ubuntu0.1 elfutils=0.190-1.1ubuntu0.1
+          sudo apt-get install --yes --no-install-recommends \
+            flatpak-builder=1.4.2-1build2 flatpak=1.14.6-1ubuntu0.1 elfutils=0.190-1.1ubuntu0.1 \
+            librsvg2-common=2.58.0+dfsg-1ubuntu0.1 libgdk-pixbuf2.0-bin=2.42.10+dfsg-3ubuntu3.3
           command -v eu-strip
           eu-strip --version
           flatpak-builder --version
           flatpak --version
           test "$(flatpak-builder --version)" = 'flatpak-builder-1.4.2'
           test "$(flatpak --version)" = 'Flatpak 1.14.6'
+          # Flatpak's host-side export validator needs the SVG GDK loader, not just librsvg2-2.
+          gdk-pixbuf-thumbnailer -s 128 packaging/io.github.playnite_linux.Playnite.svg "$RUNNER_TEMP/icon-check.png"
+          test -s "$RUNNER_TEMP/icon-check.png"
           # Ubuntu runner AppArmor otherwise blocks bubblewrap's unprivileged namespaces.
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
           flatpak remote-add --user --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
@@ -87,7 +94,9 @@ jobs:
           flatpak build-bundle repo "artifacts/Playnite-Linux-x86_64.flatpak" "$id"
           test -s artifacts/Playnite-Linux-x86_64.flatpak
           flatpak install --user --noninteractive artifacts/Playnite-Linux-x86_64.flatpak
-          test "$(timeout 30s flatpak run --user "$id" --version)" = '1.0.0.0'
+          version=$(timeout 30s flatpak run --user "$id" --version)
+          printf 'Packaged CLI version: %s\n' "$version"
+          test "$version" = '1.0.0.0'
           timeout 30s flatpak run --user "$id" --headless --smoke
           installed=$(flatpak info --user --show-location "$id")
           python3 "$GITHUB_WORKSPACE/packaging/verify-entry.py" "$installed/files" .
@@ -95,6 +104,7 @@ jobs:
           {
             echo '## Flatpak: PASS'
             echo 'flatpak-builder 1.4.2-1build2; Flatpak 1.14.6-1ubuntu0.1; elfutils 0.190-1.1ubuntu0.1; SDK 11.0.100; .NET runtime 11.0.0; linux-x64'
+            echo 'SVG loader librsvg2-common 2.58.0+dfsg-1ubuntu0.1; GDK thumbnailer 2.42.10+dfsg-3ubuntu3.3'
             stat --printf='Artifact: %n — %s bytes\n' artifacts/*.flatpak
             for ref in org.freedesktop.Platform/x86_64/25.08 org.freedesktop.Sdk/x86_64/25.08; do
               echo "$ref commit: $(flatpak info --user --show-commit "$ref")"
