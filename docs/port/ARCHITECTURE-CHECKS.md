@@ -57,10 +57,12 @@ misspelled project, package or must-not token throws instead of turning a
 prohibition into a silent allowance. The must-not columns are asserted against
 direct project edges, direct packages and resolved package closures; the Core ->
 Platform (project), Core -> Avalonia (package) and Contracts -> Core/LiteDB
-examples are covered by dedicated tests. Package allowances come from the same
-row: Avalonia's table qualifiers are enforced (SDK only the contracts package,
-Platform/Platform.Linux base packages, Desktop the unqualified family it owns),
-and the importer's LiteDB row is version-pinned to 4.1.4.
+examples are covered by dedicated tests. Each must-not API token also drives a
+source-gate probe (`ForbiddenApis`), so the API half of the column cannot become
+documentation-only. Package allowances come from the same row: Avalonia's table
+qualifiers are enforced (SDK only the contracts package, Platform/Platform.Linux
+base packages, Desktop the unqualified family it owns), and the importer's LiteDB
+row is version-pinned to 4.1.4.
 
 Scope guards fail closed rather than passing on an empty target set. The product
 enumeration throws on zero or duplicate projects; every product must have source
@@ -76,20 +78,6 @@ library, Core, logic, interop, blocking and GC files), so a scope that silently
 drops a file fails a test. A separate expected-product floor asserts the full
 ten-project set against the document, `src/` and every policy scope, so deleting
 a product from two places at once cannot reduce coverage.
-
-Scope guards fail closed rather than passing on an empty target set. The product
-enumeration throws on zero or duplicate projects; every product must have source
-files, every executable must have a resolved entry point, and every product
-assembly must contain at least one type, so the NetArchTest rules cannot succeed
-vacuously over an empty assembly. The scaffold's namespace-only `AssemblyMarker`
-files emitted no type, so each now declares the marker type its filename names;
-the non-empty assertion would otherwise fail for eight products. `SourcePolicy`
-refuses an unclassified project
-name, so renaming or adding a product cannot silently narrow the host, logic or
-UI scopes. The banned-symbol attachment matrix is asserted per project (common,
-library, Core, logic, interop, blocking and GC files), so a scope that silently
-drops a file fails a test.
-
 
 Core and Abstractions exclude Avalonia from the entire resolved closure.
 All products exclude Windows-specific packages/explicit assembly dependencies;
@@ -107,10 +95,12 @@ members, but it cannot describe syntax, semantic purity or a comment-based excep
 [official symbol-list format](https://github.com/dotnet/roslyn/blob/main/src/RoslynAnalyzers/Microsoft.CodeAnalysis.BannedApiAnalyzers/BannedApiAnalyzers.Help.md).
 `BannedConstructInventory.cs` therefore keeps one row for every row of the PORTING.md banned
 table, and `PolicyCoverageTests` fails when the table gains, loses or renames a row without an
-owner. A symbol row must exist in its named `BannedSymbols*.txt` file and resolve against the
-products' reference assemblies (the two package-only symbols that the net11 reference set
-cannot resolve are recorded explicitly); a syntax row must produce its violation from a
-failing probe. Removing a rule, weakening a probe, or adding an unowned PORTING row fails.
+owner. The comparison is a multiset: a duplicated PORTING construct or a duplicated inventory
+row fails instead of collapsing to one set member. A symbol row must exist in its named
+`BannedSymbols*.txt` file and resolve against the products' reference assemblies (the two
+package-only symbols that the net11 reference set cannot resolve are recorded explicitly); a
+syntax row must produce its violation from a failing probe. Removing a rule, weakening a
+probe, or adding an unowned or duplicated PORTING row fails.
 
 | PORTING row | Narrowed condition | Owner | Residual approximation / risk |
 | --- | --- | --- | --- |
@@ -124,7 +114,7 @@ failing probe. Removing a rule, weakening a probe, or adding an unowned PORTING 
 | `AppDomain.CreateDomain` | `AssemblyLoadContext` if needed | `BannedSymbols.txt` and source | Exact; no replacement wrapper is approved yet. |
 | `Process.Start(string)` with a shell string | `ProcessStartInfo` with `ArgumentList` | `BannedSymbols.txt` (shell overloads, constructor, `Arguments`), source | Exact for the listed shapes; `UseShellExecute` is additionally restricted to constant false. Dynamic values cannot be proven safe. |
 | `Environment.Exit` in library code | Desktop, Cli and LegacyImport are hosts | `BannedSymbols.Library.txt` and source | Exact. |
-| `GC.Collect` | A policy-allowlisted benchmark/soak harness with a comment on the call | `BannedSymbols.GcCollect.txt` (scoped by the explicit `PlayniteBenchmarkHarnessProjects` allowlist), source | No harness exists yet (p8-003). The allowlist is empty and lives in the root props plus `SourcePolicy.BenchmarkHarnessProjects`; a project cannot self-declare, and a cross-check test keeps the two copies identical. Until a harness is reviewed in, every product call is rejected. |
+| `GC.Collect` | A policy-allowlisted benchmark/soak harness with a comment on the call | `BannedSymbols.GcCollect.txt` (scoped by the protected `docs/port/BenchmarkHarnessAllowlist.props`), source | No harness exists yet (p8-003). The allowlist is empty; the protected props file is imported by the root build and read by `SourcePolicy.BenchmarkHarnessProjects`, so there is one source of truth and a product cannot self-declare. Until a harness is reviewed in, every product call is rejected. |
 | `catch { }` | Catch specific, log, rethrow or return a result | `SourcePolicy` syntax check | Only an empty body is rejected. A typed catch that silently swallows still passes and remains a review obligation. |
 | `async void` | UI event handlers only | `SourcePolicy` semantic check | Registration cannot be proven from source. The approximation is a Desktop/SDK `(object sender, EventArgs-derived)` method or lambda; async void local functions are rejected everywhere. Logging handler failures remains a review obligation. |
 | `.Result`/`.Wait()` | Commented top-level Cli entry point | `BannedSymbols.Blocking.txt` (except Cli) and source | The Cli entry-point method is treated as the whole top-level boundary: a commented call anywhere inside it is accepted; helper methods and nested functions are not. |
@@ -168,16 +158,18 @@ The 2026-11-15 hardening re-ran both kinds of proof:
 - With `<PlayniteBenchmarkHarness>true</PlayniteBenchmarkHarness>` set temporarily
   on Core and the same `GC.Collect()` probe, the narrow build exited 0 with zero
   warnings. That self-declarable property was removed in the review round; the
-  exception is now an explicit project allowlist in the root props and
-  `SourcePolicy.BenchmarkHarnessProjects`, with per-project tests proving a second
-  product cannot borrow an allowlisted name. The old log is retained as the
-  negative proof of the removed mechanism:
+  exception is now a protected project allowlist
+  (`docs/port/BenchmarkHarnessAllowlist.props`, read by `SourcePolicy` and imported
+  by the root build), with per-project tests proving a second product cannot
+  borrow an allowlisted name. The old log is retained as the negative proof of the
+  removed mechanism:
   `/home/sean/src/firstmate/data/p2-002-harden/harness-exemption-2026-11-14.log`.
 
 Both probes were reverted; the worktree contains no probe file. The review round
-also made `docs/port/02-ARCHITECTURE.md`, `docs/port/PORTING.md` and the root
-`BannedSymbols*.txt` files protected paths in `plan-guards.yml` and `CODEOWNERS`,
-so a later change to the enforced table or symbol vocabulary needs the
+also made `docs/port/02-ARCHITECTURE.md`, `docs/port/PORTING.md`,
+`docs/port/BenchmarkHarnessAllowlist.props` and the root `BannedSymbols*.txt`
+files protected paths in `plan-guards.yml` and `CODEOWNERS`, so a later change
+to the enforced table, exception allowlist or symbol vocabulary needs the
 `oracle-change` label and a second reviewer. This PR itself changes those files,
 so it needs that label to pass the oracle gate.
 The architecture suite count is recorded in the p2-002 ledger shard alongside

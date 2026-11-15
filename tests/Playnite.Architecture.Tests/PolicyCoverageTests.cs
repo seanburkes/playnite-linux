@@ -66,6 +66,24 @@ public sealed class PolicyCoverageTests
     }
 
     [Fact]
+    public void Ownership_validation_detects_a_duplicate_inventory_row()
+    {
+        var row = new BannedConstructRow("X", "BannedSymbols.txt", "N:System.Drawing", false,
+            "Playnite.Core", "class C { }", "banned Windows", "condition", "risk");
+        var problems = BannedConstructInventory.OwnershipProblems(["X"], [row, row]);
+        Assert.Contains(problems, problem => problem.Contains("inventory row 'X' appears 2 times", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Ownership_validation_detects_a_duplicate_PORTING_construct()
+    {
+        var row = new BannedConstructRow("X", "BannedSymbols.txt", "N:System.Drawing", false,
+            "Playnite.Core", "class C { }", "banned Windows", "condition", "risk");
+        var problems = BannedConstructInventory.OwnershipProblems(["X", "X"], [row]);
+        Assert.Contains(problems, problem => problem.Contains("PORTING construct 'X' appears 2 times", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void Every_inventory_row_states_its_condition_and_residual_risk()
     {
         foreach (var row in BannedConstructInventory.Rows)
@@ -266,6 +284,34 @@ public sealed class PolicyCoverageTests
     }
 
     [Fact]
+    public void Must_not_API_tokens_drive_source_gate_probes()
+    {
+        var probes = new Dictionary<string, (string Source, string Message)>(StringComparer.Ordinal)
+        {
+            ["System.Windows"] = ("namespace System.Windows.Other { class W { } } class C { System.Windows.Other.W? value; }", "banned Windows"),
+            ["System.Drawing"] = ("class C { System.Drawing.Point value; }", "banned Windows"),
+            ["Microsoft.Win32"] = ("class C { Microsoft.Win32.RegistryKey? value; }", "banned Windows"),
+            ["Win32"] = ("class C { Microsoft.Win32.RegistryKey? value; }", "banned Windows"),
+            ["DllImport"] = ("class C { [System.Runtime.InteropServices.DllImport(\"libc\")] static extern int getpid(); }", "native import"),
+        };
+
+        var checkedApis = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var row in ArchitectureTable.ProductRows)
+        {
+            foreach (var api in row.ForbiddenApis)
+            {
+                Assert.True(probes.ContainsKey(api), $"must-not API '{api}' has no source-gate probe");
+                var (source, message) = probes[api];
+                var violations = PolicyProbe.Check(row.Project, source);
+                Assert.Contains(violations, v => v.Contains(message, StringComparison.Ordinal));
+                checkedApis.Add(api);
+            }
+        }
+
+        Assert.NotEmpty(checkedApis);
+    }
+
+    [Fact]
     public void Avalonia_allowance_respects_the_table_qualifiers()
     {
         // Desktop's row is unqualified and owns views/themes, so the family is intended there.
@@ -279,10 +325,17 @@ public sealed class PolicyCoverageTests
     [Fact]
     public void Gc_symbol_scope_matches_the_policy_allowlist_and_is_not_self_declarable()
     {
-        var props = XDocument.Load(Path.Combine(ProductGraph.Root, "Directory.Build.props"));
+        var allowlistFile = Path.Combine(ProductGraph.Root, "docs", "port", "BenchmarkHarnessAllowlist.props");
+        var props = XDocument.Load(allowlistFile);
         var property = props.Descendants("PlayniteBenchmarkHarnessProjects").Single().Value;
         var msbuildAllowlist = property.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
         Assert.Equal(SourcePolicy.BenchmarkHarnessProjects.Order(), msbuildAllowlist.Order());
+
+        // The allowlist lives only in the protected policy file; the unprotected root props
+        // imports it and must not define a second copy a product could override.
+        var rootProps = File.ReadAllText(Path.Combine(ProductGraph.Root, "Directory.Build.props"));
+        Assert.Contains("BenchmarkHarnessAllowlist.props", rootProps, StringComparison.Ordinal);
+        Assert.DoesNotContain("<PlayniteBenchmarkHarnessProjects", rootProps, StringComparison.Ordinal);
 
         foreach (var product in ProductGraph.Products)
         {

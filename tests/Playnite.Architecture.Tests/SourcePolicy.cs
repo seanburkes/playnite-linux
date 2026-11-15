@@ -1,3 +1,4 @@
+using System.Xml.Linq;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
@@ -28,10 +29,10 @@ internal static class SourcePolicy
     internal static readonly string[] UiProjects = ["Playnite.Desktop", "Playnite.SDK"];
 
     // PORTING allows GC.Collect only in a benchmark/soak harness with a comment. The harness
-    // project must be named here in a reviewed policy change; no project can declare itself a
-    // harness. The symbol file in Directory.Build.props is scoped from the same allowlist and
-    // a test cross-checks the two. The list is empty until p8-003 lands its harness.
-    internal static readonly string[] BenchmarkHarnessProjects = [];
+    // projects come from the protected docs/port/BenchmarkHarnessAllowlist.props file, so
+    // widening the exception needs the oracle-change label and a second reviewer. No project
+    // can declare itself a harness, and the comment is still required by the source rule.
+    internal static readonly string[] BenchmarkHarnessProjects = LoadBenchmarkHarnesses();
 
     internal static IEnumerable<string> Violations(string project, CSharpCompilation compilation,
         IReadOnlyCollection<string>? benchmarkHarnessProjects = null)
@@ -236,5 +237,15 @@ internal static class SourcePolicy
         var statement = node.AncestorsAndSelf().OfType<StatementSyntax>().FirstOrDefault();
         return statement != null && statement.GetLeadingTrivia().Concat(statement.GetTrailingTrivia())
             .Any(t => t.IsKind(SyntaxKind.SingleLineCommentTrivia) || t.IsKind(SyntaxKind.MultiLineCommentTrivia));
+    }
+
+    private static string[] LoadBenchmarkHarnesses()
+    {
+        var path = Path.Combine(ProductGraph.Root, "docs", "port", "BenchmarkHarnessAllowlist.props");
+        var document = XDocument.Load(path);
+        var property = document.Descendants("PlayniteBenchmarkHarnessProjects").SingleOrDefault()
+            ?? throw new InvalidOperationException($"{path} has no PlayniteBenchmarkHarnessProjects property");
+        return property.Value.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Distinct(StringComparer.Ordinal).ToArray();
     }
 }

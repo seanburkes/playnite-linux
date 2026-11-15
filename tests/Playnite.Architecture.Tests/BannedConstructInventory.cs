@@ -106,6 +106,19 @@ internal static class BannedConstructInventory
 
         var table = portingConstructs.Order(StringComparer.Ordinal).ToArray();
         var inventory = rows.Select(row => row.Construct).Order(StringComparer.Ordinal).ToArray();
+
+        // Multiset check: the previous sequence comparison caught duplicates; Except alone
+        // would accept two identical rows as one owner and hide a rule duplicated in the table.
+        foreach (var duplicate in inventory.GroupBy(value => value, StringComparer.Ordinal).Where(group => group.Count() > 1))
+        {
+            problems.Add($"inventory row '{duplicate.Key}' appears {duplicate.Count()} times");
+        }
+
+        foreach (var duplicate in table.GroupBy(value => value, StringComparer.Ordinal).Where(group => group.Count() > 1))
+        {
+            problems.Add($"PORTING construct '{duplicate.Key}' appears {duplicate.Count()} times");
+        }
+
         foreach (var missing in table.Except(inventory, StringComparer.Ordinal))
         {
             problems.Add($"PORTING row '{missing}' has no inventory owner");
