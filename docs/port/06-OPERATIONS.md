@@ -116,9 +116,12 @@ it fails when a queue shard or queue aggregate row is missing, a ledger shard is
 ledger row is missing, altered, or duplicated at head, or when an existing retirement record
 was edited. It does not check order, so a new row with an earlier instant passes. The ref must
 be a strict ancestor of HEAD; HEAD, a descendant, and an unrelated commit are refused. CI
-passes the pull request's base commit (or the previous commit on `main`) with `--shards-only`,
-and on a pull request also passes `--forbid-aggregate-changes`, which fails if either aggregate
-file was modified.
+passes the merge base of the recorded pull-request base and `HEAD` (the fork point) with
+`--shards-only` and `--forbid-aggregate-changes`, so a PR branched before an unrelated
+aggregate regeneration on `main` is not charged for main's own commit; if the merge base cannot
+be computed, the step fails closed. Pushes to `main` pass the immediate previous main commit.
+Inventory, parity, generator-test, and TLC steps compare the working tree or run a model; they
+do not diff a recorded base against `HEAD`, so they need no fork-point translation.
 
 The post-merge `port-index` workflow runs only on a push to `main`. It first validates the
 shard tree and history against the previous `main` commit; an invalid shard fails the run with

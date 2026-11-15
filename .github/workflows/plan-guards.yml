@@ -161,20 +161,50 @@ jobs:
         if: >-
           github.event_name == 'pull_request' ||
           github.event_name == 'merge_group'
+        shell: bash
+        env:
+          BASE_SHA: ${{ steps.policy_base.outputs.sha }}
         run: |
-          base="${{ steps.policy_base.outputs.sha }}"
+          set -euo pipefail
+          # Compare against the fork point, not a stale recorded base. Main's
+          # post-merge aggregate regeneration is not this PR's change.
+          if [ -z "${BASE_SHA:-}" ] || printf '%s' "$BASE_SHA" | grep -Eq '^0+$'; then
+            echo "::error::No comparison base SHA is available for aggregate ownership"
+            exit 1
+          fi
+          if ! merge_base=$(git merge-base "$BASE_SHA" HEAD); then
+            echo "::error::Cannot compute the aggregate merge base for $BASE_SHA"
+            exit 1
+          fi
+          if [ -z "$merge_base" ]; then
+            echo "::error::Cannot compute the aggregate merge base for $BASE_SHA"
+            exit 1
+          fi
           # Aggregates are a parent-owned single-writer artifact: the post-merge
           # port-index workflow regenerates and commits them on main. A pull
           # request owns only its unit shards, so even a correctly regenerated
           # aggregate change fails here.
           python3 scripts/port/build_port_index.py check --shards-only \
-            --against "$base" --forbid-aggregate-changes
+            --against "$merge_base" --forbid-aggregate-changes
 
       - name: Port shards are valid and history is preserved
+        shell: bash
+        env:
+          BASE_SHA: ${{ steps.policy_base.outputs.sha }}
         run: |
-          ref="${{ steps.policy_base.outputs.sha }}"
+          set -euo pipefail
+          ref="${BASE_SHA:-}"
           args=(--shards-only)
           if [ -n "$ref" ] && ! printf '%s' "$ref" | grep -Eq '^0+$'; then
+            if ! merge_base=$(git merge-base "$ref" HEAD); then
+              echo "::error::Cannot compute the shard merge base for $ref"
+              exit 1
+            fi
+            if [ -z "$merge_base" ]; then
+              echo "::error::Cannot compute the shard merge base for $ref"
+              exit 1
+            fi
+            ref="$merge_base"
             if git cat-file -e "$ref:docs/port/units" 2>/dev/null; then
               args+=(--against "$ref")
             else
