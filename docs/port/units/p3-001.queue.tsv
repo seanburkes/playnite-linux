@@ -1,2 +1,2 @@
 id	wave	area	unit	depends	status	owner	oracle	test	notes
-p3-001	W3	leaves	Paths + XDG abstraction	p2-001	todo	core	property:paths	test:paths	
+p3-001	W3	leaves	Paths + XDG abstraction	p2-001	in-progress	core	golden:paths;property:paths	test:paths	docs/port/p3-001-paths.md; additive oracle-change; no aggregate edits

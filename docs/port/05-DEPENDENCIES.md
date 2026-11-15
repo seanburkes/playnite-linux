@@ -42,8 +42,8 @@ Versions are the current stable lines observed on 2026-11-13. Pin exact versions
 | Crc32.NET | 1.2.0 | CRC | **System.IO.Hashing** | in-box | `Crc32` |
 | DynamicLanguageRuntime | 1.2.1 | One stray `Microsoft.Scripting` using | **Remove** | — | Delete the using; no runtime use |
 | System.Buffers / Memory / Numerics.Vectors / Unsafe / ValueTuple / Tasks.Extensions / RuntimeInformation | various | Framework backports | **Remove** | — | In-box on net11 |
-| System.IO.Abstractions | 2.1.0.227 | Testable FS | **System.IO.Abstractions** | 23.0.0 | Upgrade, or use temp dirs; API changes |
-| System.IO.Abstractions.TestingHelpers | 2.1.0.227 | Test FS | **same** | 23.0.0 | |
+| System.IO.Abstractions | 2.1.0.227 | Testable FS | **Core IFileSystem + LinuxFileSystem** | in-tree | p3-001 path leaf; existence, directory creation and text reads; no new package |
+| System.IO.Abstractions.TestingHelpers | 2.1.0.227 | Test FS | **MemoryFileSystem + MemoryEnvironment** | in-tree | Reusable test doubles under Playnite.Core.Tests/TestDoubles; no host filesystem access |
 | WindowsAPICodePack | 1.1.0 | Shell/Win32 | **Remove** | — | Platform.Linux replacement |
 | Playnite.Deps | 10.56.0 | Binary bundle | **Remove** | — | Replace each member with a source package |
 | Moq | 4.21.0 | Tests | **NSubstitute** or Moq | 5.x / 4.21 | Moq 4.20+ sponsor/telemetry concerns; choose NSubstitute |

@@ -1,0 +1,44 @@
+{
+  "provenance": {
+    "kind": "v10-source-derived POSIX adaptation (not a Windows execution)",
+    "invocation": "python3 scripts/port/generate_path_goldens.py",
+    "sources": {
+      "legacy/source/Playnite/Settings/PlaynitePaths.cs": "cd7b1fdc94dd9fb46f1a65b62e563bb147019a29bc20d518fa2b41128477fc4d"
+    }
+  },
+  "paths": {
+    "ProgramPath": "/opt/playnite",
+    "ConfigRootPath": "/home/test-user/.config/playnite",
+    "DataCachePath": "/home/test-user/.cache/playnite",
+    "Home": "/home/test-user",
+    "Documents": "/home/test-user/Documents",
+    "Program": "/opt/playnite",
+    "Config": "/home/test-user/.config/playnite",
+    "UserData": "/home/test-user/.local/share/playnite",
+    "Cache": "/home/test-user/.cache/playnite",
+    "State": "/home/test-user/.local/state/playnite",
+    "Logs": "/home/test-user/.local/state/playnite/logs",
+    "LocalizationsPath": "/opt/playnite/Localization",
+    "ExtensionsProgramPath": "/opt/playnite/Extensions",
+    "ThemesProgramPath": "/opt/playnite/Themes",
+    "ThemesUserDataPath": "/home/test-user/.local/share/playnite/Themes",
+    "ExtensionsDataPath": "/home/test-user/.local/share/playnite/ExtensionsData",
+    "ExtensionQueueFilePath": "/home/test-user/.config/playnite/extinstalls.json",
+    "AddonLicenseAgreementsFilePath": "/home/test-user/.config/playnite/licenseagreements.json",
+    "ExtensionsUserDataPath": "/home/test-user/.local/share/playnite/Extensions",
+    "BrowserCachePath": "/home/test-user/.cache/playnite/browsercache",
+    "LogPath": "/home/test-user/.local/state/playnite/logs/playnite.log",
+    "ConfigFilePath": "/home/test-user/.config/playnite/config.json",
+    "FullscreenConfigFilePath": "/home/test-user/.config/playnite/fullscreenConfig.json",
+    "WindowPositionsPath": "/home/test-user/.config/playnite/windowPositions.json",
+    "BackupConfigFilePath": "/home/test-user/.config/playnite/Backup/config.json",
+    "BackupFullscreenConfigFilePath": "/home/test-user/.config/playnite/Backup/fullscreenConfig.json",
+    "BackupWindowPositionsPath": "/home/test-user/.config/playnite/Backup/windowPositions.json",
+    "ImagesCachePath": "/home/test-user/.cache/playnite/images",
+    "IconsCachePath": "/home/test-user/.cache/playnite/icons",
+    "JitProfilesPath": "/home/test-user/.cache/playnite/JITProfiles",
+    "SafeStartupFlagFile": "/home/test-user/.local/state/playnite/safestart.flag",
+    "BackupActionFile": "/home/test-user/.local/state/playnite/backup.json",
+    "RestoreBackupActionFile": "/home/test-user/.local/state/playnite/restoreBackup.json"
+  }
+}

@@ -1,0 +1,2 @@
+timestamp	unit	from	to	actor	evidence
+2026-11-15T21:01:57Z	p3-001	todo	in-progress	fm/p3-001	Core IPaths/IEnvironment/IFileSystem and v10-derived Paths/PlaynitePaths; Linux XDG implementation; reusable memory doubles; additive source-derived golden provenance via scripts/port/generate_path_goldens.py; Core 25 passed/0 skipped; existing architecture 144 passed/0 skipped; targeted Release build 0 warnings/0 errors; docs/port/p3-001-paths.md records boundaries and deferrals; owner authorized additive oracle-change; two independent adversarial reviews requested before merge

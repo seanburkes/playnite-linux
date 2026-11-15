@@ -1,0 +1,284 @@
+{
+  "provenance": {
+    "kind": "v10-source-derived POSIX adaptation (not a Windows execution)",
+    "invocation": "python3 scripts/port/generate_path_goldens.py",
+    "sources": {
+      "legacy/source/Tests/Playnite.Tests/PathsTests.cs": "fb4675a02a1d28b2cd1b1216e81c0ff0a43076aa8adc6dba5154714320871a19",
+      "legacy/source/Playnite/Common/Paths.cs": "be0b57bf5e27e419773533c9bd0051082cd50da1c03bb8996ab392a16eed089a"
+    }
+  },
+  "cases": [
+    {
+      "helper": "FixSeparators",
+      "inputs": [
+        "/GOG Games//AAAlbion///DOSBOX//dosbox.exe"
+      ],
+      "expected": "/GOG Games/AAAlbion/DOSBOX/dosbox.exe",
+      "origin": "FixSeparatorsTest: repeated separators"
+    },
+    {
+      "helper": "FixSeparators",
+      "inputs": [
+        "/これはユニコードパステストです//dosbox.exe"
+      ],
+      "expected": "/これはユニコードパステストです/dosbox.exe",
+      "origin": "FixSeparatorsTest: Unicode"
+    },
+    {
+      "helper": "FixSeparators",
+      "inputs": [
+        "/a\\b//c"
+      ],
+      "expected": "/a\\b/c",
+      "origin": "POSIX delta: backslashes are legal filename characters"
+    },
+    {
+      "helper": "FixSeparators",
+      "inputs": [
+        ""
+      ],
+      "expected": "",
+      "origin": "v10 whitespace short-circuit"
+    },
+    {
+      "helper": "AreEqual",
+      "inputs": [
+        "/test",
+        "/TesT"
+      ],
+      "expected": false,
+      "origin": "AreEqualTest; POSIX ordinal case delta"
+    },
+    {
+      "helper": "AreEqual",
+      "inputs": [
+        "test",
+        "test/"
+      ],
+      "expected": true,
+      "origin": "AreEqualTest; POSIX ordinal case delta"
+    },
+    {
+      "helper": "AreEqual",
+      "inputs": [
+        "../test/",
+        "../test"
+      ],
+      "expected": true,
+      "origin": "AreEqualTest; POSIX ordinal case delta"
+    },
+    {
+      "helper": "AreEqual",
+      "inputs": [
+        "./test/",
+        "test"
+      ],
+      "expected": true,
+      "origin": "AreEqualTest; POSIX ordinal case delta"
+    },
+    {
+      "helper": "AreEqual",
+      "inputs": [
+        "file.exe",
+        "./file.exe"
+      ],
+      "expected": true,
+      "origin": "AreEqualTest; POSIX ordinal case delta"
+    },
+    {
+      "helper": "AreEqual",
+      "inputs": [
+        "file2.exe",
+        "./file.exe"
+      ],
+      "expected": false,
+      "origin": "AreEqualTest; POSIX ordinal case delta"
+    },
+    {
+      "helper": "AreEqual",
+      "inputs": [
+        "",
+        ""
+      ],
+      "expected": false,
+      "origin": "AreEqualTest; POSIX ordinal case delta"
+    },
+    {
+      "helper": "IsFullPath",
+      "inputs": [
+        "/test"
+      ],
+      "expected": true,
+      "origin": "IsFullPathTest: POSIX absolute paths replace drive/UNC roots"
+    },
+    {
+      "helper": "IsFullPath",
+      "inputs": [
+        "/test/../test.exe"
+      ],
+      "expected": true,
+      "origin": "IsFullPathTest: POSIX absolute paths replace drive/UNC roots"
+    },
+    {
+      "helper": "IsFullPath",
+      "inputs": [
+        "test"
+      ],
+      "expected": false,
+      "origin": "IsFullPathTest: POSIX absolute paths replace drive/UNC roots"
+    },
+    {
+      "helper": "IsFullPath",
+      "inputs": [
+        "./test"
+      ],
+      "expected": false,
+      "origin": "IsFullPathTest: POSIX absolute paths replace drive/UNC roots"
+    },
+    {
+      "helper": "IsFullPath",
+      "inputs": [
+        ""
+      ],
+      "expected": false,
+      "origin": "IsFullPathTest: POSIX absolute paths replace drive/UNC roots"
+    },
+    {
+      "helper": "IsValidFilePath",
+      "inputs": [
+        "test.db"
+      ],
+      "expected": true,
+      "origin": "GetValidFilePathTest; root / exists in fake filesystem"
+    },
+    {
+      "helper": "IsValidFilePath",
+      "inputs": [
+        "/test.db"
+      ],
+      "expected": true,
+      "origin": "GetValidFilePathTest; root / exists in fake filesystem"
+    },
+    {
+      "helper": "IsValidFilePath",
+      "inputs": [
+        "../test.db"
+      ],
+      "expected": true,
+      "origin": "GetValidFilePathTest; root / exists in fake filesystem"
+    },
+    {
+      "helper": "IsValidFilePath",
+      "inputs": [
+        "test"
+      ],
+      "expected": false,
+      "origin": "GetValidFilePathTest; root / exists in fake filesystem"
+    },
+    {
+      "helper": "IsValidFilePath",
+      "inputs": [
+        ""
+      ],
+      "expected": false,
+      "origin": "GetValidFilePathTest; root / exists in fake filesystem"
+    },
+    {
+      "helper": "GetSafePathName",
+      "inputs": [
+        "test /\u0000 aaa "
+      ],
+      "expected": "test aaa",
+      "origin": "GetSafeFilenameTest: POSIX invalid characters replace Windows >>"
+    },
+    {
+      "helper": "ContainsInvalidPathChars",
+      "inputs": [
+        "/test\u0000/aaa.txt"
+      ],
+      "expected": true,
+      "origin": "ContainsInvalidFileNameCharsTest: POSIX NUL"
+    },
+    {
+      "helper": "ContainsInvalidPathChars",
+      "inputs": [
+        "/test/aaa.txt"
+      ],
+      "expected": false,
+      "origin": "ContainsInvalidFileNameCharsTest"
+    },
+    {
+      "helper": "GetCommonDirectory",
+      "inputs": [
+        "/test/file.exe",
+        "/test/file2.exe",
+        "/test/"
+      ],
+      "expected": "/test/",
+      "origin": "GetCommonDirectoryTest: drive roots translated to POSIX"
+    },
+    {
+      "helper": "GetCommonDirectory",
+      "inputs": [
+        "/test/file/aa.exe",
+        "/test/file/bb.ee",
+        "/test/file/cc.ss"
+      ],
+      "expected": "/test/file/",
+      "origin": "GetCommonDirectoryTest: drive roots translated to POSIX"
+    },
+    {
+      "helper": "GetCommonDirectory",
+      "inputs": [
+        "/file1.aa",
+        "/file1.aa",
+        "/file1.aa"
+      ],
+      "expected": "/",
+      "origin": "GetCommonDirectoryTest: drive roots translated to POSIX"
+    },
+    {
+      "helper": "GetCommonDirectory",
+      "inputs": [
+        "a/test",
+        "b/test"
+      ],
+      "expected": "",
+      "origin": "GetCommonDirectoryTest: drive roots translated to POSIX"
+    },
+    {
+      "helper": "Combine",
+      "inputs": [
+        "/test/",
+        "child",
+        "file"
+      ],
+      "expected": "/test/child/file",
+      "origin": "PlaynitePaths.UpdateUserDataDir Path.Combine derivations"
+    },
+    {
+      "helper": "Normalize",
+      "inputs": [
+        "/test/../test/./"
+      ],
+      "expected": "/test",
+      "origin": "AreEqualTest normalization exposed with explicit cwd"
+    },
+    {
+      "helper": "Normalize",
+      "inputs": [
+        "./file.exe"
+      ],
+      "expected": "/working/file.exe",
+      "origin": "AreEqualTest relative path normalization"
+    },
+    {
+      "helper": "Normalize",
+      "inputs": [
+        "/"
+      ],
+      "expected": "/",
+      "origin": "POSIX delta: preserve filesystem root"
+    }
+  ]
+}

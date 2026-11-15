@@ -1,0 +1,2 @@
+id	wave	area	unit	depends	status	owner	oracle	test	notes
+p3-001c	W3	leaves	Paths + XDG completion and counted Core baseline	p3-001	in-progress	fm/p3-001c	property:paths	test:paths	docs/port/p3-001-paths.md; completes p3-001 verification and moves Playnite.Core.Tests from empty_projects to the counted baseline; oracle-change; no aggregate edits
