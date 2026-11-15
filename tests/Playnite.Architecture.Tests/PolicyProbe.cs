@@ -10,7 +10,7 @@ internal static class PolicyProbe
     internal static readonly MetadataReference[] References = ((string)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES")!)
         .Split(Path.PathSeparator).Select(path => MetadataReference.CreateFromFile(path)).ToArray();
 
-    internal static string[] Check(string project, string source, bool inBenchmarkHarness = false)
+    internal static string[] Check(string project, string source, IReadOnlyCollection<string>? benchmarkHarnesses = null)
     {
         var compilation = CSharpCompilation.Create("PolicyProbe",
             [CSharpSyntaxTree.ParseText(source)], References,
@@ -18,6 +18,6 @@ internal static class PolicyProbe
         // Obsolete-but-banned APIs can produce compiler errors in net11; allow those
         // diagnostics only when Roslyn still resolves the symbol for policy inspection.
         Assert.DoesNotContain(compilation.GetDiagnostics(), d => d.Severity == DiagnosticSeverity.Error && d.Id is not ("CS0619" or "SYSLIB0006" or "SYSLIB0024" or "SYSLIB0050"));
-        return SourcePolicy.Violations(project, compilation, inBenchmarkHarness).ToArray();
+        return SourcePolicy.Violations(project, compilation, benchmarkHarnesses).ToArray();
     }
 }

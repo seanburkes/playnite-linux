@@ -24,18 +24,12 @@ internal sealed class ProductGraph
             throw new InvalidOperationException("No product projects found under src/; architecture checks would pass vacuously");
         }
 
-        var duplicated = result.GroupBy(p => p.Name).Where(g => g.Count() > 1).Select(g => g.Key).ToArray();
-        if (duplicated.Length > 0)
-        {
-            throw new InvalidOperationException($"Duplicate product project names: {string.Join(", ", duplicated)}");
-        }
-
+        ProductInputs.RequireUniqueNames(result.Select(p => p.Name));
         return result;
     }
 
     internal string ProjectFile { get; }
     internal string Name => Path.GetFileNameWithoutExtension(ProjectFile);
-    internal bool InBenchmarkHarness => Values("BenchmarkHarness").SingleOrDefault() == "true";
     private readonly Dictionary<string, string[]> inputs;
 
     internal ProductGraph(string projectFile)

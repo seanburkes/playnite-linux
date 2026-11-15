@@ -27,9 +27,17 @@ internal static class SourcePolicy
     internal static readonly string[] LogicProjects = ["Playnite.Core", "Playnite.SDK.Abstractions", "Playnite.Steam"];
     internal static readonly string[] UiProjects = ["Playnite.Desktop", "Playnite.SDK"];
 
-    internal static IEnumerable<string> Violations(string project, CSharpCompilation compilation, bool inBenchmarkHarness = false)
+    // PORTING allows GC.Collect only in a benchmark/soak harness with a comment. The harness
+    // project must be named here in a reviewed policy change; no project can declare itself a
+    // harness. The symbol file in Directory.Build.props is scoped from the same allowlist and
+    // a test cross-checks the two. The list is empty until p8-003 lands its harness.
+    internal static readonly string[] BenchmarkHarnessProjects = [];
+
+    internal static IEnumerable<string> Violations(string project, CSharpCompilation compilation,
+        IReadOnlyCollection<string>? benchmarkHarnessProjects = null)
     {
-        if (!KnownProjects.Contains(project))
+        var benchmarkHarnesses = benchmarkHarnessProjects ?? BenchmarkHarnessProjects;
+        if (!KnownProjects.Contains(project) && !benchmarkHarnesses.Contains(project))
         {
             throw new InvalidOperationException(
                 $"Project '{project}' has no source-policy classification; add it to SourcePolicy.KnownProjects and the PORTING.md owner inventory");
@@ -68,7 +76,7 @@ internal static class SourcePolicy
                         symbol = alias.Target;
                     }
 
-                    rule = SymbolViolation(project, symbol, node, model, inBenchmarkHarness);
+                    rule = SymbolViolation(project, symbol, node, model, benchmarkHarnesses.Contains(project));
                 }
 
                 if (rule != null)
@@ -110,11 +118,11 @@ internal static class SourcePolicy
             if (name == "System.GC" && method.Name == "Collect")
             {
                 // The table's exception is a benchmark/soak harness with a comment. The harness
-                // is declared by PlayniteBenchmarkHarness, which also lifts the symbol ban;
-                // the comment is still required here, so the property alone permits nothing.
+                // must be named in the reviewed policy allowlist (no project can self-declare);
+                // the comment is still required here, so an allowlist entry alone permits nothing.
                 return inBenchmarkHarness && IsCommented(node)
                     ? null
-                    : "banned call System.GC.Collect outside a commented benchmark/soak harness";
+                    : "banned call System.GC.Collect outside a commented policy-allowlisted benchmark/soak harness";
             }
 
             if (name == "System.Threading.Thread" && method.Name == "Abort"

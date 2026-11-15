@@ -14,7 +14,7 @@ public sealed class ProductSourceTests
         {
             // A project with no sources would contribute no violations and silently switch
             // every source rule off for that product.
-            Assert.NotEmpty(project.Values("Source"));
+            ProductInputs.RequireSources(project.Values("Source"));
             var options = new CSharpParseOptions(LanguageVersion.Preview,
                 preprocessorSymbols: project.Values("Define").Single().Split(','));
             var trees = project.Values("Source").Select(path => CSharpSyntaxTree.ParseText(File.ReadAllText(path), options, path));
@@ -28,10 +28,10 @@ public sealed class ProductSourceTests
             // The Cli exception is keyed on the real entry point; without one it could never apply.
             if (outputKind == OutputKind.ConsoleApplication)
             {
-                Assert.NotNull(compilation.GetEntryPoint(default));
+                _ = ProductInputs.RequireEntryPoint(compilation, outputKind);
             }
 
-            failures.AddRange(SourcePolicy.Violations(project.Name, compilation, project.InBenchmarkHarness));
+            failures.AddRange(SourcePolicy.Violations(project.Name, compilation));
         }
 
         Assert.True(failures.Count == 0, string.Join(Environment.NewLine, failures.Distinct()));

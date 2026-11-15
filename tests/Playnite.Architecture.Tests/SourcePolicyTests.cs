@@ -74,13 +74,29 @@ public sealed class SourcePolicyTests
     }
 
     [Theory]
-    [InlineData("class C { void M() {\n// Benchmark harness warm-up.\nSystem.GC.Collect();\n} }", true, false)]
-    [InlineData("class C { void M() { System.GC.Collect(); } }", true, true)]
-    [InlineData("class C { void M() {\n// Benchmark harness warm-up.\nSystem.GC.Collect();\n} }", false, true)]
-    public void Gc_collect_requires_a_declared_harness_and_a_comment(string source, bool harness, bool rejected)
+    [InlineData("Playnite.Benchmarks", "Playnite.Benchmarks", true, false)]
+    [InlineData("Playnite.Core", "Playnite.Benchmarks", true, true)]
+    [InlineData("Playnite.Benchmarks", "Playnite.Benchmarks", false, true)]
+    [InlineData("Playnite.Core", "", true, true)]
+    public void Gc_collect_requires_a_policy_allowlist_entry_and_a_comment(
+        string project, string allowlist, bool comment, bool rejected)
     {
-        var violations = PolicyProbe.Check("Playnite.Core", source, harness);
+        var source = comment
+            ? "class C { void M() {\n// Benchmark harness warm-up.\nSystem.GC.Collect();\n} }"
+            : "class C { void M() { System.GC.Collect(); } }";
+        var harnesses = allowlist.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        var violations = PolicyProbe.Check(project, source, harnesses);
         Assert.Equal(rejected, violations.Any(v => v.Contains("banned call System.GC.Collect", StringComparison.Ordinal)));
+    }
+
+    [Fact]
+    public void A_second_product_cannot_borrow_an_allowlisted_harness_name()
+    {
+        // The allowlist is per project: naming another project a harness never permits this one.
+        var violations = PolicyProbe.Check("Playnite.Core",
+            "class C { void M() {\n// Benchmark harness warm-up.\nSystem.GC.Collect();\n} }",
+            ["Playnite.Benchmarks"]);
+        Assert.Contains(violations, v => v.Contains("banned call System.GC.Collect", StringComparison.Ordinal));
     }
 
     [Fact]

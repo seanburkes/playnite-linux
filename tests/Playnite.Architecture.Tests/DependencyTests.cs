@@ -18,9 +18,8 @@ public sealed class DependencyTests
             var row = ArchitectureTable.For(project.Name);
             foreach (var dependency in project.Values("ProjectReference"))
             {
-                Assert.True(row.AllowedProjects.Contains(dependency),
-                    $"{project.Name} -> {dependency} violates docs/port/02-ARCHITECTURE.md allowed-reference table");
-                Assert.DoesNotContain(dependency, row.ForbiddenProjects);
+                var violation = ArchitectureTable.ProjectViolation(row, dependency);
+                Assert.True(violation == null, violation);
             }
 
             foreach (var banned in row.ForbiddenProjects)
@@ -28,21 +27,25 @@ public sealed class DependencyTests
                 Assert.DoesNotContain(banned, project.Values("ProjectReference"));
             }
 
-            // Avalonia is additionally clarified below the table: Platform may host
-            // inherently UI-shaped platform services, so the family is allowed there.
-            var allowedPackages = row.AllowedPackages.Append(
-                project.Name is "Playnite.Platform" ? "Avalonia" : string.Empty)
-                .Where(name => name.Length > 0).ToArray();
             foreach (var package in project.DirectPackages().Where(p => p != "Microsoft.CodeAnalysis.BannedApiAnalyzers"))
             {
-                var permitted = allowedPackages.Any(allowed => IsFamily(package, allowed));
+                var violation = ArchitectureTable.PackageViolation(row, package);
                 if (project.Name == "Playnite.LegacyImport" && IsFamily(package, "LiteDB"))
                 {
                     // The migration reader must stay on the frozen v10 file-format generation.
-                    permitted = LegacyLiteDbVersion(project);
+                    Assert.True(LegacyLiteDbVersion(project), $"{project.Name} -> package {package} must be LiteDB 4.1.4");
+                    continue;
                 }
 
-                Assert.True(permitted, $"{project.Name} -> package {package} violates the allowed-reference table");
+                Assert.True(violation == null, violation);
+            }
+
+            // A "Must not reference" package applies to the resolved closure too, not only to a
+            // direct reference. Avalonia in Core and LiteDB in Contracts/Desktop/Cli are the
+            // rows the table names.
+            foreach (var forbidden in row.ForbiddenPackages)
+            {
+                Assert.DoesNotContain(project.Dependencies(), d => IsFamily(d, forbidden));
             }
         }
     }
@@ -103,7 +106,7 @@ public sealed class DependencyTests
             var files = product.Values("AdditionalFile");
             Assert.Contains(Path.Combine(ProductGraph.Root, "BannedSymbols.txt"), files);
             Assert.Equal(product.Name != "Playnite.Cli", files.Contains(Path.Combine(ProductGraph.Root, "BannedSymbols.Blocking.txt")));
-            Assert.Equal(!product.InBenchmarkHarness, files.Contains(Path.Combine(ProductGraph.Root, "BannedSymbols.GcCollect.txt")));
+            Assert.Equal(!SourcePolicy.BenchmarkHarnessProjects.Contains(product.Name), files.Contains(Path.Combine(ProductGraph.Root, "BannedSymbols.GcCollect.txt")));
             Assert.Equal(product.Name != "Playnite.Platform.Linux", files.Contains(Path.Combine(ProductGraph.Root, "BannedSymbols.Interop.txt")));
             Assert.Equal(product.Name is "Playnite.Core" or "Playnite.SDK.Abstractions" or "Playnite.Steam",
                 files.Contains(Path.Combine(ProductGraph.Root, "BannedSymbols.Logic.txt")));

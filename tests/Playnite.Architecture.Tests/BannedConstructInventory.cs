@@ -19,8 +19,7 @@ internal sealed record BannedConstructRow(
 internal static class BannedConstructInventory
 {
     internal static readonly BannedConstructRow[] Rows =
-    [
-        new("System.Windows.*", null, null, false, "Playnite.Core",
+    [        new("System.Windows.*", null, null, false, "Playnite.Core",
             "namespace System.Windows.Other { class Widget { } } class C { System.Windows.Other.Widget? value; }",
             "banned Windows", "Allowed only for System.Windows.Input.ICommand; every other System.Windows type and descendant is banned.",
             "Exact for source resolution. Dynamic, reflection or generated code is outside source analysis."),
@@ -52,8 +51,8 @@ internal static class BannedConstructInventory
             "library code", "Only Playnite.Desktop, Playnite.Cli and Playnite.LegacyImport are hosts.", "Exact."),
         new("GC.Collect", "BannedSymbols.GcCollect.txt", "M:System.GC.Collect", false, "Playnite.Core",
             "class C { void M() { System.GC.Collect(); } }",
-            "banned call", "Only a benchmark/soak harness with a comment on the call.",
-            "No harness exists yet (p8-003). Until one sets PlayniteBenchmarkHarness=true, every product call is rejected; the harness unit must add itself to the source-policy inputs and prove the commented exception."),
+            "banned call", "Only a policy-allowlisted benchmark/soak harness with a comment on the call.",
+            "No harness exists yet (p8-003). Until one is named in SourcePolicy.BenchmarkHarnessProjects and Directory.Build.props, every product call is rejected; a project cannot self-declare, and the list alone still requires the comment."),
         new("catch { }", null, null, false, "Playnite.Core",
             "class C { void M() { try { } catch { } } }", "empty catch",
             "Empty catch bodies are banned; catch specific, log, or rethrow.",
@@ -77,4 +76,46 @@ internal static class BannedConstructInventory
             "class C { object M() => new System.Random(); }", "ambient randomness",
             "Not allowed in pure logic; inject a seeded Random.", "Same project-scope approximation as Guid.NewGuid."),
     ];
+
+    /// <summary>
+    /// Returns every ownership defect, including an ownerless row. Split from the xUnit
+    /// assertions so a test can prove the failure path with a synthetic row and a mutated
+    /// PORTING construct list.
+    /// </summary>
+    internal static string[] OwnershipProblems(string[] portingConstructs, IEnumerable<BannedConstructRow> rows)
+    {
+        var problems = new List<string>();
+        foreach (var row in rows)
+        {
+            if (row.SymbolFile == null && row.ProbeSource == null)
+            {
+                problems.Add($"{row.Construct}: row has no symbol file or source probe owner");
+            }
+
+            if (row.SymbolFile != null && string.IsNullOrWhiteSpace(row.SymbolId))
+            {
+                problems.Add($"{row.Construct}: symbol owner has no representative row");
+            }
+
+            if (row.ProbeSource != null
+                && (string.IsNullOrWhiteSpace(row.ProbeProject) || string.IsNullOrWhiteSpace(row.ProbeMessage)))
+            {
+                problems.Add($"{row.Construct}: source probe needs a project and an expected message");
+            }
+        }
+
+        var table = portingConstructs.Order(StringComparer.Ordinal).ToArray();
+        var inventory = rows.Select(row => row.Construct).Order(StringComparer.Ordinal).ToArray();
+        foreach (var missing in table.Except(inventory, StringComparer.Ordinal))
+        {
+            problems.Add($"PORTING row '{missing}' has no inventory owner");
+        }
+
+        foreach (var extra in inventory.Except(table, StringComparer.Ordinal))
+        {
+            problems.Add($"inventory row '{extra}' has no PORTING entry (removed rule?)");
+        }
+
+        return problems.ToArray();
+    }
 }

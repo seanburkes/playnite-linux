@@ -4,6 +4,9 @@ tests/golden/              @seanburkes
 tests/fixtures/            @seanburkes
 tests/baseline.json        @seanburkes
 docs/formal/               @seanburkes
+docs/port/02-ARCHITECTURE.md @seanburkes
+docs/port/PORTING.md       @seanburkes
+BannedSymbols*.txt         @seanburkes
 oracle-lock/               @seanburkes
 docs/port/surface-parity.tsv @seanburkes
 tools/LegacyOracle/        @seanburkes
