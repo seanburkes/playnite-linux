@@ -77,6 +77,9 @@ running. This document is the committed result; raw JSON is generated on demand.
 
 Each cell is **median [min, max]**, 10 measured repetitions. Times are milliseconds;
 RSS is KiB (1024 bytes). Decimal rounding below does not affect the raw samples.
+Runs 1 and 2 are sequential same-host, warm-cache repeats captured about 23 seconds
+apart, **not independent runs**. Two repeats cannot establish a performance
+distribution; these summaries describe only the observed samples.
 
 | Metric and scope | Run 1 | Run 2 |
 | --- | ---: | ---: |
@@ -138,3 +141,5 @@ and 3.67/2.50/2.06 after run 1; 3.54/2.54/2.08 before and after run 2. These exp
 possible variation, not a proven attribution to a particular competing process.
 Use multiple runs and comparable host conditions for later comparisons, not these
 individual maxima as a regression threshold.
+Treat the 5.7% desktop launch → Opened difference as host/measurement noise, not a
+performance trend; these two closely spaced repeats cannot demonstrate one.
