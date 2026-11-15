@@ -4,12 +4,12 @@ Question: can Avalonia 12.1.6 on Linux express ADR-013's library grid, search/fi
 selection-driven details using ADR-007's resource-dictionary pipeline, and render it
 reproducibly without a display?
 
-Result (2026-11-15): **yes for this spike**. Eight xunit v3 facts pass, zero skips. No
+Result (2026-11-15): **yes for this spike**. Nine xunit v3 facts pass, zero skips. No
 Playnite product assemblies are referenced. All six titles, playtimes, dates, installed
 flags and geometric covers are **invented fake data**, not real game metadata/artwork.
 There is no animation code, networking, timer, DB, launching, settings or packaging.
 This spike is **not in the product solution and is not executed by the Linux CI job**.
-Its eight facts and the cross-process runner are manually invoked evidence, not CI coverage.
+Its nine facts and the cross-process runner are manually invoked evidence, not CI coverage.
 
 ## Reproduce
 
@@ -25,7 +25,7 @@ env -u DISPLAY -u WAYLAND_DISPLAY SPIKE_EVIDENCE_DIR="$evidence" \
 `SPIKE_EVIDENCE_DIR` is mandatory and must be **new or empty**. A reused/nonempty
 directory fails before window creation; do not overwrite previous evidence. Both display
 variables must be absent or empty (the command above actually unsets them). Expect
-`Total: 8, Errors: 0, Failed: 0, Skipped: 0, Not Run: 0`.
+`Total: 9, Errors: 0, Failed: 0, Skipped: 0, Not Run: 0`.
 
 To automate **two separate processes**, restore the locked packages, then run:
 
@@ -36,7 +36,7 @@ python3 spikes/ui-shell/compare_processes.py "$comparison"
 ```
 
 The runner unsets both display variables, starts the full suite twice in separate
-processes, requires at least eight tests per process with zero errors/failures/skips/not-run,
+processes, requires at least nine tests per process with zero errors/failures/skips/not-run,
 and compares `render-1.png` against `render-2.png` and `render-3.png` within each process.
 It then compares `process-1/render-1.png` against `process-2/render-1.png` byte-for-byte
 and checks each process's first PNG hash against its `render.json` hash. Together those
@@ -95,8 +95,9 @@ rasterizers or future package versions. Reference hashes are evidence,
 
 | xunit fact | Assertions |
 | --- | --- |
-| `Rendered_library_tree_matches_committed_semantic_baseline` | Nonempty tree, exactly six library cells and one details panel; recursive comparison with the committed structural baseline. |
+| `Rendered_library_tree_matches_committed_semantic_baseline` | Baseline-independent checks for a nonempty tree, header/fake-data caption, six library cells, count, search placeholder, details heading/fields/caption; recursive comparison with the committed structural baseline. |
 | `Semantic_comparison_rejects_structural_drift_and_only_tolerates_one_pixel` | Mutation checks reject a missing cell, renamed control/automation name, changed type/text/value/enabled/visibility and a lost details panel; bounds drift of 1 pixel passes, 1.001 fails. |
+| `Required_library_semantics_rejects_shorter_self_matching_trees` | Removing a required header/caption, one library cell, count, placeholder, details panel or field yields a tree that matches itself but fails the independent required-content assertions. |
 | `Grid_binds_every_fake_cover_title_playtime_and_last_played` | Six catalog items and six realized cells; each cell has its bound title, playtime, last-played text and geometric-cover motif; bound count reads six. |
 | `Search_and_installed_filter_narrow_the_bound_grid_and_clear_empty_details` | Editing the actual search TextBox filters case-insensitively; checkbox combines installed filtering; zero results clear details and count reads zero; clearing search restores four installed entries and bound count reads four. |
 | `Selecting_a_cell_updates_all_bound_details` | Changing ListBox selection updates the model and visible title, playtime and last-played details. |
@@ -133,15 +134,29 @@ include search text, checkbox state and cover motif; no paths, clocks or object 
 Comparison requires exact types, names, text/values, states, hierarchy, ordering and
 child counts. **Only each bounds component has an inclusive ±1 logical-pixel tolerance**
 (one device pixel at the pinned scale), allowing small pixel-derived layout rounding;
-there is no structural tolerance. Missing/renamed cells or controls, type changes or a
-lost details panel fail. The comparator's mutation test exercises these failures.
+this can also accept a **real one-pixel layout drift**, not only rounding noise.
+There is no structural tolerance. The comparator's mutation test rejects a missing
+cell, renamed control/automation name, changed control type, text/value or effective
+state, and a lost details panel. Separate required-content assertions pin the header,
+fake-data caption, six cells inside the named library, count, visible search placeholder,
+and the details heading/title/playtime/last-played/caption without reading the baseline.
+The omission test proves these assertions reject shortened trees even when each tree
+is compared against an identical replacement baseline.
 There is no automatic baseline acceptance/update mode: the test emits its actual tree
 to the new external evidence directory before comparing, never overwriting the baseline.
 Any intentional baseline change needs explicit review of that emitted diff.
 
-Two fresh process runs each passed all eight facts with zero skips; emitted trees were
+Two fresh process runs each passed all nine facts with zero skips; emitted trees were
 byte-identical to one another and to the committed baseline, SHA-256
 `886a28797c9b0dd4d12271d26fac472513f7370703830ed8ce43b30b03226b5e`.
+This byte-identity claim is evidenced by the matching recorded SHA-256 values for both
+processes and the baseline, plus the runner's direct cross-process byte comparison;
+the structural comparison itself permits the bounds tolerance and does not assert
+byte identity. The initial external `bootstrap/` tree capture was **pre-final** (before
+the visibility field and final serialization format), is not the committed baseline,
+and is excluded from this equality claim. The original eight-fact final-source evidence
+was the two runs under external `verified-processes/`; the nine-fact hardening runs are
+under external `harden-processes/`. Both record their hashes in `comparison.json`.
 All six PNG captures retained the existing reference hash above.
 
 This proves the initial fake-data shell's selected structure and bound content, not
