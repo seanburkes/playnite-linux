@@ -1,2 +1,2 @@
 id	wave	area	unit	depends	status	owner	oracle	test	notes
-p2-003	W2	scaffold	Linux CI + Windows oracle CI	p2-001	todo	release	-	ci	matrix
+p2-003	W2	scaffold	Linux CI + Windows oracle CI	p2-001	in-progress	fm/p2-003	.github/workflows/legacy-oracle.yml;tests/baseline.json	ci:linux-build-and-test;plan-guards	MTP CI with parsed self-closing bootstrap policy; p2-002 merged; local 43 architecture cases and Core bootstrap counts verified; live rerun and two blind reviews pending
