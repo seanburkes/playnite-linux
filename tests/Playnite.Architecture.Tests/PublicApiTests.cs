@@ -1,5 +1,7 @@
 using System.Collections.Immutable;
 using System.Reflection;
+using System.Security.Cryptography;
+using System.Text;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.Diagnostics;
@@ -11,6 +13,56 @@ namespace Playnite.Architecture.Tests;
 public sealed class PublicApiTests
 {
     private static ProductGraph Abstractions => ProductGraph.Products.Single(p => p.Name == "Playnite.SDK.Abstractions");
+
+    [Fact]
+    public void Binary_baseline_matches_the_review_protected_SHA()
+    {
+        var directory = Path.Combine(ProductGraph.Root, "src", "Playnite.SDK.Abstractions", "api-baseline");
+        var expected = File.ReadAllText(Path.Combine(directory, "Playnite.SDK.Abstractions.sha256")).Trim();
+        Assert.Equal(expected, Convert.ToHexStringLower(SHA256.HashData(File.ReadAllBytes(Path.Combine(directory, "Playnite.SDK.Abstractions.dll")))));
+    }
+
+    [Fact]
+    public void Shipped_API_matches_the_review_protected_checksum()
+    {
+        var shipped = Path.Combine(ProductGraph.Root, "src", "Playnite.SDK.Abstractions", "PublicAPI.Shipped.txt");
+        var violation = ShippedSurfaceViolation(File.ReadAllBytes(shipped));
+        Assert.True(violation == null, violation);
+    }
+
+    [Theory]
+    [InlineData("AreObjectsEqual(object? object1, object? object2)", "AreObjectsEqual(string? object1, string? object2)")]
+    [InlineData("MetadataField.Name = 0", "MetadataField.Title = 0")]
+    public void Same_arity_signature_or_enum_rename_cannot_silently_rebaseline(string original, string replacement)
+    {
+        var shipped = File.ReadAllText(Path.Combine(ProductGraph.Root, "src", "Playnite.SDK.Abstractions", "PublicAPI.Shipped.txt"));
+        Assert.Contains(original, shipped, StringComparison.Ordinal);
+        var changed = Encoding.UTF8.GetBytes(shipped.Replace(original, replacement, StringComparison.Ordinal));
+        Assert.Contains("Shipped SDK API checksum mismatch", ShippedSurfaceViolation(changed)!, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void API_surface_and_baseline_are_review_protected_and_code_owned()
+    {
+        var workflow = File.ReadAllText(Path.Combine(ProductGraph.Root, ".github", "workflows", "plan-guards.yml"));
+        var protectedPaths = workflow.Split("PROTECTED_PATHS: >-", StringSplitOptions.None)[1].Split("\njobs:", StringSplitOptions.None)[0]
+            .Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
+        var ownership = File.ReadAllLines(Path.Combine(ProductGraph.Root, ".github", "CODEOWNERS"))
+            .Where(line => !line.StartsWith('#')).Select(line => line.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries)).ToArray();
+        foreach (var path in new[] { "src/Playnite.SDK.Abstractions/PublicAPI.Shipped.txt",
+            "src/Playnite.SDK.Abstractions/PublicAPI.Unshipped.txt", "src/Playnite.SDK.Abstractions/api-baseline" })
+        {
+            Assert.Contains(path, protectedPaths);
+            Assert.Contains(ownership, row => row.Length >= 2 && row[0].TrimEnd('/') == path && row[1] == "@seanburkes");
+        }
+    }
+
+    private static string? ShippedSurfaceViolation(byte[] surface)
+    {
+        var approved = File.ReadAllText(Path.Combine(ProductGraph.Root, "src", "Playnite.SDK.Abstractions", "api-baseline", "PublicAPI.Shipped.sha256")).Trim();
+        var actual = Convert.ToHexStringLower(SHA256.HashData(surface));
+        return actual == approved ? null : $"Shipped SDK API checksum mismatch: expected {approved}, got {actual}; rebaselining requires oracle-change and second-review approval";
+    }
 
     [Fact]
     public void Evaluated_abstractions_build_enables_both_API_guards()

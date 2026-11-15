@@ -8,6 +8,9 @@ docs/port/02-ARCHITECTURE.md @seanburkes
 docs/port/PORTING.md       @seanburkes
 docs/port/BenchmarkHarnessAllowlist.props @seanburkes
 BannedSymbols*.txt         @seanburkes
+src/Playnite.SDK.Abstractions/PublicAPI.Shipped.txt @seanburkes
+src/Playnite.SDK.Abstractions/PublicAPI.Unshipped.txt @seanburkes
+src/Playnite.SDK.Abstractions/api-baseline/ @seanburkes
 oracle-lock/               @seanburkes
 docs/port/surface-parity.tsv @seanburkes
 tools/LegacyOracle/        @seanburkes

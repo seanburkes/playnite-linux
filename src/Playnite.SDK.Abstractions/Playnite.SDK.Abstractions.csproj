@@ -10,4 +10,10 @@
     <PackageReference Include="Microsoft.CodeAnalysis.PublicApiAnalyzers" PrivateAssets="all" />
     <PackageReference Include="Microsoft.DotNet.ApiCompat.Task" PrivateAssets="all" />
   </ItemGroup>
+  <Target Name="ValidateSdkPublicApiPolicy" BeforeTargets="CoreCompile">
+    <Error Condition="'$(TreatWarningsAsErrors)' != 'true'"
+           Text="SDK public API validation requires TreatWarningsAsErrors=true." />
+    <Error Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('$(NoWarn),$(WarningsNotAsErrors)', '(?i)(^|[;,\s])(RS0016|RS0017)($|[;,\s])'))"
+           Text="SDK public API diagnostics RS0016/RS0017 cannot be suppressed or demoted through NoWarn or WarningsNotAsErrors." />
+  </Target>
 </Project>
