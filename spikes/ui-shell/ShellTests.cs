@@ -34,10 +34,7 @@ public sealed class ShellTests
         var tree = SemanticTree.Capture(window);
         File.WriteAllText(Path.Combine(Evidence.Value, "library-1200.semantic.json"),
             JsonSerializer.Serialize(tree, SemanticTree.Json) + "\n");
-        var nodes = SemanticTree.Flatten(tree).ToArray();
-        Assert.NotEmpty(tree.Children);
-        Assert.Equal(6, nodes.Count(node => node.Type == nameof(ListBoxItem)));
-        Assert.Single(nodes, node => node.Name == "Details");
+        AssertRequiredLibraryStructure(tree);
         var baseline = JsonSerializer.Deserialize<SemanticNode>(File.ReadAllText(
             Path.Combine(AppContext.BaseDirectory, "Baselines", "library-1200.semantic.json")))!;
         SemanticTree.AssertMatches(baseline, tree);
@@ -75,6 +72,70 @@ public sealed class ShellTests
         Assert.ThrowsAny<Xunit.Sdk.XunitException>(() =>
             SemanticTree.AssertMatches(tree, Shift(SemanticTree.BoundsTolerance + 0.001)));
     });
+
+    [Fact]
+    public Task Required_library_semantics_rejects_shorter_self_matching_trees() => Run(window =>
+    {
+        var tree = SemanticTree.Capture(window);
+        AssertRequiredLibraryStructure(tree);
+        SemanticNode Remove(SemanticNode node, Func<SemanticNode, bool> predicate) => node with
+        {
+            Children = node.Children.Where(child => !predicate(child))
+                .Select(child => Remove(child, predicate)).ToArray()
+        };
+        var omissions = new Func<SemanticNode, bool>[]
+        {
+            node => node.Text == "PLAYNITE / Library study",
+            node => node.Text == "FAKE DATA · Invented titles and geometric covers",
+            node => node.Type == nameof(ListBoxItem) && node.Children.Any(child => child.Text == "Amber Atlas"),
+            node => node.Name == "Count",
+            node => node.Text == "Search invented games",
+            node => node.Name == "Details",
+            node => node.Text == "SELECTED GAME",
+            node => node.Name == "DetailsTitle",
+            node => node.Name == "DetailsPlaytime",
+            node => node.Name == "DetailsLastPlayed",
+            node => node.Text == "Synthetic library entry. No launch action or real metadata."
+        };
+        foreach (var omission in omissions)
+        {
+            var shorter = Remove(tree, omission);
+            // A matching replacement baseline alone would accept each incomplete tree.
+            SemanticTree.AssertMatches(shorter, shorter);
+            Assert.ThrowsAny<Xunit.Sdk.XunitException>(() => AssertRequiredLibraryStructure(shorter));
+        }
+    });
+
+    private static void AssertRequiredLibraryStructure(SemanticNode tree)
+    {
+        var nodes = SemanticTree.Flatten(tree).ToArray();
+        Assert.NotEmpty(tree.Children);
+        void Text(IEnumerable<SemanticNode> scope, string text) =>
+            Assert.Single(scope, node => node.Type == nameof(TextBlock) && node.Visible && node.Text == text);
+        Text(nodes, "PLAYNITE / Library study");
+        Text(nodes, "FAKE DATA · Invented titles and geometric covers");
+        var library = Assert.Single(nodes, node => node.Type == nameof(ListBox) && node.Name == "Games");
+        Assert.Equal(6, SemanticTree.Flatten(library).Count(node => node.Type == nameof(ListBoxItem)));
+        Assert.Equal("6 invented games", Assert.Single(nodes, node => node.Name == "Count").Text);
+        var search = Assert.Single(nodes, node => node.Type == nameof(TextBox) && node.Name == "Search");
+        Text(SemanticTree.Flatten(search), "Search invented games");
+        var details = Assert.Single(nodes, node => node.Type == nameof(Border) && node.Name == "Details");
+        var fields = SemanticTree.Flatten(details).ToArray();
+        Text(fields, "SELECTED GAME");
+        foreach (var (name, text) in new[]
+        {
+            ("DetailsTitle", "Amber Atlas"),
+            ("DetailsPlaytime", "12 h 30 min"),
+            ("DetailsLastPlayed", "Last played: 2026-10-12")
+        })
+        {
+            var field = Assert.Single(fields, node => node.Name == name);
+            Assert.Equal(nameof(TextBlock), field.Type);
+            Assert.True(field.Visible);
+            Assert.Equal(text, field.Text);
+        }
+        Text(fields, "Synthetic library entry. No launch action or real metadata.");
+    }
 
     [Fact]
     public Task Grid_binds_every_fake_cover_title_playtime_and_last_played() => Run(window =>

@@ -1,0 +1,2 @@
+id	wave	area	unit	depends	status	owner	oracle	test	notes
+p2-ui-semantics-harden	W2	spike	Independent semantic-tree content guards	p2-ui-semantics	in-progress	fm/p2-ui-semantics-harden	spike; ADR-013; spikes/ui-shell/LibraryWindow.axaml	spikes/ui-shell/ShellTests.cs::Required_library_semantics_rejects_shorter_self_matching_trees	Baseline-independent header/caption, six-cell count, search placeholder and details fields; omission checks reject self-matching shortened trees; nine facts pass per process zero skips; unchanged baseline/PNG; review pending

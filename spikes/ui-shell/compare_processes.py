@@ -34,8 +34,8 @@ def main():
         print(result.stdout, end="", flush=True)
         result.check_returncode()
         summary = re.search(r"Total:\s*(\d+), Errors:\s*(\d+), Failed:\s*(\d+), Skipped:\s*(\d+), Not Run:\s*(\d+)", result.stdout)
-        if summary is None or int(summary[1]) < 8 or any(int(value) for value in summary.groups()[1:]):
-            raise RuntimeError(f"{name}: expected at least eight tests with zero errors/failures/skips/not-run")
+        if summary is None or int(summary[1]) < 9 or any(int(value) for value in summary.groups()[1:]):
+            raise RuntimeError(f"{name}: expected at least nine tests with zero errors/failures/skips/not-run")
         metadata = json.loads((run / "render.json").read_text())
         captures = [(run / f"render-{index}.png").read_bytes() for index in (1, 2, 3)]
         digest = hashlib.sha256(captures[0]).hexdigest()
