@@ -7,12 +7,13 @@
 | Captain (owner) | Sean | Scope, ADRs, gate evidence, merge decision |
 | First mate | Firstmate primary (OpenCode/Claude/Codex) | Intake, dispatch, supervision, escalation |
 | Implementer | Crewmate per worktree | One unit: code + tests + ledger |
-| Reviewer A/B | Two adversarial agents (different models), diff only | "Assume this is wrong; enumerate how" |
+| Reviewer A/B | Two adversarial agents, diff only; a different model from the implementer is preferred, not required | "Assume this is wrong; enumerate how" |
 | Fixer | A separate crewmate | Apply review findings |
-| Oracle owner | Captain | Goldens, fixtures, formal models; never the implementer agent |
+| Oracle owner | Captain + a separate agent, ideally a different model; never the implementer | Goldens, fixtures, formal models |
 
 Roles never overlap. The implementer never reviews its own unit. The reviewer never edits the
-implementation. The oracle owner is not the agent changing the implementation. Review is
+implementation. The oracle owner is the Captain working with a separate agent that is not the
+implementer; that is agent role separation, not independent human approval. Review is
 adversarial agent assistance: the owner makes the merge decision, and no agent review is
 independent human approval (ADR-024).
 
@@ -208,12 +209,13 @@ not duplicated in the build workflow.
 | `windows-fixture-validation` / `fixture` | `windows-latest` | Existing fixture/tool-path filters or manual dispatch; validate regeneration, mutations, source preservation, and the committed fixture. |
 | `port-index` / `regenerate` | `ubuntu-latest` | Push to `main` only; validate history, regenerate aggregates, and commit them on `main` with no force-push. |
 
-Require `linux-build-and-test`, `inventory-and-parity`, and `formal` for every PR and
-merge-queue entry. Require the
-applicable Windows checks when their existing path filters select a PR; do not configure a
-path-filtered Windows workflow as an unconditional required check, since an untriggered
-workflow would stay pending. The aggregate writer is a post-merge check, not a PR check.
-These are required-check names for repository configuration; this document does not change
+Require exactly these five contexts on every PR and merge-queue entry: `inventory-and-parity`,
+`formal`, `linux-build-and-test`, `AppImage packaging smoke` and `Flatpak packaging smoke`,
+with a strict up-to-date branch and no required reviews. The `legacy-oracle`,
+`settings-library-oracle` and `windows-fixture-validation` jobs are path-filtered additional
+checks: they run when their paths change, so they are not required contexts (an untriggered
+workflow would stay pending). The aggregate writer is a post-merge check, not a PR check.
+These are the required-check names for repository configuration; this document does not change
 branch protection.
 
 `linux-ci.yml` installs the exact SDK version from `global.json` (currently `11.0.100`) with
@@ -384,8 +386,9 @@ For every unit:
 2. **Reviewer A** gets only the diff, the unit's parity row, and the relevant oracle artifacts.
    Prompt: "Assume this code is wrong. Compare it to the v10 reference and the contract.
    Enumerate behavioural differences, omissions, and lifetime/ordering bugs, file:line."
-3. **Reviewer B** gets the same, with a different model. It must enumerate separately; do
-   not show A's findings.
+3. **Reviewer B** gets the same, ideally with a different model from A. It must enumerate
+   separately; do not show A's findings. If the same model or provider has to review twice,
+   record the correlation in the findings.
 4. **Fixer** applies accepted findings. It does not add scope.
 5. Re-run both reviewers on the updated diff until clean or until a finding is explicitly
    escalated to the captain.
@@ -394,8 +397,10 @@ For every unit:
 
 Both reviews are adversarial agent assistance, not independent human approval: this repository
 has one human owner, who reads the findings and decides the merge (ADR-024). Branch protection
-requires the pull request, the required checks, and an up-to-date branch; it has no approval
-requirement, and CODEOWNERS is audit metadata rather than an approval gate.
+requires the pull request, the five required checks (`inventory-and-parity`, `formal`,
+`linux-build-and-test`, `AppImage packaging smoke`, `Flatpak packaging smoke`) and an up-to-date
+branch; it has no approval requirement, and CODEOWNERS is audit metadata rather than an
+approval gate. The path-filtered oracle jobs run in addition when their paths change.
 
 Reviewer prompt skeleton:
 

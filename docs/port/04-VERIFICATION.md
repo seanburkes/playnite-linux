@@ -154,10 +154,13 @@ Independence is structural, not cultural. The mechanisms that carry it are:
 - The bytes are pinned: `tests/fixtures/v10/SHA256SUMS`, the golden manifests, `oracle-lock/`,
   and the `api-baseline/` SHA files change when a payload changes, even when the diff looks
   small.
-- The checks are executed, not asserted: the `legacy-oracle` and
-  `windows-fixture-validation` jobs run the frozen Windows code and validate regenerated
-  fixtures, the `formal` job runs the TLA+ models in `docs/formal/`, and the Linux job runs the
-  count and skip policy. These are required status checks, not reviewer opinions.
+- The checks are executed, not asserted: the `formal` job runs the TLA+ models in
+  `docs/formal/`, and the Linux job runs the count and skip policy. The five required contexts
+  are `inventory-and-parity`, `formal`, `linux-build-and-test`, `AppImage packaging smoke` and
+  `Flatpak packaging smoke`; these are status checks, not reviewer opinions. The
+  `legacy-oracle`, `settings-library-oracle` and `windows-fixture-validation` jobs run the
+  frozen Windows code and validate regenerated fixtures as path-filtered additional checks,
+  so they only run when their paths change.
 - There is no auto-accept/update-snapshot command in the repo. Regeneration is a separate
   script run by a human, and the resulting diff goes through the protected-path route.
 - Escape hatches (`Skip`, `Explicit`, `[Ignore]`, category filters) are counted; a non-zero
@@ -168,9 +171,14 @@ Independence is structural, not cultural. The mechanisms that carry it are:
 An oracle change is declared, not approved by a second person: the task says `oracle-change`,
 the PR carries the label, and the protected-path gate checks the diff. This repository has one
 human owner, so review is adversarial agent assistance rather than independent human approval,
-and the owner makes the merge decision (ADR-024). The residual risk is real: one human plus
-models can share blind spots. The mitigations are the mechanical protections above, not a
-second signature, and they reduce the risk without eliminating it.
+and the owner makes the merge decision (ADR-024). An external reviewer is still preferred where
+one can exist - an external human, or a different machine or owner - and when it is not used
+the owner's merge decision is the accepted exception, recorded in the gate artifact
+(`docs/port/gates/P<phase>-*.md`). The residual risk is real: one human plus models can share
+blind spots, correlated reviewers miss the same defects, and the structural checks catch
+tampering and regression rather than a wrong port that passes its tests. The mitigations are
+the mechanical protections above, not a second signature, and they reduce the risk without
+eliminating it.
 
 ## 5. Process-level differential harness
 

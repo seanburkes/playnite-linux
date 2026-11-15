@@ -612,13 +612,16 @@ zero third-party plugins is a claim without a corpus.
 same person, even when an agent or model produces the review text. Several documents described
 a "second reviewer" or "independent review" as a merge gate, and some described CODEOWNERS as
 an approval requirement. Neither is true. Branch protection on the default branch requires a
-pull request, the required status checks, and an up-to-date branch, and it blocks force pushes
-and branch deletion; it has no approval requirement. A rule that cannot be satisfied is not a
-gate, and a checklist that names a reviewer who does not exist teaches readers to accept a
-false claim.
+pull request, the five required status checks (`inventory-and-parity`, `formal`,
+`linux-build-and-test`, `AppImage packaging smoke`, `Flatpak packaging smoke`) and an
+up-to-date branch, and it blocks force pushes and branch deletion; it has no approval
+requirement. The path-filtered `legacy-oracle`, `settings-library-oracle` and
+`windows-fixture-validation` jobs run in addition when their paths change; they are not
+required contexts. A rule that cannot be satisfied is not a gate, and a checklist that names a
+reviewer who does not exist teaches readers to accept a false claim.
 
 **Decision.**
-- Review is adversarial agent review assistance: a reviewer agent, ideally a different model
+- Review is adversarial agent review assistance: a reviewer agent, preferably a different model
   from the implementer, receives only the diff, the parity row and the oracle artifacts, and is
   asked to assume the change is wrong. It is never described as independent review, a second
   reviewer, or an approval gate.
@@ -629,34 +632,56 @@ false claim.
   require code-owner review.
 - Oracle independence is structural, not social: frozen `legacy/` data, committed hashes in
   `tests/fixtures/*/SHA256SUMS`, golden manifests and `oracle-lock/` pins, protected paths
-  enforced by the `plan-guards` CI diff against the merge base, the required status checks
-  themselves, and the TLA+ models run by the `formal` job. Cite those mechanisms rather than
-  asserting independence in prose.
+  enforced by the `plan-guards` CI diff against the merge base, the five required status checks
+  and the path-filtered oracle jobs that run on their paths, and the TLA+ models run by the
+  `formal` job. Cite those mechanisms rather than asserting independence in prose.
 - A protected oracle change is declared, not seconded: the task says `oracle-change`, the PR
   carries the label, and the protected-path gate checks the diff, re-reading the label in the
   merge queue. `legacy/` and `oracle-lock/` remain unconditionally immutable; no label
   overrides them.
+- An external review is preferred where one can exist: for an oracle change, prefer a reviewer
+  outside this repository (an external human, or a different machine or owner). When that is
+  not used, the owner's merge decision is the accepted exception, and the gate artifact
+  (`docs/port/gates/P<phase>-*.md`) records that the exception was taken.
 
 **Consequences.**
-- The documented process matches what actually happens, so a reader can tell a real gate
-  (branch protection, required checks, the protected-path gate) from assistance (agent review).
+- A reader can tell a real gate (branch protection, the five required checks, the
+  protected-path gate) from assistance (agent review).
 - Agent review stays unit evidence: two adversarial diff-only reviews per unit, with findings
   applied by a fixer. Its authority is "evidence the owner reads", not "approval".
 - The `oracle-change` route remains the only way a protected surface moves, and CI enforces it
   rather than a person's signature.
+- The repository still contains stale "second reviewer" wording in a small set of workflow,
+  test and protected-path files. That is tracked as a required follow-up unit in the pull
+  request that added this ADR; it is not claimed to be fixed here.
 
-**Residual risk.** One human plus models can share blind spots: a model can repeat the
-implementer's assumptions, and the owner's own reading is a single point of failure. The
-mitigations are structural rather than social - a frozen `legacy/` snapshot the port cannot
-edit, committed hashes and locks, CI diffs of protected paths, mutation and negative probes,
-and the formal models. They reduce the risk but do not eliminate it, so review claims are
-stated as assistance, never as independent approval.
+**Residual risk.** One human plus models can share blind spots. Concretely:
+- diff-only review cannot execute builds or tests, so a reviewer reasons about behaviour it
+  never runs;
+- two reviewers drawn from the same model or provider are correlated and tend to miss the same
+  class of defect; a different model is a preference, not a guarantee;
+- the owner chooses the reviewer packet and can ignore a finding, and no mechanism overrides
+  that decision;
+- the owner also administers branch protection and the protected-path gate, so a deliberate
+  owner action can weaken the gate itself;
+- the structural checks catch tampering and regression (changed bytes, lowered counts, broken
+  hashes), not a semantically wrong port that happens to pass its tests;
+- the `formal` job fetches `tla2tools.jar` from the latest release without a hash pin, and the
+  oracle jobs are path-filtered, so they only run when their paths change.
+
+The mitigations are structural rather than social - a frozen `legacy/` snapshot the port
+cannot edit, committed hashes and locks, CI diffs of protected paths, mutation and negative
+probes, the formal models, and the external-review preference above. They reduce the risk but
+do not eliminate it, so review claims are stated as assistance, never as independent approval.
 
 **Rejected.**
 - *Pretend agent review is independent approval.* It is not a second person, and saying so
   would overstate the evidence behind a merge.
 - *Require an approval that cannot exist.* An approval rule with one owner is either
   self-approval, which is meaningless, or a permanent block on every change.
+- *Drop the external-review preference because the repository has one owner.* An external
+  reviewer or a different machine can still exist for a high-risk oracle change; the option
+  stays, with the exception recorded.
 
 ---
 
