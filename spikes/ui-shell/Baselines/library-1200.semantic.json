@@ -1,0 +1,747 @@
+{
+  "Type": "LibraryWindow",
+  "Name": "",
+  "AutomationName": "",
+  "Bounds": [
+    0,
+    0,
+    1200,
+    800
+  ],
+  "Enabled": true,
+  "Visible": true,
+  "Text": "Library shell — fake data",
+  "Value": null,
+  "Children": [
+    {
+      "Type": "TextBlock",
+      "Name": "",
+      "AutomationName": "",
+      "Bounds": [
+        20,
+        20,
+        1160,
+        30
+      ],
+      "Enabled": true,
+      "Visible": true,
+      "Text": "PLAYNITE / Library study",
+      "Value": null,
+      "Children": []
+    },
+    {
+      "Type": "TextBlock",
+      "Name": "",
+      "AutomationName": "",
+      "Bounds": [
+        20,
+        50,
+        1160,
+        17
+      ],
+      "Enabled": true,
+      "Visible": true,
+      "Text": "FAKE DATA · Invented titles and geometric covers",
+      "Value": null,
+      "Children": []
+    },
+    {
+      "Type": "TextBox",
+      "Name": "Search",
+      "AutomationName": "Search games",
+      "Bounds": [
+        20,
+        77,
+        260,
+        40
+      ],
+      "Enabled": true,
+      "Visible": true,
+      "Text": null,
+      "Value": "",
+      "Children": [
+        {
+          "Type": "TextBlock",
+          "Name": "PART_FloatingPlaceholder",
+          "AutomationName": "",
+          "Bounds": [
+            31,
+            84,
+            0,
+            0
+          ],
+          "Enabled": true,
+          "Visible": false,
+          "Text": "Search invented games",
+          "Value": null,
+          "Children": []
+        },
+        {
+          "Type": "TextBlock",
+          "Name": "PART_Placeholder",
+          "AutomationName": "",
+          "Bounds": [
+            31,
+            84,
+            242,
+            27
+          ],
+          "Enabled": true,
+          "Visible": true,
+          "Text": "Search invented games",
+          "Value": null,
+          "Children": []
+        }
+      ]
+    },
+    {
+      "Type": "CheckBox",
+      "Name": "Installed",
+      "AutomationName": "",
+      "Bounds": [
+        284,
+        81,
+        116,
+        32
+      ],
+      "Enabled": true,
+      "Visible": true,
+      "Text": "Installed only",
+      "Value": "False",
+      "Children": [
+        {
+          "Type": "AccessText",
+          "Name": "",
+          "AutomationName": "",
+          "Bounds": [
+            312,
+            89,
+            88,
+            17
+          ],
+          "Enabled": true,
+          "Visible": true,
+          "Text": "Installed only",
+          "Value": null,
+          "Children": []
+        }
+      ]
+    },
+    {
+      "Type": "TextBlock",
+      "Name": "Count",
+      "AutomationName": "",
+      "Bounds": [
+        414,
+        87,
+        118,
+        20
+      ],
+      "Enabled": true,
+      "Visible": true,
+      "Text": "6 invented games",
+      "Value": null,
+      "Children": []
+    },
+    {
+      "Type": "ListBox",
+      "Name": "Games",
+      "AutomationName": "Invented game library",
+      "Bounds": [
+        20,
+        127,
+        886,
+        643
+      ],
+      "Enabled": true,
+      "Visible": true,
+      "Text": null,
+      "Value": null,
+      "Children": [
+        {
+          "Type": "ListBoxItem",
+          "Name": "",
+          "AutomationName": "",
+          "Bounds": [
+            24,
+            131,
+            172,
+            260
+          ],
+          "Enabled": true,
+          "Visible": true,
+          "Text": null,
+          "Value": null,
+          "Children": [
+            {
+              "Type": "CoverArt",
+              "Name": "",
+              "AutomationName": "",
+              "Bounds": [
+                36,
+                143,
+                148,
+                138
+              ],
+              "Enabled": true,
+              "Visible": true,
+              "Text": null,
+              "Value": "0",
+              "Children": []
+            },
+            {
+              "Type": "TextBlock",
+              "Name": "",
+              "AutomationName": "",
+              "Bounds": [
+                36,
+                291,
+                148,
+                17
+              ],
+              "Enabled": true,
+              "Visible": true,
+              "Text": "Amber Atlas",
+              "Value": null,
+              "Children": []
+            },
+            {
+              "Type": "TextBlock",
+              "Name": "",
+              "AutomationName": "",
+              "Bounds": [
+                36,
+                318,
+                148,
+                17
+              ],
+              "Enabled": true,
+              "Visible": true,
+              "Text": "12 h 30 min",
+              "Value": null,
+              "Children": []
+            },
+            {
+              "Type": "TextBlock",
+              "Name": "",
+              "AutomationName": "",
+              "Bounds": [
+                36,
+                345,
+                148,
+                34
+              ],
+              "Enabled": true,
+              "Visible": true,
+              "Text": "Last played: 2026-10-12",
+              "Value": null,
+              "Children": []
+            }
+          ]
+        },
+        {
+          "Type": "ListBoxItem",
+          "Name": "",
+          "AutomationName": "",
+          "Bounds": [
+            204,
+            131,
+            172,
+            260
+          ],
+          "Enabled": true,
+          "Visible": true,
+          "Text": null,
+          "Value": null,
+          "Children": [
+            {
+              "Type": "CoverArt",
+              "Name": "",
+              "AutomationName": "",
+              "Bounds": [
+                214,
+                141,
+                152,
+                138
+              ],
+              "Enabled": true,
+              "Visible": true,
+              "Text": null,
+              "Value": "1",
+              "Children": []
+            },
+            {
+              "Type": "TextBlock",
+              "Name": "",
+              "AutomationName": "",
+              "Bounds": [
+                214,
+                289,
+                152,
+                17
+              ],
+              "Enabled": true,
+              "Visible": true,
+              "Text": "Cloud Orchard",
+              "Value": null,
+              "Children": []
+            },
+            {
+              "Type": "TextBlock",
+              "Name": "",
+              "AutomationName": "",
+              "Bounds": [
+                214,
+                316,
+                152,
+                17
+              ],
+              "Enabled": true,
+              "Visible": true,
+              "Text": "3 h 15 min",
+              "Value": null,
+              "Children": []
+            },
+            {
+              "Type": "TextBlock",
+              "Name": "",
+              "AutomationName": "",
+              "Bounds": [
+                214,
+                343,
+                152,
+                34
+              ],
+              "Enabled": true,
+              "Visible": true,
+              "Text": "Last played: 2026-10-08",
+              "Value": null,
+              "Children": []
+            }
+          ]
+        },
+        {
+          "Type": "ListBoxItem",
+          "Name": "",
+          "AutomationName": "",
+          "Bounds": [
+            384,
+            131,
+            172,
+            260
+          ],
+          "Enabled": true,
+          "Visible": true,
+          "Text": null,
+          "Value": null,
+          "Children": [
+            {
+              "Type": "CoverArt",
+              "Name": "",
+              "AutomationName": "",
+              "Bounds": [
+                394,
+                141,
+                152,
+                138
+              ],
+              "Enabled": true,
+              "Visible": true,
+              "Text": null,
+              "Value": "2",
+              "Children": []
+            },
+            {
+              "Type": "TextBlock",
+              "Name": "",
+              "AutomationName": "",
+              "Bounds": [
+                394,
+                289,
+                152,
+                17
+              ],
+              "Enabled": true,
+              "Visible": true,
+              "Text": "Lantern Tides",
+              "Value": null,
+              "Children": []
+            },
+            {
+              "Type": "TextBlock",
+              "Name": "",
+              "AutomationName": "",
+              "Bounds": [
+                394,
+                316,
+                152,
+                17
+              ],
+              "Enabled": true,
+              "Visible": true,
+              "Text": "28 h 05 min",
+              "Value": null,
+              "Children": []
+            },
+            {
+              "Type": "TextBlock",
+              "Name": "",
+              "AutomationName": "",
+              "Bounds": [
+                394,
+                343,
+                152,
+                34
+              ],
+              "Enabled": true,
+              "Visible": true,
+              "Text": "Last played: 2026-09-21",
+              "Value": null,
+              "Children": []
+            }
+          ]
+        },
+        {
+          "Type": "ListBoxItem",
+          "Name": "",
+          "AutomationName": "",
+          "Bounds": [
+            564,
+            131,
+            172,
+            260
+          ],
+          "Enabled": true,
+          "Visible": true,
+          "Text": null,
+          "Value": null,
+          "Children": [
+            {
+              "Type": "CoverArt",
+              "Name": "",
+              "AutomationName": "",
+              "Bounds": [
+                574,
+                141,
+                152,
+                138
+              ],
+              "Enabled": true,
+              "Visible": true,
+              "Text": null,
+              "Value": "3",
+              "Children": []
+            },
+            {
+              "Type": "TextBlock",
+              "Name": "",
+              "AutomationName": "",
+              "Bounds": [
+                574,
+                289,
+                152,
+                17
+              ],
+              "Enabled": true,
+              "Visible": true,
+              "Text": "Velvet Comet",
+              "Value": null,
+              "Children": []
+            },
+            {
+              "Type": "TextBlock",
+              "Name": "",
+              "AutomationName": "",
+              "Bounds": [
+                574,
+                316,
+                152,
+                17
+              ],
+              "Enabled": true,
+              "Visible": true,
+              "Text": "45 min",
+              "Value": null,
+              "Children": []
+            },
+            {
+              "Type": "TextBlock",
+              "Name": "",
+              "AutomationName": "",
+              "Bounds": [
+                574,
+                343,
+                152,
+                34
+              ],
+              "Enabled": true,
+              "Visible": true,
+              "Text": "Last played: 2026-08-04",
+              "Value": null,
+              "Children": []
+            }
+          ]
+        },
+        {
+          "Type": "ListBoxItem",
+          "Name": "",
+          "AutomationName": "",
+          "Bounds": [
+            24,
+            399,
+            172,
+            256
+          ],
+          "Enabled": true,
+          "Visible": true,
+          "Text": null,
+          "Value": null,
+          "Children": [
+            {
+              "Type": "CoverArt",
+              "Name": "",
+              "AutomationName": "",
+              "Bounds": [
+                34,
+                409,
+                152,
+                138
+              ],
+              "Enabled": true,
+              "Visible": true,
+              "Text": null,
+              "Value": "4",
+              "Children": []
+            },
+            {
+              "Type": "TextBlock",
+              "Name": "",
+              "AutomationName": "",
+              "Bounds": [
+                34,
+                557,
+                152,
+                17
+              ],
+              "Enabled": true,
+              "Visible": true,
+              "Text": "Copper Grove",
+              "Value": null,
+              "Children": []
+            },
+            {
+              "Type": "TextBlock",
+              "Name": "",
+              "AutomationName": "",
+              "Bounds": [
+                34,
+                584,
+                152,
+                17
+              ],
+              "Enabled": true,
+              "Visible": true,
+              "Text": "Not played",
+              "Value": null,
+              "Children": []
+            },
+            {
+              "Type": "TextBlock",
+              "Name": "",
+              "AutomationName": "",
+              "Bounds": [
+                34,
+                611,
+                152,
+                17
+              ],
+              "Enabled": true,
+              "Visible": true,
+              "Text": "Last played: never",
+              "Value": null,
+              "Children": []
+            }
+          ]
+        },
+        {
+          "Type": "ListBoxItem",
+          "Name": "",
+          "AutomationName": "",
+          "Bounds": [
+            204,
+            399,
+            172,
+            256
+          ],
+          "Enabled": true,
+          "Visible": true,
+          "Text": null,
+          "Value": null,
+          "Children": [
+            {
+              "Type": "CoverArt",
+              "Name": "",
+              "AutomationName": "",
+              "Bounds": [
+                214,
+                409,
+                152,
+                138
+              ],
+              "Enabled": true,
+              "Visible": true,
+              "Text": null,
+              "Value": "5",
+              "Children": []
+            },
+            {
+              "Type": "TextBlock",
+              "Name": "",
+              "AutomationName": "",
+              "Bounds": [
+                214,
+                557,
+                152,
+                17
+              ],
+              "Enabled": true,
+              "Visible": true,
+              "Text": "Paper Aurora",
+              "Value": null,
+              "Children": []
+            },
+            {
+              "Type": "TextBlock",
+              "Name": "",
+              "AutomationName": "",
+              "Bounds": [
+                214,
+                584,
+                152,
+                17
+              ],
+              "Enabled": true,
+              "Visible": true,
+              "Text": "7 h 10 min",
+              "Value": null,
+              "Children": []
+            },
+            {
+              "Type": "TextBlock",
+              "Name": "",
+              "AutomationName": "",
+              "Bounds": [
+                214,
+                611,
+                152,
+                34
+              ],
+              "Enabled": true,
+              "Visible": true,
+              "Text": "Last played: 2026-10-01",
+              "Value": null,
+              "Children": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "Type": "Border",
+      "Name": "Details",
+      "AutomationName": "",
+      "Bounds": [
+        916,
+        127,
+        264,
+        643
+      ],
+      "Enabled": true,
+      "Visible": true,
+      "Text": null,
+      "Value": null,
+      "Children": [
+        {
+          "Type": "TextBlock",
+          "Name": "",
+          "AutomationName": "",
+          "Bounds": [
+            926,
+            137,
+            244,
+            17
+          ],
+          "Enabled": true,
+          "Visible": true,
+          "Text": "SELECTED GAME",
+          "Value": null,
+          "Children": []
+        },
+        {
+          "Type": "TextBlock",
+          "Name": "DetailsTitle",
+          "AutomationName": "",
+          "Bounds": [
+            926,
+            164,
+            244,
+            30
+          ],
+          "Enabled": true,
+          "Visible": true,
+          "Text": "Amber Atlas",
+          "Value": null,
+          "Children": []
+        },
+        {
+          "Type": "TextBlock",
+          "Name": "DetailsPlaytime",
+          "AutomationName": "",
+          "Bounds": [
+            926,
+            204,
+            244,
+            17
+          ],
+          "Enabled": true,
+          "Visible": true,
+          "Text": "12 h 30 min",
+          "Value": null,
+          "Children": []
+        },
+        {
+          "Type": "TextBlock",
+          "Name": "DetailsLastPlayed",
+          "AutomationName": "",
+          "Bounds": [
+            926,
+            231,
+            244,
+            17
+          ],
+          "Enabled": true,
+          "Visible": true,
+          "Text": "Last played: 2026-10-12",
+          "Value": null,
+          "Children": []
+        },
+        {
+          "Type": "TextBlock",
+          "Name": "",
+          "AutomationName": "",
+          "Bounds": [
+            926,
+            258,
+            244,
+            34
+          ],
+          "Enabled": true,
+          "Visible": true,
+          "Text": "Synthetic library entry. No launch action or real metadata.",
+          "Value": null,
+          "Children": []
+        }
+      ]
+    }
+  ]
+}

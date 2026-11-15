@@ -4,12 +4,12 @@ Question: can Avalonia 12.1.6 on Linux express ADR-013's library grid, search/fi
 selection-driven details using ADR-007's resource-dictionary pipeline, and render it
 reproducibly without a display?
 
-Result (2026-11-15): **yes for this spike**. Six xunit v3 facts pass, zero skips. No
+Result (2026-11-15): **yes for this spike**. Eight xunit v3 facts pass, zero skips. No
 Playnite product assemblies are referenced. All six titles, playtimes, dates, installed
 flags and geometric covers are **invented fake data**, not real game metadata/artwork.
 There is no animation code, networking, timer, DB, launching, settings or packaging.
 This spike is **not in the product solution and is not executed by the Linux CI job**.
-Its six facts and the cross-process runner are manually invoked evidence, not CI coverage.
+Its eight facts and the cross-process runner are manually invoked evidence, not CI coverage.
 
 ## Reproduce
 
@@ -25,7 +25,7 @@ env -u DISPLAY -u WAYLAND_DISPLAY SPIKE_EVIDENCE_DIR="$evidence" \
 `SPIKE_EVIDENCE_DIR` is mandatory and must be **new or empty**. A reused/nonempty
 directory fails before window creation; do not overwrite previous evidence. Both display
 variables must be absent or empty (the command above actually unsets them). Expect
-`Total: 6, Errors: 0, Failed: 0, Skipped: 0, Not Run: 0`.
+`Total: 8, Errors: 0, Failed: 0, Skipped: 0, Not Run: 0`.
 
 To automate **two separate processes**, restore the locked packages, then run:
 
@@ -36,11 +36,13 @@ python3 spikes/ui-shell/compare_processes.py "$comparison"
 ```
 
 The runner unsets both display variables, starts the full suite twice in separate
-processes, requires at least six tests per process with zero errors/failures/skips/not-run,
+processes, requires at least eight tests per process with zero errors/failures/skips/not-run,
 and compares `render-1.png` against `render-2.png` and `render-3.png` within each process.
 It then compares `process-1/render-1.png` against `process-2/render-1.png` byte-for-byte
 and checks each process's first PNG hash against its `render.json` hash. Together those
 comparisons establish equality of all six captures; it does not perform nine cross-pairs.
+It also compares `library-1200.semantic.json` byte-for-byte across the two processes
+and records each tree's SHA-256 and `treeByteIdentical` in the report.
 It writes `process-{1,2}/` evidence, `process-{1,2}.log`, and `comparison.json`. It fails
 on mismatching bytes/hashes; failed runs retain their logs for investigation. The runner
 also requires a new or empty directory and never overwrites previous evidence.
@@ -59,6 +61,8 @@ Artifacts:
   `sha256` hashes the **PNG file**, not just the pixel buffer.
 - `layout-640.png`, `layout-1200.png`: 640×800 and 1200×800 layout probes. At the
   narrow breakpoint details move below the grid and cover height becomes compact.
+- `library-1200.semantic.json`: rendered control-tree projection for the initial wide
+  shell, emitted beside the PNGs and compared with the committed baseline below.
 
 Observed reference PNG: **69,092 bytes**, **1200×800**, 4,642 distinct RGBA colours.
 
@@ -91,6 +95,8 @@ rasterizers or future package versions. Reference hashes are evidence,
 
 | xunit fact | Assertions |
 | --- | --- |
+| `Rendered_library_tree_matches_committed_semantic_baseline` | Nonempty tree, exactly six library cells and one details panel; recursive comparison with the committed structural baseline. |
+| `Semantic_comparison_rejects_structural_drift_and_only_tolerates_one_pixel` | Mutation checks reject a missing cell, renamed control/automation name, changed type/text/value/enabled/visibility and a lost details panel; bounds drift of 1 pixel passes, 1.001 fails. |
 | `Grid_binds_every_fake_cover_title_playtime_and_last_played` | Six catalog items and six realized cells; each cell has its bound title, playtime, last-played text and geometric-cover motif; bound count reads six. |
 | `Search_and_installed_filter_narrow_the_bound_grid_and_clear_empty_details` | Editing the actual search TextBox filters case-insensitively; checkbox combines installed filtering; zero results clear details and count reads zero; clearing search restores four installed entries and bound count reads four. |
 | `Selecting_a_cell_updates_all_bound_details` | Changing ListBox selection updates the model and visible title, playtime and last-played details. |
@@ -101,6 +107,49 @@ rasterizers or future package versions. Reference hashes are evidence,
 The colour-count threshold is only a **loose full-frame nonblank guard**. There is no
 legacy-image comparison, snapshot acceptance, or pixel-parity threshold. Semantic
 assertions, not screenshot resemblance, prove the interactions and tested layout.
+
+## Committed semantic baseline
+
+`Baselines/library-1200.semantic.json` is a **structural reference for this fake-data
+shell**, captured from the shown, laid-out, Skia-rendered 1200×800 window at scale 1.
+It is not generated from the catalog alone. Its 46 nodes include the window/header,
+named search and installed filter, count, library list, six realized cells with six
+cover motifs and all title/playtime/last-played text, and the details panel with its
+initial selection. This JSON is the committed companion to the external screenshot
+evidence; PNG files themselves remain untracked.
+
+`SemanticTree.cs` projects the actual visual tree in depth-first visual-child order:
+Window, TextBlock (including AccessText), TextBox, CheckBox, ListBox, ListBoxItem,
+CoverArt, and the named Details container. Other layout/template wrappers are flattened,
+preserving child order and semantic ancestry. Text templates are included, including
+the hidden floating search placeholder (marked `Visible: false`). This is deliberately
+a **semantic control-tree projection, not the Avalonia automation-peer tree**.
+`Type` is the runtime control type; `Name` is the control name, `AutomationName` the
+explicit attached automation name (empty if absent, not an inferred accessible name).
+Each node also records effective enabled/visible state, meaningful text/value, and
+window-relative `[x, y, width, height]` bounds rounded to 0.001 logical pixels. Values
+include search text, checkbox state and cover motif; no paths, clocks or object IDs occur.
+
+Comparison requires exact types, names, text/values, states, hierarchy, ordering and
+child counts. **Only each bounds component has an inclusive ±1 logical-pixel tolerance**
+(one device pixel at the pinned scale), allowing small pixel-derived layout rounding;
+there is no structural tolerance. Missing/renamed cells or controls, type changes or a
+lost details panel fail. The comparator's mutation test exercises these failures.
+There is no automatic baseline acceptance/update mode: the test emits its actual tree
+to the new external evidence directory before comparing, never overwriting the baseline.
+Any intentional baseline change needs explicit review of that emitted diff.
+
+Two fresh process runs each passed all eight facts with zero skips; emitted trees were
+byte-identical to one another and to the committed baseline, SHA-256
+`886a28797c9b0dd4d12271d26fac472513f7370703830ed8ce43b30b03226b5e`.
+All six PNG captures retained the existing reference hash above.
+
+This proves the initial fake-data shell's selected structure and bound content, not
+the real Playnite product UI, v10 parity, every visual wrapper, narrow-window tree
+parity, focus/keyboard behavior, automation-peer correctness or an OS accessibility
+bridge. **Accessibility remains deferred for v1**; this baseline does not change that
+scope or claim screen-reader/AT-SPI support. The existing interaction/layout tests and
+screenshots provide separate evidence, not a substitute for product integration.
 
 ## Proposed ADR-007 theme layout
 
@@ -147,5 +196,6 @@ the two tested sizes. It does **not** prove v10 visual/behaviour parity, a real
 X11/Wayland desktop, AT-SPI/screen-reader accessibility, production virtualization or
 large-library performance, keyboard/pointer end-to-end interaction, localization, other
 scalings/window sizes, product integration or a finished user-theme format. This is
-evidence for a shape, not integration or an acceptance gate. Two adversarial agent reviews of
+evidence for a shape, not integration or a product acceptance gate. The committed tree
+is only a structural drift gate for this fake-data spike. Two adversarial agent reviews of
 the initial head were supplied by firstmate; the follow-up changes require parent review.

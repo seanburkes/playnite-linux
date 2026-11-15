@@ -1,0 +1,2 @@
+id	wave	area	unit	depends	status	owner	oracle	test	notes
+p2-ui-semantics	W2	spike	Rendered library-shell semantic baseline	p2-ui-pilot	in-progress	fm/p2-ui-semantics	spike; ADR-013; spikes/ui-shell/LibraryWindow.axaml	spikes/ui-shell/ShellTests.cs::Rendered_library_tree_matches_committed_semantic_baseline	Committed 46-node fake-data semantic projection; six cells and details; exact structure with 1 logical pixel bounds tolerance; eight facts pass in two processes with byte-identical trees; no product or accessibility claim; review pending
