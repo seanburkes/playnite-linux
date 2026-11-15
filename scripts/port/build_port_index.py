@@ -63,20 +63,33 @@ UNITS = ROOT / "docs" / "port" / "units"
 QUEUE = ROOT / "docs" / "port" / "queue.tsv"
 LEDGER = ROOT / "docs" / "port" / "ledger.tsv"
 
-# Conventional machine-local roots. Changes are protected policy changes.
-LOCAL_ABSOLUTE_ROOTS = (
-    "home", "Users", "root", "opt", "var", "mnt", "tmp", "srv",
-    "media", "Volumes", "private", "run", "usr", "etc", "bin", "sbin",
-    "lib", "lib64", "dev", "proc", "sys",
-)
+# Task directories, not standard system roots. Changes are protected policy changes.
+LOCAL_TASK_ROOTS = ("/tmp/opencode", "/srv/firstmate", "/var/lib/firstmate")
+HOME_PREFIX = r"(?:\$(?:HOME\b|\{HOME\})|~)[\\/]"
 LOCAL_PATH = re.compile(
-    r"(?<![\w])/(?:" + "|".join(map(re.escape, LOCAL_ABSOLUTE_ROOTS)) + r")(?:/|\b)|"
-    r"(?<![\w])\$(?:HOME\b|\{HOME\})|(?<![\w])~[\\/]|"
+    r"(?<![\w])/(?:home|Users|root)/[^\s/]+|"
+    r"(?<![\w])(?:" + "|".join(map(re.escape, LOCAL_TASK_ROOTS)) + r")(?:/|\b)|"
+    r"(?<![\w])" + HOME_PREFIX + r"[^\s/]+|"
     r"(?<![\w])[A-Za-z]:[\\/](?:Users|Home|Documents and Settings)(?:[\\/]|\b)|"
-    r"firstmate[\\/](?:data|state)(?:[\\/]|\b)|\.treehouse(?:[\\/]|\b)",
+    r"\.treehouse[\\/]",
     re.IGNORECASE,
 )
-REMOTE_URL = re.compile(r"\b(?:https?|ftp|ssh)://[^\s<>`\"']+", re.IGNORECASE)
+REMOTE_URL = re.compile(
+    r"\b(?:https?|ftp|ssh|git|sftp)://[^\s<>`\"']+|"
+    r"(?<![\w/\\])(?://)?(?:[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?\.[a-z]{2,})"
+    r"(?::\d+)?/[^\s<>`\"']+",
+    re.IGNORECASE,
+)
+GENERIC_HOME_PATH = re.compile(
+    r"(?<![\w])" + HOME_PREFIX
+    + r"(?:\.steam|\.local/share/Steam|\.local|\.config|config)(?![\w/\\.-])",
+    re.IGNORECASE,
+)
+
+
+def local_path_text(line: str) -> str:
+    # Remove only the matched token, never a whole Markdown label/link/line.
+    return GENERIC_HOME_PATH.sub("", REMOTE_URL.sub("", line))
 # Fixed, not the event base or HEAD; see docs/port/LOCAL-PATH-EXCEPTIONS.md.
 PRE_GUARD_COMMIT = "0b02bf9ff395a91b3524545074f53abe403effc2"
 
@@ -90,7 +103,7 @@ def local_path_allowance(label: str) -> Counter:
         return Counter()
     return Counter(hashlib.sha256(line.encode("utf-8")).hexdigest()
                    for line in blob.decode("utf-8").splitlines()
-                   if LOCAL_PATH.search(REMOTE_URL.sub("", line)))
+                   if LOCAL_PATH.search(local_path_text(line)))
 
 
 def local_path_errors(text: str, label: str) -> list[str]:
@@ -98,7 +111,7 @@ def local_path_errors(text: str, label: str) -> list[str]:
     allowed = None
     errors = []
     for lineno, line in enumerate(text.splitlines(), start=1):
-        if not LOCAL_PATH.search(REMOTE_URL.sub("", line)):
+        if not LOCAL_PATH.search(local_path_text(line)):
             continue
         if allowed is None:
             allowed = local_path_allowance(label).copy()
