@@ -9,6 +9,12 @@ by a ``removed_projects`` record in the protected baseline that names a reason
 and an approver; the protected-path ``oracle-change`` gate makes that record a
 second-reviewer decision.
 
+A project may also be absent from the counted baseline only when it is declared
+in ``empty_projects`` with a non-empty reason and still executes zero cases.
+Declaring a project empty is explicit: if it gains a case, the run fails until
+that project is moved into ``new`` as a counted entry. Undeclared zero-case
+projects fail once any new-suite baseline is recorded.
+
 ``--previous-projects`` lists the project names present at the base commit, so
 deleting a project before the first baseline is recorded is still a failure
 rather than zero tests.
@@ -52,6 +58,22 @@ def read_new_baseline(document):
         if "passed" in row and row["passed"] > row["executed"]:
             raise ValueError(f"passed baseline exceeds executed for {project}")
     return baseline
+
+
+def read_empty_projects(document):
+    """Return declared zero-case scaffolds as project name -> non-empty reason."""
+    if document is None:
+        return {}
+    empty = document.get("empty_projects", {})
+    if not isinstance(empty, dict):
+        raise ValueError("empty_projects must be an object")
+    for project, reason in empty.items():
+        if not isinstance(project, str) or not project.strip():
+            raise ValueError("empty_projects contains an invalid project name")
+        if not isinstance(reason, str) or not reason.strip():
+            raise ValueError(
+                f"declared empty project {project} needs a non-empty reason")
+    return empty
 
 
 def read_removed_projects(document):
@@ -105,9 +127,16 @@ def baseline_count(row, field):
 
 def validate_baseline_policy(current_path, current_document, current, removed,
                              previous_document, previous, previous_removed,
-                             previous_projects, current_projects):
+                             previous_projects, current_projects, empty):
     """Return failures for a baseline that lowers, deletes or loses history."""
     failures = []
+    for project in sorted(empty):
+        if current is not None and project in current:
+            failures.append(f"{project}: declared empty but also recorded in the "
+                            "counted baseline")
+        if project in removed:
+            failures.append(f"{project}: declared empty but also recorded as removed")
+
     if previous_document is not None and current_document is None:
         failures.append(f"baseline file {current_path} was deleted; the committed "
                         "baseline cannot be removed")
@@ -218,9 +247,16 @@ def read_counts(path):
             "passed": len(cases) - skipped - failed, "failed": failed, "skipped": skipped}
 
 
-def classify(project, exit_code, counts, baseline):
+def classify(project, exit_code, counts, baseline, empty):
     if counts["failed"] or counts["skipped"]:
         return "fail", "failed or skipped cases are never accepted"
+    if project in empty:
+        if counts["total"] != 0:
+            return "fail", (f"declared empty but executed case count "
+                            f"{counts['executed']}; record it in the counted baseline")
+        if exit_code in (0, 8):
+            return "declared-empty", "declared zero-case scaffold; no tests yet"
+        return "fail", f"unaccepted MTP exit code {exit_code}"
     if exit_code == 8 and counts["total"] == 0 and baseline is None:
         return "bootstrap-empty", "NO TESTS EXIST YET; no new-suite baseline is recorded"
     if exit_code != 0:
@@ -243,6 +279,7 @@ def check_results(projects, results, baseline_path, summary_path,
         current_document = load_document(baseline_path)
         baseline = read_new_baseline(current_document)
         removed = read_removed_projects(current_document)
+        empty = read_empty_projects(current_document)
     except (OSError, ValueError) as error:
         message = f"Invalid new-suite baseline: {error}"
         print(f"::error::{message}")
@@ -296,7 +333,7 @@ def check_results(projects, results, baseline_path, summary_path,
     failures.extend(validate_baseline_policy(
         baseline_path, current_document, baseline, removed,
         previous_document, previous, previous_removed,
-        previous_projects, project_names))
+        previous_projects, project_names, empty))
 
     rows = {}
     summary = ["\n### Linux test counts\n",
@@ -316,7 +353,7 @@ def check_results(projects, results, baseline_path, summary_path,
             row["exit_code"] = exit_code
             counts = read_counts(directory / f"{name}.xml")
             row["counts"] = counts
-            outcome, message = classify(name, exit_code, counts, baseline)
+            outcome, message = classify(name, exit_code, counts, baseline, empty)
         except (OSError, ValueError, ET.ParseError) as error:
             outcome, message = "fail", f"cannot validate MTP result: {error}"
         row.update(outcome=outcome, message=message)
@@ -329,8 +366,16 @@ def check_results(projects, results, baseline_path, summary_path,
             notice = f"{name}: {message}; 0 executed cases. This is not behavior evidence."
             print(f"::notice::{notice}")
             notices.append(f"\n**BOOTSTRAP NOTICE — {notice}**\n")
+        elif outcome == "declared-empty":
+            notice = (f"{name}: {message}; 0 executed cases, explicitly declared "
+                      "in empty_projects.")
+            print(f"::notice::{notice}")
+            notices.append(f"\n**DECLARED EMPTY — {notice}**\n")
         elif outcome == "fail":
             failures.append(f"{name}: {message}")
+
+    for project in sorted(set(empty) - set(rows)):
+        failures.append(f"{project}: declared empty but was not run")
 
     first_baseline = previous is None and (
         previous_document is not None
@@ -347,7 +392,7 @@ def check_results(projects, results, baseline_path, summary_path,
                     failures.append(
                         f"{project}: first baseline {field} count {recorded} is below "
                         f"observed {seen}; record the observed floor")
-        for project in sorted(set(rows) - set(baseline)):
+        for project in sorted(set(rows) - set(baseline) - set(empty)):
             failures.append(
                 f"{project}: observed test project was omitted from the first baseline")
 

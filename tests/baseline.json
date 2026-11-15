@@ -14,5 +14,28 @@
     ],
     "notes": "VSTest TRX from the Windows oracle. Two Windows-ACL tests and one flaky Windows shell test are excluded; see tests/legacy-exclusions.md."
   },
-  "new": null
+  "new": {
+    "Playnite.Architecture.Tests": {
+      "total": 76,
+      "executed": 76,
+      "passed": 76,
+      "failed": 0,
+      "skipped": 0
+    },
+    "Playnite.Smoke.Tests": {
+      "total": 4,
+      "executed": 4,
+      "passed": 4,
+      "failed": 0,
+      "skipped": 0
+    }
+  },
+  "new_capture": {
+    "captured_at": "2026-11-15T15:26:39Z",
+    "run_id": "43729847987",
+    "notes": "linux-ci / linux-build-and-test run 43729847987 on main a5affc0: Playnite.Smoke.Tests 4 executed / 4 passed / 0 failed / 0 skipped; Playnite.Architecture.Tests 76 executed / 76 passed / 0 failed / 0 skipped. Playnite.Core.Tests is a marker-only zero-case scaffold, declared in empty_projects and kept out of the counted baseline so it cannot create a zero floor."
+  },
+  "empty_projects": {
+    "Playnite.Core.Tests": "Marker-only scaffold with no test methods yet; declared empty so it cannot create a zero-case floor in the counted baseline. Move it into new once it executes cases."
+  }
 }
