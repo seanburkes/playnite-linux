@@ -12,8 +12,8 @@ tests/
 
 Rules:
 
-- Fixtures and goldens are oracle artifacts. Do not edit them in a porting change; use an
-  `oracle-change` PR with a second reviewer.
+- Fixtures and goldens are oracle artifacts. Do not edit them in a porting change; use a
+  separate `oracle-change` PR through the protected-path gate.
 - Regeneration is a human-run script, not an auto-accept flag.
 - Every golden has a provenance note: source, capture command, and what it proves.
 - A test that would pass with the implementation deleted is not a test.

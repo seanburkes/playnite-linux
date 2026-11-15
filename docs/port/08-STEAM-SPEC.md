@@ -15,7 +15,7 @@ Evidence labels used below:
 Source files were read only. No file under `~/.steam`, `~/.local/share/Steam`, or any game
 install directory was modified during capture. The redacted oracle corpus proposed from this
 evidence is described in `docs/port/p1-009-steam-corpus-proposal.md`; it is **not** committed
-until the protected-path approval lands.
+until the `oracle-change` route lands.
 
 ## 1. Roots and discovery
 
@@ -490,7 +490,7 @@ a missing install, and a broken VDF. It uses `${FIXTURE_ROOT}` so paths are port
 ### 10.2 Real redacted corpus (proposed, not yet checked in)
 
 `docs/port/p1-009-steam-corpus-proposal.md` enumerates the exact proposed paths, hashes, and
-redaction record. The corpus is staged outside the checkout until the protected-path approval
+redaction record. The corpus is staged outside the checkout until the `oracle-change` route
 lands. It covers: modern `libraryfolders.vdf` with an unavailable second library; a native
 manifest; a Proton manifest with `dlcappid`, `SharedDepots`, and escaped install-script paths;
 a Proton runtime manifest with `StateFlags 6`; a `config_info`; `compat.vdf`; and an
@@ -504,7 +504,8 @@ empty-achievement `librarycache` JSON.
 - Flatpak build launches and tracks a host Steam game (**pending**, not proven).
 - No orphan processes after cancel/teardown.
 - No network on the UI thread.
-- No protected path changes without the oracle-change label and a second reviewer.
+- No protected path changes without the declared `oracle-change` route through the
+  protected-path gate.
 
 ## 11. Unknowns still open
 

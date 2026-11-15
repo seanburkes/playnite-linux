@@ -400,7 +400,7 @@ is a convenience, not a requirement.
 
 ## ADR-016 — Firstmate for execution; Herdr when available
 
-**Context.** The work is large, parallelisable, and needs independent review. Firstmate
+**Context.** The work is large, parallelisable, and needs adversarial review. Firstmate
 provides worktree isolation, supervision, and a durable fleet state. Herdr provides terminal
 and agent visibility.
 
@@ -603,6 +603,60 @@ zero third-party plugins is a claim without a corpus.
 - Less SDK churn; the UI informs the contract.
 - v1 ships a preview SDK with honest claims.
 - The add-on ecosystem migration is a post-v1 project.
+
+---
+
+## ADR-024 — Single-owner review model
+
+**Context.** This repository has one human owner. Every pull request and every review is that
+same person, even when an agent or model produces the review text. Several documents described
+a "second reviewer" or "independent review" as a merge gate, and some described CODEOWNERS as
+an approval requirement. Neither is true. Branch protection on the default branch requires a
+pull request, the required status checks, and an up-to-date branch, and it blocks force pushes
+and branch deletion; it has no approval requirement. A rule that cannot be satisfied is not a
+gate, and a checklist that names a reviewer who does not exist teaches readers to accept a
+false claim.
+
+**Decision.**
+- Review is adversarial agent review assistance: a reviewer agent, ideally a different model
+  from the implementer, receives only the diff, the parity row and the oracle artifacts, and is
+  asked to assume the change is wrong. It is never described as independent review, a second
+  reviewer, or an approval gate.
+- The owner makes the merge decision. No document may present an agent review or a CODEOWNERS
+  entry as human approval.
+- CODEOWNERS is audit metadata only: it records which surface each path belongs to for
+  visibility and routing. It is not an approval requirement, and branch protection does not
+  require code-owner review.
+- Oracle independence is structural, not social: frozen `legacy/` data, committed hashes in
+  `tests/fixtures/*/SHA256SUMS`, golden manifests and `oracle-lock/` pins, protected paths
+  enforced by the `plan-guards` CI diff against the merge base, the required status checks
+  themselves, and the TLA+ models run by the `formal` job. Cite those mechanisms rather than
+  asserting independence in prose.
+- A protected oracle change is declared, not seconded: the task says `oracle-change`, the PR
+  carries the label, and the protected-path gate checks the diff, re-reading the label in the
+  merge queue. `legacy/` and `oracle-lock/` remain unconditionally immutable; no label
+  overrides them.
+
+**Consequences.**
+- The documented process matches what actually happens, so a reader can tell a real gate
+  (branch protection, required checks, the protected-path gate) from assistance (agent review).
+- Agent review stays unit evidence: two adversarial diff-only reviews per unit, with findings
+  applied by a fixer. Its authority is "evidence the owner reads", not "approval".
+- The `oracle-change` route remains the only way a protected surface moves, and CI enforces it
+  rather than a person's signature.
+
+**Residual risk.** One human plus models can share blind spots: a model can repeat the
+implementer's assumptions, and the owner's own reading is a single point of failure. The
+mitigations are structural rather than social - a frozen `legacy/` snapshot the port cannot
+edit, committed hashes and locks, CI diffs of protected paths, mutation and negative probes,
+and the formal models. They reduce the risk but do not eliminate it, so review claims are
+stated as assistance, never as independent approval.
+
+**Rejected.**
+- *Pretend agent review is independent approval.* It is not a second person, and saying so
+  would overstate the evidence behind a merge.
+- *Require an approval that cannot exist.* An approval rule with one owner is either
+  self-approval, which is meaningless, or a permanent block on every change.
 
 ---
 

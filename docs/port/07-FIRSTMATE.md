@@ -86,6 +86,6 @@ not used until the posture changes.
 - Workers run only the narrow check named in the task; the parent builds.
 - Two blind reviewers per unit, diff only; a fixer applies findings.
 - `legacy/`, `tests/golden/`, `tests/fixtures/`, `tests/baseline.json`, and `docs/formal/`
-  are protected. An `oracle-change` task is separate and needs a second reviewer.
+  are protected. An `oracle-change` task is separate and goes through the protected-path gate.
 - At two failed attempts, stop and escalate; do not thrash.
 - Check in at every phase gate with a `docs/port/gates/P<phase>-*.md` artifact.

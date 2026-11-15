@@ -152,5 +152,5 @@ No privileged helper is justified by these results.
   and fixture-dependent integration are not completed by this independent spike.
   Read-only parity references: `steam-010` (session tracking) and `steam-012`
   (manual fallback) remain greenfield, not implemented by this experiment.
-- Two independent blind diff-only reviews and approval remain firstmate-owned;
-  reviewers must not edit. No merge is authorized by this report.
+- Two adversarial blind diff-only agent reviews and the owner's merge decision remain
+  firstmate-owned; reviewers must not edit. No merge is authorized by this report.

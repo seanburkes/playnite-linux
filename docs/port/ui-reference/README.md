@@ -148,7 +148,7 @@ do not fill unknowns with the preferred environment above. Include:
 
 The operator can compute hashes with PowerShell `Get-FileHash -Algorithm SHA256
 -LiteralPath <path>` and read each PNG's pixel dimensions in Windows Properties →
-Details. A second reviewer must open every PNG, check that it decodes, compare its
+Details. An adversarial reviewer must open every PNG, check that it decodes, compare its
 dimensions/hash with provenance and inspect the stated scenario. Hashes establish
 file identity, not authenticity; source/build and operator evidence are required.
 

@@ -14,7 +14,8 @@ oracle. New code is in `src/` (Phase 1 onward). Do not modify the Windows app.
    changes.
 2. **Oracle paths are protected.** Do not edit `tests/golden/`, `tests/fixtures/`,
    `tests/baseline.json`, `docs/formal/`, or `docs/port/surface-parity.tsv` unless the task
-   explicitly says `oracle-change` and a second reviewer approves. `legacy/` and
+   explicitly authorises an oracle change with the `oracle-change` label, which sends it
+   through the protected-path gate. `legacy/` and
    `oracle-lock/` are unconditionally immutable; no label overrides them. A porting change may
    not redefine correctness.
 3. **Do not weaken tests.** No `[Skip]`, `[Ignore]`, `--filter` exclusions, snapshot
