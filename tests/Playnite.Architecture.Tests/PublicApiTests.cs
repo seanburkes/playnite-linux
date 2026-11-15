@@ -15,6 +15,14 @@ public sealed class PublicApiTests
     private static ProductGraph Abstractions => ProductGraph.Products.Single(p => p.Name == "Playnite.SDK.Abstractions");
 
     [Fact]
+    public void Binary_baseline_matches_the_review_protected_SHA()
+    {
+        var directory = Path.Combine(ProductGraph.Root, "src", "Playnite.SDK.Abstractions", "api-baseline");
+        var expected = File.ReadAllText(Path.Combine(directory, "Playnite.SDK.Abstractions.sha256")).Trim();
+        Assert.Equal(expected, Convert.ToHexStringLower(SHA256.HashData(File.ReadAllBytes(Path.Combine(directory, "Playnite.SDK.Abstractions.dll")))));
+    }
+
+    [Fact]
     public void Shipped_API_matches_the_review_protected_checksum()
     {
         var shipped = Path.Combine(ProductGraph.Root, "src", "Playnite.SDK.Abstractions", "PublicAPI.Shipped.txt");

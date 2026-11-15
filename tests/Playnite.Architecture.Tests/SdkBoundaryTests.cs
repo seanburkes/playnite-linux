@@ -20,6 +20,10 @@ public sealed class SdkBoundaryTests
         {
             var violations = SdkBoundaryPolicy.GraphViolations(project.Name, project.Values("ProjectReference"), project.Dependencies()).ToArray();
             Assert.True(violations.Length == 0, string.Join(Environment.NewLine, violations));
+            Assert.Contains("Microsoft.NETCore.App", project.Values("FrameworkReference"));
+            var buildViolations = SdkBoundaryPolicy.BuildInputViolations(project.Name, project.Values("UseWPF").Single(),
+                project.Values("UseWindowsForms").Single(), project.Values("FrameworkReference")).ToArray();
+            Assert.True(buildViolations.Length == 0, string.Join(Environment.NewLine, buildViolations));
         }
     }
 
@@ -58,6 +62,17 @@ public sealed class SdkBoundaryTests
     [InlineData("Playnite.SDK")]
     [InlineData("Microsoft.Win32.Registry")]
     [InlineData("System.Drawing.Common")]
+    [InlineData("System.Windows")]
+    [InlineData("WindowsBase")]
+    [InlineData("PresentationCore")]
+    [InlineData("PresentationFramework")]
+    [InlineData("System.Xaml")]
+    [InlineData("System.IO.Packaging")]
+    [InlineData("System.Windows.Forms")]
+    [InlineData("Microsoft.UI")]
+    [InlineData("Windows.UI")]
+    [InlineData("WindowsAppSDK")]
+    [InlineData("Microsoft.WindowsAppSDK")]
     public void Abstractions_forbidden_dependency_is_rejected_directly_and_transitively(string dependency)
     {
         Assert.NotEmpty(SdkBoundaryPolicy.GraphViolations("Playnite.SDK.Abstractions", [dependency], []));
@@ -65,10 +80,26 @@ public sealed class SdkBoundaryTests
     }
 
     [Theory]
+    [InlineData("true", "", "Microsoft.NETCore.App")]
+    [InlineData("", "true", "Microsoft.NETCore.App")]
+    [InlineData("", "", "Microsoft.WindowsDesktop.App")]
+    [InlineData("", "", "Microsoft.WindowsDesktop.App.WPF")]
+    [InlineData("", "", "Microsoft.WindowsDesktop.App.WindowsForms")]
+    public void Unused_Windows_UI_build_inputs_cannot_hide_behind_framework_reference_filtering(string wpf, string forms, string framework)
+    {
+        foreach (var project in new[] { "Playnite.Core", "Playnite.SDK.Abstractions" })
+        {
+            Assert.NotEmpty(SdkBoundaryPolicy.BuildInputViolations(project, wpf, forms, [framework]));
+        }
+    }
+
+    [Theory]
     [InlineData("Avalonia.Controls", "Control")]
     [InlineData("Avalonia.Media", "IImage")]
     [InlineData("Playnite.SDK.Controls", "PluginUserControl")]
     [InlineData("Playnite.Platform", "IPaths")]
+    [InlineData("System.IO.Packaging", "Package")]
+    [InlineData("Windows.UI.Xaml", "Window")]
     public void Abstractions_rejects_UI_or_platform_types_even_behind_an_alias(string ns, string type)
     {
         var source = $$"""
@@ -86,6 +117,8 @@ public sealed class SdkBoundaryTests
     [InlineData("Playnite.Platform")]
     [InlineData("Playnite.Platform.Linux")]
     [InlineData("Playnite.SDK.Controls")]
+    [InlineData("PresentationFramework")]
+    [InlineData("WindowsAppSDK")]
     public void Any_type_from_a_UI_or_platform_assembly_is_rejected_regardless_of_namespace(string assemblyName)
     {
         var ui = CSharpCompilation.Create(assemblyName, [CSharpSyntaxTree.ParseText("namespace Innocent { public class Dialog {} }")],
@@ -106,6 +139,7 @@ public sealed class SdkBoundaryTests
     {
         Assert.Empty(SdkBoundaryPolicy.GraphViolations("Playnite.Core", ["Playnite.SDK.Abstractions"], ["Playnite.SDK.Abstractions", "System.Runtime"]));
         Assert.Empty(SdkBoundaryPolicy.GraphViolations("Playnite.SDK.Abstractions", [], ["System.Runtime"]));
+        Assert.Empty(SdkBoundaryPolicy.BuildInputViolations("Playnite.SDK.Abstractions", "", "", ["Microsoft.NETCore.App"]));
         Assert.Empty(PolicyProbe.Check("Playnite.SDK.Abstractions", "public interface Contract { System.Guid Id { get; } System.Windows.Input.ICommand Command { get; } }"));
     }
 

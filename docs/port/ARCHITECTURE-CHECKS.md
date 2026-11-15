@@ -1,4 +1,4 @@
-# Architecture and banned-API gates (p2-002, p2-006)
+# Architecture and banned-API gates (p2-002, p2-006, p2-006-harden)
 
 The policy comes from `02-ARCHITECTURE.md` §2 and `PORTING.md`'s banned table.
 The frozen reference is `legacy/source/Playnite/Playnite.csproj`: its WPF/Win32,
@@ -167,7 +167,7 @@ with **0 warnings / 0 errors**; the full architecture suite passed **103 cases, 
 failed, 0 skipped** (the original 76 plus 27 new cases). Two actual narrow negative
 builds were also run and reverted: an untracked public class failed with RS0016;
 changing Id to string **and updating the text API declaration to match** failed with
-CP0002/CP0006. Proof logs are under `/home/sean/src/firstmate/data/p2-006/`.
+CP0002/CP0006. Proof logs are retained as task evidence, not repository paths.
 Independent blind reviews and CI acceptance remain the merge authority's gates.
 
 ### Review hardening
@@ -189,10 +189,10 @@ project list (currently Abstractions only), even if a package rather than a
 ProjectReference brings in Platform/Desktop/Steam. The four cases in
 `Core_rejects_every_unlisted_Playnite_dependency_in_the_package_closure` prove this.
 The live product loop now asserts the exact Core/Abstractions target set before
-checking it. Source probes also reject innocently named types from six different
+checking it. Source probes also reject innocently named types from eight different
 UI/platform assembly identities, not only their usual namespaces.
 
-Review validation: **118 passed, 0 failed, 0 skipped**; narrow Release build
+Review validation: **144 passed, 0 failed, 0 skipped**; narrow Release build
 **0 warnings / 0 errors**. Full-suite negative probes were run without exclusions
 and restored: a same-arity source/declaration change failed with
 `Shipped SDK API checksum mismatch: expected 8d54786f51b13af2d188898ebd4db3c06b5d3e4dee309dcb1ef31d335f9a61ca, got 14dba5373f7bbe1546e957d9a8655c5823b8f8877971fcd83d1ab6f35c67ea72; rebaselining requires oracle-change and second-review approval`;
@@ -204,6 +204,37 @@ under the unit's proof directory. The refreshed `bootstrap.log` records the fina
 nullable declaration and a successful guarded build, superseding its initial
 bootstrap diagnostics. This hardening changes protected policy, so the PR itself
 requires the `oracle-change` label and second-review approval before merge.
+
+This follow-up ships as **p2-006-harden**, separately from the merged seed unit.
+`Binary_baseline_matches_the_review_protected_SHA` asserts the reference assembly's
+bytes against `api-baseline/Playnite.SDK.Abstractions.sha256`; both SHA files are
+within the protected directory. No baseline or public signature is changed here.
+
+The Windows dependency families now include System.Windows, WindowsBase,
+PresentationCore, PresentationFramework, System.Xaml, System.IO.Packaging,
+System.Windows.Forms, Microsoft.UI, Windows.UI, WindowsAppSDK and
+Microsoft.WindowsAppSDK, alongside the existing Win32/Drawing/Management/services
+bans. These families are checked in both dependency closures and Abstractions source
+symbols (namespace and assembly identity), retaining the ICommand exception.
+The parameterized `Abstractions_forbidden_dependency_is_rejected_directly_and_transitively`
+cases cover each new family. `WriteArchitectureInputs` also records evaluated
+UseWPF, UseWindowsForms and FrameworkReference values: the Core/Abstractions boundary
+accepts only the standard Microsoft.NETCore.App framework and rejects the Windows UI
+flags, even when unused compiler references disappear from emitted IL.
+`Unused_Windows_UI_build_inputs_cannot_hide_behind_framework_reference_filtering`
+proves both flags and three WindowsDesktop framework names fail.
+
+`ValidateSdkPublicApiPolicy` runs before compilation and rejects disabling
+TreatWarningsAsErrors or suppressing/demoting RS0016/RS0017 through NoWarn or
+WarningsNotAsErrors. `Public_API_warning_policy_cannot_be_bypassed` invokes the
+actual MSBuild target with all five prohibited settings. A normal narrow build with
+`-p:NoWarn=RS0016` also failed with
+`SDK public API diagnostics RS0016/RS0017 cannot be suppressed or demoted through NoWarn or WarningsNotAsErrors.`
+
+Aggregate regeneration was verified in scratch output using the production
+generator: p2-006 and p2-006-harden both resolve to in-progress, not todo. The PR
+contains only the new unit shards; committed aggregates remain exclusively owned by
+the post-merge workflow, as required by PORTING.md.
 
 ## Banned construct coverage
 
@@ -271,7 +302,7 @@ The 2026-11-15 hardening re-ran both kinds of proof:
   and `System.Drawing.Point`. A narrow Core build exited 1 with zero warnings and
   three RS0030 errors, proving the new `BannedSymbols.Blocking.txt` row, the moved
   `BannedSymbols.GcCollect.txt` row, and the namespace ban all fire. Log:
-  `/home/sean/src/firstmate/data/p2-002-harden/negative-api-2026-11-14.log`.
+  `negative-api-2026-11-14.log` (retained task evidence).
 - With `<PlayniteBenchmarkHarness>true</PlayniteBenchmarkHarness>` set temporarily
   on Core and the same `GC.Collect()` probe, the narrow build exited 0 with zero
   warnings. That self-declarable property was removed in the review round; the
@@ -280,7 +311,7 @@ The 2026-11-15 hardening re-ran both kinds of proof:
   by the root build), with per-project tests proving a second product cannot
   borrow an allowlisted name. The old log is retained as the negative proof of the
   removed mechanism:
-  `/home/sean/src/firstmate/data/p2-002-harden/harness-exemption-2026-11-14.log`.
+  `harness-exemption-2026-11-14.log` (retained task evidence).
 
 Both probes were reverted; the worktree contains no probe file. The review round
 also made `docs/port/02-ARCHITECTURE.md`, `docs/port/PORTING.md`,
