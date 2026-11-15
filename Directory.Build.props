@@ -13,4 +13,16 @@
     <NuGetAudit>true</NuGetAudit>
     <NuGetAuditMode>all</NuGetAuditMode>
   </PropertyGroup>
+  <!-- API bans apply to product code, never test runners or the frozen oracle. -->
+  <PropertyGroup Condition="$(MSBuildProjectDirectory.StartsWith('$(MSBuildThisFileDirectory)src$([System.IO.Path]::DirectorySeparatorChar)'))">
+    <PlayniteProductProject>true</PlayniteProductProject>
+  </PropertyGroup>
+  <ItemGroup Condition="'$(PlayniteProductProject)' == 'true'">
+    <PackageReference Include="Microsoft.CodeAnalysis.BannedApiAnalyzers" PrivateAssets="all" />
+    <AdditionalFiles Include="$(MSBuildThisFileDirectory)BannedSymbols.txt" />
+    <AdditionalFiles Include="$(MSBuildThisFileDirectory)BannedSymbols.Library.txt" Condition="'$(MSBuildProjectName)' != 'Playnite.Cli' And '$(MSBuildProjectName)' != 'Playnite.Desktop' And '$(MSBuildProjectName)' != 'Playnite.LegacyImport'" />
+    <AdditionalFiles Include="$(MSBuildThisFileDirectory)BannedSymbols.Core.txt" Condition="'$(MSBuildProjectName)' == 'Playnite.Core'" />
+    <AdditionalFiles Include="$(MSBuildThisFileDirectory)BannedSymbols.Logic.txt" Condition="'$(MSBuildProjectName)' == 'Playnite.Core' Or '$(MSBuildProjectName)' == 'Playnite.SDK.Abstractions' Or '$(MSBuildProjectName)' == 'Playnite.Steam'" />
+    <AdditionalFiles Include="$(MSBuildThisFileDirectory)BannedSymbols.Interop.txt" Condition="'$(MSBuildProjectName)' != 'Playnite.Platform.Linux'" />
+  </ItemGroup>
 </Project>
