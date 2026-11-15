@@ -33,7 +33,9 @@ def main():
     parser.add_argument("--base", required=True)
     parser.add_argument("--paths", nargs="+", required=True)
     parser.add_argument("--error", default="Protected oracle artifacts changed. "
-                        "Use a separate oracle-change PR with a second reviewer.")
+                        "An oracle change carries the oracle-change label and passes the "
+                        "protected-path gate; review is adversarial on the owner's behalf, "
+                        "with no second reviewer and no approval gate.")
     parser.add_argument("--repo", type=Path, default=Path.cwd())
     args = parser.parse_args()
     try:

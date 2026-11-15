@@ -219,6 +219,6 @@ a ragged row, invalid UTF-8, or a filename/id mismatch fails before any aggregat
 [ ] legacy/ and oracle paths untouched.
 [ ] Parity row updated with test id.
 [ ] Unit shard updated; `check --shards-only` clean; no aggregate files in the PR diff.
-[ ] Two blind reviews; findings fixed or escalated.
+[ ] Two adversarial diff-only reviews on the owner's behalf; findings fixed or escalated.
 [ ] CI green; counts non-decreasing.
 ```

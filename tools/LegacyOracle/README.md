@@ -99,7 +99,7 @@ Mode behaviour:
 `Validate` regenerates the payloads from the harness on every run, so a harness-only change
 that alters emitted bytes fails against stale goldens; the committed bytes are never trusted as
 the input side. `tools/LegacyOracle/` and `tools/V10LibraryFixture/` are protected paths, so a
-paired harness+golden change needs the `oracle-change` label and a second review.
+paired harness+golden change needs the `oracle-change` label and the protected-path gate.
 
 Manifest formats are deliberately dead simple and hash-pinned:
 
@@ -115,7 +115,8 @@ Manifest formats are deliberately dead simple and hash-pinned:
   a short alias cannot silently stand in for a protected tree. This is a conservative shape
   check, not a general filesystem-identity resolver.
 
-Golden regeneration remains a separately reviewed human operation. Do not write anything
-under `tests/golden/` until exact paths and derivation receive independent approval. Do not
+Golden regeneration remains a declared oracle change reviewed adversarially on the owner's
+behalf. Do not write anything under `tests/golden/` until exact paths and derivation are
+declared with the `oracle-change` label and pass the protected-path gate. Do not
 claim fixture-dependent validation before p1-003's actual approved fixture is available.
 Generation artifacts are review inputs, not accepted goldens.

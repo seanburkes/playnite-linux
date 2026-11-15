@@ -7,7 +7,8 @@ delete the baseline file, reset ``new`` to null, lower a project's executed or
 passed count, or silently drop/rename a project. A project may be retired only
 by a ``removed_projects`` record in the protected baseline that names a reason
 and an approver; the protected-path ``oracle-change`` gate makes that record a
-second-reviewer decision.
+declared oracle change reviewed on the owner's behalf, not a second-reviewer
+approval.
 
 A project may be absent from the counted baseline only when it is declared in
 ``empty_projects`` with a non-empty reason, executes zero cases, reports MTP
