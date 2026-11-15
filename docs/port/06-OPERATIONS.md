@@ -123,13 +123,12 @@ be computed, the step fails closed. An aggregate file whose content exactly matc
 point or the recorded event base is not an aggregate edit. Any other content, and every add,
 delete, or rename of an aggregate, still fails. The recorded-base content check is therefore
 not redundant; it is the second allowed base-side snapshot, alongside the fork point. Because
-the aggregate check runs the base-materialised `build_port_index.py`, this tolerance is
-head-only until the merge that carries the new tool: before that merge the base tool from
-`main` governs, ignores `RECORDED_BASE`, and still passes stale or merged-main PRs through the
-fork point alone. The recorded-base-specific tolerance is proven by direct tool tests and
-becomes live from the first merge carrying it. Pre-merge, a tree carrying recorded-base
-aggregates different from the fork point is **charged** by the live step; the post-merge head
-tool is the expectation that allows it. Pushes to `main` pass the immediate previous main
+the aggregate check runs the base-materialised `build_port_index.py`, a new tool capability is
+live only once the merge carrying it has landed. That transition is complete: the base tool
+now understands `RECORDED_BASE`. Before it landed, a tree carrying recorded-base aggregates
+different from the fork point was charged by the live step; that historical pre-merge behaviour
+is retained in the ledger and is no longer asserted by the suite. A real aggregate edit is
+still charged. Pushes to `main` pass the immediate previous main
 commit. Inventory, parity, generator-test, TLC, and frozen-step checks
 either compare the working tree, run a model, or use the shared merge-base gate; none compares
 a recorded base to `HEAD` with two-dot semantics.
