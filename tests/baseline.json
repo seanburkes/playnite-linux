@@ -22,6 +22,13 @@
       "failed": 0,
       "skipped": 0
     },
+    "Playnite.Core.Tests": {
+      "total": 277,
+      "executed": 277,
+      "passed": 277,
+      "failed": 0,
+      "skipped": 0
+    },
     "Playnite.Smoke.Tests": {
       "total": 4,
       "executed": 4,
@@ -35,7 +42,11 @@
     "run_id": "43740834379",
     "notes": "linux-ci workflow (linux-build-and-test job) run 43740834379 on main 68ee1b9: Playnite.Architecture.Tests 103 executed / 103 passed / 0 failed / 0 skipped; Playnite.Smoke.Tests 4 executed / 4 passed / 0 failed / 0 skipped; Playnite.Core.Tests 0 executed with MTP exit 8, declared in empty_projects and kept out of the counted baseline so it cannot create a zero floor. Counts are the run's reported totals from its JUnit artifacts, not a local estimate."
   },
-  "empty_projects": {
-    "Playnite.Core.Tests": "Marker-only scaffold with no test methods yet; it existed at the base commit and executes zero cases with MTP exit 8. Declared empty so it cannot create a zero-case floor in the counted baseline. Move it into new once it executes cases."
-  }
+  "core_capture": {
+    "captured_at": "2026-11-15T21:55:47Z",
+    "run_id": "43766384322",
+    "commit": "3c994832adf84a8f2864d7ff15d0c8950cfce95c",
+    "notes": "p3-002c moved Playnite.Core.Tests from empty_projects into the counted new baseline after the unit gave it 277 cases. Counts are parsed from the linux-ci run 43766384322 JUnit artifacts at commit 3c99483: Playnite.Core.Tests 277 executed, 277 passed, 0 failed, 0 skipped, MTP exit 0; the same run reports Architecture 144/144 and Smoke 4/4. scripts/ci/check_linux_test_results.py accepts the empty-to-counted transition against origin/main. The 277 floor is this PR's subset; if a sibling Phase 3 Core PR merges first, the entry must be rebased to the union total from a real run, never kept at this subset."
+  },
+  "empty_projects": {}
 }
