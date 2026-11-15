@@ -66,7 +66,9 @@ jobs:
           set -euo pipefail
           sudo apt-get update
           sudo apt-get install --yes --no-install-recommends flatpak-builder=1.4.2-1build2 flatpak=1.14.6-1ubuntu0.1
-          test "$(flatpak-builder --version)" = 'flatpak-builder 1.4.2'
+          flatpak-builder --version
+          flatpak --version
+          test "$(flatpak-builder --version)" = 'flatpak-builder-1.4.2'
           test "$(flatpak --version)" = 'Flatpak 1.14.6'
           # Ubuntu runner AppArmor otherwise blocks bubblewrap's unprivileged namespaces.
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
