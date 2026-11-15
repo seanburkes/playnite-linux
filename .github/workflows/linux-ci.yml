@@ -126,6 +126,12 @@ jobs:
             --previous-projects-state "${{ steps.policy_baseline.outputs.projects_state }}" \
             --summary "$GITHUB_STEP_SUMMARY"
 
+      - name: Install Xvfb for native window smoke
+        run: sudo apt-get update && sudo apt-get install --yes xvfb xauth libice6 libsm6 libfontconfig1
+
+      - name: Open and close the native Avalonia window under Xvfb
+        run: timeout 30s xvfb-run -a dotnet src/Playnite.Desktop/bin/Release/net11.0/Playnite.Desktop.dll --smoke
+
       - name: Upload Linux test results
         if: always()
         uses: actions/upload-artifact@v4
