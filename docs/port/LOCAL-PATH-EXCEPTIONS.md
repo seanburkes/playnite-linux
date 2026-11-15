@@ -2,10 +2,17 @@
 
 The local-path guard starts from fixed main commit
 `0b02bf9ff395a91b3524545074f53abe403effc2`, never a moving event base or HEAD.
-New local home-directory, orchestrator data/state, and worktree references must use
-repository-relative evidence instead. Home environment-variable and tilde forms, Windows
-Users/Home paths, and conventional absolute roots are covered. The protected
-`LOCAL_ABSOLUTE_ROOTS` tuple in the generator configures the root set.
+New personal home-directory, orchestrator data/state, and worktree references must use
+repository-relative evidence instead. Named user homes, home-variable/tilde task paths,
+Windows Users/Home paths, and the small protected `LOCAL_TASK_ROOTS` tuple are covered.
+Conventional Steam/config home references and standard system paths are not private evidence
+and remain allowed. Generic home allowances match exact path tokens, not whole lines or
+Markdown labels: a private link target or another private path on that line is still checked.
+Repository-relative orchestrator documentation paths are allowed; data/state paths anchored
+in a personal home or a configured task root, or a bare orchestrator data/state directory,
+are not. Named-user tilde forms, Windows profile environment forms, escaped/mixed separators,
+UNC shares and percent-encoded equivalents are also checked. Matching requires a path-token
+boundary, so task names embedded in other words do not become paths.
 The generator rejects an offending file and row without echoing its private path.
 The CI policy suite also checks documentation. Both build and check validate documentation
 and every shard before writing aggregates.
@@ -32,9 +39,13 @@ or edited lines or more copies than the baseline contained. Changing a baseline 
 removing the local reference, not refreshing its exception. The four ledger rows above are
 the complete ledger allowance; CI asserts the recorded list and aggregate hashes match.
 
-Remote HTTP(S), FTP, and SSH URLs are removed before matching, including Markdown links and
-code spans. A genuine local path elsewhere on the same line still fails; a file URI does not
-receive this remote-URL exemption.
+Remote HTTP(S), FTP, SSH, Git and SFTP URLs, protocol-relative URLs, and schemeless domain URLs
+are removed before matching, including Markdown links and code spans. A genuine local path
+elsewhere on the same line still fails; a file URI does not receive this remote-URL exemption.
+Markdown delimiters and punctuation terminate a remote target, so an adjacent private target
+cannot be swallowed by the URL exemption. Remote targets are removed before decoding;
+remaining percent encoding is decoded to stability and separators are normalized before
+matching. Protocol-relative domain URLs remain remote URLs; unqualified share paths are UNC.
 
 The scan covers Markdown, TSV, text, reStructuredText, and AsciiDoc under `docs/`, root Markdown,
 and Markdown under `spikes/`, `tests/`, `tools/`, `packaging/`, and `src/`, including new files

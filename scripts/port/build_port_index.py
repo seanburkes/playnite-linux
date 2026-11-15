@@ -57,26 +57,55 @@ from collections import Counter
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
+from urllib.parse import unquote
 
 ROOT = Path(__file__).resolve().parents[2]
 UNITS = ROOT / "docs" / "port" / "units"
 QUEUE = ROOT / "docs" / "port" / "queue.tsv"
 LEDGER = ROOT / "docs" / "port" / "ledger.tsv"
 
-# Conventional machine-local roots. Changes are protected policy changes.
-LOCAL_ABSOLUTE_ROOTS = (
-    "home", "Users", "root", "opt", "var", "mnt", "tmp", "srv",
-    "media", "Volumes", "private", "run", "usr", "etc", "bin", "sbin",
-    "lib", "lib64", "dev", "proc", "sys",
-)
+# Task directories, not standard system roots. Changes are protected policy changes.
+LOCAL_TASK_ROOTS = ("/tmp/opencode", "/srv/firstmate", "/var/lib/firstmate")
+HOME_PREFIX = r"(?:\$(?:HOME\b|\{HOME\})|~)[\\/]"
 LOCAL_PATH = re.compile(
-    r"(?<![\w])/(?:" + "|".join(map(re.escape, LOCAL_ABSOLUTE_ROOTS)) + r")(?:/|\b)|"
-    r"(?<![\w])\$(?:HOME\b|\{HOME\})|(?<![\w])~[\\/]|"
+    r"(?<![\w])/(?:home|Users|root)/[^\s/]+|"
+    r"(?<![\w])(?:" + "|".join(map(re.escape, LOCAL_TASK_ROOTS)) + r")(?:/|\b)|"
+    r"(?<![\w])" + HOME_PREFIX + r"[^\s/]+|"
+    r"(?<![\w./-])~[\w.-]+|%USERPROFILE%|\$env:USERPROFILE\b|"
     r"(?<![\w])[A-Za-z]:[\\/](?:Users|Home|Documents and Settings)(?:[\\/]|\b)|"
-    r"firstmate[\\/](?:data|state)(?:[\\/]|\b)|\.treehouse(?:[\\/]|\b)",
+    r"(?<![\w./-])/?firstmate/(?:data|state)(?:/|\b)|"
+    r"(?<![\w.-])\.treehouse/",
     re.IGNORECASE,
 )
-REMOTE_URL = re.compile(r"\b(?:https?|ftp|ssh)://[^\s<>`\"']+", re.IGNORECASE)
+REMOTE_URL = re.compile(
+    r"\b(?:https?|ftp|ssh|git|sftp)://[^\s<>()\[\]{}|,;`\"']+|"
+    r"(?<![\w/\\])(?://)?(?:[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?\.[a-z]{2,})"
+    r"(?::\d+)?/[^\s<>()\[\]{}|,;`\"']+",
+    re.IGNORECASE,
+)
+UNC_PATH = re.compile(r"(?<![\w])(?:\\\\|//)[^\\/\s]+[\\/]+[^\\/\s]+")
+GENERIC_HOME_PATH = re.compile(
+    r"(?<![\w])" + HOME_PREFIX
+    + r"(?:\.steam|\.local/share/Steam|\.local|\.config|config)(?![\w/\\.-])",
+    re.IGNORECASE,
+)
+
+
+def contains_local_path(line: str) -> bool:
+    # Strip remote targets before decoding, so encoded punctuation in a URL cannot
+    # turn its path into apparent local evidence. Delimiters end the remote target.
+    text = REMOTE_URL.sub("", line)
+    while True:
+        decoded = unquote(text)
+        if decoded == text:
+            break
+        text = REMOTE_URL.sub("", decoded)
+    if UNC_PATH.search(text):
+        return True
+    # JSON/Markdown escaped and mixed Windows separators denote the same path.
+    text = re.sub(r"[\\/]+", "/", text)
+    # Exempt only exact generic tokens, never a whole Markdown label/link/line.
+    return bool(LOCAL_PATH.search(GENERIC_HOME_PATH.sub("", text)))
 # Fixed, not the event base or HEAD; see docs/port/LOCAL-PATH-EXCEPTIONS.md.
 PRE_GUARD_COMMIT = "0b02bf9ff395a91b3524545074f53abe403effc2"
 
@@ -90,7 +119,7 @@ def local_path_allowance(label: str) -> Counter:
         return Counter()
     return Counter(hashlib.sha256(line.encode("utf-8")).hexdigest()
                    for line in blob.decode("utf-8").splitlines()
-                   if LOCAL_PATH.search(REMOTE_URL.sub("", line)))
+                   if contains_local_path(line))
 
 
 def local_path_errors(text: str, label: str) -> list[str]:
@@ -98,7 +127,7 @@ def local_path_errors(text: str, label: str) -> list[str]:
     allowed = None
     errors = []
     for lineno, line in enumerate(text.splitlines(), start=1):
-        if not LOCAL_PATH.search(REMOTE_URL.sub("", line)):
+        if not contains_local_path(line):
             continue
         if allowed is None:
             allowed = local_path_allowance(label).copy()
@@ -106,7 +135,7 @@ def local_path_errors(text: str, label: str) -> list[str]:
         if allowed[digest] > 0:
             allowed[digest] -= 1
         else:
-            errors.append(f"{label}:{lineno}: absolute local path in row; "
+            errors.append(f"{label}:{lineno}: personal or task-local path in row; "
                           "use a repository-relative reference")
     return errors
 
