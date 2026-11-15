@@ -177,7 +177,7 @@ checks remain in `plan-guards.yml`; they are not duplicated in the build workflo
 
 | Workflow / check | Runner | Trigger and guarantee |
 | --- | --- | --- |
-| `linux-ci` / `linux-build-and-test` | `ubuntu-24.04` | Restore `Playnite.slnx` in locked mode, build Release, and run every project under `tests/`. Restore/build warnings and xUnit skipped/warned tests fail. |
+| `linux-ci` / `linux-build-and-test` | `ubuntu-24.04`, Python 3.12 | Test the result policy, restore `Playnite.slnx` in locked mode, build Release, and run every project under `tests/`. Restore/build warnings and xUnit skipped/warned tests fail; the bounded empty-scaffold policy below applies before the new-suite baseline is recorded. |
 | `plan-guards` / `inventory-and-parity` | `ubuntu-latest` | Reproduce inventory, validate parity, run port-index generator tests, validate shard history, and reject aggregate edits on PRs. Also enforce immutable `legacy/`/`oracle-lock/` and the protected-path `oracle-change` gate. |
 | `plan-guards` / `formal` | `ubuntu-latest`, Temurin 21 | Run `scripts/formal/run_tlc.sh` for the existing formal models. |
 | `legacy-oracle` / `windows-oracle` | `windows-latest`, x86 Release | Existing oracle-path PR filters, `oracle-*` tags, or manual dispatch. Verify pinned Playnite.Deps, build frozen v10, byte-compare manifest goldens with a negative probe, run NUnit via VSTest, and retain TRX/counts. |
@@ -199,13 +199,35 @@ SDKs. NuGet/test-runner versions remain pinned by central versions and package l
 The Linux test command explicitly selects Microsoft.Testing.Platform through .NET 11's
 `DOTNET_TEST_RUNNER` setting, runs without case filters, and uses the pinned xUnit runner's
 `--fail-skips on --fail-warns on` options. It uploads per-project TRX and JUnit files in
-`linux-test-results`. The preceding solution restore and Release build produce the test
+`linux-test-results`, together with `test-counts.json` containing every project's executed,
+passed, failed and skipped counts, MTP exit code and classified outcome. Counts also appear in
+the job summary. The preceding solution restore and Release build produce the test
 binaries and project assets used by `--no-build --no-restore`; a discovered project without
 those outputs fails rather than being skipped. It discovers project files rather than gating
 on test source or case count: `Playnite.Architecture.Tests` runs whenever its `.csproj` exists,
 including today's scaffold and the tests added by p2-002. An absent architecture project emits
 a notice; a present project's build or test failure fails the job. The core project is
 mandatory. Empty scaffold assemblies are not evidence of tested application behavior.
+
+The pre-baseline bootstrap policy is deliberately self-closing. The workflow runs **every**
+discovered project, records each exit code, then calls
+`scripts/ci/check_linux_test_results.py`. Only MTP exit **8** accompanied by a valid JUnit
+report declaring and containing **zero cases** is non-failing while no new-suite baseline is
+recorded (`tests/baseline.json` has `new: null`, or no baseline file exists). Each such project
+gets a prominent **NO TESTS EXIST YET** notice in the log and job summary, plus a recorded
+zero count; the result is `bootstrap-empty`, never a tested behavior claim. Missing, malformed
+or inconsistent reports fail. Every other nonzero exit, exit 8 with nonempty results, any
+failed case and any skipped case fail, regardless of baseline state. All projects still run
+so an earlier failure cannot hide another project's counts.
+
+Once `tests/baseline.json` contains a non-null `new` object, the bootstrap outcome closes
+automatically: **zero executed cases always fail**, even for a newly added project or a
+baseline entry containing zero. A project's executed count must also be at least its recorded
+baseline, and every baselined project must appear in the run. An invalid recorded baseline
+fails instead of reopening bootstrap. The `new` object is keyed directly by project name;
+each project's object must contain a nonnegative integer `executed` count and may also record
+passed/failed/skipped counts, coverage and capture provenance. Python policy tests in
+`scripts/ci/` exercise the bootstrap-to-baseline transition and these failure paths in CI.
 
 The Windows oracle remains independent, with its existing triggers and VSTest filters:
 EX-1 `FileSystemTests.CanWriteToFolderTest`, EX-2
@@ -218,8 +240,9 @@ unfiltered triggers, and the Windows jobs retain their narrower oracle triggers.
 
 ### New-suite baseline at Phase 2 exit
 
-`tests/baseline.json` currently has `new: null`; the scaffold has no test cases. Do not replace
-that with a fabricated zero-test baseline. At Phase 2 exit, after real tests exist and the
+`tests/baseline.json` currently has `new: null`; Core.Tests is still a marker-only scaffold,
+while p2-002 supplies real architecture cases. Do not replace `new: null` with a fabricated
+zero-test baseline. At Phase 2 exit, after every remaining empty project has real tests and the
 Linux CI run is green, the oracle owner records the new suite **per project under
 `tests/baseline.json`'s `new` object**, in a separate `oracle-change` PR with a second reviewer.
 Preserve the complete `legacy` object. Record executed cases, passed/failed cases, zero skips,
@@ -249,6 +272,8 @@ results = Path(os.environ["baseline_results"])
 counts = {}
 for report in sorted(results.glob("*.xml")):
     cases = ET.parse(report).findall(".//testcase")
+    if not cases:
+        raise SystemExit(f"Cannot close bootstrap with an empty project: {report}")
     skipped = sum(case.find("skipped") is not None for case in cases)
     failed = sum(case.find("failure") is not None or case.find("error") is not None
                  for case in cases)
@@ -268,9 +293,10 @@ This command produces a review input, `new-suite-counts.json`, alongside each pr
 report. The oracle owner must match the reports to every discovered project, add the green
 CI run provenance, and review the candidate before recording `new`; it does not update the
 protected baseline automatically. Count-regression enforcement starts from that reviewed
-Phase 2 exit baseline. Local YAML parsing and plan checks validate this wiring only: the first
-real GitHub Actions run is the evidence for SDK provisioning, restore/build/test execution,
-and artifact upload. Do not claim that CI passed from local checks.
+Phase 2 exit baseline, with zero-case rejection activated at the same time. Local YAML parsing
+and plan checks validate the wiring only: a real GitHub Actions run is the evidence for SDK
+provisioning, restore/build/test execution, and artifact upload. Do not claim that CI passed
+from local checks.
 
 ## 6. Review protocol
 

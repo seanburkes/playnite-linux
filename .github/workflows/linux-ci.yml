@@ -26,6 +26,13 @@ jobs:
         with:
           global-json-file: global.json
 
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Verify the result and baseline policy
+        run: python3 -m unittest discover -s scripts/ci -p 'test_*.py'
+
       - name: Verify the exact pinned SDK is selected
         run: |
           expected=$(jq -r '.sdk.version' global.json)
@@ -58,12 +65,24 @@ jobs:
           for project in "${projects[@]}"; do
             name=$(basename "$project" .csproj)
             echo "Running $name" >> "$GITHUB_STEP_SUMMARY"
+            mkdir -p "$RUNNER_TEMP/linux-test-results/$name"
+            exit_code=0
             dotnet test --project "$project" --configuration Release --no-build --no-restore \
               --report-xunit-trx --report-xunit-trx-filename "$name.trx" \
               --report-xunit-junit --report-xunit-junit-filename "$name.xml" \
               --results-directory "$RUNNER_TEMP/linux-test-results/$name" \
-              --fail-skips on --fail-warns on
+              --fail-skips on --fail-warns on || exit_code=$?
+            printf '%s\n' "$exit_code" > "$RUNNER_TEMP/linux-test-results/$name/exit-code.txt"
           done
+          # Only parsed exit-8 zero-case results are non-failing before new is
+          # recorded in tests/baseline.json. Once recorded, zero/regressed case
+          # counts fail. Every other nonzero exit and all failed/skipped cases
+          # fail unconditionally; no runner exit is ignored without validation.
+          python3 scripts/ci/check_linux_test_results.py \
+            --projects "${projects[@]}" \
+            --results-directory "$RUNNER_TEMP/linux-test-results" \
+            --baseline "$GITHUB_WORKSPACE/tests/baseline.json" \
+            --summary "$GITHUB_STEP_SUMMARY"
 
       - name: Upload Linux test results
         if: always()
