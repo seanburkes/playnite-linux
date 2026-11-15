@@ -1,0 +1,40 @@
+"AppState"
+{
+	"appid"		"105600"
+	"Universe"		"1"
+	"name"		"Terraria"
+	"StateFlags"		"4"
+	"installdir"		"Terraria"
+	"lastupdated"		"1700000000"
+	"LastPlayed"		"0"
+	"SizeOnDisk"		"831365954"
+	"StagingSize"		"0"
+	"buildid"		"24893155"
+	"LastOwner"		"76561190000000000"
+	"DownloadType"		"3"
+	"UpdateResult"		"0"
+	"BytesToDownload"		"2652704"
+	"BytesDownloaded"		"2652704"
+	"BytesToStage"		"5638437"
+	"BytesStaged"		"5638437"
+	"TargetBuildID"		"0"
+	"AutoUpdateBehavior"		"0"
+	"AllowOtherDownloadsWhileRunning"		"0"
+	"ScheduledAutoUpdate"		"0"
+	"InstalledDepots"
+	{
+		"105602"
+		{
+			"manifest"		"4206021387845829879"
+			"size"		"831365954"
+		}
+	}
+	"UserConfig"
+	{
+		"language"		"english"
+	}
+	"MountedConfig"
+	{
+		"language"		"english"
+	}
+}

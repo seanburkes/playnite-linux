@@ -1,0 +1,242 @@
+"AppState"
+{
+	"appid"		"1238040"
+	"Universe"		"1"
+	"name"		"Dragon Age II: Ultimate Edition"
+	"StateFlags"		"4"
+	"installdir"		"Dragon Age II"
+	"lastupdated"		"1700000000"
+	"LastPlayed"		"0"
+	"SizeOnDisk"		"10532431786"
+	"StagingSize"		"0"
+	"buildid"		"10351532"
+	"LastOwner"		"76561190000000000"
+	"DownloadType"		"1"
+	"UpdateResult"		"0"
+	"BytesToDownload"		"251940016"
+	"BytesDownloaded"		"251940016"
+	"BytesToStage"		"254017896"
+	"BytesStaged"		"254017896"
+	"TargetBuildID"		"10351532"
+	"AutoUpdateBehavior"		"0"
+	"AllowOtherDownloadsWhileRunning"		"0"
+	"ScheduledAutoUpdate"		"0"
+	"InstalledDepots"
+	{
+		"1238041"
+		{
+			"manifest"		"6701893115208317717"
+			"size"		"5653252634"
+		}
+		"1238042"
+		{
+			"manifest"		"6562337805101275464"
+			"size"		"622636"
+		}
+		"3340991"
+		{
+			"manifest"		"556631282418311229"
+			"size"		"254018335"
+		}
+		"1295714"
+		{
+			"manifest"		"5235432536676952469"
+			"size"		"17054199"
+			"dlcappid"		"1295714"
+		}
+		"1296040"
+		{
+			"manifest"		"5739219435015078089"
+			"size"		"195"
+			"dlcappid"		"1295714"
+		}
+		"1295715"
+		{
+			"manifest"		"1393092627207332345"
+			"size"		"36578785"
+			"dlcappid"		"1295715"
+		}
+		"1296050"
+		{
+			"manifest"		"5336640489826363725"
+			"size"		"195"
+			"dlcappid"		"1295715"
+		}
+		"1295716"
+		{
+			"manifest"		"5721491876898977044"
+			"size"		"17188288"
+			"dlcappid"		"1295716"
+		}
+		"1296060"
+		{
+			"manifest"		"2816424276489864718"
+			"size"		"195"
+			"dlcappid"		"1295716"
+		}
+		"1295717"
+		{
+			"manifest"		"1215406534079309104"
+			"size"		"10421771"
+			"dlcappid"		"1295717"
+		}
+		"1296070"
+		{
+			"manifest"		"5396978889999042570"
+			"size"		"195"
+			"dlcappid"		"1295717"
+		}
+		"1295718"
+		{
+			"manifest"		"4995067326356648815"
+			"size"		"15383487"
+			"dlcappid"		"1295718"
+		}
+		"1296080"
+		{
+			"manifest"		"8516053029398204601"
+			"size"		"195"
+			"dlcappid"		"1295718"
+		}
+		"1295719"
+		{
+			"manifest"		"8583645749393344846"
+			"size"		"1486477290"
+			"dlcappid"		"1295719"
+		}
+		"1296090"
+		{
+			"manifest"		"7171506742989078775"
+			"size"		"195"
+			"dlcappid"		"1295719"
+		}
+		"1295720"
+		{
+			"manifest"		"3359186693581717800"
+			"size"		"11102912"
+			"dlcappid"		"1295720"
+		}
+		"1295728"
+		{
+			"manifest"		"7528946088310658733"
+			"size"		"195"
+			"dlcappid"		"1295720"
+		}
+		"1295721"
+		{
+			"manifest"		"5094829718759178681"
+			"size"		"12464838"
+			"dlcappid"		"1295721"
+		}
+		"1296110"
+		{
+			"manifest"		"5572724812613991099"
+			"size"		"195"
+			"dlcappid"		"1295721"
+		}
+		"1295722"
+		{
+			"manifest"		"63703762947003707"
+			"size"		"18165455"
+			"dlcappid"		"1295722"
+		}
+		"1296120"
+		{
+			"manifest"		"910789103468218953"
+			"size"		"195"
+			"dlcappid"		"1295722"
+		}
+		"1295723"
+		{
+			"manifest"		"6481242437504734088"
+			"size"		"1019128635"
+			"dlcappid"		"1295723"
+		}
+		"1296130"
+		{
+			"manifest"		"329804375490145409"
+			"size"		"195"
+			"dlcappid"		"1295723"
+		}
+		"1295724"
+		{
+			"manifest"		"1394032669221920403"
+			"size"		"3241041"
+			"dlcappid"		"1295724"
+		}
+		"1296140"
+		{
+			"manifest"		"7750829889915042341"
+			"size"		"195"
+			"dlcappid"		"1295724"
+		}
+		"1295725"
+		{
+			"manifest"		"3902634720371452299"
+			"size"		"1224683442"
+			"dlcappid"		"1295725"
+		}
+		"1296150"
+		{
+			"manifest"		"6604079994308744403"
+			"size"		"195"
+			"dlcappid"		"1295725"
+		}
+		"1295726"
+		{
+			"manifest"		"4681555894162808404"
+			"size"		"3596430"
+			"dlcappid"		"1295726"
+		}
+		"1296160"
+		{
+			"manifest"		"3074737159749894895"
+			"size"		"207"
+			"dlcappid"		"1295726"
+		}
+		"1295727"
+		{
+			"manifest"		"2353633132125377200"
+			"size"		"806949169"
+			"dlcappid"		"1295727"
+		}
+		"1296170"
+		{
+			"manifest"		"6480062387033168544"
+			"size"		"207"
+			"dlcappid"		"1295727"
+		}
+	}
+	"InstallScripts"
+	{
+		"1238041"		"installScript.vdf"
+		"3340991"		"EAappInstaller_installScript.vdf"
+		"1295714"		"addins\\da2_prc_one\\installScript.vdf"
+		"1295715"		"addins\\da2_prc_seb\\installScript.vdf"
+		"1295716"		"addins\\da2_mtx_rog\\installScript.vdf"
+		"1295717"		"addins\\da2_mtx_war\\installScript.vdf"
+		"1295718"		"addins\\da2_mtx_mag\\installScript.vdf"
+		"1295719"		"addins\\da2_prc_eye\\installScript.vdf"
+		"1295720"		"addins\\da2_mtx_001\\installScript.vdf"
+		"1295721"		"addins\\da2_mtx_002\\installScript.vdf"
+		"1295722"		"addins\\da2_mtx_003\\installScript.vdf"
+		"1295723"		"addins\\da2_prc_drk\\installScript.vdf"
+		"1295724"		"addins\\da2_pro_pip\\installScript.vdf"
+		"1295725"		"addins\\da2_hir_tex\\installScript.vdf"
+		"1295726"		"__Installer\\DLC\\Signature Edition Rewards\\installScript.vdf"
+		"1295727"		"__Installer\\DLC\\Dragon Age II Soundtrack\\installScript.vdf"
+	}
+	"SharedDepots"
+	{
+		"228982"		"228980"
+		"228990"		"228980"
+	}
+	"UserConfig"
+	{
+		"language"		"english"
+	}
+	"MountedConfig"
+	{
+		"language"		"english"
+	}
+}
