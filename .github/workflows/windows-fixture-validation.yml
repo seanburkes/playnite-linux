@@ -8,6 +8,7 @@ on:
       - "tests/fixtures/v10/**"
       - ".github/workflows/windows-fixture-validation.yml"
       - "!**/*.md"
+      - "tests/fixtures/v10/**"
   push:
     branches: ["fm/p1-003"]
     paths:

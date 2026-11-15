@@ -1,6 +1,7 @@
 """Guard the CI policy surface and its self-closing ratchet wiring."""
 
 from pathlib import Path
+import fnmatch
 import os
 import subprocess
 import sys
@@ -158,7 +159,16 @@ class CiPolicyTests(unittest.TestCase):
             "    types: [opened, synchronize, reopened, labeled, unlabeled]",
             trigger.splitlines()[0])
 
-    def test_advisory_pr_paths_exclude_markdown_last(self):
+    def test_advisory_pr_paths_exclude_docs_but_restore_oracle_data(self):
+        exceptions = {
+            "legacy-oracle": ["tests/golden/settings-library.md",
+                              "tests/golden/settings/**", "tests/golden/library/**",
+                              "tests/golden/manifests/**", "tests/fixtures/v10/**"],
+            "settings-library-oracle": ["tests/golden/settings-library.md",
+                                        "tests/golden/settings/**",
+                                        "tests/golden/library/**", "tests/fixtures/v10/**"],
+            "windows-fixture-validation": ["tests/fixtures/v10/**"],
+        }
         for name in ("legacy-oracle", "settings-library-oracle",
                      "windows-fixture-validation"):
             path = PLAN_GUARDS.with_name(f"{name}.yml")
@@ -168,9 +178,27 @@ class CiPolicyTests(unittest.TestCase):
                 for line in trigger.splitlines()[1:]:
                     if not line.startswith("      - "):
                         break
-                    paths.append(line.strip())
+                    paths.append(line.strip()[3:-1])
                 self.assertGreater(len(paths), 1)
-                self.assertEqual('- "!**/*.md"', paths[-1])
+                exclusion = paths.index("!**/*.md")
+                self.assertEqual(exceptions[name], paths[exclusion + 1:])
+
+                def triggers(changed):
+                    selected = False
+                    for pattern in paths:
+                        if fnmatch.fnmatchcase(changed, pattern.lstrip("!")):
+                            selected = not pattern.startswith("!")
+                    return selected
+
+                for doc in ("tests/golden/README.md", "tests/fixtures/steam/README.md",
+                            "tools/LegacyOracle/README.md",
+                            "tools/V10LibraryFixture/README.md"):
+                    self.assertFalse(triggers(doc), doc)
+                for pattern in exceptions[name]:
+                    self.assertTrue(triggers(pattern.replace("**", "payload.md")),
+                                    pattern)
+                if name == "settings-library-oracle":
+                    self.assertTrue(triggers("tests/golden/settings-library.md"))
 
     def test_ci_policy_surface_is_protected_and_codeowned(self):
         paths = protected_paths()
