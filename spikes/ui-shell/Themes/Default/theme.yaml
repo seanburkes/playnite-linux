@@ -1,0 +1,11 @@
+id: ui-shell-default-spike
+name: Library study (fake data)
+apiVersion: 0
+resources:
+  - Colors.axaml
+  - Brushes.axaml
+  - Spacing.axaml
+  - Typography.axaml
+styles:
+  - Controls.axaml
+  - Templates.axaml

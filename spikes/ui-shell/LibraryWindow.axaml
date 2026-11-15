@@ -1,0 +1,25 @@
+<Window xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:local="using:UiShellSpike"
+        x:Class="UiShellSpike.LibraryWindow" x:DataType="local:LibraryModel" Width="1200" Height="800" Title="Library shell — fake data" WindowDecorations="None">
+  <Grid Margin="{DynamicResource PagePadding}" RowDefinitions="Auto,Auto,*" RowSpacing="{DynamicResource RowGap}">
+    <StackPanel><TextBlock Classes="heading" Text="PLAYNITE / Library study" /><TextBlock Classes="muted" Text="FAKE DATA · Invented titles and geometric covers" /></StackPanel>
+    <WrapPanel Grid.Row="1" Orientation="Horizontal">
+      <TextBox x:Name="Search" Width="{DynamicResource SearchWidth}" PlaceholderText="Search invented games" AutomationProperties.Name="Search games" Text="{Binding Search, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+      <CheckBox x:Name="Installed" Margin="{DynamicResource CardMargin}" Content="Installed only" IsChecked="{Binding InstalledOnly, Mode=TwoWay}" />
+      <TextBlock x:Name="Count" Margin="{DynamicResource CardPadding}" Text="{Binding CountLabel}" />
+    </WrapPanel>
+    <Grid x:Name="Body" Grid.Row="2" ColumnDefinitions="*,Auto" RowDefinitions="*,Auto" ColumnSpacing="{DynamicResource RowGap}" RowSpacing="{DynamicResource RowGap}">
+      <ListBox x:Name="Games" AutomationProperties.Name="Invented game library" ItemsSource="{Binding Games}" SelectedItem="{Binding SelectedGame, Mode=TwoWay}" ItemTemplate="{StaticResource GameCard}" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+        <ListBox.ItemsPanel><ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate></ListBox.ItemsPanel>
+      </ListBox>
+      <Border x:Name="Details" Grid.Column="1" Classes="surface" Width="{DynamicResource DetailsWidth}">
+        <StackPanel Spacing="{DynamicResource RowGap}">
+          <TextBlock Classes="muted" Text="SELECTED GAME" />
+          <TextBlock x:Name="DetailsTitle" Classes="heading" Text="{Binding SelectedGame.Title}" TextWrapping="Wrap" />
+          <TextBlock x:Name="DetailsPlaytime" Text="{Binding SelectedGame.Playtime}" />
+          <TextBlock x:Name="DetailsLastPlayed" Classes="muted" Text="{Binding SelectedGame.LastPlayed}" TextWrapping="Wrap" />
+          <TextBlock Classes="muted" Text="Synthetic library entry. No launch action or real metadata." TextWrapping="Wrap" />
+        </StackPanel>
+      </Border>
+    </Grid>
+  </Grid>
+</Window>

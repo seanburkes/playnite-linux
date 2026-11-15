@@ -1,0 +1,13 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:sys="clr-namespace:System;assembly=System.Runtime">
+  <Thickness x:Key="PagePadding">20</Thickness>
+  <Thickness x:Key="CardPadding">10</Thickness>
+  <Thickness x:Key="CardMargin">4</Thickness>
+  <sys:Double x:Key="RowGap">10</sys:Double>
+  <sys:Double x:Key="CardWidth">172</sys:Double>
+  <sys:Double x:Key="CoverHeight">138</sys:Double>
+  <sys:Double x:Key="CompactCoverHeight">100</sys:Double>
+  <Thickness x:Key="SelectionBorder">2</Thickness>
+  <sys:Double x:Key="DetailsWidth">264</sys:Double>
+  <sys:Double x:Key="NarrowBreakpoint">850</sys:Double>
+  <sys:Double x:Key="SearchWidth">260</sys:Double>
+</ResourceDictionary>
