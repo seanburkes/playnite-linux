@@ -21,6 +21,27 @@ jobs:
       TESTINGPLATFORM_TELEMETRY_OPTOUT: "1"
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Capture the committed policy baseline
+        shell: bash
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          set -euo pipefail
+          previous_projects="$RUNNER_TEMP/previous-projects.txt"
+          : > "$previous_projects"
+          if [ -z "${BASE_SHA:-}" ] || printf '%s' "$BASE_SHA" | grep -Eq '^0+$'; then
+            echo "::notice::No base commit is available; first-baseline policy applies"
+            exit 0
+          fi
+          if git cat-file -e "$BASE_SHA:tests/baseline.json" 2>/dev/null; then
+            git show "$BASE_SHA:tests/baseline.json" > "$RUNNER_TEMP/previous-baseline.json"
+          fi
+          git ls-tree -r --name-only "$BASE_SHA" -- tests \
+            | grep -E '/[^/]+\.csproj$' \
+            | sed -e 's|.*/||' -e 's|\.csproj$||' | sort -u > "$previous_projects" || true
 
       - uses: actions/setup-dotnet@v4
         with:
@@ -78,10 +99,15 @@ jobs:
           # recorded in tests/baseline.json. Once recorded, zero/regressed case
           # counts fail. Every other nonzero exit and all failed/skipped cases
           # fail unconditionally; no runner exit is ignored without validation.
+          # The previous committed baseline and base project list make the
+          # baseline a ratchet: lowering, resetting, deleting or silently
+          # dropping a project fails instead of reopening bootstrap.
           python3 scripts/ci/check_linux_test_results.py \
             --projects "${projects[@]}" \
             --results-directory "$RUNNER_TEMP/linux-test-results" \
             --baseline "$GITHUB_WORKSPACE/tests/baseline.json" \
+            --previous-baseline "$RUNNER_TEMP/previous-baseline.json" \
+            --previous-projects "$RUNNER_TEMP/previous-projects.txt" \
             --summary "$GITHUB_STEP_SUMMARY"
 
       - name: Install Xvfb for native window smoke

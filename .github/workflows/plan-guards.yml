@@ -13,6 +13,7 @@ env:
     tests/golden tests/fixtures tests/baseline.json docs/formal
     docs/port/surface-parity.tsv docs/port/02-ARCHITECTURE.md docs/port/PORTING.md
     BannedSymbols*.txt tools/LegacyOracle tools/V10LibraryFixture
+    .github/workflows/linux-ci.yml scripts/ci
 
 jobs:
   inventory-and-parity:
