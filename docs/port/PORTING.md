@@ -165,8 +165,10 @@ python3 scripts/port/build_port_index.py check --shards-only --against origin/ma
 ```
 
 A pull request that changes either aggregate fails CI, even if it contains freshly generated
-output; the aggregate files stop being a per-PR deliverable. The `port-index` workflow runs
-`build` on `main` after merge and commits the regenerated aggregates with a bot commit.
+output; the aggregate files stop being a per-PR deliverable. The `port-index` workflow is the
+only writer: it runs on a push to `main`, validates the shard tree and history against the
+previous `main` commit before writing, then commits the regenerated aggregates with a bot
+commit. It has no manual-dispatch path and never force-pushes.
 
 The contract is in [`units/README.md`](units/README.md). Unit ids are lowercase letters,
 digits, and single hyphens; the units directory accepts only `README.md`, `removed.tsv`, and
