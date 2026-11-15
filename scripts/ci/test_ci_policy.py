@@ -2,6 +2,7 @@
 
 from pathlib import Path
 import os
+import shlex
 import subprocess
 import sys
 import tempfile
@@ -12,6 +13,7 @@ SCRIPTS = ROOT / "scripts" / "ci"
 PLAN_GUARDS = ROOT / ".github" / "workflows" / "plan-guards.yml"
 LINUX_CI = ROOT / ".github" / "workflows" / "linux-ci.yml"
 CODEOWNERS = ROOT / ".github" / "CODEOWNERS"
+PORT_INDEX = ROOT / ".github" / "workflows" / "port-index.yml"
 
 
 def protected_paths():
@@ -166,9 +168,67 @@ class CiPolicyTests(unittest.TestCase):
                      "tests/baseline.json",
                      "scripts/ci", "scripts/port", "scripts/formal"):
             with self.subTest(path=path):
-                self.assertIn(path, paths)
+                self.assertTrue(any(path == protected or
+                                    path.startswith(protected.rstrip("/") + "/")
+                                    for protected in paths), path)
                 key = path if path in owners else path + "/"
                 self.assertIn("@seanburkes", owners.get(key, []))
+
+    def test_workflows_directory_is_protected(self):
+        self.assertIn(".github/workflows", protected_paths())
+        self.assertIn(".github/CODEOWNERS", protected_paths())
+
+    def test_pr_workflow_and_codeowners_changes_require_the_label(self):
+        name = "Oracle artifacts require an explicit oracle-change PR"
+        step = step_block(PLAN_GUARDS, name)
+        # Model the Actions label condition, then execute the actual gate command.
+        self.assertIn("github.event_name == 'pull_request' &&", step)
+        self.assertIn("!contains(github.event.pull_request.labels.*.name, "
+                      "'oracle-change')", step)
+        for change in ("new", "edit", "rename", "codeowners"):
+            with self.subTest(change=change), \
+                    tempfile.TemporaryDirectory() as temporary:
+                repo = Path(temporary)
+                existing = repo / ".github/workflows/linux-ci.yml"
+                existing.parent.mkdir(parents=True)
+                existing.write_text("name: existing\n")
+                owners = repo / ".github/CODEOWNERS"
+                owners.write_text("* @owner\n")
+                base = committed_repo(repo)
+                changed = existing
+                if change in ("new", "rename"):
+                    changed = existing.with_name("brand-new.yml")
+                    if change == "rename":
+                        existing.rename(changed)
+                    else:
+                        changed.write_text("name: brand-new\n")
+                elif change == "codeowners":
+                    changed = owners
+                    owners.write_text("* @different-owner\n")
+                else:
+                    existing.write_text("name: edited\n")
+                commit(repo, change)
+                script = run_block(PLAN_GUARDS, name).replace(
+                    "${{ steps.policy_scripts.outputs.gate }}",
+                    str(SCRIPTS / "check_protected_paths.py")).replace(
+                    "${{ steps.policy_base.outputs.sha }}", base)
+                env = os.environ.copy()
+                env["PROTECTED_PATHS"] = " ".join(protected_paths())
+                for labels in ([], ["oracle-change"]):
+                    with self.subTest(labels=labels):
+                        result = subprocess.run(
+                            ["bash", "-e", "-c", script if
+                             "oracle-change" not in labels else ":"],
+                            cwd=repo, env=env, capture_output=True,
+                            text=True, check=False)
+                        self.assertEqual(0 if labels else 1, result.returncode,
+                                         result.stdout + result.stderr)
+                        if not labels:
+                            self.assertIn("Protected oracle artifacts changed",
+                                          result.stdout)
+                            self.assertIn(str(changed.relative_to(repo)), result.stdout)
+                        else:
+                            self.assertEqual("", result.stdout)
 
     def test_policy_workflow_edited_without_the_label_is_gated(self):
         step = step_block(PLAN_GUARDS,
@@ -178,6 +238,51 @@ class CiPolicyTests(unittest.TestCase):
                       "'oracle-change')", step)
         self.assertIn("steps.policy_scripts.outputs.gate", step)
         self.assertNotIn("continue-on-error", step)
+
+    def test_aggregate_writer_pins_ssh_and_always_removes_credentials(self):
+        self.assertIn("permissions:\n  contents: read\n", PORT_INDEX.read_text())
+        cleanup_name = "Remove aggregate-writer SSH credentials"
+        cleanup = step_block(PORT_INDEX, cleanup_name)
+        self.assertIn("if: always()", cleanup)
+        self.assertNotIn("continue-on-error", cleanup)
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary)
+            committed_repo(repo)
+            git(repo, "remote", "add", "origin", "https://github.com/example/repo.git")
+            runner = repo / "runner"
+            runner.mkdir()
+            environment = runner / "environment"
+            env = os.environ.copy()
+            env.update({"RUNNER_TEMP": str(runner), "GITHUB_ENV": str(environment),
+                        "GITHUB_REPOSITORY": "example/repo", "DEPLOY_KEY": "test-key"})
+            result = subprocess.run(
+                ["bash", "-e", "-c", run_block(
+                    PORT_INDEX, "Authenticate with the aggregate-writer deploy key")],
+                cwd=repo, env=env, capture_output=True, text=True, check=False)
+            self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+            key = runner / "port-index-deploy"
+            known = runner / "port-index-known-hosts"
+            self.assertEqual("test-key\n", key.read_text())
+            self.assertEqual(0o600, key.stat().st_mode & 0o777)
+            self.assertEqual(
+                "github.com ssh-ed25519 "
+                "AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl\n",
+                known.read_text())
+            ssh = outputs(environment)["GIT_SSH_COMMAND"]
+            config = subprocess.run([*shlex.split(ssh), "-G", "github.com"],
+                                    capture_output=True, text=True, check=False)
+            self.assertEqual(0, config.returncode, config.stderr)
+            for option in ("stricthostkeychecking true", "globalknownhostsfile /dev/null",
+                           f"userknownhostsfile {known}", "identitiesonly yes"):
+                self.assertIn(option, config.stdout.splitlines())
+            self.assertEqual("git@github.com:example/repo.git",
+                             git(repo, "remote", "get-url", "origin"))
+            result = subprocess.run(
+                ["bash", "-e", "-c", run_block(PORT_INDEX, cleanup_name)],
+                cwd=repo, env=env, capture_output=True, text=True, check=False)
+            self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+            self.assertFalse(key.exists())
+            self.assertFalse(known.exists())
 
     def test_merge_queue_protected_path_step_runs(self):
         step = step_block(
