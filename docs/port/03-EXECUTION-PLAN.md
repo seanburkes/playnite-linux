@@ -372,7 +372,7 @@ pinned and the artifact is retained.
 - ADR required for: target framework, UI framework, storage, plugin compatibility, supported
   architectures, packaging, serializer, any new global dependency.
 - Plan update required for: phase scope change, gate waiver, estimate change > 30%.
-- Oracle change requires a separate PR, a written reason, and a second reviewer; the porting
-  agent cannot approve its own oracle change.
+- Oracle change requires a separate PR, a written reason, and the `oracle-change` label
+  through the protected-path gate; the porting agent cannot approve its own oracle change.
 - A repeated failure mode (twice) becomes a standing instruction, analyzer, template, or
   eval — never a manual fix on unit #N.

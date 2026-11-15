@@ -144,7 +144,7 @@ the launcher early, or reparent a game. Those remain p1-007/real-install questio
 4. Any D-Bus/permission or host-helper architecture change belongs to the captain.
    ADR-020 and Phase 5/8 real acceptance remain open, not waived by this probe.
 
-Candidate diff and evidence are for firstmate to obtain two independent blind
-diff-only reviews. No reviewer edits or completed-review claim is included here.
+Candidate diff and evidence are for firstmate to obtain two adversarial diff-only
+reviews. No reviewer edits or completed-review claim is included here.
 The queue remains `in-progress` because real Steam/native/Proton evidence is
 absent; sandbox transport acceptance is no longer pending.

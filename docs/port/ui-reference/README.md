@@ -148,7 +148,7 @@ do not fill unknowns with the preferred environment above. Include:
 
 The operator can compute hashes with PowerShell `Get-FileHash -Algorithm SHA256
 -LiteralPath <path>` and read each PNG's pixel dimensions in Windows Properties →
-Details. A second reviewer must open every PNG, check that it decodes, compare its
+Details. An adversarial reviewer must open every PNG, check that it decodes, compare its
 dimensions/hash with provenance and inspect the stated scenario. Hashes establish
 file identity, not authenticity; source/build and operator evidence are required.
 
@@ -160,7 +160,7 @@ gate, and no item here is required for p1-004 or Phase 1 exit.
 - [ ] Genuine `main-library.png`, `details.png`, `settings.png` captured and decoded.
 - [ ] Actual version/runtime/dimensions/scenarios and hashes recorded in provenance.
 - [ ] Synthetic-only/privacy and authenticity review complete.
-- [ ] Two independent blind diff-only reviews arranged by firstmate; reviewers do
-  not edit. Approval required before merge.
+- [ ] Two adversarial diff-only reviews arranged by firstmate; reviewers do
+  not edit. The owner decides the merge.
 - [ ] Queue/ledger updated with genuine capture evidence. No image or behavioural
   verification is claimed by this document.

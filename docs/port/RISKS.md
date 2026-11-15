@@ -16,7 +16,7 @@ Scored: likelihood × impact, 1–5 each. Owner is the role that must act, not t
 | R10 | **ARM64 native dependency gaps** (Magick, SDL2, WebKit, SQLite) | 3 | 4 | 12 | Verify each in Phase 2/5; prefer managed/bundled; CI on ARM runner or qemu smoke | A dependency has no `linux-arm64` runtime |
 | R11 | **Flatpak sandbox vs game libraries** (host paths, Steam, processes) | 4 | 3 | 12 | Document permissions; test Flatpak against a host Steam install; portals where possible | Flatpak cannot see `~/.steam` or launch a game |
 | R12 | **.NET 11 STS support window** ends Nov 2028 | 3 | 3 | 9 | Pin SDK; schedule upgrade to next LTS; avoid preview-only APIs | Next LTS announcement |
-| R13 | **Agent drift / review theatre**: agents optimise for green, weaken tests, add stubs | 4 | 4 | 16 | Oracle guard, counts gate, banned APIs, diff-only blind reviews, no self-review, 2-attempt escalation | A PR changes a golden/test or adds a `TODO`/stub |
+| R13 | **Agent drift / review theatre**: agents optimise for green, weaken tests, add stubs | 4 | 4 | 16 | Oracle guard, counts gate, banned APIs, diff-only adversarial reviews, no self-review, 2-attempt escalation | A PR changes a golden/test or adds a `TODO`/stub |
 | R14 | **Scope creep**: fullscreen, plugins, emulation, add-on store pulled into v1 | 4 | 4 | 16 | ADR-008 scope; parity ledger `out-of-scope-v1`; captain gate | A "while we're here" PR touches out-of-scope UI |
 | R15 | **Serialization drift** (Newtonsoft → STJ, property names, null vs missing) | 3 | 4 | 12 | Keep Newtonsoft for v10 data; byte goldens; ADR-012 | A settings round-trip diff |
 | R16 | **Path/case/locale bugs** on Linux | 4 | 3 | 12 | `IPaths`, ordinal comparisons, invariant formatting, TZ/LANG test matrix | Tests pass on developer machine, fail in CI/Flatpak |
@@ -41,7 +41,7 @@ Scored: likelihood × impact, 1–5 each. Owner is the role that must act, not t
 - Close a row only with evidence (a test, a spike report, or a shipped mitigation).
 - Do not delete rows; mark them `retired` with the evidence.
 
-## Added after the independent plan review
+## Added after the adversarial plan review
 
 | # | Risk | L | I | Score | Mitigation | Trigger / early warning |
 | --- | --- | ---: | ---: | ---: | --- | --- |
