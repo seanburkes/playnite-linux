@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run the complete spike twice in separate processes, then compare PNG bytes/hashes."""
+"""Compare three PNGs within each of two processes, then the first PNG across processes."""
 
 import argparse
 import hashlib
@@ -47,6 +47,7 @@ def main():
                         "passed": int(summary[1]), "skipped": 0})
     first = evidence / "process-1/render-1.png"
     second = evidence / "process-2/render-1.png"
+    # Equality within each triple plus this cross-process pair proves all six equal.
     if first.read_bytes() != second.read_bytes():
         raise RuntimeError(f"Cross-process PNG bytes differ: {results}")
     report = {"separateProcesses": 2, "byteIdentical": True, "runs": results}

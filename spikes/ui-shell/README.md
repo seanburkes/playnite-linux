@@ -37,7 +37,10 @@ python3 spikes/ui-shell/compare_processes.py "$comparison"
 
 The runner unsets both display variables, starts the full suite twice in separate
 processes, requires at least six tests per process with zero errors/failures/skips/not-run,
-and compares all three PNGs in each process plus PNG bytes and hashes across processes.
+and compares `render-1.png` against `render-2.png` and `render-3.png` within each process.
+It then compares `process-1/render-1.png` against `process-2/render-1.png` byte-for-byte
+and checks each process's first PNG hash against its `render.json` hash. Together those
+comparisons establish equality of all six captures; it does not perform nine cross-pairs.
 It writes `process-{1,2}/` evidence, `process-{1,2}.log`, and `comparison.json`. It fails
 on mismatching bytes/hashes; failed runs retain their logs for investigation. The runner
 also requires a new or empty directory and never overwrites previous evidence.
@@ -74,9 +77,9 @@ final-source runs compared manually with `cmp` (exit 0), both matching the 69,09
 digest above. The original xunit fact proved three windows **within one process**, not
 cross-process identity; the initial cross-process observation was manual, not test-proven.
 
-Review follow-up evidence is fresh at
-`/home/sean/src/firstmate/data/p2-ui-pilot/review-final-2/`: the automated runner compared
-`process-1/render-{1,2,3}.png` with `process-2/render-{1,2,3}.png`. All six match the
+Review follow-up evidence is fresh in the external evidence directory `review-final-3/`:
+the automated runner compared `render-{1,2,3}.png` within each process and then
+`render-1.png` between `process-1/` and `process-2/`. All six match the
 69,092-byte digest above, and each process passed all six facts with zero skips.
 `comparison.json` records the separate-process result. Only these named final captures
 are claimed identical; the pre-final `run-1/` is explicitly excluded. This is not a
@@ -122,6 +125,9 @@ merged dictionaries, brushes use dynamic palette resources, views consume named 
 and styles/templates live separately. The dictionary-swap test exercises the live
 pipeline. Fluent supplies baseline control templates; the separate template file defines
 the card data template, not a complete replacement Fluent control-template suite.
+Card titles intentionally inherit the window's theme-provided `BodyFont` and `BodySize`
+with default text styling; there is no dedicated title style. The unused `title` class
+was removed rather than introducing a separate typographic role for this spike.
 
 **Placeholders / not implemented:** `theme.yaml` is a proposed documented manifest, not
 parsed at runtime; `apiVersion: 0` is experimental, not a product API commitment. Arbitrary
