@@ -387,15 +387,23 @@ class AggregateOwnershipTests(unittest.TestCase):
                               repo, values["sha"], values["recorded"])
             self.assertEqual(0, result.returncode, result.stdout + result.stderr)
 
-    def test_stale_pr_that_merged_newer_main_whole_chain_passes(self):
+    def test_pre_merge_recorded_base_content_step_is_charged(self):
         with tempfile.TemporaryDirectory() as temporary:
             repo = Path(temporary)
-            newer_main = merge_main_then_advance(repo)
-            resolved, values = resolve_policy(repo, "pull_request",
-                                              pull_request_base=newer_main)
-            self.assertEqual(0, resolved.returncode, resolved.stdout + resolved.stderr)
+            base, recorded = recorded_repo(repo)
             result = run_step(run_block(PLAN_GUARDS, "Port aggregates are generated on main"),
-                              repo, values["sha"], values["recorded"])
+                              repo, base, recorded)
+            self.assertEqual(1, result.returncode)
+            self.assertIn("changed: docs/port/queue.tsv", result.stderr)
+
+    def test_post_merge_only_recorded_base_tolerance_head_tool_passes(self):
+        # Post-merge expectation: once this lands, the base tool carries the
+        # tolerance. Pre-merge the base-materialised tool charges this tree.
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary)
+            base, recorded = recorded_repo(repo)
+            use_head_tool(repo)
+            result = run_tool(repo, base, recorded)
             self.assertEqual(0, result.returncode, result.stdout + result.stderr)
 
     def test_aggregate_edited_in_merge_commit_whole_chain_fails(self):
