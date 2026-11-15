@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <ProjectReference Include="../Playnite.Core/Playnite.Core.csproj" />
+    <ProjectReference Include="../Playnite.Platform/Playnite.Platform.csproj" />
+  </ItemGroup>
+</Project>
