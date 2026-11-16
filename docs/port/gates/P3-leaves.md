@@ -12,9 +12,10 @@
 - Review model: adversarial assistance on the owner's behalf, not independent approval. The
   ADR-024 single-owner exception applies; no external-human review is claimed. This exit
   artifact carries worker diff-only self-review, not separate reviewer agents.
-- Result: **READY FOR OWNER ACCEPTANCE** — all five Phase 3 exit criteria hold at the gate
-  commit. This document does **not** declare the exit and does **not** dispatch Phase 4; the
-  owner decides. The deferrals below are explicit gaps, not passes.
+- Result: **ACCEPTED — owner acceptance 2026-11-16** — all five Phase 3 exit criteria hold
+  at the gate commit, and the owner accepted the Phase 3 exit on that date. The deferrals,
+  uncovered items and change-control gaps below remain explicit gaps, not passes. The
+  evidence lines, run ids and measurements in this document are unchanged by the acceptance.
 
 ## Evidence
 
@@ -150,8 +151,9 @@ a current union record. Every other existing capture object is unchanged by this
 The Phase 3 order in `docs/port/03-EXECUTION-PLAN.md` names **culture handling** in the
 localisation workstream and the **`Playnite.SDK.Abstractions` v7 freeze / ApiCompat report**
 as Phase 3 item 7. Neither has a Phase 3 unit shard, and neither is delivered or claimed
-here. Before the exit is accepted, the plan needs an explicit update or the owner needs to
-record a scope waiver for both items. The current repository has the Phase 2 PublicAPI /
+here. The owner accepted the exit on 2026-11-16 with both items recorded as explicit,
+unresolved gaps; no scope waiver is recorded here, and the plan still needs this update
+before Phase 4 relies on either item. The current repository has the Phase 2 PublicAPI /
 ApiCompat scaffold only; the v7 contract freeze is scheduled as `p6-004` in Phase 6.
 
 ## Exit checklist
@@ -166,7 +168,7 @@ ApiCompat scaffold only; the v7 contract freeze is scheduled as `p6-004` in Phas
 - [x] The serialisation fuzz target runs bounded in linux-ci and fails on a nonzero exit or a
       missing `FUZZ COMPLETE` marker.
 
-**Verdict: READY FOR OWNER ACCEPTANCE — not a declared exit.** The five Phase 3 exit criteria
-are evidenced at `f6d5fab`, with the deferrals and uncovered items above stated explicitly.
-The owner decides whether to accept the Phase 3 exit; Phase 4 is not dispatched by this
-document.
+**Verdict: ACCEPTED — owner accepted the Phase 3 exit on 2026-11-16.** The five Phase 3 exit
+criteria are evidenced at `f6d5fab`, with the deferrals, uncovered items and change-control
+gaps above stated explicitly. Acceptance records those gaps; it does not convert them into
+passes.
