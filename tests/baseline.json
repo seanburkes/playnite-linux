@@ -139,6 +139,10 @@
     "run_id": 43795306184,
     "run_url": "https://github.com/seanburkes/playnite-linux/actions/runs/43795306184",
     "commit": "d78e8b32dd272fb49c8589b4645fd548f9dae9cd",
+    "revalidation_run_id": 43796922458,
+    "revalidation_run_url": "https://github.com/seanburkes/playnite-linux/actions/runs/43796922458",
+    "revalidation_commit": "17a8409f533da3258ad85a77e3606511020569cf",
+    "revalidation_notes": "Review B correction head 17a8409: ChecksumTests now asserts each case's source, cross_check and v10_test_constant against expected, the golden-corpus README says oracle runs rather than the Windows oracle, and the unit doc describes that enforcement. linux-ci 43796922458 independently confirms Core 1503 total / 1503 executed / 1503 passed / 0 failed / 0 skipped, Architecture 144 / 144 / 144 / 0 / 0, Smoke 4 / 4 / 4 / 0 / 0, every MTP exit 0. Production code and the test count are identical to the capture head; this is the current final code head, and the following evidence-only head's linux-ci run revalidates the same counts.",
     "notes": "Counts independently parsed from the downloaded linux-test-results JUnit, testsuite totals and MTP exit files for linux-ci run 43795306184 on https://github.com/seanburkes/playnite-linux/pull/83 head d78e8b3: Playnite.Core.Tests 1503 total / 1503 executed / 1503 passed / 0 failed / 0 skipped, Playnite.Architecture.Tests 144 / 144 / 144 / 0 / 0, Playnite.Smoke.Tests 4 / 4 / 4 / 0 / 0, every MTP exit 0. The 58-case addition over the merged 1445 floor is 53 ChecksumTests golden cases plus five focused CRC/checksum tests. This raises only the counted Core floor to the real 1503; every earlier capture and other suite floor is retained and nothing is lowered. The capture commit changes only tests/baseline.json and the p3-crc-ds shard evidence, so linux-ci on the final pushed head must revalidate the same counted cases."
   }
 }
