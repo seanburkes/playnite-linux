@@ -70,15 +70,18 @@ Nothing live is written until each of these steps succeeds:
    per-entry and total declared-size limits.
 2. If `backup-manifest.json` exists, reject an unknown format version, a member-count or
    name mismatch, an invalid size or hash shape, and a manifest that omits or invents a
-   member. Without a manifest, record the legacy warning and report missing optional v10
+   member. The member set is checked through one name-to-declared-size index built from the
+   archive, so validation stays linear in the member count. Without a manifest, record the legacy warning and report missing optional v10
    members.
 3. Select members by category and `RestoreItems`; report unrecognized root members and do
    not restore them.
 4. Preflight every selected target root and file. A non-settings target that already exists
    requires `RestoreOptions.Overwrite`; no settings target is changed at this point either.
-5. Require an existing `WorkDirectory`, stage **every** member there while enforcing the
-   limits again against actual bytes, verify ZIP CRC, declared length and manifest SHA-256,
-   then cancel-check once more.
+5. Require an existing `WorkDirectory` that is outside every selected target root (a work
+   directory inside a root would be deleted by the overwrite cleanup), re-check the created
+   staging directory for symlinks, stage **every** member there while enforcing the limits
+   again against actual bytes, verify ZIP CRC, declared length and manifest SHA-256, then
+   cancel-check once more and re-check the staging directory before deleting it.
 6. Only then, with `Overwrite`, reproduce v10's cleanup of the selected roots: library root
    files are deleted, `libraryfiles`/`extension`/`extensiondata` roots are replaced, and
    `themes/{Desktop,Fullscreen}` lose every directory except `Default`; finally the selected
@@ -102,7 +105,8 @@ wrong-version, missing-member and over-limit archives are rejected before that p
 | Entry count or size limit exceeded | `InvalidDataException`, no live write |
 | Existing output or restore target without overwrite | `IOException`, no live write |
 | Missing work directory | `DirectoryNotFoundException` |
-| Symlink in a source, output, target or work path | `IOException` |
+| Work directory inside a selected target root | `IOException`, no live write or cleanup |
+| Symlink in a source, output, target, backup-file or work path | `IOException` |
 
 ## Bomb and traversal limits
 
@@ -139,9 +143,11 @@ was changed.
 `ArchiveTests` covers listing, normalization, entry reads, tar/zip parity, traversal,
 duplicates, links and limits. `BackupTests` covers the full and minimal round trips, the v10
 fixture restore, exclusions, naming/rotation, overwrite protection, manifest determinism,
-all validation failures, cancellation, symlinks and bomb limits.
+large-manifest validation through the single entry index, all validation failures,
+cancellation, symlinked backup/work paths, work directories inside selected targets and bomb
+limits.
 
-Local narrow checks at the implementation head: Core **1411 passed / 0 failed / 0 skipped**
+Local narrow checks at the implementation head: Core **1414 passed / 0 failed / 0 skipped**
 (previous union floor 1365), Architecture **144 passed / 0 failed / 0 skipped**, Core Release
 build **0 warnings / 0 errors**. The counted floor is raised only from a real linux-ci run on
 the final head.

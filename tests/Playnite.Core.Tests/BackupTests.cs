@@ -336,6 +336,57 @@ public sealed class BackupTests
     }
 
     [Fact]
+    public async Task Large_manifests_are_validated_against_one_entry_index()
+    {
+        using var scratch = new Scratch();
+        CreateSource(scratch);
+        for (var i = 0; i < 512; i++)
+        {
+            ArchiveTestData.Write(scratch.Library, $"bulk-{i:D4}.db", $"bulk {i}");
+        }
+
+        await Backup.BackupDataAsync(Options(scratch, scratch.Backup, AllItems), Timestamp);
+        var report = await Backup.RestoreBackupAsync(RestoreOptions(scratch, AllItems));
+        Assert.False(report.LegacyFormat);
+        Assert.Equal(516, ArchiveTestData.ReadTree(scratch.RestoreLibrary).Count);
+    }
+
+    [Fact]
+    public async Task Work_directory_inside_a_selected_target_is_rejected_before_cleanup()
+    {
+        using var scratch = new Scratch();
+        CreateSource(scratch);
+        await Backup.BackupDataAsync(Options(scratch, scratch.Backup, AllItems), Timestamp);
+        var work = Path.Combine(scratch.RestoreData, "Extensions", "work");
+        Directory.CreateDirectory(work);
+        ArchiveTestData.Write(scratch.RestoreData, "Extensions/keep.dll", "keep");
+        await Assert.ThrowsAsync<IOException>(() => Backup.RestoreBackupAsync(
+            RestoreOptions(scratch, [BackupDataItem.Extensions], overwrite: true, workDirectory: work)));
+        Assert.Equal("keep", File.ReadAllText(
+            Path.Combine(scratch.RestoreData, "Extensions/keep.dll")));
+    }
+
+    [Fact]
+    public async Task Symlinked_backup_file_and_work_directory_are_rejected_before_opening()
+    {
+        using var scratch = new Scratch();
+        CreateSource(scratch);
+        await Backup.BackupDataAsync(Options(scratch, scratch.Backup), Timestamp);
+        var backupLink = Path.Combine(scratch.Root, "backup-link.zip");
+        File.CreateSymbolicLink(backupLink, scratch.Backup);
+        await Assert.ThrowsAsync<IOException>(() => Backup.RestoreBackupAsync(
+            RestoreOptions(scratch, [BackupDataItem.Settings, BackupDataItem.Library],
+                backupFile: backupLink)));
+        Assert.Throws<IOException>(() => Backup.GetRestoreSelections(backupLink));
+
+        var workLink = Path.Combine(scratch.Root, "work-link");
+        Directory.CreateSymbolicLink(workLink, scratch.Work);
+        await Assert.ThrowsAsync<IOException>(() => Backup.RestoreBackupAsync(
+            RestoreOptions(scratch, [BackupDataItem.Settings, BackupDataItem.Library],
+                workDirectory: workLink)));
+    }
+
+    [Fact]
     public async Task Symbolic_links_in_sources_and_restore_targets_are_rejected()
     {
         using var scratch = new Scratch();

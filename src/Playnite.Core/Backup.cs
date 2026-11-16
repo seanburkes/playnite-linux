@@ -185,6 +185,7 @@ public static class Backup
     {
         limits ??= new ArchiveLimits();
         limits.Validate();
+        CheckPath(options.BackupFile);
         await using var source = File.OpenRead(options.BackupFile);
         using var zip = new ZipArchive(source, ZipArchiveMode.Read);
         var entries = ValidateZip(zip, limits);
@@ -259,8 +260,14 @@ public static class Backup
             throw new DirectoryNotFoundException("Restore work directory must exist.");
         }
 
+        if (roots.Any(c => IsWithin(options.WorkDirectory, TargetRoot(options, c))))
+        {
+            throw new IOException("Restore work directory must be outside the selected restore targets.");
+        }
+
         var stage = Path.Combine(options.WorkDirectory, "restore-" + Path.GetRandomFileName());
         Directory.CreateDirectory(stage);
+        CheckPath(stage);
         try
         {
             long actualTotal = 0;
@@ -304,7 +311,11 @@ public static class Backup
         }
         finally
         {
-            Directory.Delete(stage, true);
+            if (Directory.Exists(stage))
+            {
+                CheckPath(stage);
+                Directory.Delete(stage, true);
+            }
         }
 
         return new BackupRestoreReport(manifest is null, warnings);
@@ -316,6 +327,7 @@ public static class Backup
     /// </summary>
     public static List<BackupDataItem> GetRestoreSelections(string backupFile, ArchiveLimits? limits = null)
     {
+        CheckPath(backupFile);
         using var source = File.OpenRead(backupFile);
         using var zip = new ZipArchive(source, ZipArchiveMode.Read);
         var entries = ValidateZip(zip, limits ?? new ArchiveLimits());
@@ -421,13 +433,14 @@ public static class Backup
             throw new InvalidDataException("Missing or unexpected backup member.");
         }
 
+        var declared = entries.ToDictionary(e => e.Name, e => e.Entry.Length, StringComparer.Ordinal);
         var result = new Dictionary<string, BackupManifestMember>(StringComparer.Ordinal);
         foreach (var member in manifest.Members)
         {
             if (member is null || string.IsNullOrEmpty(member.Name) || member.Sha256 is null ||
                 member.Name == ManifestName || Archive.NormalizeName(member.Name) != member.Name ||
                 !Regex.IsMatch(member.Sha256, "^[0-9A-F]{64}$", RegexOptions.CultureInvariant) ||
-                !entries.Any(e => e.Name == member.Name && e.Entry.Length == member.Size) ||
+                !declared.TryGetValue(member.Name, out var size) || size != member.Size ||
                 !result.TryAdd(member.Name, member))
             {
                 throw new InvalidDataException("Missing or invalid required backup member.");
@@ -612,6 +625,15 @@ public static class Backup
                 CheckTree(child);
             }
         }
+    }
+
+    private static bool IsWithin(string path, string root)
+    {
+        var full = Path.TrimEndingDirectorySeparator(Path.GetFullPath(path));
+        var target = Path.TrimEndingDirectorySeparator(Path.GetFullPath(root));
+        var prefix = target.EndsWith(Path.DirectorySeparatorChar) ? target : target + Path.DirectorySeparatorChar;
+        return full.Equals(target, StringComparison.Ordinal) ||
+            full.StartsWith(prefix, StringComparison.Ordinal);
     }
 
     internal static void CheckPath(string path)
