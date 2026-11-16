@@ -113,19 +113,23 @@ or incidental state-domain failure. The three publication counterexamples must i
 Mutants target assignments within named actions, not source line numbers or whole-file
 text snippets. Coverage must exactly match the configuration's invariant list.
 
-| Invariant | Mutant that must be rejected |
-| --- | --- |
-| `TypeOK` | `Start` sets attempts beyond `MaxRuns` |
-| `SourceUnchanged` | `Read` erases the source |
-| `ReadSnapshotImmutable` | `Read` captures an empty snapshot |
-| `NoCommitWithoutVerify` | `Publish` loses the verification flag on commit |
-| `ReaderNeverPartial` | Unsafe in-place publication followed by a concurrent read |
-| `AtomicLive` | Unsafe in-place publication exposes partial live data |
-| `BackupBeforeWrite` | `Backup` proceeds without recording a backup |
-| `DurableReceipt` | `Publish` omits the durable receipt |
-| `CrashSafe` | Crash between unsafe partial publication and final swap |
-| `CleanResumable` | `Recover` retains dirty staging |
-| `RepeatRunSafe` | `Start` reports another import instead of no-op/refusal |
+| Invariant | Mutant that must be rejected | Check exercised |
+| --- | --- | --- |
+| `TypeOK` | `Start` sets attempts beyond `MaxRuns` | Post-state domain |
+| `SourceUnchanged` | `Read` erases the source | Post-state source preservation |
+| `ReadSnapshotImmutable` | `Read` captures an empty snapshot | Post-state capture integrity, not a read/write guard bypass |
+| `NoCommitWithoutVerify` | `Publish` loses the verification flag on commit | Post-state assertion after the verification guard passed, not a guard bypass |
+| `ReaderNeverPartial` | Unsafe in-place publication followed by a concurrent read | Unsafe protocol variant and observed post-state |
+| `AtomicLive` | Unsafe in-place publication exposes partial live data | Unsafe protocol variant and live post-state |
+| `BackupBeforeWrite` | `Backup` proceeds without recording a backup | Post-state ordering assertion, not bypass of a backup-exists write guard |
+| `DurableReceipt` | `Publish` omits the durable receipt | Post-state receipt/data consistency |
+| `CrashSafe` | Crash between unsafe partial publication and final swap | Unsafe protocol variant and crashed post-state |
+| `CleanResumable` | `Recover` retains dirty staging | Post-state cleanup |
+| `RepeatRunSafe` | `Start` reports another import instead of no-op/refusal | Post-state repeated-run response |
+
+These mutations demonstrate falsifiability of the named **state invariants**. None is
+a guard-bypass mutation: in particular the verification, snapshot and backup mutations
+do not independently establish that implementation guards reject invalid input.
 
 The harness uses the same `TLA2TOOLS_JAR` override as the all-model runner. It writes
 mutated models/configs to automatically removed temporary directories; it never edits
@@ -135,3 +139,5 @@ full TLC logs for the baseline and every mutant.
 The existing `plan-guards` formal job invokes `scripts/formal/run_tlc.sh` for
 `LibraryImport.cfg`, `SettingsMigration.cfg` and `GameSession.cfg`, then executes the
 mutation harness using the same pinned jar. No separate job or model fork is needed.
+The CI step sets `FORMAL_MUTATION_OUTPUT` and uploads the baseline/per-mutant TLC logs
+as `library-import-mutation-tlc`, on failure as well as success when logs are available.
