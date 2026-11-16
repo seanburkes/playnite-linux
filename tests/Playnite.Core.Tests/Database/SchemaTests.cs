@@ -30,7 +30,7 @@ public sealed class SchemaTests
         using var fresh = DatabaseTestDirectory.Connect(files.PathFor("fresh.sqlite"));
         using var update = DatabaseTestDirectory.Connect(files.PathFor("upgraded.sqlite"));
         Assert.Equal(await Shape(fresh), await Shape(update));
-        Assert.Equal(new[] { 1, 2 }, (await update.QueryAsync<int>("SELECT version FROM schema_version ORDER BY version;")).ToArray());
+        Assert.Equal(new[] { 1, 2, 3 }, (await update.QueryAsync<int>("SELECT version FROM schema_version ORDER BY version;")).ToArray());
         Assert.Equal("ok", await update.QuerySingleAsync<string>("PRAGMA integrity_check;"));
         Assert.Empty(await update.QueryAsync("PRAGMA foreign_key_check;"));
     }
@@ -51,7 +51,7 @@ public sealed class SchemaTests
     }
 
     [Theory]
-    [InlineData(3)]
+    [InlineData(4)]
     [InlineData(7)]
     public async Task Unknown_or_gapped_versions_are_refused_without_changing_history(int version)
     {
@@ -61,13 +61,56 @@ public sealed class SchemaTests
             await connection.ExecuteAsync("INSERT INTO schema_version VALUES (@Version, 'future');", new { Version = version });
         await Assert.ThrowsAsync<InvalidDataException>(() => LibraryDatabase.OpenAsync(files.PathFor()));
         using var after = DatabaseTestDirectory.Connect(files.PathFor());
-        Assert.Equal(3, await after.QuerySingleAsync<int>("SELECT COUNT(*) FROM schema_version;"));
+        Assert.Equal(4, await after.QuerySingleAsync<int>("SELECT COUNT(*) FROM schema_version;"));
         Assert.Equal("future", await after.QuerySingleAsync<string>("SELECT applied_at FROM schema_version WHERE version=@Version;", new { Version = version }));
+    }
+
+    [Theory]
+    [InlineData("game")]
+    [InlineData("tag")]
+    [InlineData("game_action")]
+    public async Task Upgrade_refuses_v2_rows_with_non_canonical_identities(string kind)
+    {
+        using var files = new DatabaseTestDirectory();
+        using (var connection = DatabaseTestDirectory.Connect(files.PathFor()))
+        {
+            await SchemaMigrator.ApplyAsync(connection, 2, CancellationToken.None);
+            if (kind == "tag")
+            {
+                await connection.ExecuteAsync("INSERT INTO tag(Id, LegacyJson) VALUES ('ZZZZZZZZ-ZZZZ-ZZZZ-ZZZZ-ZZZZZZZZZZZZ', '{}');");
+            }
+            else
+            {
+                await connection.ExecuteAsync("""
+                    INSERT INTO game(Id, PluginId, Hidden, Favorite, EnableSystemHdr, IncludeLibraryPluginAction, IsInstalled,
+                        OverrideInstallState, UseGlobalPreScript, UseGlobalPostScript, UseGlobalGameStartedScript, Playtime, PlayCount,
+                        GenreIdsPresent, PlatformIdsPresent, PublisherIdsPresent, DeveloperIdsPresent, CategoryIdsPresent, TagIdsPresent,
+                        FeatureIdsPresent, SeriesIdsPresent, AgeRatingIdsPresent, RegionIdsPresent, LinksPresent, GameActionsPresent,
+                        RomsPresent, LegacyJson)
+                    VALUES (@Id, '00000000-0000-0000-0000-000000000000', 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                        '00000000000000000000', '00000000000000000000', 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, '{}');
+                    """, new { Id = kind == "game" ? "zzzzzzzz-zzzz-zzzz-zzzz-zzzzzzzzzzzz" : GameId.ToString("D") });
+                if (kind != "game")
+                {
+                    await connection.ExecuteAsync("""
+                        INSERT INTO game_action(GameId, Position, Type, OverrideDefaultArgs, IsPlayAction, EmulatorId, TrackingMode, InitialTrackingDelay, TrackingFrequency)
+                        VALUES (@Id, 0, 0, 0, 0, 'ZZZZZZZZ-ZZZZ-ZZZZ-ZZZZ-ZZZZZZZZZZZZ', 0, 0, 0);
+                        """, new { Id = GameId.ToString("D") });
+                }
+            }
+        }
+        var error = await Assert.ThrowsAsync<InvalidDataException>(() => LibraryDatabase.OpenAsync(files.PathFor()));
+        Assert.Contains(kind switch { "tag" => "tag.Id", "game" => "game.Id", _ => "game_action.EmulatorId" }, error.Message, StringComparison.Ordinal);
+        Assert.Contains("non-canonical identity", error.Message, StringComparison.Ordinal);
+        using var after = DatabaseTestDirectory.Connect(files.PathFor());
+        Assert.Equal(2, await after.QuerySingleAsync<int>("SELECT MAX(version) FROM schema_version;"));
+        Assert.Equal(1, await after.QuerySingleAsync<int>($"SELECT COUNT(*) FROM {(kind == "tag" ? "tag" : kind == "game" ? "game" : "game_action")};"));
+        Assert.Equal(0, await after.QuerySingleAsync<int>("SELECT COUNT(*) FROM sqlite_schema WHERE type='trigger';"));
     }
 
     public static IEnumerable<object[]> CrashCheckpoints()
     {
-        foreach (var version in new[] { 1, 2 })
+        foreach (var version in new[] { 1, 2, 3 })
             foreach (var stage in Enum.GetValues<MigrationStage>())
                 yield return [version, stage.ToString()];
     }
@@ -77,7 +120,7 @@ public sealed class SchemaTests
     public async Task Sigkill_at_every_migration_checkpoint_is_resumable(int version, string stage)
     {
         using var files = new DatabaseTestDirectory();
-        if (version == 2)
+        if (version > 1)
         {
             using var old = DatabaseTestDirectory.Connect(files.PathFor());
             await SchemaMigrator.ApplyAsync(old, 1, CancellationToken.None);
@@ -105,7 +148,7 @@ public sealed class SchemaTests
         Assert.Equal(LibraryDatabase.SchemaVersion, await after.QuerySingleAsync<int>("SELECT MAX(version) FROM schema_version;"));
         Assert.Equal("ok", await after.QuerySingleAsync<string>("PRAGMA integrity_check;"));
         Assert.Empty(await after.QueryAsync("PRAGMA foreign_key_check;"));
-        if (version == 2)
+        if (version > 1)
             Assert.Equal("preserved", (await resumed.ReadAsync(s => s.Games.GetAsync(GameId)))!.Value.Name);
         await LibraryDatabase.OpenAsync(files.PathFor("fresh.sqlite"));
         using var fresh = DatabaseTestDirectory.Connect(files.PathFor("fresh.sqlite"));
