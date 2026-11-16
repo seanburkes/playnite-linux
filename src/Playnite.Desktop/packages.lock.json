@@ -219,6 +219,7 @@
         "dependencies": {
           "Newtonsoft.Json": "[13.0.4, )",
           "Playnite.SDK.Abstractions": "[7.0.0, )",
+          "SharpCompress": "[1.0.0, )",
           "Tomlyn": "[2.11.1, )",
           "YamlDotNet": "[18.1.0, )"
         }
@@ -254,6 +255,12 @@
         "requested": "[13.0.4, )",
         "resolved": "13.0.4",
         "contentHash": "pdgNNMai3zv51W5aq268sujXUyx7SNdE2bj1wZcWjAQrKMFZV260lbqYop1d2GM67JI1huLRwxo9ZqnfF/lC6A=="
+      },
+      "SharpCompress": {
+        "type": "CentralTransitive",
+        "requested": "[1.0.0, )",
+        "resolved": "1.0.0",
+        "contentHash": "bdBq9V2epw7KBX3TeA+lxnKU8dD61tsqVuyuo5cAXj4d+9+fcIQObTr0705oTWnPDRhjRx3TpgOFbYYAMObpaw=="
       },
       "Tomlyn": {
         "type": "CentralTransitive",

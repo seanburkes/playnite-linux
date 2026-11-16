@@ -1,0 +1,18 @@
+{
+  "source": "tests/fixtures/archives-v10/v10-full.zip",
+  "provenance": "v10 entry roots from legacy/source/Playnite/Backup.cs; synthetic payloads",
+  "entries": [
+    "config.json",
+    "fullscreenConfig.json",
+    "library/database.json",
+    "library/games.db",
+    "libraryfiles/cover.png",
+    "libraryfiles/Backgrounds/background.jpg",
+    "extension/TestAddon/extension.yaml",
+    "extension/TestAddon/TestAddon.dll",
+    "extensiondata/TestAddon/data.json",
+    "themes/Desktop/Custom/theme.yaml",
+    "themes/Desktop/Custom/Views/Main.xaml",
+    "themes/Fullscreen/Custom/theme.yaml"
+  ]
+}
