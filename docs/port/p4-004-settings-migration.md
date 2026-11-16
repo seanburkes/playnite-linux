@@ -91,7 +91,16 @@ commit, source mutation, stale staging, symlink refusal and destination conflict
 
 ## Evidence
 
-Local Release checks: Core **1583 passed**, Architecture **144 passed**, zero failed/skipped.
-The Core count includes 50 migration cases. Actual linux-ci counts and the additive baseline
-capture must land before this change is marked ready; local counts do not raise the floor.
-Independent reviews are firstmate-owned. Protected parity/aggregate files remain untouched.
+Local Release checks: Core **1583 passed**, Architecture **144 passed**, zero failed/skipped;
+Core build **0 warnings / 0 errors**. The Core count includes 50 migration cases.
+
+Actual [linux-ci run 43812557296](https://github.com/seanburkes/playnite-linux/actions/runs/43812557296)
+on implementation head `260bcc342f820dceb93b151e7c272cc27e9c5926` of
+https://github.com/seanburkes/playnite-linux/pull/89 passed warning-as-error build, bounded
+serialization fuzzing and native smoke. Downloaded JUnit testcase elements, suite totals,
+test-counts.json and exit files independently confirm **Core 1583, Architecture 144, Smoke 4**,
+all passed, zero failed/skipped, every MTP exit 0. This actual run raises only Core's floor
+from 1533 to 1583; `p4_004_capture` adds provenance without altering historical records.
+The additive baseline exception is authorized by firstmate steering 001-002 under
+`oracle-change`. Final pushed-head CI must revalidate before readiness. Independent reviews
+are firstmate-owned. Protected parity/aggregate files remain untouched.
