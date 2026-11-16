@@ -5,7 +5,7 @@ namespace Playnite.Core.Import;
 
 /// <summary>A v10 files-directory reference and its independently captured manifest hash.</summary>
 public sealed record AssetReference(string File, string Collection, string Identity, string Field, string Path,
-    string? Sha256, long? Size);
+    string? Sha256, long? Size, string Status = "readable");
 
 /// <summary>One result per reference; original filenames survive even when bytes share a blob.</summary>
 public sealed record AssetResult(AssetReference Reference, string Outcome, string? Destination,
@@ -41,6 +41,11 @@ public static class AssetCopy
                 throw new InvalidDataException($"Unsafe asset reference: {reference.Identity}/{reference.Path}");
             var path = Path.Combine(source, "files", relative);
             RejectLinks(path);
+            if (reference.Status == "unreadable")
+            {
+                results.Add(new(reference, "unreadable", null, null, null, "unavailable"));
+                continue;
+            }
             FileStream input;
             try { input = new FileStream(path, System.IO.FileMode.Open, FileAccess.Read, FileShare.Read, 65536, FileOptions.Asynchronous); }
             catch (Exception exception) when (exception is FileNotFoundException or DirectoryNotFoundException)

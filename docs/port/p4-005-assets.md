@@ -23,6 +23,10 @@ The raw LiteDB reader captures hashes by streaming assets instead of buffering
 their full contents. Only root database/marker files need immutable byte copies.
 Unreadable asset entries are retained in its manifest with `status=unreadable`
 and null hash/size; marker/database read failures still refuse the import.
+That unreadable snapshot status is preserved per reference even if the source
+lock/permission failure clears before copying: without a captured hash the writer
+reports unreadable instead of accepting new, unverified bytes or aborting with a
+missing-hash error. A readable asset with no manifest hash still refuses explicitly.
 The reader has no Core/SQLite reference; the writer has no LiteDB reference.
 
 ## Dimensions and accounting

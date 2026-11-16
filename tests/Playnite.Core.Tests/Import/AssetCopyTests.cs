@@ -120,6 +120,27 @@ public sealed class AssetCopyTests : IDisposable
     }
 
     [Fact]
+    public async Task Reader_unreadable_snapshot_stays_reported_after_source_lock_is_released()
+    {
+        Write("locked", "readable after release"u8.ToArray());
+        JObject envelope;
+        using (var lease = new FileStream(Path.Combine(Source, "files", "locked"), System.IO.FileMode.Open, FileAccess.ReadWrite, FileShare.None))
+            envelope = JObject.Parse(await Envelope());
+        Assert.Equal("readable after release", File.ReadAllText(Path.Combine(Source, "files", "locked")));
+        var captured = ((JArray)envelope["files"]!).Single(f => (string?)f["path"] == "files/locked");
+        Assert.Equal("unreadable", (string?)captured["status"]);
+        Assert.Equal(JTokenType.Null, captured["sha256"]!.Type);
+        var game = ((JArray)envelope["records"]!).First(r => (string?)r["collection"] == "Game");
+        game["data"]!["Icon"] = "locked";
+        var report = await LibraryMigration.RunAsync(envelope.ToString(), Source, Destination);
+        Assert.Equal(1, report.UnreadableAssets); Assert.Equal(1, report.MissingAssets); Assert.Equal(0, report.EmptyAssets);
+        var unreadable = Assert.Single(report.Assets.Where(a => a.Outcome == "unreadable"));
+        Assert.Equal("unreadable", unreadable.Reference.Status); Assert.Equal("locked", unreadable.Reference.Path);
+        Assert.Equal("10000000-0000-0000-0000-000000000001", unreadable.Reference.Identity);
+        Assert.Null(unreadable.Reference.Sha256); Assert.Null(unreadable.Destination);
+    }
+
+    [Fact]
     public async Task SIGKILL_mid_copy_leaves_only_a_temporary_file_then_retry_publishes_verified_blob()
     {
         var reference = Write("large.png", new byte[1024 * 1024]);

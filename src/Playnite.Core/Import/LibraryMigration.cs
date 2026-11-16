@@ -107,7 +107,7 @@ public static class LibraryMigration
             {
                 if ((string?)row.Data[field] is not { Length: > 0 } path) continue;
                 var manifest = files.SingleOrDefault(f => (string?)f["path"] == "files/" + path.Replace('\\', '/'));
-                references.Add(new(row.File, row.Collection, row.Identity, field, path, (string?)manifest?["sha256"], (long?)manifest?["size"]));
+                references.Add(new(row.File, row.Collection, row.Identity, field, path, (string?)manifest?["sha256"], (long?)manifest?["size"], (string?)manifest?["status"] ?? "readable"));
             }
         }
         if (dryRun)
