@@ -162,6 +162,12 @@ internal static class LibrarySchema
         CREATE TRIGGER platform_identity_update BEFORE UPDATE OF Id ON platform
             WHEN length(NEW.Id)<>36 OR NEW.Id<>lower(NEW.Id) OR NEW.Id GLOB '*[^0-9a-f-]*' OR substr(NEW.Id,9,1)<>'-' OR substr(NEW.Id,14,1)<>'-' OR substr(NEW.Id,19,1)<>'-' OR substr(NEW.Id,24,1)<>'-' OR length(replace(NEW.Id,'-',''))<>32
             BEGIN SELECT RAISE(ABORT, 'platform.Id must be a canonical lowercase 36-character identity'); END;
+        CREATE TRIGGER game_identity_insert BEFORE INSERT ON game
+            WHEN length(NEW.Id)<>36 OR NEW.Id<>lower(NEW.Id) OR NEW.Id GLOB '*[^0-9a-f-]*' OR substr(NEW.Id,9,1)<>'-' OR substr(NEW.Id,14,1)<>'-' OR substr(NEW.Id,19,1)<>'-' OR substr(NEW.Id,24,1)<>'-' OR length(replace(NEW.Id,'-',''))<>32
+            BEGIN SELECT RAISE(ABORT, 'game.Id must be a canonical lowercase 36-character identity'); END;
+        CREATE TRIGGER game_identity_update BEFORE UPDATE OF Id ON game
+            WHEN length(NEW.Id)<>36 OR NEW.Id<>lower(NEW.Id) OR NEW.Id GLOB '*[^0-9a-f-]*' OR substr(NEW.Id,9,1)<>'-' OR substr(NEW.Id,14,1)<>'-' OR substr(NEW.Id,19,1)<>'-' OR substr(NEW.Id,24,1)<>'-' OR length(replace(NEW.Id,'-',''))<>32
+            BEGIN SELECT RAISE(ABORT, 'game.Id must be a canonical lowercase 36-character identity'); END;
         CREATE TRIGGER game_action_emulator_insert BEFORE INSERT ON game_action
             WHEN length(NEW.EmulatorId)<>36 OR NEW.EmulatorId<>lower(NEW.EmulatorId) OR NEW.EmulatorId GLOB '*[^0-9a-f-]*' OR substr(NEW.EmulatorId,9,1)<>'-' OR substr(NEW.EmulatorId,14,1)<>'-' OR substr(NEW.EmulatorId,19,1)<>'-' OR substr(NEW.EmulatorId,24,1)<>'-' OR length(replace(NEW.EmulatorId,'-',''))<>32
             BEGIN SELECT RAISE(ABORT, 'game_action.EmulatorId must be a canonical lowercase 36-character identity'); END;

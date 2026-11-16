@@ -25,14 +25,14 @@ Schema version **3**, with committed, forward-only SQL migrations:
    links, actions and ROMs. All persistent writable v10 Game fields have explicit columns;
    playtime, play count and install size retain their full unsigned 64-bit domain.
 2. Version 2 adds provider, sort-name, playtime, activity and reverse-relation indexes.
-3. Version 3 enforces canonical lowercase hyphenated 36-character identities on the eleven
-   metadata tables and on `game_action.EmulatorId`. The game table already carries the weaker
-   length/lowercase form as a `CHECK`; SQLite cannot add a `CHECK` to an existing table, and the
-   metadata tables are foreign-key parents, so version 3 installs a matching BEFORE
+3. Version 3 enforces canonical lowercase hyphenated 36-character identities on `game.Id`, the
+   eleven metadata tables and `game_action.EmulatorId`. The game table already carries a weaker
+   length/lowercase `CHECK` from version 1; SQLite cannot add a `CHECK` to an existing table, and
+   the metadata tables are foreign-key parents, so version 3 installs a matching BEFORE
    INSERT/UPDATE trigger pair per table instead. The storable identity is exactly
    `Guid.ToString("D")`, so a stored id is always parseable. Before installing the triggers the
-   upgrade scans existing metadata and emulator ids and refuses the upgrade with
-   `InvalidDataException` naming the table when one is non-canonical; that rejects corrupt v1/v2
+   upgrade scans existing game, metadata and emulator ids and refuses the upgrade with
+   `InvalidDataException` naming the column when one is non-canonical; that rejects corrupt v1/v2
    rows rather than rewriting references or discovering them later in a reader. A fresh and an
    upgraded destination therefore carry the identical rule, and a non-canonical write fails even
    when it bypasses the repositories.
@@ -77,7 +77,7 @@ The database adds an explicit SQL destination rather than copying the LiteDB eng
 
 | Boundary | Destination behavior / evidence |
 | --- | --- |
-| Identity | Caller-supplied GUIDs stored in lowercase D form; empty entity IDs rejected. Empty optional source/completion references become SQL NULL and read back as Guid.Empty. Version 3 enforces the canonical D form in metadata tables and `game_action.EmulatorId`, not only in `game`, and refuses to upgrade a v1/v2 destination that already holds a non-canonical identity. A null provider `GameId` is a legal stored NULL and round-trips as a null model value. |
+| Identity | Caller-supplied GUIDs stored in lowercase D form; empty entity IDs rejected. Empty optional source/completion references become SQL NULL and read back as Guid.Empty. Version 3 enforces the canonical D form in `game`, the metadata tables and `game_action.EmulatorId`, and refuses to upgrade a v1/v2 destination that already holds a non-canonical identity in any of them. A null provider `GameId` is a legal stored NULL and round-trips as a null model value. |
 | Null/empty | Nullable text and dates are distinct from empty text; each nullable collection has an explicit presence bit, retaining null versus empty. |
 | Ordering | Relation/link/action/ROM positions preserve insertion order and duplicates. A missing referenced metadata row fails explicitly; no silent reference removal. Metadata deletion is restricted while referenced; deleting a game cascades only its dependent rows. `game_action.EmulatorId` is the one reference this schema cannot constrain with a foreign key: v10 keeps emulators in a separate collection the destination does not store, so there is no parent row to point at. The mechanism is a trigger plus a report, not an FK: triggers enforce the canonical identity, and `Games.FindDanglingEmulatorReferencesAsync` reports ids absent from the caller's source catalogue; the importer report must surface them rather than dropping them. |
 | Numbers | UInt64 values are fixed-width, 20-digit invariant decimal TEXT, constrained to the UInt64 domain. This avoids SQLite's signed-integer overflow and retains numeric lexicographic ordering. Scores and unknown enum numeric values are not clamped. |
@@ -96,7 +96,8 @@ UInt64 boundaries/ordering, FK failures, rollback (including a caught graph erro
 query-only enforcement, connection disposal, competing writers and repeatable snapshots.
 
 `DatabaseContractTests` pins the importer-host contract: no public or non-public property or
-method reaches a `SqliteConnection`; nested writes fail fast for the same instance, a second
+method reaches a `SqliteConnection`; `game.Id` rejects uppercase and 36-character non-hex values
+on insert and update; nested writes fail fast for the same instance, a second
 instance and a different spelling (`./`, `../` and a symlink) of the same file without consuming
 the busy timeout, and the outer callback rolls back; a background write started inside a write
 callback fails fast; write-inside-read and read-inside-write follow the documented rules; every

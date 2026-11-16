@@ -67,6 +67,7 @@ internal static class SchemaMigrator
         SqliteTransaction transaction, CancellationToken cancellationToken)
     {
         CommandDefinition Command(string sql) => new(sql, transaction: transaction, cancellationToken: cancellationToken);
+        await RequireCanonicalIdentitiesAsync(connection, Command("SELECT Id FROM game;"), "game.Id").ConfigureAwait(false);
         foreach (var table in LibrarySchema.MetadataTables)
         {
             await RequireCanonicalIdentitiesAsync(connection, Command($"SELECT Id FROM {table};"), $"{table}.Id").ConfigureAwait(false);

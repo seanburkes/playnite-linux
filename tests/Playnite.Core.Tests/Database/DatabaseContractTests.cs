@@ -223,6 +223,32 @@ public sealed class DatabaseContractTests
     }
 
     [Fact]
+    public async Task Game_identity_must_be_canonical()
+    {
+        using var files = new DatabaseTestDirectory();
+        var database = await LibraryDatabase.OpenAsync(files.PathFor());
+        await database.WriteAsync(async s => { await s.Games.AddAsync(new StoredGame(new Game(Id, "570"))); return 0; });
+        using var connection = DatabaseTestDirectory.Connect(files.PathFor());
+        foreach (var invalid in new[] { Id.ToString("D").ToUpperInvariant(), "zzzzzzzz-zzzz-zzzz-zzzz-zzzzzzzzzzzz" })
+        {
+            var update = await Assert.ThrowsAsync<SqliteException>(() =>
+                connection.ExecuteAsync("UPDATE game SET Id=@Id;", new { Id = invalid }));
+            Assert.Contains("game.Id must be a canonical lowercase 36-character identity", update.Message, StringComparison.Ordinal);
+            var insert = await Assert.ThrowsAsync<SqliteException>(() => connection.ExecuteAsync("""
+                INSERT INTO game(Id, PluginId, Hidden, Favorite, EnableSystemHdr, IncludeLibraryPluginAction, IsInstalled,
+                    OverrideInstallState, UseGlobalPreScript, UseGlobalPostScript, UseGlobalGameStartedScript, Playtime, PlayCount,
+                    GenreIdsPresent, PlatformIdsPresent, PublisherIdsPresent, DeveloperIdsPresent, CategoryIdsPresent, TagIdsPresent,
+                    FeatureIdsPresent, SeriesIdsPresent, AgeRatingIdsPresent, RegionIdsPresent, LinksPresent, GameActionsPresent,
+                    RomsPresent, LegacyJson)
+                VALUES (@Id, '00000000-0000-0000-0000-000000000000', 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                    '00000000000000000000', '00000000000000000000', 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, '{}');
+                """, new { Id = invalid }));
+            Assert.Contains("game.Id must be a canonical lowercase 36-character identity", insert.Message, StringComparison.Ordinal);
+        }
+        Assert.Equal("570", (await database.ReadAsync(s => s.Games.GetAsync(Id)))!.Value.GameId);
+    }
+
+    [Fact]
     public async Task Nullable_provider_game_id_round_trips_through_the_stored_column()
     {
         using var files = new DatabaseTestDirectory();
