@@ -129,7 +129,9 @@ jobs:
           fi
 
       - name: Verify generated localisation artifacts against the frozen oracle
-        run: python3 scripts/loc/generate_english.py --check
+        run: |
+          python3 scripts/loc/generate_english.py --check
+          python3 scripts/loc/generate_coverage.py --check
 
       - name: Restore locked dependencies (warnings are errors)
         run: dotnet restore Playnite.slnx --locked-mode -warnaserror
