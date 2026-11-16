@@ -46,7 +46,7 @@ The migration report includes one AssetResult per nonempty imported asset field:
 | copied / reused | Verified complete blob published / already present and verified |
 | planned | Dry-run verifies source hash and reads dimensions, without writes |
 | missing | FileNotFoundException or DirectoryNotFoundException opening the reference |
-| unreadable | Permission/sharing/source-read failure, not absence |
+| unreadable | Reader-unreadable snapshot or unmanifested open failure, not absence |
 | empty | Readable zero-byte file, not absence or unsupported image |
 | external | Absolute Windows/POSIX path or URI retained in provenance, not accessed/downloaded |
 
@@ -64,6 +64,12 @@ including record identity/path, rather than being folded into an originally
 missing reference. Null/empty fields mean no
 reference and produce no asset result. Traversal and symbolic-link components
 are refused rather than followed. Unexpected destination I/O errors fail loudly.
+Likewise, a readable captured asset that becomes locked, unreadable, or a directory
+cannot reproduce its captured bytes: migration refuses with record/path context
+instead of replacing that verified snapshot with an unreadable marker. The marker
+remains available for assets already unreadable in the reader snapshot (including
+when their lock subsequently clears). Tests exercise both lock transitions and a
+present-on-disk replacement directory, while retaining all 1737 executed cases.
 
 ## Publication, retries and tests
 
@@ -123,3 +129,23 @@ honestly above. Existing tests were strengthened without changing the 1737 case
 count. A normal merge of origin/main `17f3e98` preserves its gate-audit note and
 all sibling fields, with aggregate bytes taken unchanged from main. Fresh merged-head
 linux-ci evidence and review closure are still required before readiness.
+
+The fresh merged final-implementation run
+[43956420719](https://github.com/seanburkes/playnite-linux/actions/runs/43956420719)
+on `5e95044b91df5d4ba2309c5bea8022838f7d76d0` passed warning-as-error locked
+restore/build, all 125 CI-policy tests, full suites, bounded fuzz and native smoke.
+Downloaded JUnit cases/suite totals, test-counts.json and exits independently
+confirm **1737 Core / 173 Architecture / 4 Smoke**, zero failures/skips, all exits 0.
+This is retained as the pre-residual-fix merged evidence, not the final floor citation.
+
+Residual B's captured-readable-to-unreadable asymmetry was fixed at
+`c401b2727047b77bc9347b5ef1d8a416c633276d`. Fresh actual linux-ci
+[43957589425](https://github.com/seanburkes/playnite-linux/actions/runs/43957589425)
+again passed warning-as-error locked restore/build, 125 CI-policy tests, suites,
+bounded fuzz and native smoke. Downloaded JUnit case elements/suite totals,
+test-counts.json and exits confirm **1737 Core / 173 Architecture / 4 Smoke**,
+zero failures/skips, all exits 0. `p4_005_merged_final_capture` now binds the floor
+to this real final post-main/post-residual-fix implementation, retaining all prior
+captures. This floor/evidence-only commit is inside the PR before readiness and
+does not cite its own run; final evidence-head linux-ci and both firstmate-arranged
+review closures remain pending.
