@@ -7,7 +7,8 @@ namespace Playnite.Core.Database;
 /// A SQLite library destination. Each operation owns and closes its connection.
 /// Operations are not reentrant: a <see cref="WriteAsync{T}"/> callback must not start another
 /// write on the same destination, because that inner write would wait on its own outer writer
-/// until the busy timeout. Such nesting is refused immediately instead.
+/// until the busy timeout. That rule covers a write started in the background from inside the
+/// callback, including fire-and-forget work: start follow-up writes after the callback returns.
 /// </summary>
 public sealed class LibraryDatabase
 {
@@ -22,14 +23,49 @@ public sealed class LibraryDatabase
             throw new ArgumentException("A library database path must be absolute.", nameof(path));
         }
 
-        this.path = path;
+        this.path = CanonicalPath(path);
         connectionString = new SqliteConnectionStringBuilder
         {
-            DataSource = path,
+            DataSource = this.path,
             Pooling = false,
             ForeignKeys = true,
             DefaultTimeout = 5,
         }.ToString();
+    }
+
+    // The nesting guard compares destinations, so different spellings of one file must share a
+    // key: absolute normalisation, then each existing directory component and the file itself
+    // resolve their symlink target. Hard links have no managed identity API and cannot be
+    // detected here; SQLite's busy timeout remains the backstop for that spelling.
+    private static string CanonicalPath(string path)
+    {
+        var full = Path.GetFullPath(path);
+        var directory = Path.GetDirectoryName(full);
+        if (directory != null)
+        {
+            full = Path.Combine(ResolveDirectory(directory), Path.GetFileName(full));
+        }
+        if (File.Exists(full))
+        {
+            full = new FileInfo(full).ResolveLinkTarget(returnFinalTarget: true)?.FullName ?? full;
+        }
+        return full;
+    }
+
+    private static string ResolveDirectory(string directory)
+    {
+        var full = Path.GetFullPath(directory);
+        var root = Path.GetPathRoot(full) ?? "";
+        var current = root;
+        foreach (var segment in full[root.Length..].Split(Path.DirectorySeparatorChar, StringSplitOptions.RemoveEmptyEntries))
+        {
+            current = Path.Combine(current, segment);
+            if (Directory.Exists(current))
+            {
+                current = new DirectoryInfo(current).ResolveLinkTarget(returnFinalTarget: true)?.FullName ?? current;
+            }
+        }
+        return current;
     }
 
     /// <summary>Current forward-only destination schema version.</summary>

@@ -71,6 +71,54 @@ public sealed class DatabaseContractTests
         Assert.Single(await database.ReadAsync(s => s.Games.GetAllAsync()));
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Nested_write_is_refused_for_a_different_spelling_of_the_same_file(bool symbolicLink)
+    {
+        using var files = new DatabaseTestDirectory();
+        var database = await LibraryDatabase.OpenAsync(files.PathFor());
+        var aliasPath = symbolicLink
+            ? files.PathFor("alias.sqlite")
+            : Path.Combine(files.DirectoryPath, ".", "library.sqlite");
+        if (symbolicLink) File.CreateSymbolicLink(aliasPath, files.PathFor());
+        var alias = await LibraryDatabase.OpenAsync(aliasPath);
+        var stopwatch = Stopwatch.StartNew();
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() => database.WriteAsync(async s =>
+        {
+            await alias.WriteAsync(async inner =>
+            {
+                await inner.Games.AddAsync(new StoredGame(new Game(Id, "570")));
+                return 0;
+            });
+            return 0;
+        }));
+        stopwatch.Stop();
+        Assert.Contains("WriteAsync", error.Message, StringComparison.Ordinal);
+        Assert.True(stopwatch.Elapsed < TimeSpan.FromSeconds(2), $"nesting through {aliasPath} took {stopwatch.Elapsed}");
+        Assert.Empty(await database.ReadAsync(s => s.Games.GetAllAsync()));
+    }
+
+    [Fact]
+    public async Task Background_write_started_inside_a_write_callback_fails_fast()
+    {
+        using var files = new DatabaseTestDirectory();
+        var database = await LibraryDatabase.OpenAsync(files.PathFor());
+        await database.WriteAsync(async s =>
+        {
+            var background = Task.Run(() => database.WriteAsync(async inner =>
+            {
+                await inner.Games.AddAsync(new StoredGame(new Game(Id, "570")));
+                return 0;
+            }));
+            var error = await Assert.ThrowsAsync<InvalidOperationException>(() => background);
+            Assert.Contains("WriteAsync", error.Message, StringComparison.Ordinal);
+            return 0;
+        });
+        Assert.Empty(await database.ReadAsync(s => s.Games.GetAllAsync()));
+        await database.WriteAsync(async s => { await s.Games.AddAsync(new StoredGame(new Game(Id, "570"))); return 0; });
+    }
+
     [Fact]
     public async Task Write_inside_read_is_allowed_and_the_outer_snapshot_stays_stable()
     {
@@ -126,14 +174,14 @@ public sealed class DatabaseContractTests
         using var connection = DatabaseTestDirectory.Connect(files.PathFor());
         var canonical = MetadataId.ToString("D");
         await connection.ExecuteAsync($"INSERT INTO {table}(Id, LegacyJson) VALUES (@Id, '{{}}');", new { Id = canonical });
-        foreach (var invalid in new[] { canonical.ToUpperInvariant(), "not-a-guid" })
+        foreach (var invalid in new[] { canonical.ToUpperInvariant(), "not-a-guid", "zzzzzzzz-zzzz-zzzz-zzzz-zzzzzzzzzzzz" })
         {
             var insert = await Assert.ThrowsAsync<SqliteException>(() =>
                 connection.ExecuteAsync($"INSERT INTO {table}(Id, LegacyJson) VALUES (@Id, '{{}}');", new { Id = invalid }));
-            Assert.Contains("lowercase 36-character identity", insert.Message, StringComparison.Ordinal);
+            Assert.Contains("canonical lowercase 36-character identity", insert.Message, StringComparison.Ordinal);
             var update = await Assert.ThrowsAsync<SqliteException>(() =>
                 connection.ExecuteAsync($"UPDATE {table} SET Id=@Id WHERE Id=@Canonical;", new { Id = invalid, Canonical = canonical }));
-            Assert.Contains("lowercase 36-character identity", update.Message, StringComparison.Ordinal);
+            Assert.Contains("canonical lowercase 36-character identity", update.Message, StringComparison.Ordinal);
         }
     }
 
@@ -161,16 +209,16 @@ public sealed class DatabaseContractTests
         Assert.Empty(await database.ReadAsync(s => s.Games.FindDanglingEmulatorReferencesAsync([EmulatorId, unknown])));
 
         using var connection = DatabaseTestDirectory.Connect(files.PathFor());
-        foreach (var invalid in new[] { EmulatorId.ToString("D").ToUpperInvariant(), "not-a-guid" })
+        foreach (var invalid in new[] { EmulatorId.ToString("D").ToUpperInvariant(), "not-a-guid", "zzzzzzzz-zzzz-zzzz-zzzz-zzzzzzzzzzzz" })
         {
             var update = await Assert.ThrowsAsync<SqliteException>(() =>
                 connection.ExecuteAsync("UPDATE game_action SET EmulatorId=@Id WHERE Position=0;", new { Id = invalid }));
-            Assert.Contains("game_action.EmulatorId must be a lowercase 36-character identity", update.Message, StringComparison.Ordinal);
+            Assert.Contains("game_action.EmulatorId must be a canonical lowercase 36-character identity", update.Message, StringComparison.Ordinal);
             var insert = await Assert.ThrowsAsync<SqliteException>(() => connection.ExecuteAsync("""
                 INSERT INTO game_action(GameId, Position, Type, OverrideDefaultArgs, IsPlayAction, EmulatorId, TrackingMode, InitialTrackingDelay, TrackingFrequency)
                 VALUES (@GameId, 9, 0, 0, 0, @Id, 0, 0, 0);
                 """, new { GameId = Id.ToString("D"), Id = invalid }));
-            Assert.Contains("game_action.EmulatorId must be a lowercase 36-character identity", insert.Message, StringComparison.Ordinal);
+            Assert.Contains("game_action.EmulatorId must be a canonical lowercase 36-character identity", insert.Message, StringComparison.Ordinal);
         }
     }
 

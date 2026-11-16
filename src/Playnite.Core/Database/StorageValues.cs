@@ -4,6 +4,11 @@ namespace Playnite.Core.Database;
 
 internal static class StorageValues
 {
+    // The canonical stored form is Guid.ToString("D"); the schema triggers and the version 3
+    // upgrade scan enforce the same rule on rows that did not come through these repositories.
+    internal static bool IsCanonicalIdentity(string? value)
+        => value != null && Guid.TryParseExact(value, "D", out var id) && string.Equals(value, id.ToString("D"), StringComparison.Ordinal);
+
     internal static void RequireIdentity(Guid id)
     {
         if (id == Guid.Empty)

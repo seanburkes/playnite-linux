@@ -65,6 +65,45 @@ public sealed class SchemaTests
         Assert.Equal("future", await after.QuerySingleAsync<string>("SELECT applied_at FROM schema_version WHERE version=@Version;", new { Version = version }));
     }
 
+    [Theory]
+    [InlineData("tag")]
+    [InlineData("game_action")]
+    public async Task Upgrade_refuses_v2_rows_with_non_canonical_identities(string kind)
+    {
+        using var files = new DatabaseTestDirectory();
+        using (var connection = DatabaseTestDirectory.Connect(files.PathFor()))
+        {
+            await SchemaMigrator.ApplyAsync(connection, 2, CancellationToken.None);
+            if (kind == "tag")
+            {
+                await connection.ExecuteAsync("INSERT INTO tag(Id, LegacyJson) VALUES ('ZZZZZZZZ-ZZZZ-ZZZZ-ZZZZ-ZZZZZZZZZZZZ', '{}');");
+            }
+            else
+            {
+                await connection.ExecuteAsync("""
+                    INSERT INTO game(Id, PluginId, Hidden, Favorite, EnableSystemHdr, IncludeLibraryPluginAction, IsInstalled,
+                        OverrideInstallState, UseGlobalPreScript, UseGlobalPostScript, UseGlobalGameStartedScript, Playtime, PlayCount,
+                        GenreIdsPresent, PlatformIdsPresent, PublisherIdsPresent, DeveloperIdsPresent, CategoryIdsPresent, TagIdsPresent,
+                        FeatureIdsPresent, SeriesIdsPresent, AgeRatingIdsPresent, RegionIdsPresent, LinksPresent, GameActionsPresent,
+                        RomsPresent, LegacyJson)
+                    VALUES (@Id, '00000000-0000-0000-0000-000000000000', 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                        '00000000000000000000', '00000000000000000000', 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, '{}');
+                    """, new { Id = GameId.ToString("D") });
+                await connection.ExecuteAsync("""
+                    INSERT INTO game_action(GameId, Position, Type, OverrideDefaultArgs, IsPlayAction, EmulatorId, TrackingMode, InitialTrackingDelay, TrackingFrequency)
+                    VALUES (@Id, 0, 0, 0, 0, 'ZZZZZZZZ-ZZZZ-ZZZZ-ZZZZ-ZZZZZZZZZZZZ', 0, 0, 0);
+                    """, new { Id = GameId.ToString("D") });
+            }
+        }
+        var error = await Assert.ThrowsAsync<InvalidDataException>(() => LibraryDatabase.OpenAsync(files.PathFor()));
+        Assert.Contains(kind == "tag" ? "tag.Id" : "game_action.EmulatorId", error.Message, StringComparison.Ordinal);
+        Assert.Contains("non-canonical identity", error.Message, StringComparison.Ordinal);
+        using var after = DatabaseTestDirectory.Connect(files.PathFor());
+        Assert.Equal(2, await after.QuerySingleAsync<int>("SELECT MAX(version) FROM schema_version;"));
+        Assert.Equal(1, await after.QuerySingleAsync<int>($"SELECT COUNT(*) FROM {(kind == "tag" ? "tag" : "game_action")};"));
+        Assert.Equal(0, await after.QuerySingleAsync<int>("SELECT COUNT(*) FROM sqlite_schema WHERE type='trigger';"));
+    }
+
     public static IEnumerable<object[]> CrashCheckpoints()
     {
         foreach (var version in new[] { 1, 2, 3 })

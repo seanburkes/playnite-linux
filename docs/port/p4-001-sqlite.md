@@ -25,12 +25,17 @@ Schema version **3**, with committed, forward-only SQL migrations:
    links, actions and ROMs. All persistent writable v10 Game fields have explicit columns;
    playtime, play count and install size retain their full unsigned 64-bit domain.
 2. Version 2 adds provider, sort-name, playtime, activity and reverse-relation indexes.
-3. Version 3 enforces canonical lowercase 36-character identities on the eleven metadata
-   tables and on `game_action.EmulatorId`. The game table already carries that rule as a
-   `CHECK`; SQLite cannot add a `CHECK` to an existing table, and the metadata tables are
-   foreign-key parents, so version 3 installs a matching BEFORE INSERT/UPDATE trigger pair per
-   table instead. A fresh and an upgraded destination therefore carry the identical rule, and
-   a non-canonical write fails even when it bypasses the repositories.
+3. Version 3 enforces canonical lowercase hyphenated 36-character identities on the eleven
+   metadata tables and on `game_action.EmulatorId`. The game table already carries the weaker
+   length/lowercase form as a `CHECK`; SQLite cannot add a `CHECK` to an existing table, and the
+   metadata tables are foreign-key parents, so version 3 installs a matching BEFORE
+   INSERT/UPDATE trigger pair per table instead. The storable identity is exactly
+   `Guid.ToString("D")`, so a stored id is always parseable. Before installing the triggers the
+   upgrade scans existing metadata and emulator ids and refuses the upgrade with
+   `InvalidDataException` naming the table when one is non-canonical; that rejects corrupt v1/v2
+   rows rather than rewriting references or discovering them later in a reader. A fresh and an
+   upgraded destination therefore carry the identical rule, and a non-canonical write fails even
+   when it bypasses the repositories.
 
 `schema_version(version, applied_at)` records each committed step. Every step holds the
 SQLite writer lock and commits DDL and its version together. A future or gapped version
@@ -47,7 +52,8 @@ does not rewrite its history or rows.
   destination `SqliteConnection` of its own.
 - `LibrarySession.Games`: `AddAsync`, `GetAsync`, `GetAllAsync`, `UpdateAsync`, `DeleteAsync`,
   plus `FindDanglingEmulatorReferencesAsync(knownEmulators)` for the emulator reference that no
-  in-schema foreign key can express. A game graph includes its metadata references, links,
+  in-schema foreign key can express. That method only ever sees canonical ids: the upgrade
+  refuses non-canonical rows and the version 3 triggers reject them afterwards. A game graph includes its metadata references, links,
   actions and ROMs. Graph writes use a savepoint, so even a caught child-row failure cannot
   commit a partial replacement.
 - `LibrarySession.Metadata<T>()`: the same CRUD surface for Tag, Genre, Company, GameFeature,
@@ -71,15 +77,15 @@ The database adds an explicit SQL destination rather than copying the LiteDB eng
 
 | Boundary | Destination behavior / evidence |
 | --- | --- |
-| Identity | Caller-supplied GUIDs stored in lowercase D form; empty entity IDs rejected. Empty optional source/completion references become SQL NULL and read back as Guid.Empty. Version 3 enforces the lowercase 36-character rule in metadata tables and `game_action.EmulatorId`, not only in `game`. A null provider `GameId` is a legal stored NULL and round-trips as a null model value. |
+| Identity | Caller-supplied GUIDs stored in lowercase D form; empty entity IDs rejected. Empty optional source/completion references become SQL NULL and read back as Guid.Empty. Version 3 enforces the canonical D form in metadata tables and `game_action.EmulatorId`, not only in `game`, and refuses to upgrade a v1/v2 destination that already holds a non-canonical identity. A null provider `GameId` is a legal stored NULL and round-trips as a null model value. |
 | Null/empty | Nullable text and dates are distinct from empty text; each nullable collection has an explicit presence bit, retaining null versus empty. |
-| Ordering | Relation/link/action/ROM positions preserve insertion order and duplicates. A missing referenced metadata row fails explicitly; no silent reference removal. Metadata deletion is restricted while referenced; deleting a game cascades only its dependent rows. `game_action.EmulatorId` is the one reference this schema cannot constrain: v10 keeps emulators in a separate collection the destination does not store, so there is no parent row to point at. Its identity format is enforced and `Games.FindDanglingEmulatorReferencesAsync` reports ids absent from the caller's source catalogue; the importer report must surface them rather than dropping them. |
+| Ordering | Relation/link/action/ROM positions preserve insertion order and duplicates. A missing referenced metadata row fails explicitly; no silent reference removal. Metadata deletion is restricted while referenced; deleting a game cascades only its dependent rows. `game_action.EmulatorId` is the one reference this schema cannot constrain with a foreign key: v10 keeps emulators in a separate collection the destination does not store, so there is no parent row to point at. The mechanism is a trigger plus a report, not an FK: triggers enforce the canonical identity, and `Games.FindDanglingEmulatorReferencesAsync` reports ids absent from the caller's source catalogue; the importer report must surface them rather than dropping them. |
 | Numbers | UInt64 values are fixed-width, 20-digit invariant decimal TEXT, constrained to the UInt64 domain. This avoids SQLite's signed-integer overflow and retains numeric lexicographic ordering. Scores and unknown enum numeric values are not clamped. |
 | Dates | Activity/add/modify/scan dates are UTC ISO-8601 with offset. Unspecified DateTime values are refused pending an explicit source-timezone decision by the caller. Release dates have separate nullable year/month/day columns, preserving partial precision and ReleaseDate.Empty. |
 | Paths/encoding | Text is passed as parameters unchanged, including Windows paths, quotes, Unicode, empty strings and null. Path mapping/reporting belongs to the importer, not the destination. |
 | Transient state | IsInstalling/IsUninstalling/IsLaunching/IsRunning reset false, matching the v10 GamesCollection initialization callback. Read-only computed model properties are not stored. |
 | Errors | Duplicate identities, missing updates, invalid bags and foreign-key failures surface. No INSERT OR IGNORE, replacement inserts, truncation, or exception swallowing. |
-| Lifetime/concurrency | FK enforcement, WAL, 5000ms busy timeout on every connection; immediate writer transactions prevent stale read-to-write upgrades. One writer per destination: a `WriteAsync` callback that starts another `WriteAsync` for the same destination fails immediately with `InvalidOperationException` instead of waiting on its own outer writer until the busy timeout; the guard is keyed by destination path, so it covers a second `LibraryDatabase` instance on the same file. A `WriteAsync` inside a `ReadAsync` is allowed and does not join the outer snapshot; a `ReadAsync` inside a `WriteAsync` is allowed and sees only committed state. SQLite's provider executes I/O synchronously even through its async methods; no Task.Run facade in Core. Cancellation is checked at commands and before commit. |
+| Lifetime/concurrency | FK enforcement, WAL, 5000ms busy timeout on every connection; immediate writer transactions prevent stale read-to-write upgrades. One writer per destination: a `WriteAsync` callback that starts another `WriteAsync` for the same destination fails immediately with `InvalidOperationException` instead of waiting on its own outer writer until the busy timeout, and that rule includes a write started in the background from inside the callback, fire-and-forget included. The guard key is the canonical absolute path with each directory component and the file resolving their symlink target, so `/tmp/x/./library.sqlite`, `../x/library.sqlite` and a symlink share one key; hard links have no managed identity API and remain backstopped by the busy timeout. A `WriteAsync` inside a `ReadAsync` is allowed and does not join the outer snapshot; a `ReadAsync` inside a `WriteAsync` is allowed and sees only committed state. SQLite's provider executes I/O synchronously even through its async methods; no Task.Run facade in Core. Cancellation is checked at commands and before commit. |
 
 ## Verification
 
@@ -90,15 +96,19 @@ UInt64 boundaries/ordering, FK failures, rollback (including a caught graph erro
 query-only enforcement, connection disposal, competing writers and repeatable snapshots.
 
 `DatabaseContractTests` pins the importer-host contract: no public or non-public property or
-method reaches a `SqliteConnection`; nested writes fail fast (same and different instance on the
-same file) without consuming the busy timeout and the outer callback rolls back; write-inside-read
-and read-inside-write follow the documented rules; every metadata table rejects uppercase and
-malformed identities on insert and update; `game_action.EmulatorId` does the same, and
-`FindDanglingEmulatorReferencesAsync` reports exactly the ids outside the supplied catalogue; a
-null provider `GameId` stores SQL NULL and round-trips.
+method reaches a `SqliteConnection`; nested writes fail fast for the same instance, a second
+instance and a different spelling (`./`, `../` and a symlink) of the same file without consuming
+the busy timeout, and the outer callback rolls back; a background write started inside a write
+callback fails fast; write-inside-read and read-inside-write follow the documented rules; every
+metadata table rejects uppercase, malformed and 36-character non-hex identities on insert and
+update; `game_action.EmulatorId` does the same, and `FindDanglingEmulatorReferencesAsync` reports
+exactly the ids outside the supplied catalogue; a null provider `GameId` stores SQL NULL and
+round-trips.
 
 `SchemaTests` compares fresh and v1-upgraded `sqlite_schema` definitions and preserved rows,
-pins reopen idempotence/refusal semantics and tests cancellation rollback. Twelve child-process
+pins reopen idempotence/refusal semantics, refuses an upgrade holding a non-canonical metadata or
+emulator id without changing its version history or rows, and tests cancellation rollback. Twelve
+child-process
 SIGKILL cases cover before SQL, after SQL, after version insertion and after commit in each of the
 three migrations. Each resumes twice, checks integrity and foreign keys, compares against a fresh
 schema, and preserves seeded v1 user data when a later upgrade is killed. This verifies schema

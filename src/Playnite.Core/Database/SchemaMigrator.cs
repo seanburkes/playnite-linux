@@ -39,6 +39,10 @@ internal static class SchemaMigrator
             }
 
             checkpoint?.Invoke(version, MigrationStage.BeforeSql);
+            if (version == 3)
+            {
+                await RequireCanonicalIdentitiesAsync(connection, transaction, cancellationToken).ConfigureAwait(false);
+            }
             await connection.ExecuteAsync(Command(version switch
             {
                 1 => LibrarySchema.Version1,
@@ -52,6 +56,33 @@ internal static class SchemaMigrator
             cancellationToken.ThrowIfCancellationRequested();
             await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
             checkpoint?.Invoke(version, MigrationStage.AfterCommit);
+        }
+    }
+
+    // Version 3 adds the identity triggers, so rows written before it must satisfy the same rule.
+    // Only writes outside these repositories can produce a non-canonical identity; refusing the
+    // upgrade keeps the destination readable and leaves the decision to repair or discard it with
+    // its owner instead of silently rewriting references.
+    private static async Task RequireCanonicalIdentitiesAsync(SqliteConnection connection,
+        SqliteTransaction transaction, CancellationToken cancellationToken)
+    {
+        CommandDefinition Command(string sql) => new(sql, transaction: transaction, cancellationToken: cancellationToken);
+        foreach (var table in LibrarySchema.MetadataTables)
+        {
+            await RequireCanonicalIdentitiesAsync(connection, Command($"SELECT Id FROM {table};"), $"{table}.Id").ConfigureAwait(false);
+        }
+        await RequireCanonicalIdentitiesAsync(connection, Command("SELECT EmulatorId FROM game_action;"), "game_action.EmulatorId").ConfigureAwait(false);
+    }
+
+    private static async Task RequireCanonicalIdentitiesAsync(SqliteConnection connection,
+        CommandDefinition query, string column)
+    {
+        var values = await connection.QueryAsync<string>(query).ConfigureAwait(false);
+        if (values.FirstOrDefault(value => !StorageValues.IsCanonicalIdentity(value)) is { } invalid)
+        {
+            throw new InvalidDataException(
+                $"Schema upgrade to version 3 refused: {column} contains the non-canonical identity '{invalid}'. " +
+                "This destination is only writable through the library repositories; repair or discard it instead of upgrading.");
         }
     }
 }
