@@ -62,6 +62,7 @@ p4-003	W4	data	Atomic swap/rollback	p4-002	todo	import	formal:LibraryImport	test
 p4-004	W4	data	Settings migration	p3-003	in-progress	fm/p4-004	tests/golden/settings/*.json	SettingsMigrationTests	docs/port/p4-004-settings-migration.md; lossless settings projection and archive; explicit path mapping/reporting including forward-slash UNC and relative typed paths; dry-run and atomic restartable write that discards partial staging; SQLite/importer files untouched; actual linux-ci baseline and independent reviews pending
 p4-005	W4	data	Asset copy/hash	p4-002	todo	import	golden:assets	test:assets	
 p4-006	W4	data	Skip report (non-Steam)	p4-002	todo	import	golden:skip	test:skip	explicit
+p4-tla	W4	data	Library import crash-safety formal model	p4-001	in-progress	fm/p4-tla	docs/formal/LibraryImport.tla;legacy/source/Playnite/Database/GameDatabase.cs	scripts/formal/run_tlc.sh;python3 scripts/formal/check_library_import_mutations.py	Formal-only oracle-change; intermediate publication/crash state and rejected unsafe in-place variant; all 11 invariants mutation-checked in plan-guards; implementation obligations and assumptions in docs/formal/README.md; no product conformance claim; independent review acceptance and final-head forge CI pending
 p5-001	W5	steam	VDF/ACF parsers	p3-002	todo	steam	fixtures	vdf	fuzz
 p5-002	W5	steam	Steam root/library discovery	p5-001	todo	steam	fixtures	test:steam	
 p5-003	W5	steam	Artwork/metadata cache	p5-002	todo	steam	http-stub	test:metadata	rate limit
