@@ -23,9 +23,9 @@
       "skipped": 0
     },
     "Playnite.Core.Tests": {
-      "total": 1463,
-      "executed": 1463,
-      "passed": 1463,
+      "total": 1533,
+      "executed": 1533,
+      "passed": 1533,
       "failed": 0,
       "skipped": 0
     },
@@ -158,5 +158,12 @@
     "run_url": "https://github.com/seanburkes/playnite-linux/actions/runs/43796860902",
     "commit": "e9825b5bb856509474802d89d15dfc2d884626c6",
     "notes": "Counts independently parsed from the downloaded linux-test-results JUnit testcase elements, testsuite totals and MTP exit files for linux-ci run 43796860902 on https://github.com/seanburkes/playnite-linux/pull/82 evidence head e9825b5: Playnite.Core.Tests 1457 total / 1457 executed / 1457 passed / 0 failed / 0 skipped, exit 0, including 12 LocalizationCoverageTests cases; Playnite.Architecture.Tests 144 / 144 / 144 / 0 / 0, exit 0; Playnite.Smoke.Tests 4 / 4 / 4 / 0 / 0, exit 0. This raises the recorded Core union floor from 1445 to the evidenced 1457 (the 10 first-round coverage cases plus the 2 Review B cases that enforce generator --check and the filesystem language set); no other suite floor is lowered and every historical capture remains intact. The capture commit changes only tests/baseline.json and the p3-loc-coverage-ds shard evidence, so linux-ci on the final ratchet head revalidates the same counted cases. The earlier 006bd57 run 43794960376 evidenced 1455 before the Review B additions and is superseded as the floor citation, not deleted."
+  },
+  "p3_crc_ds_union_capture": {
+    "captured_at": "2026-11-16T03:52:51Z",
+    "run_id": 43800467861,
+    "run_url": "https://github.com/seanburkes/playnite-linux/actions/runs/43800467861",
+    "commit": "09065d23612e5750cbf3cb99147f5c3c7f4dac37",
+    "notes": "Final merged head of https://github.com/seanburkes/playnite-linux/pull/85 after normally merging origin/main 339aa97 (p3-fuzz-ds, Core floor 1463) and measuring the merged tree locally at 1533. Counts independently parsed from the downloaded linux-test-results JUnit testcase elements, testsuite totals and MTP exit files for linux-ci run 43800467861 on https://github.com/seanburkes/playnite-linux/pull/85 head 09065d2: Playnite.Core.Tests 1533 total / 1533 executed / 1533 passed / 0 failed / 0 skipped, exit 0; Playnite.Architecture.Tests 144 / 144 / 144 / 0 / 0, exit 0; Playnite.Smoke.Tests 4 / 4 / 4 / 0 / 0, exit 0. The 1533 is the real union on current main: 1515 (main's 1457 plus this unit's 58 checksum cases) plus the 18 FuzzTargetTests cases from #84, not an assumed sum. This raises only the counted Core floor from 1515 to the measured 1533; main's p3_fuzz_ds_capture and the pre-merge 1503 record are retained, every other historical capture remains intact, and no suite floor is lowered. The earlier 394e3f2 run 43798442753 measured 1515 before #84 merged and is retained as superseded history. The capture commit changes only tests/baseline.json and the p3-crc-ds shard evidence, so linux-ci on the final pushed head revalidates the same counted cases."
   }
 }
