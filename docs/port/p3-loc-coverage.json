@@ -1,0 +1,530 @@
+{
+  "provenance": {
+    "oracle": "Playnite 10.64 frozen legacy tree",
+    "generator": "python3 scripts/loc/generate_coverage.py",
+    "english": "legacy/source/Playnite/Localization/LocSource.xaml",
+    "inputs": {
+      "legacy/source/Playnite/Localization/LocSource.xaml": "53ab48aa12848ee289b98fc8d05b65f6bbfde06a1f77fcfe8a981680392d3468",
+      "legacy/source/Playnite/Localization/ar_SA.xaml": "690a3de1c6ff8fda152c6c2bcc6c6034d033c10e93c322ccfbb6a422468d4f2d",
+      "legacy/source/Playnite/Localization/bg_BG.xaml": "efff95547e20acb50bcabc3807bdf9ded5767cc49bc693ba12be8db80ee95ec2",
+      "legacy/source/Playnite/Localization/ca_ES.xaml": "12895f949829b30aeae76828bd68681b52188fa95c098c19eb3f9b368a22d821",
+      "legacy/source/Playnite/Localization/cs_CZ.xaml": "a515ef5206f72c91c9ec6b4b4f8d3087bcd05fbf5c7b5d93da2577ea7ae935d3",
+      "legacy/source/Playnite/Localization/da_DK.xaml": "b8d8886009b19eb1dac0bfcb9590ce1e838505dfdd6a8444ccffce99f03e0718",
+      "legacy/source/Playnite/Localization/de_DE.xaml": "92413dd2d697d6d45208379bab3c4afe7321da0a756f6d3df934fc2d01b8bb4b",
+      "legacy/source/Playnite/Localization/el_GR.xaml": "171a0e0ac0e8c6b916cfbdde7def0e5d626450abb31d0d8bb058648ee55539b4",
+      "legacy/source/Playnite/Localization/es_ES.xaml": "0a2caa4724dca9790fdcf27c3857eb1b7962b65f2d0457953778c114e5cedb72",
+      "legacy/source/Playnite/Localization/et_EE.xaml": "12bcc0ea672efb50a69a6cef39ba39f6e7b87c0be9b18319f36db191d896e49b",
+      "legacy/source/Playnite/Localization/fa_IR.xaml": "bed042c036f415b0f8eb0fe4664d90be09cb859d3345b9dc3e690382b6dd57df",
+      "legacy/source/Playnite/Localization/fi_FI.xaml": "f8eabfbc1dc5666fc7cbf78aabb78f40f623887f1039a063c5bdcfa637ea18f8",
+      "legacy/source/Playnite/Localization/fr_FR.xaml": "c008906f8f724f000896443e1081f648dcff30eca973b2f807011a37a5c4bd47",
+      "legacy/source/Playnite/Localization/gl_ES.xaml": "f98f48909fe40f26554a140635db02f2261266b22b3e2b97c900c3752370a01f",
+      "legacy/source/Playnite/Localization/he_IL.xaml": "cd50c170612d6cce0a8b572a28007ad3630aae5b9377c5f21f5f25592ed22697",
+      "legacy/source/Playnite/Localization/hr_HR.xaml": "6407690efaef35908e969d82ec5f8a995865b8f1f49bbf802b2b26a358b7f18d",
+      "legacy/source/Playnite/Localization/hu_HU.xaml": "9e5690dc4da52fd878a96feb5821da4f8c3d21a66c8cd9cf6e179f6b102f5337",
+      "legacy/source/Playnite/Localization/id_ID.xaml": "60ee0563e7df94b8e0ccfa8ccac6a44acd70c93a58818385c4df1acfb1d59482",
+      "legacy/source/Playnite/Localization/it_IT.xaml": "23be79beb424787d2d208953b4b64085a2a85feaa47b690d47eae677e6ae5711",
+      "legacy/source/Playnite/Localization/ja_JP.xaml": "cdf11b2ab59322d7ef79e8dd65fd2c8386da40e440b735af1bc392ceca2481f8",
+      "legacy/source/Playnite/Localization/ko_KR.xaml": "58b901727152dbc494cc88e80a027a3b2e99b2f3ab834ede800e4a89d8959421",
+      "legacy/source/Playnite/Localization/lt_LT.xaml": "b4e2e1f09547325b9d08c8a375191c127192468298b79b16df06ac85db41afe1",
+      "legacy/source/Playnite/Localization/mr_IN.xaml": "5875f2276f879611eabd00d3e1b4158917d3911e6b7c74bcae8894f3e2561edf",
+      "legacy/source/Playnite/Localization/nl_NL.xaml": "2a35603a41e2a1c82137396e4fbed2a81e6607b4c6a1651d03ce107bc9dca08a",
+      "legacy/source/Playnite/Localization/no_NO.xaml": "0e32ed3fe0f98d393cf24effcf827a055c3de427bd24c1e9e683812904f4def8",
+      "legacy/source/Playnite/Localization/pl_PL.xaml": "02c959812e7c2a94f28c735982c99cc6e24118efb2ffb6141a8c7a57f7ff3d9a",
+      "legacy/source/Playnite/Localization/pt_BR.xaml": "09096cadc53144c722dcbbf9c92fd4a054eccce4d7b6a4a4477a36aa61cccb3a",
+      "legacy/source/Playnite/Localization/pt_PT.xaml": "f2e25b9dd6b61e897e5960e3d275cc25be5624e7499ad88369753d6832544d28",
+      "legacy/source/Playnite/Localization/ro_RO.xaml": "adae81aa95b000418faa9f2f44f353d07e40025d3a210ee0ff7c6d1f1ad0b3b7",
+      "legacy/source/Playnite/Localization/ru_RU.xaml": "d6aad5eeee391a8c539aa5c35f998ce3528765fdc92b62a6dc6e4ef51bcea630",
+      "legacy/source/Playnite/Localization/sk_SK.xaml": "4b8b6658b9b95b2ff51e8fe7b8b97b5b4a69636a0dae96f615332182dbf6b5cb",
+      "legacy/source/Playnite/Localization/sr_SP.xaml": "c3b61368e46d1b9d0a01090e4ea31c4815833ac808f81eb183629807170b06bb",
+      "legacy/source/Playnite/Localization/sv_SE.xaml": "a06364e34ea6adb65a0e8e5dac220a19338e12687eef6e08de0eeda06c4cf685",
+      "legacy/source/Playnite/Localization/tr_TR.xaml": "126a90d57b306014897ad803a67c5d689a16ddc1789be53535c2fc7d36ae0415",
+      "legacy/source/Playnite/Localization/uk_UA.xaml": "779db2ee04fcc3b2f2c6a8158eacf1e825cf9850fc665cc60402f7856a4c2e40",
+      "legacy/source/Playnite/Localization/vi_VN.xaml": "10cd19eba137d099af9bdb69fa3a214f1de409225879e2fb79f4f4493933e9be",
+      "legacy/source/Playnite/Localization/zh_CN.xaml": "0fb1decef953a856a6e807d2827ff41c7068d9771cd99420a5c09041f581a852",
+      "legacy/source/Playnite/Localization/zh_TW.xaml": "3d6f24695bc67a7d0da1ccd9724b280c7257a23cca2fdc44ed61803fafa55a82"
+    },
+    "keyCount": 1134,
+    "languageCount": 37,
+    "coverageRule": "present counts non-empty translations of English keys; missing is an English key not declared by the language file; extra is a declared key absent from English; untranslated is a declared English key with an empty value, because v10 falls back to English for empty translations; whitespace-only text is a translation",
+    "placeholderRule": "compare the ordinal multiset of unescaped numbered .NET composite-format placeholders; {{ and }} are literal braces, so changing or dropping an index or format is a defect rather than a missing string; named braces such as {name}, percent tokens and arbitrary brace text are not placeholders",
+    "textContract": "XML-decoded character data, preserving source whitespace; not rendered XAML"
+  },
+  "languages": [
+    {
+      "language": "ar_SA",
+      "file": "legacy/source/Playnite/Localization/ar_SA.xaml",
+      "present": 1122,
+      "missing": 0,
+      "extra": 0,
+      "untranslated": 12,
+      "missingKeys": [],
+      "extraKeys": [],
+      "placeholderMismatches": []
+    },
+    {
+      "language": "bg_BG",
+      "file": "legacy/source/Playnite/Localization/bg_BG.xaml",
+      "present": 1128,
+      "missing": 0,
+      "extra": 0,
+      "untranslated": 6,
+      "missingKeys": [],
+      "extraKeys": [],
+      "placeholderMismatches": []
+    },
+    {
+      "language": "ca_ES",
+      "file": "legacy/source/Playnite/Localization/ca_ES.xaml",
+      "present": 1128,
+      "missing": 0,
+      "extra": 0,
+      "untranslated": 6,
+      "missingKeys": [],
+      "extraKeys": [],
+      "placeholderMismatches": []
+    },
+    {
+      "language": "cs_CZ",
+      "file": "legacy/source/Playnite/Localization/cs_CZ.xaml",
+      "present": 1134,
+      "missing": 0,
+      "extra": 0,
+      "untranslated": 0,
+      "missingKeys": [],
+      "extraKeys": [],
+      "placeholderMismatches": []
+    },
+    {
+      "language": "da_DK",
+      "file": "legacy/source/Playnite/Localization/da_DK.xaml",
+      "present": 466,
+      "missing": 0,
+      "extra": 0,
+      "untranslated": 668,
+      "missingKeys": [],
+      "extraKeys": [],
+      "placeholderMismatches": []
+    },
+    {
+      "language": "de_DE",
+      "file": "legacy/source/Playnite/Localization/de_DE.xaml",
+      "present": 1129,
+      "missing": 0,
+      "extra": 0,
+      "untranslated": 5,
+      "missingKeys": [],
+      "extraKeys": [],
+      "placeholderMismatches": []
+    },
+    {
+      "language": "el_GR",
+      "file": "legacy/source/Playnite/Localization/el_GR.xaml",
+      "present": 1120,
+      "missing": 0,
+      "extra": 0,
+      "untranslated": 14,
+      "missingKeys": [],
+      "extraKeys": [],
+      "placeholderMismatches": []
+    },
+    {
+      "language": "es_ES",
+      "file": "legacy/source/Playnite/Localization/es_ES.xaml",
+      "present": 1124,
+      "missing": 0,
+      "extra": 0,
+      "untranslated": 10,
+      "missingKeys": [],
+      "extraKeys": [],
+      "placeholderMismatches": []
+    },
+    {
+      "language": "et_EE",
+      "file": "legacy/source/Playnite/Localization/et_EE.xaml",
+      "present": 1112,
+      "missing": 0,
+      "extra": 0,
+      "untranslated": 22,
+      "missingKeys": [],
+      "extraKeys": [],
+      "placeholderMismatches": []
+    },
+    {
+      "language": "fa_IR",
+      "file": "legacy/source/Playnite/Localization/fa_IR.xaml",
+      "present": 1134,
+      "missing": 0,
+      "extra": 0,
+      "untranslated": 0,
+      "missingKeys": [],
+      "extraKeys": [],
+      "placeholderMismatches": []
+    },
+    {
+      "language": "fi_FI",
+      "file": "legacy/source/Playnite/Localization/fi_FI.xaml",
+      "present": 927,
+      "missing": 0,
+      "extra": 0,
+      "untranslated": 207,
+      "missingKeys": [],
+      "extraKeys": [],
+      "placeholderMismatches": []
+    },
+    {
+      "language": "fr_FR",
+      "file": "legacy/source/Playnite/Localization/fr_FR.xaml",
+      "present": 1133,
+      "missing": 0,
+      "extra": 0,
+      "untranslated": 1,
+      "missingKeys": [],
+      "extraKeys": [],
+      "placeholderMismatches": []
+    },
+    {
+      "language": "gl_ES",
+      "file": "legacy/source/Playnite/Localization/gl_ES.xaml",
+      "present": 1110,
+      "missing": 0,
+      "extra": 0,
+      "untranslated": 24,
+      "missingKeys": [],
+      "extraKeys": [],
+      "placeholderMismatches": []
+    },
+    {
+      "language": "he_IL",
+      "file": "legacy/source/Playnite/Localization/he_IL.xaml",
+      "present": 1120,
+      "missing": 0,
+      "extra": 0,
+      "untranslated": 14,
+      "missingKeys": [],
+      "extraKeys": [],
+      "placeholderMismatches": []
+    },
+    {
+      "language": "hr_HR",
+      "file": "legacy/source/Playnite/Localization/hr_HR.xaml",
+      "present": 728,
+      "missing": 0,
+      "extra": 0,
+      "untranslated": 406,
+      "missingKeys": [],
+      "extraKeys": [],
+      "placeholderMismatches": []
+    },
+    {
+      "language": "hu_HU",
+      "file": "legacy/source/Playnite/Localization/hu_HU.xaml",
+      "present": 1134,
+      "missing": 0,
+      "extra": 0,
+      "untranslated": 0,
+      "missingKeys": [],
+      "extraKeys": [],
+      "placeholderMismatches": []
+    },
+    {
+      "language": "id_ID",
+      "file": "legacy/source/Playnite/Localization/id_ID.xaml",
+      "present": 1110,
+      "missing": 0,
+      "extra": 0,
+      "untranslated": 24,
+      "missingKeys": [],
+      "extraKeys": [],
+      "placeholderMismatches": [
+        {
+          "key": "LOCSkinApplyError",
+          "englishPlaceholders": [
+            "{0}",
+            "{1}",
+            "{2}"
+          ],
+          "translatedPlaceholders": [
+            "{0}",
+            "{1}"
+          ]
+        }
+      ]
+    },
+    {
+      "language": "it_IT",
+      "file": "legacy/source/Playnite/Localization/it_IT.xaml",
+      "present": 1134,
+      "missing": 0,
+      "extra": 0,
+      "untranslated": 0,
+      "missingKeys": [],
+      "extraKeys": [],
+      "placeholderMismatches": []
+    },
+    {
+      "language": "ja_JP",
+      "file": "legacy/source/Playnite/Localization/ja_JP.xaml",
+      "present": 1134,
+      "missing": 0,
+      "extra": 0,
+      "untranslated": 0,
+      "missingKeys": [],
+      "extraKeys": [],
+      "placeholderMismatches": [
+        {
+          "key": "LOCSignInExternalNotif",
+          "englishPlaceholders": [
+            "{0}"
+          ],
+          "translatedPlaceholders": []
+        }
+      ]
+    },
+    {
+      "language": "ko_KR",
+      "file": "legacy/source/Playnite/Localization/ko_KR.xaml",
+      "present": 1110,
+      "missing": 0,
+      "extra": 0,
+      "untranslated": 24,
+      "missingKeys": [],
+      "extraKeys": [],
+      "placeholderMismatches": [
+        {
+          "key": "LOCExtensionInstallFail",
+          "englishPlaceholders": [
+            "{0}"
+          ],
+          "translatedPlaceholders": []
+        },
+        {
+          "key": "LOCThemeInstallFail",
+          "englishPlaceholders": [
+            "{0}"
+          ],
+          "translatedPlaceholders": []
+        }
+      ]
+    },
+    {
+      "language": "lt_LT",
+      "file": "legacy/source/Playnite/Localization/lt_LT.xaml",
+      "present": 797,
+      "missing": 0,
+      "extra": 0,
+      "untranslated": 337,
+      "missingKeys": [],
+      "extraKeys": [],
+      "placeholderMismatches": []
+    },
+    {
+      "language": "mr_IN",
+      "file": "legacy/source/Playnite/Localization/mr_IN.xaml",
+      "present": 933,
+      "missing": 0,
+      "extra": 0,
+      "untranslated": 201,
+      "missingKeys": [],
+      "extraKeys": [],
+      "placeholderMismatches": []
+    },
+    {
+      "language": "nl_NL",
+      "file": "legacy/source/Playnite/Localization/nl_NL.xaml",
+      "present": 1131,
+      "missing": 0,
+      "extra": 0,
+      "untranslated": 3,
+      "missingKeys": [],
+      "extraKeys": [],
+      "placeholderMismatches": [
+        {
+          "key": "LOCMenuKofiSupport",
+          "englishPlaceholders": [],
+          "translatedPlaceholders": [
+            "{0}"
+          ]
+        }
+      ]
+    },
+    {
+      "language": "no_NO",
+      "file": "legacy/source/Playnite/Localization/no_NO.xaml",
+      "present": 1112,
+      "missing": 0,
+      "extra": 0,
+      "untranslated": 22,
+      "missingKeys": [],
+      "extraKeys": [],
+      "placeholderMismatches": []
+    },
+    {
+      "language": "pl_PL",
+      "file": "legacy/source/Playnite/Localization/pl_PL.xaml",
+      "present": 1129,
+      "missing": 0,
+      "extra": 0,
+      "untranslated": 5,
+      "missingKeys": [],
+      "extraKeys": [],
+      "placeholderMismatches": []
+    },
+    {
+      "language": "pt_BR",
+      "file": "legacy/source/Playnite/Localization/pt_BR.xaml",
+      "present": 1134,
+      "missing": 0,
+      "extra": 0,
+      "untranslated": 0,
+      "missingKeys": [],
+      "extraKeys": [],
+      "placeholderMismatches": []
+    },
+    {
+      "language": "pt_PT",
+      "file": "legacy/source/Playnite/Localization/pt_PT.xaml",
+      "present": 1117,
+      "missing": 0,
+      "extra": 0,
+      "untranslated": 17,
+      "missingKeys": [],
+      "extraKeys": [],
+      "placeholderMismatches": []
+    },
+    {
+      "language": "ro_RO",
+      "file": "legacy/source/Playnite/Localization/ro_RO.xaml",
+      "present": 874,
+      "missing": 0,
+      "extra": 0,
+      "untranslated": 260,
+      "missingKeys": [],
+      "extraKeys": [],
+      "placeholderMismatches": []
+    },
+    {
+      "language": "ru_RU",
+      "file": "legacy/source/Playnite/Localization/ru_RU.xaml",
+      "present": 1134,
+      "missing": 0,
+      "extra": 0,
+      "untranslated": 0,
+      "missingKeys": [],
+      "extraKeys": [],
+      "placeholderMismatches": []
+    },
+    {
+      "language": "sk_SK",
+      "file": "legacy/source/Playnite/Localization/sk_SK.xaml",
+      "present": 834,
+      "missing": 0,
+      "extra": 0,
+      "untranslated": 300,
+      "missingKeys": [],
+      "extraKeys": [],
+      "placeholderMismatches": []
+    },
+    {
+      "language": "sr_SP",
+      "file": "legacy/source/Playnite/Localization/sr_SP.xaml",
+      "present": 1045,
+      "missing": 0,
+      "extra": 0,
+      "untranslated": 89,
+      "missingKeys": [],
+      "extraKeys": [],
+      "placeholderMismatches": []
+    },
+    {
+      "language": "sv_SE",
+      "file": "legacy/source/Playnite/Localization/sv_SE.xaml",
+      "present": 1134,
+      "missing": 0,
+      "extra": 0,
+      "untranslated": 0,
+      "missingKeys": [],
+      "extraKeys": [],
+      "placeholderMismatches": []
+    },
+    {
+      "language": "tr_TR",
+      "file": "legacy/source/Playnite/Localization/tr_TR.xaml",
+      "present": 1134,
+      "missing": 0,
+      "extra": 0,
+      "untranslated": 0,
+      "missingKeys": [],
+      "extraKeys": [],
+      "placeholderMismatches": []
+    },
+    {
+      "language": "uk_UA",
+      "file": "legacy/source/Playnite/Localization/uk_UA.xaml",
+      "present": 1134,
+      "missing": 0,
+      "extra": 0,
+      "untranslated": 0,
+      "missingKeys": [],
+      "extraKeys": [],
+      "placeholderMismatches": []
+    },
+    {
+      "language": "vi_VN",
+      "file": "legacy/source/Playnite/Localization/vi_VN.xaml",
+      "present": 1134,
+      "missing": 0,
+      "extra": 0,
+      "untranslated": 0,
+      "missingKeys": [],
+      "extraKeys": [],
+      "placeholderMismatches": [
+        {
+          "key": "LOCExtensionInstallPrompt",
+          "englishPlaceholders": [
+            "{0}",
+            "{1}",
+            "{2}"
+          ],
+          "translatedPlaceholders": [
+            "{0}",
+            "{2}"
+          ]
+        },
+        {
+          "key": "LOCThemeInstallPrompt",
+          "englishPlaceholders": [
+            "{0}",
+            "{1}",
+            "{2}"
+          ],
+          "translatedPlaceholders": [
+            "{0}",
+            "{2}"
+          ]
+        }
+      ]
+    },
+    {
+      "language": "zh_CN",
+      "file": "legacy/source/Playnite/Localization/zh_CN.xaml",
+      "present": 1129,
+      "missing": 0,
+      "extra": 0,
+      "untranslated": 5,
+      "missingKeys": [],
+      "extraKeys": [],
+      "placeholderMismatches": []
+    },
+    {
+      "language": "zh_TW",
+      "file": "legacy/source/Playnite/Localization/zh_TW.xaml",
+      "present": 1133,
+      "missing": 0,
+      "extra": 0,
+      "untranslated": 1,
+      "missingKeys": [],
+      "extraKeys": [],
+      "placeholderMismatches": []
+    }
+  ]
+}
