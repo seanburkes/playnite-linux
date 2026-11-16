@@ -23,9 +23,9 @@
       "skipped": 0
     },
     "Playnite.Core.Tests": {
-      "total": 1411,
-      "executed": 1411,
-      "passed": 1411,
+      "total": 1412,
+      "executed": 1412,
+      "passed": 1412,
       "failed": 0,
       "skipped": 0
     },
@@ -101,5 +101,12 @@
     "run_url": "https://github.com/seanburkes/playnite-linux/actions/runs/43783097811",
     "commit": "e14713db627c52f19bdbeda5e1c534a3eaa65b54",
     "notes": "Counts independently parsed from the downloaded linux-test-results JUnit and MTP exit files for linux-ci run 43783097811 on https://github.com/seanburkes/playnite-linux/pull/79 head e14713d: Playnite.Core.Tests 1411 total / 1411 executed / 1411 passed / 0 failed / 0 skipped, Playnite.Architecture.Tests 144 / 144 / 144 / 0 / 0, Playnite.Smoke.Tests 4 / 4 / 4 / 0 / 0, all MTP exit 0. This raises the recorded Core union floor from 1365 to the evidenced 1411 (1365 plus 46 archive/backup cases); no other suite floor is lowered and every historical capture remains intact. The ratchet commit changes only tests/baseline.json and the p3-008b shard evidence, so linux-ci on the new PR head revalidates the same counted cases."
+  },
+  "p3_008b_capture_final": {
+    "captured_at": "2026-11-16T01:44:08Z",
+    "run_id": 43787536463,
+    "run_url": "https://github.com/seanburkes/playnite-linux/actions/runs/43787536463",
+    "commit": "1b724b14001bc5a1a581e7d7b2954f901773d958",
+    "notes": "Counts independently parsed from the downloaded linux-test-results JUnit and MTP exit files for linux-ci run 43787536463 on https://github.com/seanburkes/playnite-linux/pull/79 head 1b724b1: Playnite.Core.Tests 1412 total / 1412 executed / 1412 passed / 0 failed / 0 skipped, Playnite.Architecture.Tests 144 / 144 / 144 / 0 / 0, Playnite.Smoke.Tests 4 / 4 / 4 / 0 / 0, all MTP exit 0. This is the final floor for the owner-ruling shape: the earlier p3_008b_capture 1411 ratchet belongs to the superseded manifest/force-flag direction and is retained as history. The Core union floor moves from 1365 to the evidenced 1412; no other suite floor is lowered. The ratchet commit changes only tests/baseline.json and the p3-008b shard evidence, so linux-ci on the new PR head revalidates the same counted cases."
   }
 }
