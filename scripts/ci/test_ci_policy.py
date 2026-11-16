@@ -3,6 +3,7 @@
 from pathlib import Path
 import fnmatch
 import os
+import re
 import shlex
 import subprocess
 import sys
@@ -13,6 +14,7 @@ ROOT = Path(__file__).resolve().parents[2]
 SCRIPTS = ROOT / "scripts" / "ci"
 PLAN_GUARDS = ROOT / ".github" / "workflows" / "plan-guards.yml"
 LINUX_CI = ROOT / ".github" / "workflows" / "linux-ci.yml"
+FUZZ_RUNNER = ROOT / "tools" / "Playnite.Fuzz" / "FuzzRunner.cs"
 CODEOWNERS = ROOT / ".github" / "CODEOWNERS"
 PORT_INDEX = ROOT / ".github" / "workflows" / "port-index.yml"
 
@@ -135,6 +137,17 @@ def resolve_base(workflow, event, pull_request_base="", merge_group_base="",
                 "MERGE_GROUP_BASE": merge_group_base, "PUSH_BEFORE": push_before,
                 "GITHUB_OUTPUT": str(output)})
     result = subprocess.run(["bash", "-e", "-c", script], cwd=repo, env=env,
+                            capture_output=True, text=True, check=False)
+    return result, outputs(output) if output.exists() else {}
+
+
+def resolve_fuzz_budget(event, output=None):
+    if output is None:
+        output = Path(tempfile.mkdtemp()) / "fuzz-budget"
+    script = run_block(LINUX_CI, "Resolve the fuzz budget")
+    env = os.environ.copy()
+    env.update({"EVENT_NAME": event, "GITHUB_OUTPUT": str(output)})
+    result = subprocess.run(["bash", "-e", "-c", script], cwd=ROOT, env=env,
                             capture_output=True, text=True, check=False)
     return result, outputs(output) if output.exists() else {}
 
@@ -888,6 +901,44 @@ class CiPolicyTests(unittest.TestCase):
             self.assertEqual(0, result.returncode, result.stderr)
             self.assertEqual(["Other.Suite", "Real.Tests"],
                              result.stdout.splitlines())
+
+    def test_fuzz_budget_is_keyed_on_the_event_and_keeps_the_floor(self):
+        runner = FUZZ_RUNNER.read_text()
+        seconds_match = re.search(r"MinimumWallClockSeconds = (\d+);", runner)
+        iterations_match = re.search(r"MinimumIterations = ([\d_]+);", runner)
+        self.assertIsNotNone(seconds_match)
+        self.assertIsNotNone(iterations_match)
+        minimum_seconds = int(seconds_match.group(1))
+        minimum_iterations = int(iterations_match.group(1).replace("_", ""))
+        self.assertEqual((30, 100_000), (minimum_seconds, minimum_iterations))
+
+        expected = {"pull_request": 45, "merge_group": 45, "push": 120}
+        for event, seconds in expected.items():
+            with self.subTest(event=event):
+                result, values = resolve_fuzz_budget(event)
+                self.assertEqual(0, result.returncode, result.stderr)
+                self.assertEqual(str(seconds), values["seconds"])
+                self.assertEqual("50000000", values["iterations"])
+                self.assertEqual(str(seconds + 30), values["timeout_seconds"])
+                self.assertGreaterEqual(int(values["seconds"]), minimum_seconds)
+                self.assertGreaterEqual(int(values["iterations"]), minimum_iterations)
+
+        result, values = resolve_fuzz_budget("workflow_dispatch")
+        self.assertNotEqual(0, result.returncode)
+        self.assertEqual({}, values)
+
+    def test_fuzz_step_uses_the_resolved_budget_and_keeps_the_marker_gate(self):
+        block = step_block(LINUX_CI, "Fuzz the serialisation parsers (bounded)")
+        self.assertIn("FUZZ_SECONDS: ${{ steps.fuzz_budget.outputs.seconds }}", block)
+        self.assertIn("FUZZ_ITERATIONS: ${{ steps.fuzz_budget.outputs.iterations }}", block)
+        self.assertIn(
+            "FUZZ_TIMEOUT_SECONDS: ${{ steps.fuzz_budget.outputs.timeout_seconds }}",
+            block)
+        self.assertIn('"${FUZZ_TIMEOUT_SECONDS}s"', block)
+        self.assertNotIn('FUZZ_SECONDS: "45"', block)
+        self.assertIn("--seconds \"$FUZZ_SECONDS\"", block)
+        self.assertIn("--iterations \"$FUZZ_ITERATIONS\"", block)
+        self.assertIn("grep -q '^FUZZ COMPLETE '", block)
 
 
 if __name__ == "__main__":
