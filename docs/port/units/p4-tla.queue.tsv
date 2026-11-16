@@ -1,0 +1,2 @@
+id	wave	area	unit	depends	status	owner	oracle	test	notes
+p4-tla	W4	data	Library import crash-safety formal model	p4-001	in-progress	fm/p4-tla	docs/formal/LibraryImport.tla;legacy/source/Playnite/Database/GameDatabase.cs	scripts/formal/run_tlc.sh	Formal-only oracle-change; atomic durable data/receipt publication; crash recovery and bounded repeat runs; implementation obligations in docs/formal/README.md; no product conformance claim; independent reviews and forge CI pending

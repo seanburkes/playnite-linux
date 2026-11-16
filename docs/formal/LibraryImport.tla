@@ -1,154 +1,174 @@
 ---------------- MODULE LibraryImport ----------------
-\* Formal model for the v10 -> SQLite library migration.
-\*
-\* The implementation writes a temp database, verifies it, then atomically
-\* swaps the live database. A crash during the swap must roll back to the old
-\* live database; a concurrent reader must never observe a partial database.
-EXTENDS Naturals
+\* Single importer, immutable source, disposable staging, atomic publication.
+\* Destination data and source identity receipt belong to ONE durable artifact.
+\* A crash can occur on either side of Publish, never inside its atomic step.
+EXTENDS Naturals, FiniteSets
 
-VARIABLES
-    state,          \* "Idle" | "Copying" | "Reading" | "Writing" | "Verifying"
-                    \* | "Swapping" | "Committed" | "Failed" | "RolledBack"
-    sourceHash,     \* constant identity of the source library
-    backupExists,   \* backup manifest written before any live write
-    verified,       \* verification passed
-    liveDb,         \* "Old" | "New" | "Partial" (Partial is reachable during swap/crash)
-    tempDb,         \* "None" | "Partial" | "Verified"
-    visibleDb,      \* what a concurrent reader can see: "Old" | "New"
-    readerSees      \* last value a concurrent reader observed
+CONSTANTS SourceRows, OldRows, MaxRuns
+ASSUME /\ SourceRows # {}
+       /\ SourceRows # OldRows
+       /\ MaxRuns \in Nat \ {0}
 
-vars == <<state, sourceHash, backupExists, verified, liveDb, tempDb, visibleDb, readerSees>>
+VARIABLES state, source, snapshot, tempDb, liveDb, receipt,
+          backupExists, verified, runs, publications, repeatRun, outcome,
+          readerSees
+
+vars == <<state, source, snapshot, tempDb, liveDb, receipt,
+          backupExists, verified, runs, publications, repeatRun, outcome,
+          readerSees>>
+
+Active == {"BackingUp", "Reading", "Writing", "Verifying", "Ready"}
+Terminal == {"Idle", "Committed", "Recovered", "NoOp", "Refused"}
 
 Init ==
     /\ state = "Idle"
-    /\ sourceHash = "v10-fixture"
+    /\ source = SourceRows
+    /\ snapshot = {}
+    /\ tempDb = {}
+    /\ liveDb = OldRows
+    /\ receipt = FALSE
     /\ backupExists = FALSE
     /\ verified = FALSE
-    /\ liveDb = "Old"
-    /\ tempDb = "None"
-    /\ visibleDb = "Old"
-    /\ readerSees = "Old"
+    /\ runs = 0
+    /\ publications = 0
+    /\ repeatRun = FALSE
+    /\ outcome = "None"
+    /\ readerSees = OldRows
 
+\* Repeat detection uses the receipt in the published database, not RAM or
+\* a marker written separately after rename. Both permitted policies are checked.
 Start ==
-    /\ state = "Idle"
-    /\ state' = "Copying"
+    /\ state \in Terminal
+    /\ runs < MaxRuns
+    /\ runs' = runs + 1
+    /\ repeatRun' = receipt
+    /\ IF receipt
+          THEN /\ state' \in {"NoOp", "Refused"}
+               /\ outcome' = state'
+          ELSE /\ state' = "BackingUp"
+               /\ outcome' = "None"
+    /\ snapshot' = {}
+    /\ tempDb' = {}
     /\ backupExists' = FALSE
     /\ verified' = FALSE
-    /\ liveDb' = "Old"
-    /\ tempDb' = "None"
-    /\ visibleDb' = "Old"
-    /\ readerSees' = "Old"
-    /\ UNCHANGED <<sourceHash>>
+    /\ UNCHANGED <<source, liveDb, receipt, publications, readerSees>>
 
-Copy ==
-    /\ state = "Copying"
+Backup ==
+    /\ state = "BackingUp"
     /\ state' = "Reading"
     /\ backupExists' = TRUE
-    /\ UNCHANGED <<sourceHash, verified, liveDb, tempDb, visibleDb, readerSees>>
+    /\ UNCHANGED <<source, snapshot, tempDb, liveDb, receipt, verified,
+                   runs, publications, repeatRun, outcome, readerSees>>
 
 Read ==
     /\ state = "Reading"
     /\ state' = "Writing"
-    /\ UNCHANGED <<sourceHash, backupExists, verified, liveDb, tempDb, visibleDb, readerSees>>
+    /\ snapshot' = source
+    /\ UNCHANGED <<source, tempDb, liveDb, receipt, backupExists, verified,
+                   runs, publications, repeatRun, outcome, readerSees>>
 
+\* Each row is a separate write/crash boundary. Only staging may be partial.
 Write ==
     /\ state = "Writing"
+    /\ tempDb # snapshot
+    /\ \E row \in snapshot \ tempDb : tempDb' = tempDb \cup {row}
+    /\ UNCHANGED <<state, source, snapshot, liveDb, receipt, backupExists,
+                   verified, runs, publications, repeatRun, outcome, readerSees>>
+
+FinishWrite ==
+    /\ state = "Writing"
+    /\ tempDb = snapshot
     /\ state' = "Verifying"
-    /\ tempDb' = "Partial"
-    /\ UNCHANGED <<sourceHash, backupExists, verified, liveDb, visibleDb, readerSees>>
+    /\ UNCHANGED <<source, snapshot, tempDb, liveDb, receipt, backupExists,
+                   verified, runs, publications, repeatRun, outcome, readerSees>>
 
-VerifyPass ==
+Verify ==
     /\ state = "Verifying"
-    /\ tempDb = "Partial"
-    /\ state' = "Swapping"
+    /\ tempDb = snapshot
+    /\ state' = "Ready"
     /\ verified' = TRUE
-    /\ tempDb' = "Verified"
-    /\ liveDb' = "Partial"
-    /\ UNCHANGED <<sourceHash, backupExists, visibleDb, readerSees>>
+    /\ UNCHANGED <<source, snapshot, tempDb, liveDb, receipt, backupExists,
+                   runs, publications, repeatRun, outcome, readerSees>>
 
-VerifyFail ==
-    /\ state = "Verifying"
-    /\ state' = "Failed"
-    /\ tempDb' = "None"
-    /\ UNCHANGED <<sourceHash, backupExists, verified, liveDb, visibleDb, readerSees>>
-
-SwapEnd ==
-    /\ state = "Swapping"
+Publish ==
+    /\ state = "Ready"
+    /\ verified /\ tempDb = snapshot /\ ~receipt
     /\ state' = "Committed"
-    /\ liveDb' = "New"
-    /\ visibleDb' = "New"
-    /\ tempDb' = "None"
-    /\ UNCHANGED <<sourceHash, backupExists, verified, readerSees>>
+    /\ liveDb' = tempDb
+    /\ receipt' = TRUE
+    /\ publications' = publications + 1
+    /\ tempDb' = {}
+    /\ outcome' = "Imported"
+    /\ UNCHANGED <<source, snapshot, backupExists, verified, runs,
+                   repeatRun, readerSees>>
 
-\* Crash in the middle of the swap: the live path is partial until rollback.
-CrashSwap ==
-    /\ state = "Swapping"
-    /\ state' = "Failed"
-    /\ tempDb' = "None"
-    /\ UNCHANGED <<sourceHash, backupExists, verified, liveDb, visibleDb, readerSees>>
-
+\* Includes read/write/verification/publication failure before the atomic step.
+\* Failure and process death leave disposable staging; neither changes liveDb.
 Fail ==
-    /\ state \in {"Copying", "Reading", "Writing"}
+    /\ state \in Active
     /\ state' = "Failed"
-    /\ tempDb' = "None"
-    /\ UNCHANGED <<sourceHash, backupExists, verified, liveDb, visibleDb, readerSees>>
+    /\ UNCHANGED <<source, snapshot, tempDb, liveDb, receipt, backupExists,
+                   verified, runs, publications, repeatRun, outcome, readerSees>>
 
-Rollback ==
-    /\ state = "Failed"
-    /\ state' = "RolledBack"
-    /\ liveDb' = "Old"
-    /\ tempDb' = "None"
-    /\ visibleDb' = "Old"
-    /\ UNCHANGED <<sourceHash, backupExists, verified, readerSees>>
-
-Reset ==
-    /\ state \in {"Committed", "RolledBack"}
-    /\ state' = "Idle"
-    /\ backupExists' = FALSE
+Crash ==
+    /\ state \notin {"Crashed", "Failed"}
+    /\ state' = "Crashed"
+    /\ snapshot' = {}
     /\ verified' = FALSE
-    /\ liveDb' = "Old"
-    /\ tempDb' = "None"
-    /\ visibleDb' = "Old"
-    /\ UNCHANGED <<sourceHash, readerSees>>
+    /\ UNCHANGED <<source, tempDb, liveDb, receipt, backupExists, runs,
+                   publications, repeatRun, outcome, readerSees>>
 
-\* A reader can observe the published database at any time.
+\* Restart discards staging, even if it was verified. It never rolls back an
+\* already-published destination or loses its durable migration receipt.
+Recover ==
+    /\ state \in {"Crashed", "Failed"}
+    /\ state' = "Recovered"
+    /\ snapshot' = {}
+    /\ tempDb' = {}
+    /\ verified' = FALSE
+    /\ backupExists' = FALSE
+    /\ UNCHANGED <<source, liveDb, receipt, runs, publications, repeatRun,
+                   outcome, readerSees>>
+
 ReadVisible ==
-    /\ readerSees' = visibleDb
-    /\ UNCHANGED <<state, sourceHash, backupExists, verified, liveDb, tempDb, visibleDb>>
+    /\ readerSees' = liveDb
+    /\ UNCHANGED <<state, source, snapshot, tempDb, liveDb, receipt,
+                   backupExists, verified, runs, publications, repeatRun, outcome>>
 
-Next ==
-    \/ Start \/ Copy \/ Read \/ Write
-    \/ VerifyPass \/ VerifyFail \/ SwapEnd \/ CrashSwap
-    \/ Fail \/ Rollback \/ Reset
-    \/ ReadVisible
+Next == Start \/ Backup \/ Read \/ Write \/ FinishWrite \/ Verify \/ Publish
+        \/ Fail \/ Crash \/ Recover \/ ReadVisible
 
-Spec == Init /\ [][Next]_vars /\ WF_vars(Next)
+\* Safety only: repeated crashes/failures need not eventually permit progress.
+Spec == Init /\ [][Next]_vars
 
-\* ---- Invariants ---------------------------------------------------------
+TypeOK ==
+    /\ state \in Active \cup Terminal \cup {"Failed", "Crashed"}
+    /\ source \in SUBSET SourceRows
+    /\ snapshot \in SUBSET SourceRows
+    /\ tempDb \in SUBSET SourceRows
+    /\ liveDb \in {OldRows, SourceRows}
+    /\ receipt \in BOOLEAN /\ backupExists \in BOOLEAN /\ verified \in BOOLEAN
+    /\ runs \in 0..MaxRuns /\ publications \in 0..MaxRuns
+    /\ repeatRun \in BOOLEAN
+    /\ outcome \in {"None", "Imported", "NoOp", "Refused"}
+    /\ readerSees \in {OldRows, SourceRows}
 
-\* The source library is never modified. The model has no source-write action.
-SourceUnchanged == sourceHash = "v10-fixture"
-
-\* A committed database implies verification passed.
-NoCommitWithoutVerify == state = "Committed" => verified
-
-\* A concurrent reader never sees a partial database.
-ReaderNeverPartial == readerSees \in {"Old", "New"}
-
-\* In every observable/terminal state, the live database is old or new.
-\* This is the falsifiable invariant: crash mid-swap leaves Partial until
-\* Rollback restores Old.
-AtomicLive ==
-    state \in {"Idle", "Committed", "RolledBack"} => liveDb \in {"Old", "New"}
-
-\* A backup exists before the first live write / verification.
-BackupBeforeWrite ==
-    state \in {"Writing", "Verifying", "Swapping", "Committed"} => backupExists
-
-\* At most one import is active: the state machine has one lane.
-OneImport == state \in {"Copying", "Reading", "Writing", "Verifying", "Swapping"} => state /= "Idle"
-
-\* Crash recovery: every started import reaches a terminal state under weak fairness.
-Termination == (state = "Copying") ~> (state \in {"Committed", "RolledBack"})
+SourceUnchanged == source = SourceRows
+ReadSnapshotImmutable == state \in {"Writing", "Verifying", "Ready", "Committed"}
+                         => snapshot = SourceRows
+AtomicLive == liveDb \in {OldRows, SourceRows}
+ReaderNeverPartial == readerSees \in {OldRows, SourceRows}
+NoCommitWithoutVerify == state = "Committed" => verified /\ liveDb = snapshot
+BackupBeforeWrite == state \in {"Writing", "Verifying", "Ready", "Committed"}
+                     => backupExists
+\* This equivalence also forbids publishing data without the repeat-run guard.
+DurableReceipt == (receipt <=> liveDb = SourceRows)
+                 /\ publications = (IF receipt THEN 1 ELSE 0)
+CrashSafe == state \in {"Crashed", "Failed"}
+             => (liveDb = OldRows /\ ~receipt)
+                \/ (liveDb = SourceRows /\ receipt)
+CleanResumable == state = "Recovered" => tempDb = {} /\ snapshot = {} /\ ~verified
+RepeatRunSafe == /\ publications <= 1
+                 /\ (repeatRun => receipt /\ outcome \in {"NoOp", "Refused"})
 
 =============================================================================
