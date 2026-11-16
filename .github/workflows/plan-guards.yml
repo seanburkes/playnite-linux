@@ -270,3 +270,8 @@ jobs:
         env:
           TLA2TOOLS_JAR: ${{ runner.temp }}/tla/tla2tools.jar
         run: scripts/formal/run_tlc.sh
+
+      - name: Library import invariant mutation coverage
+        env:
+          TLA2TOOLS_JAR: ${{ runner.temp }}/tla/tla2tools.jar
+        run: python3 scripts/formal/check_library_import_mutations.py

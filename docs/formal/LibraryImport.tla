@@ -1,13 +1,16 @@
 ---------------- MODULE LibraryImport ----------------
 \* Single importer, immutable source, disposable staging, atomic publication.
 \* Destination data and source identity receipt belong to ONE durable artifact.
-\* A crash can occur on either side of Publish, never inside its atomic step.
+\* PublishPartial exposes preparation and its crash boundary. InPlacePublish
+\* selects an unsafe implementation that overwrites the live path before swap.
+\* The checked production configuration is FALSE; mutation checks exercise TRUE.
 EXTENDS Naturals, FiniteSets
 
-CONSTANTS SourceRows, OldRows, MaxRuns
+CONSTANTS SourceRows, OldRows, MaxRuns, InPlacePublish
 ASSUME /\ SourceRows # {}
        /\ SourceRows # OldRows
        /\ MaxRuns \in Nat \ {0}
+       /\ InPlacePublish \in BOOLEAN
 
 VARIABLES state, source, snapshot, tempDb, liveDb, receipt,
           backupExists, verified, runs, publications, repeatRun, outcome,
@@ -17,7 +20,7 @@ vars == <<state, source, snapshot, tempDb, liveDb, receipt,
           backupExists, verified, runs, publications, repeatRun, outcome,
           readerSees>>
 
-Active == {"BackingUp", "Reading", "Writing", "Verifying", "Ready"}
+Active == {"BackingUp", "Reading", "Writing", "Verifying", "Ready", "Publishing"}
 Terminal == {"Idle", "Committed", "Recovered", "NoOp", "Refused"}
 
 Init ==
@@ -90,8 +93,20 @@ Verify ==
     /\ UNCHANGED <<source, snapshot, tempDb, liveDb, receipt, backupExists,
                    runs, publications, repeatRun, outcome, readerSees>>
 
-Publish ==
+\* Preparation stays private for atomic replacement. In-place publication is
+\* representable too: any strict subset (including empty) can become live.
+\* Readers and Crash are enabled in Publishing, before Publish completes.
+PublishPartial ==
     /\ state = "Ready"
+    /\ state' = "Publishing"
+    /\ IF InPlacePublish
+          THEN liveDb' \in (SUBSET tempDb) \ {tempDb}
+          ELSE liveDb' = liveDb
+    /\ UNCHANGED <<source, snapshot, tempDb, receipt, backupExists, verified,
+                   runs, publications, repeatRun, outcome, readerSees>>
+
+Publish ==
+    /\ state = "Publishing"
     /\ verified /\ tempDb = snapshot /\ ~receipt
     /\ state' = "Committed"
     /\ liveDb' = tempDb
@@ -135,8 +150,9 @@ ReadVisible ==
     /\ UNCHANGED <<state, source, snapshot, tempDb, liveDb, receipt,
                    backupExists, verified, runs, publications, repeatRun, outcome>>
 
-Next == Start \/ Backup \/ Read \/ Write \/ FinishWrite \/ Verify \/ Publish
-        \/ Fail \/ Crash \/ Recover \/ ReadVisible
+Next == Start \/ Backup \/ Read \/ Write \/ FinishWrite \/ Verify
+        \/ PublishPartial \/ Publish
+        \/ Crash \/ Fail \/ Recover \/ ReadVisible
 
 \* Safety only: repeated crashes/failures need not eventually permit progress.
 Spec == Init /\ [][Next]_vars
@@ -146,20 +162,20 @@ TypeOK ==
     /\ source \in SUBSET SourceRows
     /\ snapshot \in SUBSET SourceRows
     /\ tempDb \in SUBSET SourceRows
-    /\ liveDb \in {OldRows, SourceRows}
+    /\ liveDb \in {OldRows} \cup (SUBSET SourceRows)
     /\ receipt \in BOOLEAN /\ backupExists \in BOOLEAN /\ verified \in BOOLEAN
     /\ runs \in 0..MaxRuns /\ publications \in 0..MaxRuns
     /\ repeatRun \in BOOLEAN
     /\ outcome \in {"None", "Imported", "NoOp", "Refused"}
-    /\ readerSees \in {OldRows, SourceRows}
+    /\ readerSees \in {OldRows} \cup (SUBSET SourceRows)
 
 SourceUnchanged == source = SourceRows
-ReadSnapshotImmutable == state \in {"Writing", "Verifying", "Ready", "Committed"}
+ReadSnapshotImmutable == state \in {"Writing", "Verifying", "Ready", "Publishing", "Committed"}
                          => snapshot = SourceRows
 AtomicLive == liveDb \in {OldRows, SourceRows}
 ReaderNeverPartial == readerSees \in {OldRows, SourceRows}
 NoCommitWithoutVerify == state = "Committed" => verified /\ liveDb = snapshot
-BackupBeforeWrite == state \in {"Writing", "Verifying", "Ready", "Committed"}
+BackupBeforeWrite == state \in {"Writing", "Verifying", "Ready", "Publishing", "Committed"}
                      => backupExists
 \* This equivalence also forbids publishing data without the repeat-run guard.
 DurableReceipt == (receipt <=> liveDb = SourceRows)
