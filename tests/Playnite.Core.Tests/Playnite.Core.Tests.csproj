@@ -16,6 +16,10 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="../golden/paths/*.json" Link="golden/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="../golden/loc/*.json" Link="golden/loc/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="../../legacy/source/Playnite/Localization/LocSource.xaml" Link="golden/loc/LocSource.xaml" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="../../legacy/source/Playnite/Localization/LocalizationKeys.cs" Link="golden/loc/LocalizationKeys.cs" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="../../legacy/build/buildLocConstants.ps1" Link="golden/loc/buildLocConstants.ps1" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
   <ItemGroup>
     <None Include="../golden/utils-v10.json" Link="utils-v10.json" CopyToOutputDirectory="PreserveNewest" />

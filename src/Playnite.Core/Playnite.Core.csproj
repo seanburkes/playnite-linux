@@ -1,5 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <ItemGroup>
+    <EmbeddedResource Include="Localization/English.json" LogicalName="Playnite.Localization.English.json" />
+  </ItemGroup>
+  <ItemGroup>
     <ProjectReference Include="../Playnite.SDK.Abstractions/Playnite.SDK.Abstractions.csproj" />
   </ItemGroup>
   <ItemGroup>
