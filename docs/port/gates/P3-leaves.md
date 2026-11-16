@@ -14,8 +14,9 @@
   artifact carries worker diff-only self-review, not separate reviewer agents.
 - Result: **ACCEPTED — owner acceptance 2026-11-16** — all five Phase 3 exit criteria hold
   at the gate commit, and the owner accepted the Phase 3 exit on that date. The deferrals,
-  uncovered items and change-control gaps below remain explicit gaps, not passes. The
-  evidence lines, run ids and measurements in this document are unchanged by the acceptance.
+  uncovered items and owner-waived change-control gaps below remain explicit gaps, not
+  passes. The evidence lines, run ids and measurements in this document are unchanged by
+  the acceptance.
 
 ## Evidence
 
@@ -151,10 +152,11 @@ a current union record. Every other existing capture object is unchanged by this
 The Phase 3 order in `docs/port/03-EXECUTION-PLAN.md` names **culture handling** in the
 localisation workstream and the **`Playnite.SDK.Abstractions` v7 freeze / ApiCompat report**
 as Phase 3 item 7. Neither has a Phase 3 unit shard, and neither is delivered or claimed
-here. The owner accepted the exit on 2026-11-16 with both items recorded as explicit,
-unresolved gaps; no scope waiver is recorded here, and the plan still needs this update
-before Phase 4 relies on either item. The current repository has the Phase 2 PublicAPI /
-ApiCompat scaffold only; the v7 contract freeze is scheduled as `p6-004` in Phase 6.
+here. **The owner granted an explicit scope waiver for both items on 2026-11-16**: they are
+outside the accepted Phase 3 exit, and the plan update remains a Phase 4 dependency for
+those two items. Nothing here delivers or claims them. The current repository has the
+Phase 2 PublicAPI / ApiCompat scaffold only; the v7 contract freeze is scheduled as
+`p6-004` in Phase 6.
 
 ## Exit checklist
 
@@ -169,6 +171,6 @@ ApiCompat scaffold only; the v7 contract freeze is scheduled as `p6-004` in Phas
       missing `FUZZ COMPLETE` marker.
 
 **Verdict: ACCEPTED — owner accepted the Phase 3 exit on 2026-11-16.** The five Phase 3 exit
-criteria are evidenced at `f6d5fab`, with the deferrals, uncovered items and change-control
-gaps above stated explicitly. Acceptance records those gaps; it does not convert them into
-passes.
+criteria are evidenced at `f6d5fab`, with the deferrals, uncovered items and owner-waived
+change-control gaps above stated explicitly. Acceptance records those gaps; it does not
+convert them into passes.

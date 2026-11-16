@@ -143,6 +143,10 @@ dispatched yet.
 - No open Phase 3 blocker: the owner accepted the Phase 3 exit on 2026-11-16 with the
   deferrals and uncovered items recorded in `gates/P3-leaves.md`. Library-open and the
   negative-proof-log residual remain explicitly unproven.
+- **Change-control gap:** culture handling and the `Playnite.SDK.Abstractions` v7 freeze /
+  ApiCompat report have no Phase 3 unit. The owner granted an explicit scope waiver for both
+  on 2026-11-16; the plan update remains a Phase 4 dependency for those two items, and the
+  v7 freeze is scheduled as `p6-004` in Phase 6. Neither is delivered or claimed.
 - Release work still needs dependency redistribution/license review. Steam remains greenfield
   with corpus/real-install acceptance rather than a v10 implementation diff; neither is an
   unreported scaffolding test pass.

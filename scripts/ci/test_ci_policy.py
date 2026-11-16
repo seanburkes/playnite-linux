@@ -936,6 +936,7 @@ class CiPolicyTests(unittest.TestCase):
             block)
         self.assertIn('"${FUZZ_TIMEOUT_SECONDS}s"', block)
         self.assertNotIn('FUZZ_SECONDS: "45"', block)
+        self.assertIn("--seconds \"$FUZZ_SECONDS\"", block)
         self.assertIn("--iterations \"$FUZZ_ITERATIONS\"", block)
         self.assertIn("grep -q '^FUZZ COMPLETE '", block)
 
