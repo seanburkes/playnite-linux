@@ -16,16 +16,16 @@
   },
   "new": {
     "Playnite.Architecture.Tests": {
-      "total": 153,
-      "executed": 153,
-      "passed": 153,
+      "total": 173,
+      "executed": 173,
+      "passed": 173,
       "failed": 0,
       "skipped": 0
     },
     "Playnite.Core.Tests": {
-      "total": 1695,
-      "executed": 1695,
-      "passed": 1695,
+      "total": 1706,
+      "executed": 1706,
+      "passed": 1706,
       "failed": 0,
       "skipped": 0
     },
@@ -207,5 +207,15 @@
     "run_url": "https://github.com/seanburkes/playnite-linux/actions/runs/43913516510",
     "commit": "0bf3204e04db5c6829765a1241600a92a0c36bfa",
     "notes": "Counts independently parsed from downloaded linux-test-results JUnit testcase elements and MTP exit files for actual linux-ci run 43913516510 on https://github.com/seanburkes/playnite-linux/pull/94 at merged implementation head 0bf3204e04db5c6829765a1241600a92a0c36bfa: Core 1695 total/executed/passed, Architecture 153 total/executed/passed, Smoke 4 total/executed/passed, every suite zero failures/skips and exit 0. Core rises from main's real 1671 union by 24 importer cases; Architecture rises from 144 by nine raw-reader dependency/security-policy cases. Importer coverage includes the frozen Windows fixture (3 expected Steam games / 3 imported / 1 custom explicitly reported; 9 documents accounted for), eight real SIGKILL pipeline checkpoints, cancellation/restart, verification failure refusing publication, repeat dry-run no-op and repeat real-run refusal, malicious type keys with a working constructor control, and a negative typed-mapping guard. All existing capture objects, Smoke, empty_projects and legacy evidence remain intact; no floor is lowered. This additive oracle-change floor capture is authorized by firstmate steering 001 and 004. The floor commit changes only baseline/documentation/shard evidence, not implementation/test cases; linux-ci on its pushed head must revalidate these same counts before readiness. Two adversarial diff-only reviews are requested through firstmate; no independent approval is claimed. The separately owner-authorized importer-only advisory exception is documented in docs/port/p4-002-import.md."
+  },
+  "p4_002_final_capture": {
+    "captured_at": "2026-11-16T17:32:20Z",
+    "run_id": 43918884660,
+    "run_url": "https://github.com/seanburkes/playnite-linux/actions/runs/43918884660",
+    "commit": "69e00be324d186dd7688c65c3eca1bc1d1f84d49",
+    "previous_review_run_id": 43917159311,
+    "previous_review_run_url": "https://github.com/seanburkes/playnite-linux/actions/runs/43917159311",
+    "previous_review_commit": "747fd06684bbe4da9578d4af0ac0cb02b49f28c0",
+    "notes": "Final implementation head of https://github.com/seanburkes/playnite-linux/pull/94, after both firstmate-arranged adversarial reviews/re-reviews closed all P2 code findings on 747fd06 and firstmate steering009 sanity-checked 747fd06..69e00be PASS/no P1-P2. Downloaded actual linux-ci run 43918884660 JUnit testcase elements and MTP exit files independently confirm Core 1706 total/executed/passed, Architecture 173 total/executed/passed, Smoke 4 total/executed/passed, zero failures/skips and every exit 0. The earlier review-fix run 43917159311 at 747fd06 independently confirmed 1701/163/4; the final five Core cases and ten additional architecture controls are measured here, not inferred from that earlier run. Core now protects main's 1671 union plus 35 importer cases; Architecture protects 144 plus 29 importer/security-policy cases. Final follow-up checks complete WAL checkpoint and main-file-only publication, three-TZ UTC epoch preservation, duplicate marker rejection, dangling links/early directory/path edges and the remaining named guard surfaces. Steam fixture accounting remains 3 expected / 3 imported / 1 custom explicitly reported; all 9 source documents accounted for and original library bytes unchanged. Only Core total/executed/passed rises 1695 to 1706 and Architecture 153 to 173; all prior capture objects, legacy, Smoke and empty_projects are retained, no floor lowered. Additive oracle-change capture/board-done authorized by firstmate steering001/004/007-009. This floor/board commit changes only baseline, documentation and p4-002 shards; implementation/test-case files are identical to 69e00be. Its own linux-ci run must revalidate the same counts before readiness. Reviews are adversarial assistance on the owner's behalf, not independent human approval; no worker merge."
   }
 }

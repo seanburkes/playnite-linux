@@ -190,11 +190,11 @@ remain a merge gate; this capture is not independent human approval.
   instrument the actual nested object/array `_type` and `$type` paths, rather than
   relying only on Process/FileInfo string assertions. Both constructor counters
   remain zero through reader and writer, with working throwing/incrementing controls.
-- **P2-3 in delivery gate:** the earlier floor commit `b13630d` was baseline/doc/shard
+- **P2-3 closed by the final capture below:** the earlier floor commit `b13630d` was baseline/doc/shard
   only relative to reviewed `0bf3204`, with no reviewed-code change. Its final-head
   linux-ci run 43914304294 independently reconfirmed 1695/153/4 and all six checks
   passed. Review fixes add tests, so a new real-CI floor capture and board completion
-  will follow the final fixes; the queue deliberately remains in-progress meanwhile.
+  followed the final fixes; the final capture below moves the queue to done.
 - **P2-4 fixed:** public RunAsync now requires the source directory and checks source,
   destination and generated-artifact containment plus all ancestor symlinks itself,
   before writes, independent of the CLI. Direct-API tests cover source containment,
@@ -213,9 +213,9 @@ remain a merge gate; this capture is not independent human approval.
   it into either test runner's deps.json; neither runner deps.json contains LiteDB.
   Generated lock metadata is not a shipped runtime reference or a second suppression.
 
-Both firstmate-arranged re-reviews have now arrived (steering 007/008) and close the
-P2 code findings; final-head CI/floor/board is the remaining P2 gate. No independent
-human approval is claimed, and the PR stays draft until that gate is closed.
+Both firstmate-arranged re-reviews arrived (steering 007/008) and close the P2 code
+findings. The final real-CI capture below closes P2-3 floor/board. No independent
+human approval is claimed; evidence-only-head revalidation precedes readiness.
 
 ## Review A disposition
 
@@ -258,9 +258,32 @@ human approval is claimed, and the PR stays draft until that gate is closed.
   floor captures remain append-only; the final implementation receives a new real-CI
   capture and its evidence-only head is separately revalidated before readiness.
 
-Both re-reviews close their P2 code findings on 747fd06; Review B's P2-3 remains a
-delivery gate until the refreshed floor/board commit is inside the PR. Downloaded
+Both re-reviews close their P2 code findings on 747fd06; Review B's P2-3 is closed
+by the refreshed floor/board commit below. Downloaded
 linux-ci run 43917159311 on 747fd06 independently confirms **1701 Core / 163
 Architecture / 4 Smoke**, all passed, zero skips, every exit 0. The inexpensive P3
 follow-up adds five Core cases and ten guard controls, so its own real CI run must
 be captured rather than pretending the earlier run covers those new cases.
+
+## Done: final implementation and floor/board capture
+
+Final implementation head **`69e00be324d186dd7688c65c3eca1bc1d1f84d49`** passed actual
+[linux-ci run 43918884660](https://github.com/seanburkes/playnite-linux/actions/runs/43918884660).
+Downloaded JUnit testcase elements and MTP exit files independently confirm
+**1706 Core / 173 Architecture / 4 Smoke**, every case passed, zero failures/skips,
+every exit 0. Locked restore and Release build ran with warnings-as-errors. This
+measures the main union plus **35 Core / 29 Architecture** importer cases, not an
+estimated sum or a local-only floor.
+
+Both firstmate-arranged adversarial reviews/re-reviews close P2 code findings;
+steering 009's final-delta sanity check reports **PASS, no P1/P2**. P3 dispositions
+are recorded above, including deliberately retained private/quiescent-namespace,
+regular-file, resource, package-parser, and power-loss limitations. This is not
+independent human approval and does not authorize a worker merge.
+
+The additive final capture in `tests/baseline.json` retains every historical record
+and raises only Core **1695→1706** and Architecture **153→173**; Smoke/legacy remain
+unchanged. Queue, ledger and this unit are **done**. The floor/board commit changes
+only baseline/documentation/shards, leaving every implementation/test-case byte
+identical to the captured head; its own CI must revalidate these counts before
+readiness. No aggregate files are edited by this unit.

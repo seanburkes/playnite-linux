@@ -1,2 +1,2 @@
 id	wave	area	unit	depends	status	owner	oracle	test	notes
-p4-002	W4	data	v10 LiteDB importer	p4-001	in-progress	import	golden:import	test:import	Isolated raw reader; CLI/Core verified temp writer; 3 expected Steam rows; crash matrix and security exception in docs/port/p4-002-import.md; CI floor/reviews pending
+p4-002	W4	data	v10 LiteDB importer	p4-001	done	import	golden:import	test:import	Isolated raw reader and CLI/Core verified temp writer; 3 expected/3 imported/1 custom reported; 8 SIGKILL checkpoints; final actual linux-ci 43918884660 at 69e00be counts Core1706/Architecture173/Smoke4 zero skips; both adversarial re-reviews and final firstmate sanity check disposed; floor inside PR; see docs/port/p4-002-import.md
