@@ -6,7 +6,9 @@ await SettingsMigration.MigrateAsync(args[0], args[1], [], checkpoint: current =
 {
     if (current == step)
     {
-        // Abrupt process death intentionally bypasses every managed finally/Dispose.
+        // Prove the child reached this boundary before abrupt process death, which intentionally
+        // bypasses every managed finally/Dispose.
+        File.WriteAllText(args[3], current.ToString());
         Process.GetCurrentProcess().Kill();
     }
 });
