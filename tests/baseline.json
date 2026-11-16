@@ -23,9 +23,9 @@
       "skipped": 0
     },
     "Playnite.Core.Tests": {
-      "total": 1365,
-      "executed": 1365,
-      "passed": 1365,
+      "total": 1382,
+      "executed": 1382,
+      "passed": 1382,
       "failed": 0,
       "skipped": 0
     },
@@ -94,5 +94,12 @@
     "run_url": "https://github.com/seanburkes/playnite-linux/actions/runs/43775725997",
     "commit": "9fb148ee502905a8c4aedc9526ad88b87faf4651",
     "notes": "Counts independently parsed from downloaded linux-test-results JUnit testcase elements and MTP exit files for linux-ci run 43775725997 on https://github.com/seanburkes/playnite-linux/pull/76: Core 1365 total / 1365 executed / 1365 passed / 0 failed / 0 skipped; Architecture 144 / 144 / 144 / 0 / 0; Smoke 4 / 4 / 4 / 0 / 0; all MTP exit 0. The Core JUnit contains 111 query cases plus 1254 pre-query cases. After waiting for the prior model/manifest union floor to merge in https://github.com/seanburkes/playnite-linux/pull/75, origin/main was normally merged into fm/p3-006 and a fresh local Release MTP run at integration head a33d37e2090d831e99363fefcc6291c4194af885 again passed 1365/1365, zero failures/skips. This raises the complete merged 1254 floor to the evidenced 1365 rather than guessing a future union. Every historical capture, other suite floor and empty_projects remains intact; no count is lowered. Additive oracle-change update authorized by firstmate steering p3-006/007 and sequenced after the prior floor by steering 008-009."
+  },
+  "p3_007b_capture": {
+    "captured_at": "2026-11-16T00:48:30Z",
+    "run_id": 43782366884,
+    "run_url": "https://github.com/seanburkes/playnite-linux/actions/runs/43782366884",
+    "commit": "a6abbcbb838b5e07814dacaa48f9a310249e0b4c",
+    "notes": "Counts independently parsed from downloaded linux-test-results JUnit testcase elements, testsuite totals and MTP exit files for linux-ci run 43782366884 on https://github.com/seanburkes/playnite-linux/pull/78 head a6abbcb: Playnite.Core.Tests 1382 total / 1382 executed / 1382 passed / 0 failed / 0 skipped, exit 0, including 17 LocalizationKeyTests cases; Playnite.Architecture.Tests 144 / 144 / 144 / 0 / 0, exit 0; Playnite.Smoke.Tests 4 / 4 / 4 / 0 / 0, exit 0. This raises the evidenced 1365 Core floor to 1382, the exact 17-case localisation addition rather than a guessed union. Every historical capture, other suite floor and empty_projects remains intact; no count is lowered. The p3_007b shard records this unit; aggregates remain parent-owned. Additive oracle-change update on the same PR that adds the localisation golden."
   }
 }

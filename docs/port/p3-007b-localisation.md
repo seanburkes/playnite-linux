@@ -53,9 +53,12 @@ reporting, changed text and ordering, resolution, naming exceptions, malformed X
 rejection, immutability, and seeded diff laws / bounded XML text round-trips.
 
 Local Release runs: Core **1,382 passed**, Architecture **144 passed**, zero skips/failures.
-CI evidence and any baseline increase must come from a real `linux-ci` run, never these local
-counts. The p3-007b shard records this unit instead of editing the generated aggregates or the
-protected shared parity table. Independent adversarial reviews are firstmate-owned.
+Actual `linux-ci` run 43782366884 on head `a6abbcb` reports the same: Core 1382/1382,
+Architecture 144/144, Smoke 4/4, zero failed or skipped, every MTP exit 0. That run's JUnit
+evidence raises the counted Core floor from 1365 to 1382 in an additive `p3_007b_capture`; no
+historical capture or floor is lowered. The p3-007b shard records this unit instead of editing
+the generated aggregates or the protected shared parity table. Independent adversarial reviews
+are firstmate-owned.
 
 This unit was recovered from an interrupted lane's uncommitted tree. The recovered
 implementation and goldens were kept; this contract was renamed to the unit id and the golden
