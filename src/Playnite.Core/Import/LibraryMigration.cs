@@ -32,11 +32,12 @@ public static class LibraryMigration
         destination = Path.GetFullPath(destination);
         RequirePlainDirectory(sourceDirectory);
         RequirePlainDirectory(Path.GetDirectoryName(destination)!);
+        if (Directory.Exists(destination)) throw new IOException("Destination is an existing directory, not a database file.");
         var artifacts = new[] { destination, destination + ".import", destination + ".import.lock", destination + ".import-report.json" };
         if (artifacts.Any(path => path == sourceDirectory || path.StartsWith(sourceDirectory + Path.DirectorySeparatorChar, StringComparison.Ordinal)) ||
             sourceDirectory.StartsWith(destination + ".import" + Path.DirectorySeparatorChar, StringComparison.Ordinal) || sourceDirectory == Path.GetPathRoot(sourceDirectory))
             throw new ArgumentException("Destination and migration artifacts must be outside the source directory.");
-        if (Path.Exists(destination) && (File.GetAttributes(destination) & FileAttributes.ReparsePoint) != 0)
+        if (IsLink(destination))
             throw new IOException("Destination must not be a symbolic link.");
         cancellationToken.ThrowIfCancellationRequested();
         using var reader = new JsonTextReader(new StringReader(intermediate)) { DateParseHandling = DateParseHandling.None, MaxDepth = 128 };
@@ -98,7 +99,7 @@ public static class LibraryMigration
         if (File.Exists(destination)) throw new IOException("Destination already exists; import refuses to overwrite it (including on a second run).");
         var staging = destination + ".import";
         foreach (var artifact in new[] { destination + ".import.lock", destination + ".import-report.json", staging })
-            if (Path.Exists(artifact) && (File.GetAttributes(artifact) & FileAttributes.ReparsePoint) != 0)
+            if (IsLink(artifact))
                 throw new IOException("Migration artifacts must not be symbolic links.");
         // Lock file is deliberately retained; deleting a lock inode permits concurrent owners.
         using var lease = new FileStream(destination + ".import.lock", System.IO.FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
@@ -149,7 +150,9 @@ public static class LibraryMigration
             if (await connection.ExecuteScalarAsync<string>(new CommandDefinition("PRAGMA integrity_check;", cancellationToken: cancellationToken)).ConfigureAwait(false) != "ok" ||
                 (await connection.QueryAsync(new CommandDefinition("PRAGMA foreign_key_check;", cancellationToken: cancellationToken)).ConfigureAwait(false)).Any())
                 throw new InvalidDataException("SQLite integrity verification failed.");
-            await connection.ExecuteAsync(new CommandDefinition("PRAGMA wal_checkpoint(TRUNCATE);", cancellationToken: cancellationToken)).ConfigureAwait(false);
+            var checkpointResult = await connection.QuerySingleAsync<WalCheckpoint>(new CommandDefinition("PRAGMA wal_checkpoint(TRUNCATE);", cancellationToken: cancellationToken)).ConfigureAwait(false);
+            if (checkpointResult.Busy != 0 || checkpointResult.Log != checkpointResult.Checkpointed)
+                throw new InvalidDataException("WAL checkpoint was incomplete; refusing publication of the main file alone.");
         }
         checkpoint?.Invoke("Verified");
         await File.WriteAllTextAsync(destination + ".import-report.json", System.Text.Json.JsonSerializer.Serialize(report), cancellationToken).ConfigureAwait(false);
@@ -163,6 +166,16 @@ public static class LibraryMigration
     }
 
     private static MigrationDecision Decision(Row row, string outcome, string reason) => new(row.File, row.Collection, row.Identity, outcome, reason);
+
+    private static bool IsLink(string path) => new FileInfo(path).LinkTarget != null ||
+        (Path.Exists(path) && (File.GetAttributes(path) & FileAttributes.ReparsePoint) != 0);
+
+    private sealed class WalCheckpoint
+    {
+        public int Busy { get; set; }
+        public int Log { get; set; }
+        public int Checkpointed { get; set; }
+    }
 
     private static void RequirePlainDirectory(string path)
     {

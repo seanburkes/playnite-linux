@@ -90,6 +90,9 @@ Verification checks complete game values/legacy bags, metadata values/legacy bag
 counts, SQLite integrity and foreign keys. WAL is checkpointed and all connections
 are closed before the main file is flushed and renamed without overwrite on the
 same filesystem. The report is written only after verification and before rename.
+The TRUNCATE checkpoint result must be non-busy and fully checkpointed or publication
+fails. A BeforeSwap test copies only the main file, opens that standalone copy
+read-only, asserts all three games, and checks the staging WAL is absent/empty.
 A crash can leave a verified report with no live file: it is an audit/plan artifact,
 not a commit marker; live-path existence determines publication. No post-publication
 work is needed to make the database usable. Source and backup copies are untouched.
@@ -145,6 +148,10 @@ It also rejects LiteCollection, BsonSerializer, every Deserialize*/Populate* API
 AssemblyLoadContext, dynamic dispatch, MethodInfo/ConstructorInfo and Invoke, with
 negative controls for each previously uncovered path. This is a regression guard,
 not a proof against arbitrarily obfuscated future code; review remains required.
+The follow-up also covers names containing Deserialize (including UnsafeDeserialize),
+ReadObject, DynamicInvoke, Emit, Compile, Expression, DataContractSerializer,
+BinaryFormatter, JavaScriptSerializer and uninitialized-object construction, each
+with a negative control.
 
 The CLI's caller-supplied reader DLL is trusted executable configuration, not an
 untrusted-input/plugin boundary. Do not expose that argument to untrusted callers.
@@ -206,5 +213,54 @@ remain a merge gate; this capture is not independent human approval.
   it into either test runner's deps.json; neither runner deps.json contains LiteDB.
   Generated lock metadata is not a shipped runtime reference or a second suppression.
 
-Review A and final-head CI/floor/board gates remain required. No independent human
-approval is claimed, and the PR stays draft until both reviews are disposed.
+Both firstmate-arranged re-reviews have now arrived (steering 007/008) and close the
+P2 code findings; final-head CI/floor/board is the remaining P2 gate. No independent
+human approval is claimed, and the PR stays draft until that gate is closed.
+
+## Review A disposition
+
+- **P2 fixed in 747fd06:** `LibraryMigration.RunAsync` now requires sourceDirectory;
+  its opening path checks call RequirePlainDirectory for both roots, reject every
+  output artifact overlapping the source, reject ancestor links, and reject a live
+  destination link. The exact change is `git diff b13630d 747fd06 --
+  src/Playnite.Core/Import/LibraryMigration.cs`. The direct-API regression is
+  `Public_Core_API_rejects_source_containment_and_symlinked_parents_without_CLI_help`,
+  covering containment, parent/live links, source/staging aliasing and byte identity.
+  The follow-up also tests a symlinked source ancestor, the filesystem root, source
+  nested inside staging, an existing destination directory, source nested inside
+  that directory, and a dangling live-path symlink. FileInfo.LinkTarget rejects
+  dangling links even when the target does not exist; directories fail before writes.
+- **P3 fixed:** the audit guard now scans test projects and global build files;
+  WAL checkpoint output is checked and a standalone-main-file publication test
+  proves sidecars are not required; duplicate database.json root keys are rejected.
+  BSON dates with Unspecified kind are refused rather than given a guessed zone.
+  Separate UTC, Pacific/Honolulu and Asia/Tokyo child processes prove the same
+  frozen fixture activity/added instants are emitted as exact UTC strings.
+- **P3 explicit threat boundary:** source and destination namespaces must be quiescent,
+  private directories containing ordinary regular files. Attribute checks are not
+  descriptor-relative openat/O_NOFOLLOW protection and have TOCTOU windows against
+  a concurrent namespace attacker. The BCL-only reader does not enforce POSIX
+  inode type/link-count checks: FIFO/device entries may block or exhaust resources,
+  and hard links are read as files rather than sandboxed within the source tree.
+  Such sources are unsupported trusted-input violations, not a claim of enforced
+  sandboxing. The migration does not write those source entries. Stronger POSIX
+  namespace confinement requires a separately reviewed isolation/platform design;
+  the owner-authorized exception still carries parser/exhaustion residual risk.
+- **P3 retained evidence, not broad cleanup:** staging intentionally keeps the source
+  intermediate/manifest after success and leaves unknown regular files untouched.
+  A matching manifest is a restart-consistency token, not an authenticity token.
+  Private staging is required; untrusted prepopulation/concurrent mutation is not
+  supported. No recursive cleanup of potentially unrelated files is performed.
+- **P3 scope clarified:** the source-level raw-reader guard is not package-IL proof
+  and deliberately does not ban Core's explicit known-model Populate path. Core's
+  TypeNameHandling.None/JsonValueGuard plus full-document nested trap tests enforce
+  that boundary. The envelope SourceHash meaning is documented above. Historical
+  floor captures remain append-only; the final implementation receives a new real-CI
+  capture and its evidence-only head is separately revalidated before readiness.
+
+Both re-reviews close their P2 code findings on 747fd06; Review B's P2-3 remains a
+delivery gate until the refreshed floor/board commit is inside the PR. Downloaded
+linux-ci run 43917159311 on 747fd06 independently confirms **1701 Core / 163
+Architecture / 4 Smoke**, all passed, zero skips, every exit 0. The inexpensive P3
+follow-up adds five Core cases and ten guard controls, so its own real CI run must
+be captured rather than pretending the earlier run covers those new cases.

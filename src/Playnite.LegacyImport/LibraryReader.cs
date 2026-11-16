@@ -15,6 +15,8 @@ internal static class LibraryReader
         var copies = new List<(string Path, byte[] Bytes)>();
         Capture(source, source, copies);
         using var marker = JsonDocument.Parse(copies.Single(c => c.Path == "database.json").Bytes);
+        if (marker.RootElement.EnumerateObject().GroupBy(p => p.Name, StringComparer.Ordinal).Any(g => g.Count() > 1))
+            throw new InvalidDataException("Duplicate database.json marker keys are not supported.");
         if (marker.RootElement.GetProperty("Version").GetInt32() != 4)
         {
             throw new InvalidDataException("Only the v10 database format (Version 4) is supported.");
@@ -74,8 +76,13 @@ internal static class LibraryReader
         if (value.IsDocument) return value.AsDocument.ToDictionary(p => p.Key, p => ConvertValue(p.Value), StringComparer.Ordinal);
         if (value.IsArray) return value.AsArray.Select(ConvertValue).ToArray();
         if (value.IsGuid) return value.AsGuid.ToString("D");
-        // LiteDB dates are milliseconds since the UTC epoch; never infer a host timezone.
-        if (value.IsDateTime) return value.AsDateTime.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture);
+        // LiteDB decodes an epoch instant as Local or Utc. Refuse Unspecified instead of inferring a timezone.
+        if (value.IsDateTime)
+        {
+            var date = value.AsDateTime;
+            if (date.Kind == DateTimeKind.Unspecified) throw new InvalidDataException("BSON datetime has no timezone kind.");
+            return date.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture);
+        }
         if (value.IsBinary) return new { bsonType = "binary", base64 = Convert.ToBase64String(value.AsBinary) };
         if (value.IsObjectId) return new { bsonType = "objectId", hex = value.AsObjectId.ToString() };
         if (value.IsString) return value.AsString;

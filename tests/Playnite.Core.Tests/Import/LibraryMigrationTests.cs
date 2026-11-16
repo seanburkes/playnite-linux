@@ -332,8 +332,13 @@ public sealed class LibraryMigrationTests : IDisposable
         Assert.Contains("outside the source", contained.Message);
         var parent = Path.Combine(temporary, "alias"); Directory.CreateSymbolicLink(parent, source);
         await Assert.ThrowsAsync<IOException>(() => LibraryMigration.RunAsync(envelope, source, Path.Combine(parent, "library.sqlite")));
+        await Assert.ThrowsAsync<IOException>(() => LibraryMigration.RunAsync(envelope, parent, Destination));
+        await Assert.ThrowsAsync<ArgumentException>(() => LibraryMigration.RunAsync(envelope, Path.GetPathRoot(source)!, Destination));
         var destinationLink = Path.Combine(temporary, "destination-link"); File.CreateSymbolicLink(destinationLink, Path.Combine(source, "games.db"));
         await Assert.ThrowsAsync<IOException>(() => LibraryMigration.RunAsync(envelope, source, destinationLink));
+        var dangling = Path.Combine(temporary, "dangling-link"); File.CreateSymbolicLink(dangling, Path.Combine(temporary, "missing.sqlite"));
+        await Assert.ThrowsAsync<IOException>(() => LibraryMigration.RunAsync(envelope, source, dangling));
+        Assert.NotNull(new FileInfo(dangling).LinkTarget);
         Assert.Equal(before, Snapshot(source));
         Assert.False(File.Exists(Destination));
         var stagingSource = Path.Combine(temporary, "staging-source.import"); Directory.CreateDirectory(stagingSource);
@@ -341,6 +346,14 @@ public sealed class LibraryMigrationTests : IDisposable
         var stagingBefore = Snapshot(stagingSource);
         await Assert.ThrowsAsync<ArgumentException>(() => LibraryMigration.RunAsync(envelope, stagingSource, stagingSource[..^7]));
         Assert.Equal(stagingBefore, Snapshot(stagingSource));
+        var nestedSource = Path.Combine(stagingSource, "nested"); Directory.CreateDirectory(nestedSource);
+        await Assert.ThrowsAsync<ArgumentException>(() => LibraryMigration.RunAsync(envelope, nestedSource, stagingSource[..^7]));
+        var destinationDirectory = Path.Combine(temporary, "destination-directory"); Directory.CreateDirectory(destinationDirectory);
+        var directoryRefusal = await Assert.ThrowsAsync<IOException>(() => LibraryMigration.RunAsync(envelope, source, destinationDirectory));
+        Assert.Contains("existing directory", directoryRefusal.Message);
+        var insideDestination = Path.Combine(destinationDirectory, "source"); Directory.CreateDirectory(insideDestination);
+        await Assert.ThrowsAsync<IOException>(() => LibraryMigration.RunAsync(envelope, insideDestination, destinationDirectory));
+        Assert.False(Directory.Exists(destinationDirectory + ".import"));
     }
 
     [Fact]
@@ -352,6 +365,59 @@ public sealed class LibraryMigrationTests : IDisposable
         var error = await Assert.ThrowsAsync<InvalidDataException>(() => LibraryMigration.RunAsync(envelope.ToString(), Fixture(), Destination));
         Assert.Contains("games.db/Game/10000000-0000-0000-0000-000000000001", error.Message);
         Assert.Empty(Directory.GetFileSystemEntries(temporary));
+    }
+
+    [Fact]
+    public async Task Before_publication_the_main_file_alone_has_every_game_and_WAL_is_empty()
+    {
+        var envelope = await ReadEnvelope();
+        var standalone = Path.Combine(temporary, "standalone.sqlite");
+        await LibraryMigration.RunAsync(envelope, Fixture(), Destination, checkpoint: state =>
+        {
+            if (state != "BeforeSwap") return;
+            var staged = Path.Combine(Destination + ".import", "library.sqlite");
+            Assert.True(!File.Exists(staged + "-wal") || new FileInfo(staged + "-wal").Length == 0);
+            File.Copy(staged, standalone);
+            using var connection = new Microsoft.Data.Sqlite.SqliteConnection(new Microsoft.Data.Sqlite.SqliteConnectionStringBuilder
+            { DataSource = standalone, Mode = Microsoft.Data.Sqlite.SqliteOpenMode.ReadOnly, Pooling = false }.ToString());
+            connection.Open();
+            using var command = connection.CreateCommand(); command.CommandText = "SELECT COUNT(*) FROM game;";
+            Assert.Equal(3L, command.ExecuteScalar());
+        });
+        Assert.True(File.Exists(Destination));
+    }
+
+    [Theory]
+    [InlineData("UTC")]
+    [InlineData("Pacific/Honolulu")]
+    [InlineData("Asia/Tokyo")]
+    public async Task BSON_epoch_dates_retain_the_same_UTC_instant_in_non_UTC_reader_processes(string timezone)
+    {
+        var start = Start(Product("Playnite.LegacyImport")); start.ArgumentList.Add(Fixture()); start.Environment["TZ"] = timezone;
+        using var process = Process.Start(start)!;
+        var output = process.StandardOutput.ReadToEndAsync(); var error = process.StandardError.ReadToEndAsync();
+        await process.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(30));
+        Assert.True(process.ExitCode == 0, await error);
+        using var document = JsonDocument.Parse(await output);
+        var game = document.RootElement.GetProperty("records").EnumerateArray().First(r => r.GetProperty("collection").GetString() == "Game");
+        Assert.Equal("2020-02-03T04:05:06.0000000Z", game.GetProperty("data").GetProperty("LastActivity").GetString());
+        Assert.Equal("2020-01-02T03:04:05.0000000Z", game.GetProperty("data").GetProperty("Added").GetString());
+    }
+
+    [Fact]
+    public async Task Duplicate_database_marker_keys_fail_without_repair_or_source_mutation()
+    {
+        var source = Path.Combine(temporary, "source"); Directory.CreateDirectory(source);
+        foreach (var file in Directory.GetFiles(Fixture())) File.Copy(file, Path.Combine(source, Path.GetFileName(file)));
+        File.WriteAllText(Path.Combine(source, "database.json"), "{\"Version\":1,\"Version\":4}");
+        var before = Snapshot(source);
+        var start = Start(Product("Playnite.LegacyImport")); start.ArgumentList.Add(source);
+        using var process = Process.Start(start)!;
+        var output = process.StandardOutput.ReadToEndAsync(); var error = process.StandardError.ReadToEndAsync();
+        await process.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(30));
+        Assert.NotEqual(0, process.ExitCode); Assert.Empty(await output);
+        Assert.Contains("Duplicate database.json", await error);
+        Assert.Equal(before, Snapshot(source));
     }
 
     private sealed class ReaderContext(string reader) : AssemblyLoadContext(isCollectible: true)

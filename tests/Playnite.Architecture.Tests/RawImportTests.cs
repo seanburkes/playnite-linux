@@ -11,11 +11,13 @@ public sealed class RawImportTests
         "BsonMapper", "LiteDatabase", "GetCollection", "ToObject", "Deserialize", "DeserializeObject",
         "Populate", "CreateInstance", "Activator", "Assembly", "GetType", "TypeNameHandling",
         "LiteCollection", "BsonSerializer", "AssemblyLoadContext", "dynamic", "MethodInfo", "ConstructorInfo", "Invoke",
+        "ReadObject", "DynamicInvoke", "Emit", "Compile", "Expression", "DataContractSerializer", "BinaryFormatter", "JavaScriptSerializer",
+        "FormatterServices", "GetUninitializedObject",
     };
 
     private static string[] Violations(string source) => CSharpSyntaxTree.ParseText(source).GetRoot().DescendantNodes()
         .OfType<SimpleNameSyntax>().Select(n => n.Identifier.ValueText)
-        .Where(n => Forbidden.Contains(n) || n.StartsWith("Deserialize", StringComparison.Ordinal) || n.StartsWith("Populate", StringComparison.Ordinal))
+        .Where(n => Forbidden.Contains(n) || n.Contains("Deserialize", StringComparison.Ordinal) || n.StartsWith("Populate", StringComparison.Ordinal))
         .Distinct().Order().ToArray();
 
     [Fact]
@@ -52,6 +54,16 @@ public sealed class RawImportTests
     [InlineData("MethodInfo method; method.Invoke(target, args);", "MethodInfo")]
     [InlineData("ConstructorInfo constructor; constructor.Invoke(args);", "ConstructorInfo")]
     [InlineData("method.Invoke(target, args);", "Invoke")]
+    [InlineData("formatter.UnsafeDeserialize(stream);", "UnsafeDeserialize")]
+    [InlineData("serializer.ReadObject(stream);", "ReadObject")]
+    [InlineData("callback.DynamicInvoke(args);", "DynamicInvoke")]
+    [InlineData("generator.Emit(opcode);", "Emit")]
+    [InlineData("expression.Compile();", "Compile")]
+    [InlineData("Expression.New(type);", "Expression")]
+    [InlineData("new DataContractSerializer(type);", "DataContractSerializer")]
+    [InlineData("new BinaryFormatter();", "BinaryFormatter")]
+    [InlineData("new JavaScriptSerializer();", "JavaScriptSerializer")]
+    [InlineData("FormatterServices.GetUninitializedObject(type);", "GetUninitializedObject")]
     public void Negative_guard_rejects_typed_mapping_and_object_construction(string source, string violation)
         => Assert.Contains(violation, Violations(source));
 
