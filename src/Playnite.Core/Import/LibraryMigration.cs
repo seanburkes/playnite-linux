@@ -14,7 +14,12 @@ public sealed record MigrationDecision(string File, string Collection, string Id
 
 /// <summary>Auditable migration plan/result. Documents not imported are retained in the intermediate.</summary>
 public sealed record MigrationReport(int Version, string SourceHash, int ExpectedSteam, int ImportedSteam,
-    bool DryRun, IReadOnlyList<MigrationDecision> Decisions);
+    bool DryRun, IReadOnlyList<MigrationDecision> Decisions, IReadOnlyList<AssetResult> Assets)
+{
+    public int MissingAssets => Assets.Count(a => a.Outcome == "missing");
+    public int UnreadableAssets => Assets.Count(a => a.Outcome == "unreadable");
+    public int EmptyAssets => Assets.Count(a => a.Outcome == "empty");
+}
 
 /// <summary>Consumes JSON v1, never LiteDB. Publishes only a verified, closed SQLite file.</summary>
 public static class LibraryMigration
@@ -33,7 +38,7 @@ public static class LibraryMigration
         RequirePlainDirectory(sourceDirectory);
         RequirePlainDirectory(Path.GetDirectoryName(destination)!);
         if (Directory.Exists(destination)) throw new IOException("Destination is an existing directory, not a database file.");
-        var artifacts = new[] { destination, destination + ".import", destination + ".import.lock", destination + ".import-report.json" };
+        var artifacts = new[] { destination, destination + ".assets", destination + ".import", destination + ".import.lock", destination + ".import-report.json" };
         if (artifacts.Any(path => path == sourceDirectory || path.StartsWith(sourceDirectory + Path.DirectorySeparatorChar, StringComparison.Ordinal)) ||
             sourceDirectory.StartsWith(destination + ".import" + Path.DirectorySeparatorChar, StringComparison.Ordinal) || sourceDirectory == Path.GetPathRoot(sourceDirectory))
             throw new ArgumentException("Destination and migration artifacts must be outside the source directory.");
@@ -94,8 +99,20 @@ public static class LibraryMigration
             throw new InvalidDataException("Duplicate source identities; refusing the entire import.");
         ValidateReferences(games, metadata.Select(m => m.Value).ToArray());
         checkpoint?.Invoke("Transformed");
-        var report = new MigrationReport(1, sourceHash, games.Count, dryRun ? 0 : games.Count, dryRun, decisions);
-        if (dryRun) return report;
+        var references = new List<AssetReference>();
+        foreach (var row in rows.Where(r => decisions.Any(d => d.File == r.File && d.Collection == r.Collection && d.Identity == r.Identity && d.Outcome == "import")))
+        {
+            var fields = row.Collection == "Game" ? new[] { "Icon", "CoverImage", "BackgroundImage" } : row.Collection == "Platform" ? ["Icon", "Cover", "Background"] : [];
+            foreach (var field in fields)
+            {
+                if ((string?)row.Data[field] is not { Length: > 0 } path) continue;
+                var manifest = files.SingleOrDefault(f => (string?)f["path"] == "files/" + path.Replace('\\', '/'));
+                references.Add(new(row.File, row.Collection, row.Identity, field, path, (string?)manifest?["sha256"], (long?)manifest?["size"]));
+            }
+        }
+        if (dryRun)
+            return new(1, sourceHash, games.Count, 0, true, decisions,
+                await AssetCopy.RunAsync(sourceDirectory, destination + ".assets", references, dryRun: true, cancellationToken: cancellationToken).ConfigureAwait(false));
         if (File.Exists(destination)) throw new IOException("Destination already exists; import refuses to overwrite it (including on a second run).");
         var staging = destination + ".import";
         foreach (var artifact in new[] { destination + ".import.lock", destination + ".import-report.json", staging })
@@ -116,6 +133,32 @@ public static class LibraryMigration
         }
         await File.WriteAllTextAsync(manifestPath, ownership.ToString(Formatting.None), cancellationToken).ConfigureAwait(false);
         await File.WriteAllTextAsync(Path.Combine(staging, "source.json"), intermediate, cancellationToken).ConfigureAwait(false);
+        var assets = await AssetCopy.RunAsync(sourceDirectory, destination + ".assets", references, checkpoint: checkpoint, cancellationToken: cancellationToken).ConfigureAwait(false);
+        foreach (var asset in assets.Where(a => a.Destination != null))
+        {
+            var reference = asset.Reference;
+            if (reference.Collection == "Game")
+            {
+                var game = games.Single(g => g.Value.Id == Guid.Parse(reference.Identity)).Value;
+                switch (reference.Field)
+                {
+                    case "Icon": game.Icon = asset.Destination; break;
+                    case "CoverImage": game.CoverImage = asset.Destination; break;
+                    case "BackgroundImage": game.BackgroundImage = asset.Destination; break;
+                }
+            }
+            else
+            {
+                var platform = (Platform)metadata.Single(m => m.Row.Identity == reference.Identity && m.Row.Collection == reference.Collection).Value;
+                switch (reference.Field)
+                {
+                    case "Icon": platform.Icon = asset.Destination; break;
+                    case "Cover": platform.Cover = asset.Destination; break;
+                    case "Background": platform.Background = asset.Destination; break;
+                }
+            }
+        }
+        var report = new MigrationReport(1, sourceHash, games.Count, games.Count, false, decisions, assets);
         checkpoint?.Invoke("Copied");
         var temporary = Path.Combine(staging, "library.sqlite");
         foreach (var suffix in new[] { "", "-wal", "-shm" }) File.Delete(temporary + suffix);

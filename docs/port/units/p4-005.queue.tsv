@@ -1,2 +1,2 @@
 id	wave	area	unit	depends	status	owner	oracle	test	notes
-p4-005	W4	data	Asset copy/hash	p4-002	todo	import	golden:assets	test:assets	
+p4-005	W4	data	Asset copy/hash	p4-002	in-progress	fm/p4-005	legacy/source/Playnite/Database/GameDatabase.cs; tests/fixtures/v10-assets	AssetCopyTests; LibraryMigrationTests; RawImportTests	docs/port/p4-005-assets.md; streaming SHA-256 dedup and atomic asset publication; PNG/GIF/JPEG headers; per-record missing/unreadable/empty accounting; actual-CI floor and adversarial reviews pending

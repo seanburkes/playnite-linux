@@ -1,0 +1,5 @@
+[
+  { "file": "games.db", "collection": "Game", "identity": "10000000-0000-0000-0000-000000000001", "field": "Icon", "path": "10000000-0000-0000-0000-000000000001\\discord.png" },
+  { "file": "games.db", "collection": "Game", "identity": "10000000-0000-0000-0000-000000000001", "field": "CoverImage", "path": "10000000-0000-0000-0000-000000000001\\reddit.png" },
+  { "file": "games.db", "collection": "Game", "identity": "10000000-0000-0000-0000-000000000001", "field": "BackgroundImage", "path": "10000000-0000-0000-0000-000000000001\\missing.png" }
+]

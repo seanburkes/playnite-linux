@@ -1,0 +1,18 @@
+[
+  {
+    "path": "files/10000000-0000-0000-0000-000000000001/discord.png",
+    "oracle": "legacy/source/Playnite.DesktopApp/Themes/Desktop/Default/Images/discord.png",
+    "sha256": "30304c4e8261b43e4d08e0b44ed94a8bd03293c9aec3d61f85245a38cab11e3e",
+    "size": 1559,
+    "width": 245,
+    "height": 240
+  },
+  {
+    "path": "files/10000000-0000-0000-0000-000000000001/reddit.png",
+    "oracle": "legacy/source/Playnite.DesktopApp/Themes/Desktop/Default/Images/reddit.png",
+    "sha256": "bbefe99227dcb276a3b95b27cb5b1846089a19eebf920948950c65b6a6942b7f",
+    "size": 1924,
+    "width": 32,
+    "height": 32
+  }
+]
