@@ -1,2 +1,2 @@
 id	wave	area	unit	depends	status	owner	oracle	test	notes
-p3-007	W3	leaves	Localisation keys	p2-001	todo	ui	golden:loc	test:loc	reuse translations
+p3-007	W3	leaves	Localisation keys	p2-001	done	ui	golden:loc	test:loc	Superseded-by its continuation p3-007b, the delivered unit: https://github.com/seanburkes/playnite-linux/pull/78 merged at d6935c7ccef9672178bf647c9f412d7a47116ded; merge commit verified as an ancestor of main f6d5fab with git merge-base --is-ancestor; v10-derived evidence tests/golden/loc/english-v10.json and LocalizationKeyTests; base row retained, not a separate deliverable; aggregates parent-owned

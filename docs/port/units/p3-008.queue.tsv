@@ -1,2 +1,2 @@
 id	wave	area	unit	depends	status	owner	oracle	test	notes
-p3-008	W3	leaves	Archive/backup	p3-002	todo	core	golden:archive	test:archive	SharpCompress
+p3-008	W3	leaves	Archive/backup	p3-002	done	core	golden:archive	test:archive	Superseded-by its continuation p3-008b, the delivered unit: https://github.com/seanburkes/playnite-linux/pull/79 merged at e71ad0db1445f0e382485eaa2a4624d5ec8eb88a with the baseline ratchet https://github.com/seanburkes/playnite-linux/pull/80 merged at 65cada8182b1f9490bd07f053edfa3d6c8189ee0; both merge commits verified as ancestors of main f6d5fab with git merge-base --is-ancestor; v10-derived fixtures tests/fixtures/archives-v10 and goldens tests/golden/archives; base row retained, not a separate deliverable; aggregates parent-owned

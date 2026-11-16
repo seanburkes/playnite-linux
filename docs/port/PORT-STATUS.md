@@ -1,8 +1,8 @@
 # Port status
 
-**Phase:** 3 — authorised by owner acceptance of Phase 2 on 2026-11-15
-**Updated:** 2026-11-15
-**Next gate:** Phase 3 exit
+**Phase:** 3 — implementation merged; exit pending owner acceptance
+**Updated:** 2026-11-16
+**Next gate:** Phase 4 (only after the owner accepts the Phase 3 exit)
 
 ## Done
 
@@ -79,14 +79,30 @@
       to v1.1 and empty-library-open to Phase 4. Exit artifact
       https://github.com/seanburkes/playnite-linux/pull/64 merged at `0e39326`;
       owner acceptance authorises Phase 3, without waiving the recorded residual risks.
+- [x] Phase 3 pure-logic units merged: paths/XDG (#68), string/date/enum (#67),
+      serialisation (#69, #71), models/equality (#72, #74, #75), manifests (#73),
+      search/filter/sort (#76), localisation keys and diff (#78), archive/backup
+      (#79, #80), v10-to-new key migration (#81), locale coverage (#82), CRC/checksums
+      (#83, #85) and the bounded serialisation fuzz gate (#84). Base rows `p3-007` and
+      `p3-008` are resolved as superseded-by their continuations `p3-007b`/`p3-008b`.
+- [x] Phase 3 exit evidence drafted in `gates/P3-leaves.md` and checked at main
+      `f6d5fab`: run
+      [43803577215](https://github.com/seanburkes/playnite-linux/actions/runs/43803577215)
+      reports Core 1533/1533, Architecture 144/144 and Smoke 4/4 with zero
+      failures/skips; the bounded fuzz step printed `FUZZ COMPLETE`; `legacy/` is
+      unchanged since Phase 1; the English key-set diff is empty and missing
+      translations are reported. This is **ready for owner acceptance**, not a declared
+      exit.
 
 ## In flight
 
-None. Phase 2 units are done; Phase 3 is authorised but no implementation unit has started.
+None. Phase 3 units are merged; the exit is pending owner acceptance. Phase 4 has not
+started and is not dispatched by the exit draft.
 
 ## Not started
 
-- Phase 3+ porting units and any production code beyond the Phase 2 scaffold.
+- Phase 4+ porting units (SQLite migration, settings migration, real library import) and
+  any production code beyond the merged Phase 3 pure-logic leaves.
 
 ## Deferred / known limitations
 
@@ -123,8 +139,9 @@ None. Phase 2 units are done; Phase 3 is authorised but no implementation unit h
 
 ## Blockers
 
-- No Phase 3 entry blocker: the owner accepted Phase 2 with declared deferrals on
-  2026-11-15. Library-open and the negative-proof-log residual remain explicitly unproven.
+- No Phase 3 blocker: all Phase 3 pure-logic units are merged and the exit evidence is ready
+  for owner acceptance. Library-open and the negative-proof-log residual remain explicitly
+  unproven.
 - Release work still needs dependency redistribution/license review. Steam remains greenfield
   with corpus/real-install acceptance rather than a v10 implementation diff; neither is an
   unreported scaffolding test pass.
@@ -137,7 +154,7 @@ None. Phase 2 units are done; Phase 3 is authorised but no implementation unit h
 | Legacy XAML LOC | 68,226 | `scan_legacy.py` |
 | Legacy executed cases (oracle) | 281 passed, 3 excluded | `tests/baseline.json` |
 | Windows-only files (non-WPF) | 72 | `scan_legacy.py` |
-| New-suite recorded baseline | 103 architecture + 4 smoke; Core declared empty | `tests/baseline.json`, run 43740834379 |
-| Current new-suite cases | 144 architecture + 4 smoke; zero failures/skips | run 43758217982 on `a2b6633` |
+| New-suite recorded baseline | 1533 Core + 103 architecture + 4 smoke | `tests/baseline.json`, additive captures through run 43800467861 |
+| Current new-suite cases | 1533 Core + 144 architecture + 4 smoke; zero failures/skips | run 43803577215 on `f6d5fab` |
 | Ported parity rows | 0 | `surface-parity.tsv` (0 of 96 rows ported) |
 | Open ADRs | 0 | `00-DECISIONS.md` |
