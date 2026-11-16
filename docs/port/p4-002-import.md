@@ -131,3 +131,15 @@ patterns are rejected. The guard covers evaluated reader compiler sources.
 checks both dependency directions. It complements the existing architecture table
 and compiled/source gates, which remain enabled. Two adversarial reviews and real
 linux-ci-backed floor capture are delivery gates; local test counts are not floor evidence.
+
+## CI-backed floor capture
+
+Actual [linux-ci run 43913516510](https://github.com/seanburkes/playnite-linux/actions/runs/43913516510)
+on merged implementation head `0bf3204e04db5c6829765a1241600a92a0c36bfa` passed.
+Downloaded JUnit testcase elements and MTP exit files independently confirm
+**1695 Core / 153 Architecture / 4 Smoke**, all passed, zero failures/skips, every
+exit 0. Core includes main's hardened schema-version-3/settings union (1671) plus
+24 importer cases; Architecture adds nine raw-reader policy cases to 144.
+The additive floor commit retains every earlier capture and requires its own
+linux-ci revalidation before readiness. Two firstmate-arranged adversarial reviews
+remain a merge gate; this capture is not independent human approval.
