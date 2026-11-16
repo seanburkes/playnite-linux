@@ -96,3 +96,11 @@ and exit files confirm Core **1736**, Architecture **173**, Smoke **4**, all pas
 zero failed/skipped and all MTP exits 0. Only the Core floor rises from 1706 to the
 actual 1736 union. The floor commit is evidence-only; final pushed-head linux-ci
 and two firstmate-arranged adversarial diff reviews remain readiness gates.
+
+Review A's released-lock fix was validated by actual linux-ci
+[43954161343](https://github.com/seanburkes/playnite-linux/actions/runs/43954161343)
+on `723cf8e396a7af73038db170f0885db734347632`: downloaded artifacts confirm
+Core **1737**, Architecture **173**, Smoke **4**, all passed with zero failures/skips
+and all exits 0. The Core floor now protects that additional regression; previous
+captures remain intact. This evidence-only delta still requires final-head CI
+and A re-review/B closure before readiness.
