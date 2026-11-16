@@ -16,7 +16,7 @@ internal static class LibraryReader
             if ((directory.Attributes & FileAttributes.ReparsePoint) != 0) throw new InvalidDataException("Source ancestors cannot be symbolic links.");
         var copies = new List<CapturedFile>();
         Capture(source, source, copies);
-        using var marker = JsonDocument.Parse(copies.Single(c => c.Path == "database.json").Bytes ?? throw new IOException("Cannot read database.json."));
+        using var marker = ReadMarker(copies.Where(c => c.Path == "database.json").Select(c => c.Bytes));
         if (marker.RootElement.EnumerateObject().GroupBy(p => p.Name, StringComparer.Ordinal).Any(g => g.Count() > 1))
             throw new InvalidDataException("Duplicate database.json marker keys are not supported.");
         if (marker.RootElement.GetProperty("Version").GetInt32() != 4)
@@ -49,6 +49,14 @@ internal static class LibraryReader
         if (after.Count != copies.Count || copies.Any(c => !after.Any(a => a.Path == c.Path && a.Size == c.Size && a.Sha256 == c.Sha256 && a.Status == c.Status)))
             throw new IOException("Source changed during read; refusing a mixed snapshot.");
         return new { format = "playnite-v10-library", version = 1, files, records };
+    }
+
+    internal static JsonDocument ReadMarker(IEnumerable<byte[]?> matches)
+    {
+        var markers = matches.ToArray();
+        if (markers.Length != 1)
+            throw new InvalidDataException($"Expected exactly one database.json at the source root; found {markers.Length}.");
+        return JsonDocument.Parse(markers[0] ?? throw new IOException("Cannot read database.json."));
     }
 
     private static void Capture(string root, string directory, List<CapturedFile> copies)

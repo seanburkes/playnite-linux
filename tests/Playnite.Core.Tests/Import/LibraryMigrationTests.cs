@@ -420,6 +420,47 @@ public sealed partial class LibraryMigrationTests : IDisposable
         Assert.Equal(before, Snapshot(source));
     }
 
+    [Fact]
+    [Trait("Invariant", "LibraryImport.SourceUnchanged")]
+    public async Task Missing_database_json_refuses_with_expected_filename_and_found_count_without_mutating_source()
+    {
+        var source = Path.Combine(temporary, "missing-marker");
+        Directory.CreateDirectory(source);
+        foreach (var file in Directory.GetFiles(Fixture()).Where(p => Path.GetFileName(p) != "database.json"))
+            File.Copy(file, Path.Combine(source, Path.GetFileName(file)));
+        var before = Snapshot(source);
+        var start = Start(Product("Playnite.LegacyImport"));
+        start.ArgumentList.Add(source);
+        using var process = Process.Start(start)!;
+        var output = process.StandardOutput.ReadToEndAsync();
+        var error = process.StandardError.ReadToEndAsync();
+        await process.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(30));
+        Assert.NotEqual(0, process.ExitCode);
+        Assert.Contains("Expected exactly one database.json at the source root; found 0.", await error);
+        Assert.Empty(await output);
+        Assert.Equal(before, Snapshot(source));
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(2)]
+    public void Missing_or_duplicate_captured_markers_refuse_explicitly_with_a_working_single_marker_control(int count)
+    {
+        var context = new ReaderContext(Product("Playnite.LegacyImport"));
+        try
+        {
+            var assembly = context.LoadFromAssemblyPath(Product("Playnite.LegacyImport"));
+            var method = assembly.GetType("Playnite.LegacyImport.LibraryReader", true)!.GetMethod("ReadMarker", BindingFlags.NonPublic | BindingFlags.Static)!;
+            var bytes = File.ReadAllBytes(Path.Combine(Fixture(), "database.json"));
+            using var control = Assert.IsType<JsonDocument>(method.Invoke(null, [new byte[]?[] { bytes }]));
+            Assert.Equal(4, control.RootElement.GetProperty("Version").GetInt32());
+            // A real directory cannot contain two identical root names; exercise duplicate capture directly.
+            var error = Assert.Throws<TargetInvocationException>(() => method.Invoke(null, [Enumerable.Repeat<byte[]?>(bytes, count).ToArray()]));
+            Assert.Equal($"Expected exactly one database.json at the source root; found {count}.", Assert.IsType<InvalidDataException>(error.InnerException).Message);
+        }
+        finally { context.Unload(); }
+    }
+
     private sealed class ReaderContext(string reader) : AssemblyLoadContext(isCollectible: true)
     {
         protected override Assembly? Load(AssemblyName name)

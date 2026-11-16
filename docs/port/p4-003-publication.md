@@ -228,3 +228,15 @@ repeat refusal from the artifact alone while the source remains byte-identical.
 The complete narrow Core suite covers asset, receipt, report, replacement and crash
 tests together; its measured combined-head counts and real CI run are recorded in
 the shard/floor evidence, never inferred by summing the two branches.
+
+Combined Review A on `602e977` confirmed the replacement P2s and completion/audit
+ordering closed. Its inherited reader-diagnostic P2 is fixed **with this unit**,
+not attributed to https://github.com/seanburkes/playnite-linux/pull/96:
+`ReadMarker` explicitly requires exactly one root `database.json` and reports the
+expected filename and actual count instead of leaking `Single`'s generic exception.
+A missing-marker subprocess test proves clear refusal and unchanged source bytes;
+zero/duplicate captured-marker tests use a working one-marker control. Identical
+root names cannot coexist in a real directory, so duplicate capture is exercised
+directly through the existing isolated-reader reflection test boundary. Successful
+reader behavior, marker-version/key validation and raw-only dependency policy are
+unchanged.
