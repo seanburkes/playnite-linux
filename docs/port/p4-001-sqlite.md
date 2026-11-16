@@ -125,11 +125,12 @@ revalidated **1630 Core / 144 Architecture / 4 Smoke** there, zero failures/skip
 record is retained as history, and this follow-up records the final-head provenance in its own
 capture record. The pre-unit merged main floor for #90 was 1583 Core.
 
-This review follow-up measured **1664 Core / 144 Architecture / 4 Smoke** on
-[linux-ci run 43816863124](https://github.com/seanburkes/playnite-linux/actions/runs/43816863124)
-at implementation head `f05ca563cf7d255faf21c28c73d20255899d3bf0`, independently counted from
+This review follow-up measured **1669 Core / 144 Architecture / 4 Smoke** on
+[linux-ci run 43819146506](https://github.com/seanburkes/playnite-linux/actions/runs/43819146506)
+at implementation head `652389a74ab8f44833181db375c45fc577b580aa`, independently counted from
 the downloaded JUnit testcase elements, `test-counts.json` and MTP exit files (all exit 0, zero
-failures/skips). Current main's floor is 1642 Core; the 22 added cases are 18
-destination-contract cases and four additional schema version 3 SIGKILL checkpoints. The floor
-commit changes only `tests/baseline.json`, this document and the p4-001 ledger shard, so the
-final pushed head's own linux-ci run revalidates the same 1664 cases.
+failures/skips). The earlier 1664 measurement on `f05ca56` was superseded by the Review B fixes.
+Current main's floor is 1642 Core; the 27 added cases are 18 destination-contract cases, four
+additional schema version 3 SIGKILL checkpoints, and five Review B cases. The floor commit
+changes only `tests/baseline.json`, this document and the p4-001 queue/ledger shards, so the
+final pushed head's own linux-ci run revalidates the same 1669 cases.
