@@ -108,10 +108,18 @@ CI-backed counts and the two adversarial diff-only reviews are delivery gates. T
 baseline floor capture is authorized by firstmate steering p4-001/001 and /002 under
 `oracle-change`; existing capture records, fixtures and goldens stay intact.
 
-Merged implementation head `7c339cc6373672c79aa83a3782c4864acdfaee81` includes current main's
-settings migration. Actual [linux-ci run 43813507631](https://github.com/seanburkes/playnite-linux/actions/runs/43813507631)
-passed with **1630 Core / 144 Architecture / 4 Smoke**, zero failures/skips, every MTP exit 0,
-independently counted from downloaded JUnit artifacts. This unit contributes 47 database cases;
-the pre-unit merged main floor is 1583 Core, not the earlier 1533 floor. The narrow Core Release
-build had zero warnings/errors, and the CI warning-as-error build and all five PR checks passed.
-The evidence-only floor commit must be revalidated on its own pushed head before readiness.
+The merged #90 final head was `83a8e338f7e8afa90306567362f77e22226f2e96`; its own
+[linux-ci run 43814054645](https://github.com/seanburkes/playnite-linux/actions/runs/43814054645)
+revalidated **1630 Core / 144 Architecture / 4 Smoke** there, zero failures/skips, every MTP exit
+0. `p4_001_capture` cites the earlier implementation head `7c339cc` and run 43813507631; that
+record is retained as history, and this follow-up records the final-head provenance in its own
+capture record. The pre-unit merged main floor for #90 was 1583 Core.
+
+This review follow-up measured **1664 Core / 144 Architecture / 4 Smoke** on
+[linux-ci run 43816863124](https://github.com/seanburkes/playnite-linux/actions/runs/43816863124)
+at implementation head `f05ca563cf7d255faf21c28c73d20255899d3bf0`, independently counted from
+the downloaded JUnit testcase elements, `test-counts.json` and MTP exit files (all exit 0, zero
+failures/skips). Current main's floor is 1642 Core; the 22 added cases are 18
+destination-contract cases and four additional schema version 3 SIGKILL checkpoints. The floor
+commit changes only `tests/baseline.json`, this document and the p4-001 ledger shard, so the
+final pushed head's own linux-ci run revalidates the same 1664 cases.
