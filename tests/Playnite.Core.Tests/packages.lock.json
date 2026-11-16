@@ -184,6 +184,12 @@
           "xunit.v3.runner.common": "[4.0.3]"
         }
       },
+      "assetcopy.crashhost": {
+        "type": "Project",
+        "dependencies": {
+          "Playnite.Core": "[1.0.0, )"
+        }
+      },
       "playnite.cli": {
         "type": "Project",
         "dependencies": {

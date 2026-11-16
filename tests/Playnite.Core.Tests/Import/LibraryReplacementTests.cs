@@ -459,6 +459,56 @@ public sealed partial class LibraryMigrationTests
         Assert.Empty(Directory.GetFileSystemEntries(temporary));
     }
 
+    [Fact]
+    [Trait("Invariant", "LibraryImport.DurableReceipt")]
+    [Trait("Invariant", "LibraryImport.SourceUnchanged")]
+    public async Task Combined_asset_replacement_receipt_verifies_full_asset_report_and_both_fingerprints()
+    {
+        await SeedLiveAsync();
+        var source = Path.Combine(temporary, "asset-source");
+        Directory.CreateDirectory(source);
+        foreach (var file in Directory.GetFiles(Fixture(), "*", SearchOption.AllDirectories))
+        {
+            var target = Path.Combine(source, Path.GetRelativePath(Fixture(), file));
+            Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+            File.Copy(file, target);
+        }
+        var bundle = Path.Combine(Root, "tests", "fixtures", "v10-assets");
+        foreach (var file in Directory.GetFiles(Path.Combine(bundle, "files"), "*", SearchOption.AllDirectories))
+        {
+            var target = Path.Combine(source, Path.GetRelativePath(bundle, file));
+            Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+            File.Copy(file, target);
+        }
+        var before = Snapshot(source);
+        var start = Start(Product("Playnite.LegacyImport"));
+        start.ArgumentList.Add(source);
+        using var reader = System.Diagnostics.Process.Start(start)!;
+        var envelopeTask = reader.StandardOutput.ReadToEndAsync();
+        var errors = reader.StandardError.ReadToEndAsync();
+        await reader.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(30));
+        Assert.True(reader.ExitCode == 0, await errors);
+        var envelope = await envelopeTask;
+        var report = await LibraryMigration.RunAsync(envelope, source, Destination, replaceExisting: true);
+        Assert.Equal(3, report.Assets.Count);
+        Assert.Equal(1, report.MissingAssets);
+        Assert.Equal(2, report.Assets.Count(a => a.Outcome == "copied"));
+        foreach (var asset in report.Assets.Where(a => a.Destination != null))
+            Assert.Equal(asset.Reference.Sha256, Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(Path.Combine(temporary, asset.Destination!)))));
+        using (var connection = new SqliteConnection($"Data Source={Destination};Pooling=False"))
+        {
+            await connection.OpenAsync();
+            Assert.Equal(report.SourceHash, await connection.ExecuteScalarAsync<string>("SELECT SourceHash FROM playnite_migration_receipt WHERE Id=1;"));
+            Assert.Equal(report.SourceManifestHash, await connection.ExecuteScalarAsync<string>("SELECT SourceManifestHash FROM playnite_migration_receipt WHERE Id=1;"));
+            Assert.Equal(System.Text.Json.JsonSerializer.Serialize(report), await connection.ExecuteScalarAsync<string>("SELECT ReportJson FROM playnite_migration_receipt WHERE Id=1;"));
+        }
+        Assert.Equal(System.Text.Json.JsonSerializer.Serialize(report), await File.ReadAllTextAsync(Destination + ".import-report.json"));
+        File.Delete(Destination + ".import-report.json");
+        Directory.Delete(Destination + ".import", recursive: true);
+        await Assert.ThrowsAsync<IOException>(() => LibraryMigration.RunAsync(envelope, source, Destination, replaceExisting: true));
+        Assert.Equal(before, Snapshot(source));
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]

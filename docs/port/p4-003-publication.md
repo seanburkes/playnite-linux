@@ -45,6 +45,9 @@ bytes, rather than only imported rows. It is a reader-supplied manifest identity
 not an independent writer rehash or a filesystem-wide atomic snapshot. The test
 reconstructs it independently from every frozen fixture file and proves a changed
 record changes `SourceHash` but not `SourceManifestHash`.
+Unreadable entries from the asset reader retain null size/hash in this manifest;
+no raw bytes are claimed for them. The full-envelope `SourceHash` separately
+binds their status and the complete receipt report retains per-asset outcomes.
 
 ### SQLite generation lease
 
@@ -199,3 +202,28 @@ Closure Review A additionally required acknowledgment/audit ordering: the extern
 audit move now follows `Committed`. The post-completion fault test asserts no audit
 exists both inside the checkpoint and after the thrown failure, proves all new
 rows remain, removes all staging material, and proves artifact-only repeat refusal.
+
+### Combined asset/publication integration
+
+This unit builds on p4-001 SQLite, p4-002 reader/importer and the reviewed p4-005
+asset implementation at `6c38c22da6a80fc1d4907a7f152bbf84dfed4516` from
+https://github.com/seanburkes/playnite-linux/pull/96. Per steering006 that reviewed
+head is merged directly while its unrelated shared Flatpak/main gate is repaired
+by firstmate; this worker does not rerun or edit packaging.
+
+The merge explicitly retains **both** `MigrationReport.SourceManifestHash` and
+`Assets` (plus its missing/unreadable/empty counters), in both dry-run and real-run
+construction. The namespaced receipt is created only after asset copying and
+reference rewriting; its verified ReportJson includes the complete asset report.
+Generated-artifact containment includes both the `.assets` store and publication
+lease. Explicit replacement consent and artifact-only refusal remain authoritative,
+not the asset branch's superseded unconditional existing-path refusal.
+
+The combined regression replaces an existing library using the unchanged Windows
+v10 databases plus p4-005's provenance-bearing `v10-assets` derivative, checks two
+copied asset blobs by hash and one missing reference, checks both fingerprint
+columns and exact full ReportJson/audit equality, removes audit/staging, and proves
+repeat refusal from the artifact alone while the source remains byte-identical.
+The complete narrow Core suite covers asset, receipt, report, replacement and crash
+tests together; its measured combined-head counts and real CI run are recorded in
+the shard/floor evidence, never inferred by summing the two branches.
