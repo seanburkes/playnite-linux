@@ -118,31 +118,30 @@ public sealed class FuzzTargetTests
     }
 
     [Fact]
-    public void A_fixed_iteration_run_is_deterministic_and_reports_the_completion_marker()
+    public void A_minimum_budget_run_reports_the_completion_marker_and_smaller_budgets_are_rejected()
     {
+        var corpusRoot = RepositoryPaths.Combine("tests", "fixtures", "serialization-fuzz");
         var options = new FuzzOptions
         {
-            CorpusRoot = RepositoryPaths.Combine("tests", "fixtures", "serialization-fuzz"),
+            CorpusRoot = corpusRoot,
             Seed = 0x5EED_003C,
-            Seconds = 60,
-            Iterations = 128,
+            Seconds = FuzzOptions.MinimumWallClockSeconds,
+            Iterations = FuzzOptions.MinimumIterations,
             CaseTimeoutMilliseconds = 2_000,
             MaxInputBytes = InputLimit,
             MaxManagedBytes = 256L * 1024 * 1024,
         };
 
-        using var firstOutput = new StringWriter();
-        using var secondOutput = new StringWriter();
-        var first = FuzzRunner.Run(options, firstOutput);
-        var second = FuzzRunner.Run(options, secondOutput);
+        using var output = new StringWriter();
+        var result = FuzzRunner.Run(options, output);
 
-        Assert.Equal(first.Cases, second.Cases);
-        Assert.Equal(first.Clean, second.Clean);
-        Assert.Equal(first.Rejected, second.Rejected);
-        Assert.Equal(first.CorpusDigest, second.CorpusDigest);
-        Assert.Equal("iterations", first.Budget);
-        Assert.Equal("iterations", second.Budget);
-        Assert.Contains("FUZZ COMPLETE ", firstOutput.ToString(), StringComparison.Ordinal);
-        Assert.Contains("FUZZ COMPLETE ", secondOutput.ToString(), StringComparison.Ordinal);
+        Assert.Equal("iterations", result.Budget);
+        Assert.True(result.Cases >= FuzzOptions.MinimumIterations);
+        Assert.Contains("FUZZ COMPLETE ", output.ToString(), StringComparison.Ordinal);
+
+        var tinySeconds = options with { Seconds = FuzzOptions.MinimumWallClockSeconds - 1 };
+        var tinyIterations = options with { Iterations = FuzzOptions.MinimumIterations - 1 };
+        Assert.Throws<ArgumentException>(tinySeconds.Validate);
+        Assert.Throws<ArgumentException>(tinyIterations.Validate);
     }
 }

@@ -6,6 +6,12 @@ namespace Playnite.Fuzz;
 /// <summary>Configuration for one bounded fuzz run.</summary>
 public sealed record FuzzOptions
 {
+    /// <summary>Minimum wall-clock budget, so a tiny run cannot pass vacuously.</summary>
+    public const int MinimumWallClockSeconds = 30;
+
+    /// <summary>Minimum iteration budget, so a tiny run cannot pass vacuously.</summary>
+    public const long MinimumIterations = 100_000;
+
     /// <summary>Gets the committed corpus root.</summary>
     public string CorpusRoot { get; init; } = string.Empty;
 
@@ -36,14 +42,20 @@ public sealed record FuzzOptions
             throw new ArgumentException("A corpus root is required.", nameof(CorpusRoot));
         }
 
-        if (Seconds <= 0)
+        if (Seconds < MinimumWallClockSeconds)
         {
-            throw new ArgumentException("The wall-clock budget must be positive.", nameof(Seconds));
+            throw new ArgumentException(
+                $"The wall-clock budget must be at least {MinimumWallClockSeconds} seconds; " +
+                "a shorter run cannot complete a meaningful budget.",
+                nameof(Seconds));
         }
 
-        if (Iterations <= 0)
+        if (Iterations < MinimumIterations)
         {
-            throw new ArgumentException("The iteration budget must be positive.", nameof(Iterations));
+            throw new ArgumentException(
+                $"The iteration budget must be at least {MinimumIterations:N0}; " +
+                "a smaller run cannot complete a meaningful budget.",
+                nameof(Iterations));
         }
 
         if (CaseTimeoutMilliseconds <= 0)
@@ -103,7 +115,10 @@ public sealed class FuzzFailureException : Exception
 /// The loop stops only at a configured budget, and prints the completion marker after the
 /// final memory check. A crash, unhandled parser exception, case timeout, corpus drift or
 /// memory ceiling throws <see cref="FuzzFailureException"/> and no completion marker is
-/// printed, so the CI step cannot mistake a partial run for a pass.
+/// printed, so the CI step cannot mistake a partial run for a pass. Budgets below
+/// <see cref="FuzzOptions.MinimumWallClockSeconds"/> and
+/// <see cref="FuzzOptions.MinimumIterations"/> are rejected, so the marker is only meaningful
+/// when a configured budget at or above those minimums is exhausted cleanly.
 /// </remarks>
 public static class FuzzRunner
 {

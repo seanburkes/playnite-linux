@@ -15,16 +15,18 @@ public static class Program
         Options:
           --corpus <dir>            Committed corpus root (required).
           --seed <value>            Mutation seed; decimal or 0x-prefixed hexadecimal.
-          --seconds <n>             Wall-clock budget in seconds (default 120).
-          --iterations <n>          Iteration budget; whichever budget is reached first stops it.
+          --seconds <n>             Wall-clock budget in seconds (default 120, minimum 30).
+          --iterations <n>          Iteration budget (minimum 100000); whichever budget is
+                                    reached first stops the run.
           --case-timeout-ms <n>     Per-case hang timeout (default 2000).
           --max-input-bytes <n>     Parser size limit used for this run (default 65536).
           --max-memory-mb <n>       Managed-heap ceiling (default 256).
           --help                    Print this text.
 
-        A clean run prints a single "FUZZ COMPLETE" line. A crash, unhandled parser exception,
-        hang, corpus drift, malformed probe acceptance or memory overrun exits nonzero and does
-        not print that marker.
+        A clean run prints a single "FUZZ COMPLETE" line only after a configured budget at or
+        above the minimums is exhausted cleanly; smaller budgets are usage errors. A crash,
+        unhandled parser exception, hang, corpus drift, malformed probe acceptance or memory
+        overrun exits nonzero and does not print that marker.
         """;
 
     /// <summary>Runs the target.</summary>
