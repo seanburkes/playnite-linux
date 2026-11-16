@@ -13,7 +13,7 @@ namespace Playnite.Core.Import;
 public sealed record MigrationDecision(string File, string Collection, string Identity, string Outcome, string Reason);
 
 /// <summary>Auditable migration plan/result. Documents not imported are retained in the intermediate.</summary>
-public sealed record MigrationReport(int Version, string SourceHash, int ExpectedSteam, int ImportedSteam,
+public sealed record MigrationReport(int Version, string SourceHash, string SourceManifestHash, int ExpectedSteam, int ImportedSteam,
     bool DryRun, IReadOnlyList<MigrationDecision> Decisions);
 
 /// <summary>Consumes JSON v1, never LiteDB. Publishes only a verified, closed SQLite file.</summary>
@@ -22,9 +22,9 @@ public static class LibraryMigration
     private const string Steam = "cb91dfc9-b977-43bf-8e70-55f46e410fab";
     private sealed record Row(string File, string Collection, string Identity, JObject Data);
 
-    /// <summary>Plans without writes, or publishes a verified artifact, atomically replacing an unmigrated library.</summary>
+    /// <summary>Plans without writes, or publishes a verified artifact; replacing an unreceipted library requires explicit consent.</summary>
     public static async Task<MigrationReport> RunAsync(string intermediate, string sourceDirectory, string destination, bool dryRun = false,
-        Action<string>? checkpoint = null, CancellationToken cancellationToken = default)
+        Action<string>? checkpoint = null, CancellationToken cancellationToken = default, bool replaceExisting = false)
     {
         if (!Path.IsPathFullyQualified(sourceDirectory)) throw new ArgumentException("Source must be absolute.", nameof(sourceDirectory));
         if (!Path.IsPathFullyQualified(destination)) throw new ArgumentException("Destination must be absolute.", nameof(destination));
@@ -57,6 +57,9 @@ public static class LibraryMigration
         foreach (var row in rows)
             if (!files.Any(f => (string?)f["path"] == row.File)) throw new InvalidDataException($"Unmanifested record: {row.File}/{row.Identity}");
         var sourceHash = Convert.ToHexStringLower(SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(root.ToString(Formatting.None))));
+        var sourceManifestHash = Convert.ToHexStringLower(SHA256.HashData(System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(
+            files.OrderBy(f => (string?)f["path"], StringComparer.Ordinal)
+                .Select(f => new { path = (string?)f["path"], size = (long?)f["size"], sha256 = (string?)f["sha256"] }))));
         checkpoint?.Invoke("Read");
         var decisions = new List<MigrationDecision>();
         var games = new List<StoredGame>();
@@ -94,7 +97,7 @@ public static class LibraryMigration
             throw new InvalidDataException("Duplicate source identities; refusing the entire import.");
         ValidateReferences(games, metadata.Select(m => m.Value).ToArray());
         checkpoint?.Invoke("Transformed");
-        var report = new MigrationReport(1, sourceHash, games.Count, dryRun ? 0 : games.Count, dryRun, decisions);
+        var report = new MigrationReport(1, sourceHash, sourceManifestHash, games.Count, dryRun ? 0 : games.Count, dryRun, decisions);
         if (dryRun) return report;
         var staging = destination + ".import";
         foreach (var artifact in new[] { destination + ".import.lock", destination + ".import-report.json", staging })
@@ -103,8 +106,7 @@ public static class LibraryMigration
         // Lock file is deliberately retained; deleting a lock inode permits concurrent owners.
         using var lease = new FileStream(destination + ".import.lock", System.IO.FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
         using (await DatabasePublicationLease.AcquireAsync(destination, false, cancellationToken).ConfigureAwait(false))
-            if (File.Exists(destination) && await HasReceiptAsync(destination, cancellationToken).ConfigureAwait(false))
-                throw new IOException("Destination contains a durable migration receipt; refusing a second run.");
+            await CheckDestinationAsync(destination, replaceExisting, cancellationToken).ConfigureAwait(false);
         Directory.CreateDirectory(staging);
         if ((File.GetAttributes(staging) & FileAttributes.ReparsePoint) != 0 || Directory.EnumerateFileSystemEntries(staging).Any(p => (File.GetAttributes(p) & FileAttributes.ReparsePoint) != 0))
             throw new IOException("Staging area must not contain symbolic links.");
@@ -116,6 +118,12 @@ public static class LibraryMigration
                 throw new IOException("Staging area is not owned by this source/destination; refusing cleanup.");
         }
         await File.WriteAllTextAsync(manifestPath, ownership.ToString(Formatting.None), cancellationToken).ConfigureAwait(false);
+        var reportPath = destination + ".import-report.json";
+        if (File.Exists(reportPath))
+        {
+            File.Copy(reportPath, Path.Combine(staging, "previous-report.json"), overwrite: true);
+            File.Delete(reportPath);
+        }
         await File.WriteAllTextAsync(Path.Combine(staging, "source.json"), intermediate, cancellationToken).ConfigureAwait(false);
         checkpoint?.Invoke("Copied");
         var temporary = Path.Combine(staging, "library.sqlite");
@@ -151,9 +159,9 @@ public static class LibraryMigration
             await using (var transaction = await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false))
             {
                 await connection.ExecuteAsync(new CommandDefinition("""
-                    CREATE TABLE migration_receipt(Id INTEGER PRIMARY KEY CHECK(Id=1), SourceHash TEXT NOT NULL, ReportJson TEXT NOT NULL);
-                    INSERT INTO migration_receipt VALUES(1, @sourceHash, @reportJson);
-                    """, new { sourceHash, reportJson = System.Text.Json.JsonSerializer.Serialize(report) }, transaction, cancellationToken: cancellationToken)).ConfigureAwait(false);
+                    CREATE TABLE playnite_migration_receipt(Id INTEGER PRIMARY KEY CHECK(Id=1), SourceHash TEXT NOT NULL, SourceManifestHash TEXT NOT NULL, ReportJson TEXT NOT NULL);
+                    INSERT INTO playnite_migration_receipt VALUES(1, @sourceHash, @sourceManifestHash, @reportJson);
+                    """, new { sourceHash, sourceManifestHash, reportJson = System.Text.Json.JsonSerializer.Serialize(report) }, transaction, cancellationToken: cancellationToken)).ConfigureAwait(false);
                 await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
             }
             if (await connection.ExecuteScalarAsync<string>(new CommandDefinition("PRAGMA integrity_check;", cancellationToken: cancellationToken)).ConfigureAwait(false) != "ok" ||
@@ -164,7 +172,8 @@ public static class LibraryMigration
                 throw new InvalidDataException("WAL checkpoint was incomplete; refusing publication of the main file alone.");
         }
         checkpoint?.Invoke("Verified");
-        await File.WriteAllTextAsync(destination + ".import-report.json", System.Text.Json.JsonSerializer.Serialize(report), cancellationToken).ConfigureAwait(false);
+        var stagedReport = Path.Combine(staging, "report.json");
+        await File.WriteAllTextAsync(stagedReport, System.Text.Json.JsonSerializer.Serialize(report), cancellationToken).ConfigureAwait(false);
         using (var durable = new FileStream(temporary, System.IO.FileMode.Open, FileAccess.ReadWrite, FileShare.None)) durable.Flush(flushToDisk: true);
         cancellationToken.ThrowIfCancellationRequested();
         checkpoint?.Invoke("BeforeSwap");
@@ -173,10 +182,9 @@ public static class LibraryMigration
         {
             // All supported connections have drained, including their WAL checkpoint/close.
             // External SQLite connections do not participate in this protocol: fail closed.
-            if (File.Exists(destination + "-shm") || (File.Exists(destination + "-wal") && new FileInfo(destination + "-wal").Length != 0))
+            if (File.Exists(destination + "-shm") || File.Exists(destination + "-wal"))
                 throw new IOException("Live SQLite sidecars remain; close external database connections before replacement.");
-            if (File.Exists(destination) && await HasReceiptAsync(destination, cancellationToken).ConfigureAwait(false))
-                throw new IOException("Destination contains a durable migration receipt; refusing a second run.");
+            await CheckDestinationAsync(destination, replaceExisting, cancellationToken).ConfigureAwait(false);
             var previous = Path.Combine(staging, "previous.sqlite");
             var existed = File.Exists(destination);
             if (existed)
@@ -194,8 +202,9 @@ public static class LibraryMigration
                 swapped = true;
                 checkpoint?.Invoke("Swapped");
                 cancellationToken.ThrowIfCancellationRequested();
-                if (!await HasReceiptAsync(destination, cancellationToken, sourceHash).ConfigureAwait(false))
+                if (!await HasReceiptAsync(destination, cancellationToken, report).ConfigureAwait(false))
                     throw new InvalidDataException("Published artifact lost its migration receipt.");
+                File.Move(stagedReport, reportPath, overwrite: true);
                 checkpoint?.Invoke("ReceiptConfirmed");
                 cancellationToken.ThrowIfCancellationRequested();
             }
@@ -204,9 +213,11 @@ public static class LibraryMigration
                 // The exclusive lease hides the unconfirmed swap from supported readers.
                 if (swapped)
                 {
+                    foreach (var sidecar in Sidecars(destination)) File.Delete(sidecar);
                     if (existed) File.Move(previous, destination, overwrite: true);
                     else File.Delete(destination);
                 }
+                File.Delete(reportPath);
                 throw;
             }
         }
@@ -214,7 +225,24 @@ public static class LibraryMigration
         return report;
     }
 
-    private static async Task<bool> HasReceiptAsync(string path, CancellationToken cancellationToken, string? expectedSourceHash = null)
+    private static IEnumerable<string> Sidecars(string path) => new[] { path + "-wal", path + "-shm", path + "-journal" }
+        .Concat(Directory.EnumerateFileSystemEntries(Path.GetDirectoryName(path)!)
+            .Where(p => Path.GetFileName(p).StartsWith(Path.GetFileName(path) + "-mj", StringComparison.Ordinal)));
+
+    private static async Task CheckDestinationAsync(string path, bool replaceExisting, CancellationToken cancellationToken)
+    {
+        var sidecars = Sidecars(path).ToArray();
+        if (sidecars.Any(IsLink)) throw new IOException("Live SQLite sidecars must not be symbolic links.");
+        if (File.Exists(path + "-journal") || sidecars.Skip(3).Any())
+            throw new IOException("Live SQLite rollback journal or super-journal remains; close external database connections and recover the library before replacement.");
+        if (!File.Exists(path)) return;
+        if (await HasReceiptAsync(path, cancellationToken).ConfigureAwait(false))
+            throw new IOException("Destination contains a durable migration receipt; refusing a second run.");
+        if (!replaceExisting)
+            throw new IOException("Destination has no durable migration receipt; use explicit --replace-existing consent (replaceExisting in the Core API). Earlier successful imports without receipts cannot be distinguished from other libraries.");
+    }
+
+    private static async Task<bool> HasReceiptAsync(string path, CancellationToken cancellationToken, MigrationReport? expectedReport = null)
     {
         await using var connection = new SqliteConnection(new SqliteConnectionStringBuilder
         { DataSource = path, Mode = SqliteOpenMode.ReadWrite, Pooling = false }.ToString());
@@ -222,11 +250,12 @@ public static class LibraryMigration
         // A read-only WAL connection can leave sidecars behind on close. Query-only on a
         // read-write handle preserves SQL read safety and permits SQLite's final close cleanup.
         await connection.ExecuteAsync(new CommandDefinition("PRAGMA query_only=ON;", cancellationToken: cancellationToken)).ConfigureAwait(false);
-        if (await connection.ExecuteScalarAsync<long>(new CommandDefinition("SELECT COUNT(*) FROM sqlite_schema WHERE type='table' AND name='migration_receipt';", cancellationToken: cancellationToken)).ConfigureAwait(false) == 0)
+        if (await connection.ExecuteScalarAsync<long>(new CommandDefinition("SELECT COUNT(*) FROM sqlite_schema WHERE type='table' AND name='playnite_migration_receipt';", cancellationToken: cancellationToken)).ConfigureAwait(false) == 0)
             return false;
-        if (expectedSourceHash != null)
-            return await connection.ExecuteScalarAsync<string>(new CommandDefinition("SELECT SourceHash FROM migration_receipt WHERE Id=1;", cancellationToken: cancellationToken)).ConfigureAwait(false) == expectedSourceHash;
-        return await connection.ExecuteScalarAsync<long>(new CommandDefinition("SELECT COUNT(*) FROM migration_receipt;", cancellationToken: cancellationToken)).ConfigureAwait(false) != 0;
+        if (expectedReport != null)
+            return await connection.ExecuteScalarAsync<long>(new CommandDefinition("SELECT COUNT(*) FROM playnite_migration_receipt WHERE Id=1 AND SourceHash=@SourceHash AND SourceManifestHash=@SourceManifestHash AND ReportJson=@reportJson;",
+                new { expectedReport.SourceHash, expectedReport.SourceManifestHash, reportJson = System.Text.Json.JsonSerializer.Serialize(expectedReport) }, cancellationToken: cancellationToken)).ConfigureAwait(false) == 1;
+        return await connection.ExecuteScalarAsync<long>(new CommandDefinition("SELECT COUNT(*) FROM playnite_migration_receipt;", cancellationToken: cancellationToken)).ConfigureAwait(false) != 0;
     }
 
     private static MigrationDecision Decision(Row row, string outcome, string reason) => new(row.File, row.Collection, row.Identity, outcome, reason);

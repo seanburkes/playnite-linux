@@ -10,8 +10,8 @@ internal static class ImportCommand
     {
         try
         {
-            if (args.Length < 3 || args.Skip(3).Any(a => a != "--dry-run" && !a.StartsWith("--pause-at=", StringComparison.Ordinal)))
-                throw new ArgumentException("Usage: Playnite.Cli import-v10 <reader.dll> <v10-library> <destination.sqlite> [--dry-run] [--pause-at=STATE]");
+            if (args.Length < 3 || args.Skip(3).Any(a => a is not ("--dry-run" or "--replace-existing") && !a.StartsWith("--pause-at=", StringComparison.Ordinal)))
+                throw new ArgumentException("Usage: Playnite.Cli import-v10 <reader.dll> <v10-library> <destination.sqlite> [--dry-run] [--replace-existing] [--pause-at=STATE]");
             var source = Path.GetFullPath(args[1]);
             var destination = Path.GetFullPath(args[2]);
             RejectLinks(source);
@@ -37,7 +37,7 @@ internal static class ImportCommand
                     // Fault-injection rendezvous: tests kill the process rather than throw.
                     Console.In.ReadLine();
                 }
-            });
+            }, replaceExisting: args.Contains("--replace-existing", StringComparer.Ordinal));
             Console.WriteLine(JsonSerializer.Serialize(report));
             return 0;
         }

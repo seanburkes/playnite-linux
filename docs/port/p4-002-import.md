@@ -25,8 +25,9 @@ and transforms, validates references and reports its plan but creates no files,
 locks, SQLite database or directories. Repeated dry-runs are identical no-ops.
 This unit originally refused any existing live destination. The subsequent
 [p4-003 replacement contract](p4-003-publication.md) supersedes that restriction:
-unmigrated live libraries can be atomically replaced behind publication leases;
-an in-artifact receipt still refuses a successful previous import.
+unreceipted live libraries can be atomically replaced behind publication leases
+with explicit `--replace-existing` consent. An in-artifact receipt always refuses
+a repeat; earlier unreceipted imports require consent too, never silent overwrite.
 
 ## Intermediate v1 (stdout, one JSON object)
 
@@ -80,6 +81,10 @@ The additive `v10-malicious` derivative records its generator and provenance and
 does not pretend Linux mutation is independent Windows oracle evidence.
 
 ## Publication and recovery
+
+This section records the original fresh-publication implementation. The current
+[p4-003 contract](p4-003-publication.md) supersedes its destination-refusal and
+report/receipt publication rules and adds connection-lifetime publication leases.
 
 An exclusive retained `<destination>.import.lock` serializes writers. Staging is
 `<destination>.import/`; a matching destination/source fingerprint in `manifest.json`
