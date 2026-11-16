@@ -83,3 +83,12 @@ floor capture require `oracle-change`; no existing oracle is redefined.
 
 Validation and independent adversarial review evidence is recorded in the
 `p4-005` unit shard; aggregate queue/ledger and protected parity TSV are untouched.
+
+Actual linux-ci [43952540098](https://github.com/seanburkes/playnite-linux/actions/runs/43952540098)
+on implementation head `3d0815a62fdfb64305b49e97405d658d2b003bd8` passed
+warning-as-error locked restore/build, full suites, bounded serialization fuzz and
+native smoke. Downloaded JUnit case elements and suite totals, test-counts.json
+and exit files confirm Core **1736**, Architecture **173**, Smoke **4**, all passed,
+zero failed/skipped and all MTP exits 0. Only the Core floor rises from 1706 to the
+actual 1736 union. The floor commit is evidence-only; final pushed-head linux-ci
+and two firstmate-arranged adversarial diff reviews remain readiness gates.

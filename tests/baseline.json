@@ -23,9 +23,9 @@
       "skipped": 0
     },
     "Playnite.Core.Tests": {
-      "total": 1706,
-      "executed": 1706,
-      "passed": 1706,
+      "total": 1736,
+      "executed": 1736,
+      "passed": 1736,
       "failed": 0,
       "skipped": 0
     },
@@ -217,5 +217,12 @@
     "previous_review_run_url": "https://github.com/seanburkes/playnite-linux/actions/runs/43917159311",
     "previous_review_commit": "747fd06684bbe4da9578d4af0ac0cb02b49f28c0",
     "notes": "Final implementation head of https://github.com/seanburkes/playnite-linux/pull/94, after both firstmate-arranged adversarial reviews/re-reviews closed all P2 code findings on 747fd06 and firstmate steering009 sanity-checked 747fd06..69e00be PASS/no P1-P2. Downloaded actual linux-ci run 43918884660 JUnit testcase elements and MTP exit files independently confirm Core 1706 total/executed/passed, Architecture 173 total/executed/passed, Smoke 4 total/executed/passed, zero failures/skips and every exit 0. The earlier review-fix run 43917159311 at 747fd06 independently confirmed 1701/163/4; the final five Core cases and ten additional architecture controls are measured here, not inferred from that earlier run. Core now protects main's 1671 union plus 35 importer cases; Architecture protects 144 plus 29 importer/security-policy cases. Final follow-up checks complete WAL checkpoint and main-file-only publication, three-TZ UTC epoch preservation, duplicate marker rejection, dangling links/early directory/path edges and the remaining named guard surfaces. Steam fixture accounting remains 3 expected / 3 imported / 1 custom explicitly reported; all 9 source documents accounted for and original library bytes unchanged. Only Core total/executed/passed rises 1695 to 1706 and Architecture 153 to 173; all prior capture objects, legacy, Smoke and empty_projects are retained, no floor lowered. Additive oracle-change capture/board-done authorized by firstmate steering001/004/007-009. This floor/board commit changes only baseline, documentation and p4-002 shards; implementation/test-case files are identical to 69e00be. Its own linux-ci run must revalidate the same counts before readiness. Reviews are adversarial assistance on the owner's behalf, not independent human approval; no worker merge."
+  },
+  "p4_005_capture": {
+    "captured_at": "2026-11-16T20:46:02Z",
+    "run_id": 43952540098,
+    "run_url": "https://github.com/seanburkes/playnite-linux/actions/runs/43952540098",
+    "commit": "3d0815a62fdfb64305b49e97405d658d2b003bd8",
+    "notes": "Downloaded actual linux-ci JUnit testcase elements, suite totals, test-counts.json and MTP exit files independently confirm Core 1736 total/executed/passed, Architecture 173 total/executed/passed, Smoke 4 total/executed/passed, every suite zero failures/skips and exit 0 on https://github.com/seanburkes/playnite-linux/pull/96. Warning-as-error locked restore/build, bounded serialization fuzzing and native Xvfb smoke also passed. This raises only Core from main's 1706 to the actual 1736 union, adding 30 asset cases including two byte-exact frozen-v10 PNGs, header-only PNG/GIF/JPEG dimensions, missing/unreadable/empty accounting, cross-filename dedup and true no-op retry, source/destination hash mismatch refusal, actual mid-copy SIGKILL/recovery, cancellation/disposal, Game/Platform remapping and retained legacy documents, external/unsafe paths and a seeded malformed-header fuzz smoke. Architecture/Smoke, empty_projects, legacy and all historical captures remain unchanged; no floor is lowered. Additive oracle-change update explicitly authorized by the task. The floor commit changes only baseline/evidence, not implementation/test cases; its own final pushed-head linux-ci must revalidate the same counts before readiness. Two firstmate-arranged adversarial reviews remain pending; no independent approval or worker merge is claimed. Aggregates and protected parity are untouched."
   }
 }
