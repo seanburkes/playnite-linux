@@ -29,6 +29,27 @@ public sealed class ChecksumTests
     {
         using var document = JsonDocument.Parse(json);
         var item = document.RootElement;
+        var expected = item.GetProperty("expected").GetString();
+
+        // The provenance is part of the expectation: a value that no longer agrees with the
+        // frozen-v10 source, its independent cross-check or a v10 test constant must fail here.
+        Assert.Equal("frozen-v10", item.GetProperty("source").GetString());
+        var crossCheck = item.GetProperty("cross_check").GetString()!;
+        if (crossCheck.StartsWith("exception:", StringComparison.Ordinal))
+        {
+            Assert.Equal("!" + crossCheck["exception:".Length..], expected);
+        }
+        else
+        {
+            Assert.Equal(crossCheck, expected);
+        }
+
+        if (item.TryGetProperty("v10_test_constant", out var constant) &&
+            constant.ValueKind == JsonValueKind.String)
+        {
+            Assert.Equal(constant.GetString(), expected);
+        }
+
         string actual;
         var directory = NewDirectory();
         try

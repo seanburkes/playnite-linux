@@ -70,7 +70,9 @@ a 1 MiB pattern split across `Append` calls in the oracle, and file/stream overl
 `ChecksumTests` also states the published check value and the empty-input value directly, so
 the two load-bearing constants do not depend on the golden file alone.
 
-`Frozen_v10_checksum_expectations_match` exercises every golden case. Additional tests cover
+`Frozen_v10_checksum_expectations_match` exercises every golden case and asserts each case's
+`source`, `cross_check` and (when present) `v10_test_constant` against `expected`, so editing a
+single expectation in the golden fails instead of passing silently. Additional tests cover
 incremental composition at every boundary of a sentence, a 1 MiB buffer split into 1, 2, 4095,
 4096, 4097, 65536 and 100000 byte updates against one pass, and agreement between the stream
 and path overloads.
