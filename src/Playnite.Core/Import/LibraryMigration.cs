@@ -22,7 +22,7 @@ public static class LibraryMigration
     private const string Steam = "cb91dfc9-b977-43bf-8e70-55f46e410fab";
     private sealed record Row(string File, string Collection, string Identity, JObject Data);
 
-    /// <summary>Plans without writes, or restarts an owned staging area and publishes to an absent destination.</summary>
+    /// <summary>Plans without writes, or publishes a verified artifact, atomically replacing an unmigrated library.</summary>
     public static async Task<MigrationReport> RunAsync(string intermediate, string sourceDirectory, string destination, bool dryRun = false,
         Action<string>? checkpoint = null, CancellationToken cancellationToken = default)
     {
@@ -33,7 +33,7 @@ public static class LibraryMigration
         RequirePlainDirectory(sourceDirectory);
         RequirePlainDirectory(Path.GetDirectoryName(destination)!);
         if (Directory.Exists(destination)) throw new IOException("Destination is an existing directory, not a database file.");
-        var artifacts = new[] { destination, destination + ".import", destination + ".import.lock", destination + ".import-report.json" };
+        var artifacts = new[] { destination, destination + ".import", destination + ".import.lock", destination + ".import-report.json", destination + ".publication.lock" };
         if (artifacts.Any(path => path == sourceDirectory || path.StartsWith(sourceDirectory + Path.DirectorySeparatorChar, StringComparison.Ordinal)) ||
             sourceDirectory.StartsWith(destination + ".import" + Path.DirectorySeparatorChar, StringComparison.Ordinal) || sourceDirectory == Path.GetPathRoot(sourceDirectory))
             throw new ArgumentException("Destination and migration artifacts must be outside the source directory.");
@@ -96,14 +96,15 @@ public static class LibraryMigration
         checkpoint?.Invoke("Transformed");
         var report = new MigrationReport(1, sourceHash, games.Count, dryRun ? 0 : games.Count, dryRun, decisions);
         if (dryRun) return report;
-        if (File.Exists(destination)) throw new IOException("Destination already exists; import refuses to overwrite it (including on a second run).");
         var staging = destination + ".import";
         foreach (var artifact in new[] { destination + ".import.lock", destination + ".import-report.json", staging })
             if (IsLink(artifact))
                 throw new IOException("Migration artifacts must not be symbolic links.");
         // Lock file is deliberately retained; deleting a lock inode permits concurrent owners.
         using var lease = new FileStream(destination + ".import.lock", System.IO.FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
-        if (File.Exists(destination)) throw new IOException("Destination already exists; import refuses to overwrite it.");
+        using (await DatabasePublicationLease.AcquireAsync(destination, false, cancellationToken).ConfigureAwait(false))
+            if (File.Exists(destination) && await HasReceiptAsync(destination, cancellationToken).ConfigureAwait(false))
+                throw new IOException("Destination contains a durable migration receipt; refusing a second run.");
         Directory.CreateDirectory(staging);
         if ((File.GetAttributes(staging) & FileAttributes.ReparsePoint) != 0 || Directory.EnumerateFileSystemEntries(staging).Any(p => (File.GetAttributes(p) & FileAttributes.ReparsePoint) != 0))
             throw new IOException("Staging area must not contain symbolic links.");
@@ -147,6 +148,14 @@ public static class LibraryMigration
         await using (var connection = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = temporary, Pooling = false }.ToString()))
         {
             await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+            await using (var transaction = await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false))
+            {
+                await connection.ExecuteAsync(new CommandDefinition("""
+                    CREATE TABLE migration_receipt(Id INTEGER PRIMARY KEY CHECK(Id=1), SourceHash TEXT NOT NULL, ReportJson TEXT NOT NULL);
+                    INSERT INTO migration_receipt VALUES(1, @sourceHash, @reportJson);
+                    """, new { sourceHash, reportJson = System.Text.Json.JsonSerializer.Serialize(report) }, transaction, cancellationToken: cancellationToken)).ConfigureAwait(false);
+                await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+            }
             if (await connection.ExecuteScalarAsync<string>(new CommandDefinition("PRAGMA integrity_check;", cancellationToken: cancellationToken)).ConfigureAwait(false) != "ok" ||
                 (await connection.QueryAsync(new CommandDefinition("PRAGMA foreign_key_check;", cancellationToken: cancellationToken)).ConfigureAwait(false)).Any())
                 throw new InvalidDataException("SQLite integrity verification failed.");
@@ -160,9 +169,64 @@ public static class LibraryMigration
         cancellationToken.ThrowIfCancellationRequested();
         checkpoint?.Invoke("BeforeSwap");
         cancellationToken.ThrowIfCancellationRequested();
-        File.Move(temporary, destination, overwrite: false);
+        using (await DatabasePublicationLease.AcquireAsync(destination, true, cancellationToken).ConfigureAwait(false))
+        {
+            // All supported connections have drained, including their WAL checkpoint/close.
+            // External SQLite connections do not participate in this protocol: fail closed.
+            if (File.Exists(destination + "-shm") || (File.Exists(destination + "-wal") && new FileInfo(destination + "-wal").Length != 0))
+                throw new IOException("Live SQLite sidecars remain; close external database connections before replacement.");
+            if (File.Exists(destination) && await HasReceiptAsync(destination, cancellationToken).ConfigureAwait(false))
+                throw new IOException("Destination contains a durable migration receipt; refusing a second run.");
+            var previous = Path.Combine(staging, "previous.sqlite");
+            var existed = File.Exists(destination);
+            if (existed)
+            {
+                File.Copy(destination, previous, overwrite: true);
+                using var retained = new FileStream(previous, System.IO.FileMode.Open, FileAccess.ReadWrite, FileShare.None);
+                retained.Flush(flushToDisk: true);
+            }
+            var swapped = false;
+            try
+            {
+                checkpoint?.Invoke("Publishing");
+                cancellationToken.ThrowIfCancellationRequested();
+                File.Move(temporary, destination, overwrite: existed);
+                swapped = true;
+                checkpoint?.Invoke("Swapped");
+                cancellationToken.ThrowIfCancellationRequested();
+                if (!await HasReceiptAsync(destination, cancellationToken, sourceHash).ConfigureAwait(false))
+                    throw new InvalidDataException("Published artifact lost its migration receipt.");
+                checkpoint?.Invoke("ReceiptConfirmed");
+                cancellationToken.ThrowIfCancellationRequested();
+            }
+            catch
+            {
+                // The exclusive lease hides the unconfirmed swap from supported readers.
+                if (swapped)
+                {
+                    if (existed) File.Move(previous, destination, overwrite: true);
+                    else File.Delete(destination);
+                }
+                throw;
+            }
+        }
         checkpoint?.Invoke("Committed");
         return report;
+    }
+
+    private static async Task<bool> HasReceiptAsync(string path, CancellationToken cancellationToken, string? expectedSourceHash = null)
+    {
+        await using var connection = new SqliteConnection(new SqliteConnectionStringBuilder
+        { DataSource = path, Mode = SqliteOpenMode.ReadWrite, Pooling = false }.ToString());
+        await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+        // A read-only WAL connection can leave sidecars behind on close. Query-only on a
+        // read-write handle preserves SQL read safety and permits SQLite's final close cleanup.
+        await connection.ExecuteAsync(new CommandDefinition("PRAGMA query_only=ON;", cancellationToken: cancellationToken)).ConfigureAwait(false);
+        if (await connection.ExecuteScalarAsync<long>(new CommandDefinition("SELECT COUNT(*) FROM sqlite_schema WHERE type='table' AND name='migration_receipt';", cancellationToken: cancellationToken)).ConfigureAwait(false) == 0)
+            return false;
+        if (expectedSourceHash != null)
+            return await connection.ExecuteScalarAsync<string>(new CommandDefinition("SELECT SourceHash FROM migration_receipt WHERE Id=1;", cancellationToken: cancellationToken)).ConfigureAwait(false) == expectedSourceHash;
+        return await connection.ExecuteScalarAsync<long>(new CommandDefinition("SELECT COUNT(*) FROM migration_receipt;", cancellationToken: cancellationToken)).ConfigureAwait(false) != 0;
     }
 
     private static MigrationDecision Decision(Row row, string outcome, string reason) => new(row.File, row.Collection, row.Identity, outcome, reason);

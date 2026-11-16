@@ -75,6 +75,7 @@ public sealed class LibraryDatabase
     public static async Task<LibraryDatabase> OpenAsync(string path, CancellationToken cancellationToken = default)
     {
         var database = new LibraryDatabase(path);
+        using var publication = await DatabasePublicationLease.AcquireAsync(database.path, false, cancellationToken).ConfigureAwait(false);
         await using var connection = await database.ConnectAsync(cancellationToken).ConfigureAwait(false);
         await connection.ExecuteAsync(new CommandDefinition("PRAGMA journal_mode=WAL;", cancellationToken: cancellationToken)).ConfigureAwait(false);
         await SchemaMigrator.ApplyAsync(connection, SchemaVersion, cancellationToken).ConfigureAwait(false);
@@ -119,6 +120,7 @@ public sealed class LibraryDatabase
         ArgumentNullException.ThrowIfNull(operation);
         cancellationToken.ThrowIfCancellationRequested();
         using var nesting = write ? WriteNestingGuard.Enter(path) : default;
+        using var publication = await DatabasePublicationLease.AcquireAsync(path, false, cancellationToken).ConfigureAwait(false);
         await using var connection = await ConnectAsync(cancellationToken).ConfigureAwait(false);
         if (!write)
         {

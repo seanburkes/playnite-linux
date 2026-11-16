@@ -23,9 +23,10 @@ not just by the CLI; the directly invoked reader checks source ancestors too. Ex
 prints a JSON report; exit 1 prints an explicit diagnostic on stderr. Dry-run reads
 and transforms, validates references and reports its plan but creates no files,
 locks, SQLite database or directories. Repeated dry-runs are identical no-ops.
-Any existing live destination, including a successful previous import, is refused;
-it is never overwritten. This unit publishes a fresh destination atomically; it
-does not replace an already-open user library (the broader p4-003 rollback contract).
+This unit originally refused any existing live destination. The subsequent
+[p4-003 replacement contract](p4-003-publication.md) supersedes that restriction:
+unmigrated live libraries can be atomically replaced behind publication leases;
+an in-artifact receipt still refuses a successful previous import.
 
 ## Intermediate v1 (stdout, one JSON object)
 

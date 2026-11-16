@@ -1,2 +1,2 @@
 id	wave	area	unit	depends	status	owner	oracle	test	notes
-p4-003	W4	data	Atomic swap/rollback	p4-002	todo	import	formal:LibraryImport	test:import	TLA+ invariants
+p4-003	W4	data	Atomic swap/rollback	p4-002	in-progress	import	formal:LibraryImport; docs/port/p4-003-publication.md	test:LibraryReplacementTests	Retained-old atomic rename behind shared reader/exclusive publication leases; in-artifact receipt; replacement SIGKILL/rollback/reader-window evidence; real final-head CI floor and firstmate-arranged reviews pending.
