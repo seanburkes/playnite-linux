@@ -23,9 +23,9 @@
       "skipped": 0
     },
     "Playnite.Core.Tests": {
-      "total": 1503,
-      "executed": 1503,
-      "passed": 1503,
+      "total": 1457,
+      "executed": 1457,
+      "passed": 1457,
       "failed": 0,
       "skipped": 0
     },
@@ -142,7 +142,14 @@
     "revalidation_run_id": 43796922458,
     "revalidation_run_url": "https://github.com/seanburkes/playnite-linux/actions/runs/43796922458",
     "revalidation_commit": "17a8409f533da3258ad85a77e3606511020569cf",
-    "revalidation_notes": "Review B correction head 17a8409: ChecksumTests now asserts each case's source, cross_check and v10_test_constant against expected, the golden-corpus README says oracle runs rather than the Windows oracle, and the unit doc describes that enforcement. linux-ci 43796922458 independently confirms Core 1503 total / 1503 executed / 1503 passed / 0 failed / 0 skipped, Architecture 144 / 144 / 144 / 0 / 0, Smoke 4 / 4 / 4 / 0 / 0, every MTP exit 0. Production code and the test count are identical to the capture head; this is the current final code head, and the following evidence-only head's linux-ci run revalidates the same counts.",
-    "notes": "Counts independently parsed from the downloaded linux-test-results JUnit, testsuite totals and MTP exit files for linux-ci run 43795306184 on https://github.com/seanburkes/playnite-linux/pull/83 head d78e8b3: Playnite.Core.Tests 1503 total / 1503 executed / 1503 passed / 0 failed / 0 skipped, Playnite.Architecture.Tests 144 / 144 / 144 / 0 / 0, Playnite.Smoke.Tests 4 / 4 / 4 / 0 / 0, every MTP exit 0. The 58-case addition over the merged 1445 floor is 53 ChecksumTests golden cases plus five focused CRC/checksum tests. This raises only the counted Core floor to the real 1503; every earlier capture and other suite floor is retained and nothing is lowered. The capture commit changes only tests/baseline.json and the p3-crc-ds shard evidence, so linux-ci on the final pushed head must revalidate the same counted cases."
+    "revalidation_notes": "Review B correction head 17a8409: ChecksumTests now asserts each case's source, cross_check and v10_test_constant against expected, the golden-corpus README says oracle runs rather than the Windows oracle, and the unit doc describes that enforcement. linux-ci 43796922458 independently confirms Core 1503 total / 1503 executed / 1503 passed / 0 failed / 0 skipped, Architecture 144 / 144 / 144 / 0 / 0, Smoke 4 / 4 / 4 / 0 / 0, every MTP exit 0. Production code and the test count are identical to the capture head; this was the final code head before the owner-requested main merge.",
+    "notes": "Counts independently parsed from the downloaded linux-test-results JUnit, testsuite totals and MTP exit files for linux-ci run 43795306184 on https://github.com/seanburkes/playnite-linux/pull/83 head d78e8b3: Playnite.Core.Tests 1503 total / 1503 executed / 1503 passed / 0 failed / 0 skipped, Playnite.Architecture.Tests 144 / 144 / 144 / 0 / 0, Playnite.Smoke.Tests 4 / 4 / 4 / 0 / 0, every MTP exit 0. The 58-case addition over the merged 1445 floor is 53 ChecksumTests golden cases plus five focused CRC/checksum tests. This record is retained as pre-merge history; the merged union floor is recorded by p3_crc_ds_union_capture once a linux-ci run measures it. No suite floor is lowered."
+  },
+  "p3_loc_coverage_capture": {
+    "captured_at": "2026-11-16T03:17:03Z",
+    "run_id": 43796860902,
+    "run_url": "https://github.com/seanburkes/playnite-linux/actions/runs/43796860902",
+    "commit": "e9825b5bb856509474802d89d15dfc2d884626c6",
+    "notes": "Counts independently parsed from the downloaded linux-test-results JUnit testcase elements, testsuite totals and MTP exit files for linux-ci run 43796860902 on https://github.com/seanburkes/playnite-linux/pull/82 evidence head e9825b5: Playnite.Core.Tests 1457 total / 1457 executed / 1457 passed / 0 failed / 0 skipped, exit 0, including 12 LocalizationCoverageTests cases; Playnite.Architecture.Tests 144 / 144 / 144 / 0 / 0, exit 0; Playnite.Smoke.Tests 4 / 4 / 4 / 0 / 0, exit 0. This raises the recorded Core union floor from 1445 to the evidenced 1457 (the 10 first-round coverage cases plus the 2 Review B cases that enforce generator --check and the filesystem language set); no other suite floor is lowered and every historical capture remains intact. The capture commit changes only tests/baseline.json and the p3-loc-coverage-ds shard evidence, so linux-ci on the final ratchet head revalidates the same counted cases. The earlier 006bd57 run 43794960376 evidenced 1455 before the Review B additions and is superseded as the floor citation, not deleted."
   }
 }

@@ -1,0 +1,2 @@
+id	wave	area	unit	depends	status	owner	oracle	test	notes
+p3-loc-coverage-ds	W3	leaves	Localisation coverage and placeholder validation	p3-007b	in-progress	fm/p3-loc-coverage-ds	legacy/source/Playnite/Localization	LocalizationCoverageTests	37 read-only locale files plus English; committed per-language report with input hashes and generator; missing/extra/untranslated counts and .NET format-placeholder defects; excludes empty translations and treats escaped braces as literals; additive only; docs/port/p3-loc-coverage.md
