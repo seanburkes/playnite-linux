@@ -4,7 +4,10 @@
 - Gate commit: `f6d5fab2259633689e21dfcb4da52b025bbfa56b` (`main`). This documentation
   change records that tree; it does not claim that its own later commit ran these workflows.
   Every runtime count below comes from the downloaded artifacts of the run named beside it,
-  not from a local estimate.
+  not from a local estimate. The exit draft merged in
+  https://github.com/seanburkes/playnite-linux/pull/86 at `8b4404a`; this correction follows
+  that merge, raising the Architecture floor and correcting the evidence paragraphs without
+  rewriting the recorded runtime evidence.
 - Owner: leaves / p3-exit
 - Review model: adversarial assistance on the owner's behalf, not independent approval. The
   ADR-024 single-owner exception applies; no external-human review is claimed. This exit
@@ -18,12 +21,13 @@
 | Item | State | Commit / run | Evidence and boundary |
 | --- | --- | --- | --- |
 | Linux build and tests | pass | `f6d5fab2259633689e21dfcb4da52b025bbfa56b`; [43803577215](https://github.com/seanburkes/playnite-linux/actions/runs/43803577215) | Forge conclusion success; downloaded `linux-test-results/test-counts.json` and the three JUnit files agree: **Core 1533 executed / 1533 passed / 0 failed / 0 skipped**, **Architecture 144 / 144 / 0 / 0**, **Smoke 4 / 4 / 0 / 0**; every MTP exit code is 0. |
-| Executed-case ratchet | pass | same run; `tests/baseline.json` | Core **1533 ≥ 1533** recorded floor, Architecture **144 ≥ 103**, Smoke **4 ≥ 4**; no floor was lowered by this reconciliation. |
+| PR-head linux-ci | pass | `61e9df7`; [43804777415](https://github.com/seanburkes/playnite-linux/actions/runs/43804777415) | The PR-head linux-ci completed successfully. Downloaded `test-counts.json` reports the same **Core 1533 / Architecture 144 / Smoke 4**, zero failed and zero skipped; its bounded fuzz step printed `FUZZ COMPLETE … corpus_sha256=1238d2aee830e40b7084501f39ccf90d3c55f8a087e353b97750ff39b6c38193`. |
+| Executed-case ratchet | pass | same main run; `tests/baseline.json` | Core **1533 ≥ 1533**, Architecture **144 ≥ 144** after this correction raises the counted floor from 103 to 144, Smoke **4 ≥ 4**; no floor is lowered. |
 | Zero skips | pass | same run | `skipped: 0` for all three projects in `test-counts.json`, and `skipped="0"` in every JUnit `testsuite` element. No `[Skip]`, `[Ignore]`, filter exclusion or re-accepted snapshot is used to obtain the counts. |
 | `legacy/` unchanged since Phase 1 | pass | `f6d5fab` against Phase 1 `8c5a811` | `git diff --name-only 8c5a811..f6d5fab -- legacy/` is empty; `git log --oneline 8798035..f6d5fab -- legacy/` is also empty, so the frozen oracle has not changed since it was imported. |
 | English key-set diff empty | pass | `f6d5fab`; `docs/port/p3-009-migration-report.json` | `counts` records source 1134, target 1134, mapped 1134, unmapped 0, obsolete 0; the `diff` object has empty `added`, `removed` and `changed` lists. The p3-007b sibling golden independently contains the same 1134 English declarations. |
 | Missing translations reported | pass | `f6d5fab`; `docs/port/p3-loc-coverage.json` | All 37 frozen locale files are reported per language with present / missing / extra / untranslated counts, exact missing and extra keys, and placeholder defects. Every language has 0 missing and 0 extra keys against English; 7 real placeholder defects in 5 languages are listed. |
-| Bounded fuzz target in CI | pass | [43803577215](https://github.com/seanburkes/playnite-linux/actions/runs/43803577215) | The required linux-ci step ran `FUZZ COMPLETE seed=0x5EED1A2B003C004D cases=1058705 clean=94742 rejected=963963 elapsed_ms=45000 peak_managed_bytes=632488 budget=wall-clock`. The workflow target is 45 s with a hard 75 s outer timeout; a nonzero exit or a missing marker fails the job. |
+| Bounded fuzz target in CI | pass | [43803577215](https://github.com/seanburkes/playnite-linux/actions/runs/43803577215) | The required linux-ci step ran `FUZZ COMPLETE seed=0x5EED1A2B003C004D cases=1058705 clean=94742 rejected=963963 elapsed_ms=45000 peak_managed_bytes=632488 corpus_sha256=1238d2aee830e40b7084501f39ccf90d3c55f8a087e353b97750ff39b6c38193 budget=wall-clock`. The workflow target is 45 s with a hard 75 s outer timeout; a nonzero exit or a missing marker fails the job. The PR-head run above used the same corpus hash with 1,136,922 cases. |
 
 ### Per-unit v10-derived evidence
 
@@ -39,12 +43,12 @@ itself an ancestor after a squash, so ancestry is asserted on the forge merge co
 | p3-004 — models/equality | [#72](https://github.com/seanburkes/playnite-linux/pull/72) at `f4855e1`, corrections [#74](https://github.com/seanburkes/playnite-linux/pull/74) at `64468d2` and [#75](https://github.com/seanburkes/playnite-linux/pull/75) at `716bbf2` | [43773267320](https://github.com/seanburkes/playnite-linux/actions/runs/43773267320): Core 1191/1191; union [43774480101](https://github.com/seanburkes/playnite-linux/actions/runs/43774480101): Core 1254/1254 | `tests/golden/models-v10/equality.json` and `provenance.json`, generated by `scripts/port/generate_model_goldens.py` from unmodified frozen SDK models compiled on .NET 11 with throw-only database/resource seams; `Models` tests. The golden records relational equality/hash observations, not persisted runtime hashes. |
 | p3-005 — manifests | [#73](https://github.com/seanburkes/playnite-linux/pull/73) at `8e3c9c5` | [43773960462](https://github.com/seanburkes/playnite-linux/actions/runs/43773960462): Core 1254/1254, Architecture 144/144, Smoke 4/4 | `tests/fixtures/manifests-v10/` with `provenance.json` (byte copies and derived shapes from frozen v10 test manifests) and `tests/golden/manifests/`; `ManifestTests`. |
 | p3-006 — search/filter/sort | [#76](https://github.com/seanburkes/playnite-linux/pull/76) at `e4b2fdf` | [43775725997](https://github.com/seanburkes/playnite-linux/actions/runs/43775725997): Core 1365/1365, Architecture 144/144, Smoke 4/4 | `docs/port/p3-006-queries.md` cites each frozen source line; `QueryDateAndFilterTests` and `QueryPropertyTests` encode the v10 calendar boundaries, future-date quirk, comparer total/stability/symmetry/commutation laws and filter idempotence. This unit's v10 evidence is a quirk-table test, not a golden file. |
-| p3-007 — localisation keys | superseded-by p3-007b | none separate | Base row retained and closed; no separate deliverable or evidence is claimed. |
+| p3-007 — localisation keys | delivered through p3-007b ([#78](https://github.com/seanburkes/playnite-linux/pull/78)) | none direct | The base row is superseded-by p3-007b; its evidence is the continuation's golden and tests below. No direct or independent base-row evidence is claimed. |
 | p3-007b — localisation keys | [#78](https://github.com/seanburkes/playnite-linux/pull/78) at `d6935c7` | [43782366884](https://github.com/seanburkes/playnite-linux/actions/runs/43782366884): Core 1382/1382, Architecture 144/144, Smoke 4/4 | `tests/golden/loc/english-v10.json`, generated by `scripts/loc/generate_english.py` from `legacy/source/Playnite/Localization/LocSource.xaml`, `LocalizationKeys.cs` and `legacy/build/buildLocConstants.ps1`; `LocalizationKeyTests` re-hashes the three frozen files at their repository paths. |
-| p3-008 — archive/backup | superseded-by p3-008b | none separate | Base row retained and closed; no separate deliverable or evidence is claimed. |
+| p3-008 — archive/backup | delivered through p3-008b ([#79](https://github.com/seanburkes/playnite-linux/pull/79), [#80](https://github.com/seanburkes/playnite-linux/pull/80)) | none direct | The base row is superseded-by p3-008b; its evidence is the continuation's fixtures and tests below. No direct or independent base-row evidence is claimed. |
 | p3-008b — archive/backup | [#79](https://github.com/seanburkes/playnite-linux/pull/79) at `e71ad0d`, ratchet [#80](https://github.com/seanburkes/playnite-linux/pull/80) at `65cada8` | [43789085630](https://github.com/seanburkes/playnite-linux/actions/runs/43789085630): Core 1429/1429, Architecture 144/144, Smoke 4/4 | `tests/fixtures/archives-v10/` with `provenance.json` (v10 entry roots from `Backup.cs`), `tests/golden/archives/v10-source-backup.entries.json`, `v10-full.entries.json` and `v10-restore-tree.json`; `ArchiveTests`, `BackupTests`. |
 | p3-009 — v10 → new key migration | [#81](https://github.com/seanburkes/playnite-linux/pull/81) at `1bddab6` | [43791763526](https://github.com/seanburkes/playnite-linux/actions/runs/43791763526): Core 1445/1445, Architecture 144/144, Smoke 4/4 | `docs/port/p3-009-migration-report.json` and `src/Playnite.Core/Migrations/localization-v10.json`, checked by `LocalizationMigrationTests` against frozen `LocSource.xaml`, `LocalizationKeys.cs` and `buildLocConstants.ps1`. The 1134/0/0 English result is identity/lossless contract evidence; rename/collision/obsolete behaviour is exercised with synthetic maps, not claimed as a real v10 rename. |
-| p3-crc-ds — CRC/checksums | [#83](https://github.com/seanburkes/playnite-linux/pull/83) at `ee3ab1d`, union ratchet [#85](https://github.com/seanburkes/playnite-linux/pull/85) at `0426d05` | [43798442753](https://github.com/seanburkes/playnite-linux/actions/runs/43798442753): Core 1515/1515; [43800467861](https://github.com/seanburkes/playnite-linux/actions/runs/43800467861): Core 1533/1533 | `tests/golden/checksums-v10.json`, generated by `scripts/port/generate_checksum_goldens.py` from frozen `FileSystem_Checksum.cs` with pinned Crc32.NET and every non-exception expectation cross-checked against CPython `zlib`/`hashlib`; `ChecksumTests`. |
+| p3-crc-ds — CRC/checksums | [#83](https://github.com/seanburkes/playnite-linux/pull/83) at `ee3ab1d`, union ratchet [#85](https://github.com/seanburkes/playnite-linux/pull/85) at `0426d05` | [43798442753](https://github.com/seanburkes/playnite-linux/actions/runs/43798442753): Core 1515/1515; [43800467861](https://github.com/seanburkes/playnite-linux/actions/runs/43800467861): Core 1533/1533 | `tests/golden/checksums-v10.json`, generated by `scripts/port/generate_checksum_goldens.py` from frozen `FileSystem_Checksum.cs` with pinned Crc32.NET. The CPython `zlib`/`hashlib` cross-check covers the non-equal checksum cases; the four equal/content-comparison cases are self-referential, so the generator check is their independent guard. `ChecksumTests`. |
 | p3-loc-coverage-ds — coverage/placeholders | [#82](https://github.com/seanburkes/playnite-linux/pull/82) at `37a3a37` | [43796860902](https://github.com/seanburkes/playnite-linux/actions/runs/43796860902): Core 1457/1457, Architecture 144/144, Smoke 4/4 | `docs/port/p3-loc-coverage.json` over all 37 frozen `legacy/source/Playnite/Localization/*.xaml` files plus English, generated by `scripts/loc/generate_coverage.py`; `LocalizationCoverageTests` recomputes every language and runs the generator `--check`. Culture selection and fallback rendering are outside this unit. |
 | p3-fuzz-ds — bounded fuzz | [#84](https://github.com/seanburkes/playnite-linux/pull/84) at `e7a49d9` | [43797058980](https://github.com/seanburkes/playnite-linux/actions/runs/43797058980): Core 1463/1463, Architecture 144/144, Smoke 4/4; main run above: 1533/144/4 plus `FUZZ COMPLETE` | `tools/Playnite.Fuzz`, `tests/Playnite.Core.Tests/Serialization/FuzzTargetTests.cs` and the hash-pinned `tests/fixtures/serialization-fuzz/` corpus, including byte copies of the v10 settings and extension-manifest goldens; `linux-ci` fails on a nonzero exit or a missing marker. |
 
@@ -75,6 +79,22 @@ Some unit runs tested a PR head that a squash merge did not preserve as an ances
 (for example p3-crc-ds run 43800467861 on `09065d2` and p3-fuzz-ds run 43797058980 on
 `30a5efe`). Those are historical unit observations; the authoritative final-tree counts are
 the main run on `f6d5fab` above.
+
+### Baseline change and history accuracy
+
+This correction changes `tests/baseline.json` in exactly two ways:
+
+- `new.Playnite.Architecture.Tests` is raised from **103 to 144** total / executed /
+  passed, using the same real main run 43803577215 (144/144/0/0). The Core entry stays
+  **1533** and the Smoke entry stays **4**; no Core capture object is edited by this PR.
+- The additive `p3_exit_architecture_capture` object records that run and this reason.
+
+This document does **not** claim that every earlier baseline object is byte-identical.
+Before this correction, `p3_crc_ds_capture` had already been amended before merge to add
+its `43796922458` revalidation fields, and PR #85's earlier 1515 union capture object was
+replaced before merge by the 1533 `p3_crc_ds_union_capture` object. Run `43798442753` at
+1515 therefore survives only as superseded history cited in that object's notes; it is not
+a current union record. Every other existing capture object is unchanged by this PR.
 
 ### Source-derived and historical boundaries
 
@@ -125,11 +145,21 @@ the main run on `f6d5fab` above.
 - Exhaustive parser correctness or security beyond the stated bounds, and any Windows
   execution result for the source-derived goldens.
 
+## Change control required
+
+The Phase 3 order in `docs/port/03-EXECUTION-PLAN.md` names **culture handling** in the
+localisation workstream and the **`Playnite.SDK.Abstractions` v7 freeze / ApiCompat report**
+as Phase 3 item 7. Neither has a Phase 3 unit shard, and neither is delivered or claimed
+here. Before the exit is accepted, the plan needs an explicit update or the owner needs to
+record a scope waiver for both items. The current repository has the Phase 2 PublicAPI /
+ApiCompat scaffold only; the v7 contract freeze is scheduled as `p6-004` in Phase 6.
+
 ## Exit checklist
 
 - [x] Every ported Phase 3 unit has a v10-derived test or golden, cited above.
 - [x] Main linux-ci executed cases are non-decreasing and skips are zero: Core **1533/1533**,
-      Architecture **144/144**, Smoke **4/4**, all floors preserved, zero failed/skipped.
+      Architecture **144/144** after raising its counted floor from 103 to 144, Smoke
+      **4/4**, no floor lowered, zero failed/skipped.
 - [x] `legacy/` has no changes since Phase 1.
 - [x] The English key-set diff is empty and missing translations are reported for all 37
       locale files.
