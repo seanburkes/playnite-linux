@@ -17,11 +17,12 @@ of scope; the unit reports the declarations the v10 loader consumes.
 ## Report and generator
 
 `python3 scripts/loc/generate_coverage.py` writes `docs/port/p3-loc-coverage.json`; `--check`
-verifies it without writing. `linux-ci` runs the `--check` form. The report records the exact
-input paths, their SHA-256 hashes, the English key count, the language count, and the rules
-below, so a stale or hand-edited report is detectable. The report is small because it stores
-per-language counts plus the short missing, extra and placeholder-defect lists; the large
-untranslated sets are represented by their count.
+verifies it without writing. The report records the exact input paths, their SHA-256 hashes, the
+English key count, the language count, and the rules below, so a stale or hand-edited report is
+detectable; `LocalizationCoverageTests` also recomputes every language from `legacy/` and fails
+on any difference. The report is small because it stores per-language counts plus the short
+missing, extra and placeholder-defect lists; the large untranslated sets are represented by
+their count.
 
 Per language the report records:
 
