@@ -12,6 +12,8 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="../../src/Playnite.Core/Playnite.Core.csproj" />
+    <ProjectReference Include="../../src/Playnite.Cli/Playnite.Cli.csproj" />
+    <ProjectReference Include="../../src/Playnite.LegacyImport/Playnite.LegacyImport.csproj" ReferenceOutputAssembly="false" />
     <ProjectReference Include="../../src/Playnite.Platform.Linux/Playnite.Platform.Linux.csproj" />
     <ProjectReference Include="../../tools/Playnite.Fuzz/Playnite.Fuzz.csproj" />
     <ProjectReference Include="../../tools/SettingsMigration.CrashHost/SettingsMigration.CrashHost.csproj" />
