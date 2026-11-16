@@ -227,6 +227,16 @@ public sealed class BackupTests
     }
 
     [Fact]
+    public async Task Restore_staging_rejects_a_member_that_lies_about_its_declared_size()
+    {
+        using var scratch = new Scratch();
+        await Assert.ThrowsAnyAsync<InvalidDataException>(() => Backup.RestoreBackupAsync(
+            RestoreOptions(scratch, [BackupDataItem.Library],
+                backupFile: ArchiveTestData.Fixture("lying-size.zip"))));
+        Assert.False(Directory.Exists(scratch.RestoreLibrary));
+    }
+
+    [Fact]
     public async Task Restore_limits_reject_entry_count_per_entry_and_total_sizes()
     {
         using var scratch = new Scratch();

@@ -56,7 +56,8 @@ public static class Archive
         var result = new MemoryStream();
         try
         {
-            await CopyBoundedAsync(source, result, Math.Min(limits.EntryBytes, remaining),
+            await CopyBoundedAsync(source, result,
+                Math.Min(entry.Entry.Size, Math.Min(limits.EntryBytes, remaining)),
                 cancellationToken).ConfigureAwait(false);
             if (result.Length != entry.Entry.Size)
             {

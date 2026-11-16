@@ -121,12 +121,12 @@ wrong-version, missing-member and over-limit archives are rejected before that p
 | `TotalBytes` | 4 GiB (4,294,967,296) | the sum of declared sizes and the sum actually written |
 | Manifest read | 64 MiB (`ManifestLimitBytes`), `EntryBytes` and the remaining total budget, whichever is smallest | manifest decompression |
 
-The declared sum is checked before decompression, and the copy loop checks each read against
-the remaining per-entry and total budget, so a member that lies about its size is still
-stopped. `GetEntryStreamAsync` uses the caller's remaining total budget after the other
-declared members, not just `EntryBytes`. The manifest's declared size is checked against the
-manifest cap before any copy starts, so a manifest that lies cannot be read first and rejected
-afterwards. Restore stages into a bounded temporary tree under the caller's `WorkDirectory`;
+The declared sum is checked before decompression, and every copy is capped at
+`min(declared size, remaining total budget, EntryBytes)`: the loop fails as soon as a read
+would exceed the declared size or the budget, so a member that lies about its size cannot
+consume the `EntryBytes` ceiling. `GetEntryStreamAsync` applies the same cap after the other
+members' declared sizes. The manifest's declared size is checked against the manifest cap
+before any copy starts, so a manifest that lies cannot be read first and rejected afterwards. Restore stages into a bounded temporary tree under the caller's `WorkDirectory`;
 `Directory.Delete(stage, true)` runs in `finally` only after the directory is re-checked.
 Backup applies the same count and size budgets to its source files and manifest.
 
@@ -154,7 +154,7 @@ overwrite protection, manifest determinism, large-manifest validation through th
 index, the manifest size cap, all validation failures, cancellation, symlinked backup/work
 paths, work directories inside selected targets, later-mode symlink preflight and bomb limits.
 
-Local narrow checks at the implementation head: Core **1417 passed / 0 failed / 0 skipped**
+Local narrow checks at the implementation head: Core **1418 passed / 0 failed / 0 skipped**
 (previous union floor 1365), Architecture **144 passed / 0 failed / 0 skipped**, Core Release
 build **0 warnings / 0 errors**. The counted floor is raised only from a real linux-ci run on
 the final head.

@@ -141,10 +141,12 @@ public static class Backup
                     cancellationToken.ThrowIfCancellationRequested();
                     var entry = zip.CreateEntry(file.Name);
                     entry.LastWriteTime = timestamp;
+                    var declared = new FileInfo(file.Path).Length;
                     await using var source = File.OpenRead(file.Path);
                     await using var target = entry.Open();
                     var (size, hash) = await CopyAndHashAsync(source, target,
-                        Math.Min(limits.EntryBytes, limits.TotalBytes - actualTotal), cancellationToken).ConfigureAwait(false);
+                        Math.Min(declared, Math.Min(limits.EntryBytes, limits.TotalBytes - actualTotal)),
+                        cancellationToken).ConfigureAwait(false);
                     actualTotal += size;
                     members.Add(new BackupManifestMember(file.Name, size, hash));
                 }
@@ -290,8 +292,9 @@ public static class Backup
                 await using var output = new FileStream(stagedPath, FileMode.CreateNew, FileAccess.Write,
                     FileShare.None, 81_920, FileOptions.Asynchronous);
                 var (size, hash) = await CopyAndHashAsync(input, output,
-                    Math.Min(limits.EntryBytes, limits.TotalBytes - actualTotal), cancellationToken,
-                    entry.Entry.Crc32).ConfigureAwait(false);
+                    Math.Min(entry.Entry.Length,
+                        Math.Min(limits.EntryBytes, limits.TotalBytes - actualTotal)),
+                    cancellationToken, entry.Entry.Crc32).ConfigureAwait(false);
                 actualTotal += size;
                 if (size != entry.Entry.Length ||
                     (manifestMembers is not null && entry.Name != ManifestName &&
