@@ -1,8 +1,8 @@
 # Port status
 
-**Phase:** 3 — exit pending owner acceptance
+**Phase:** 4 — porting (Phase 3 exit accepted 2026-11-16)
 **Updated:** 2026-11-16
-**Next gate:** Phase 3 exit — owner acceptance (Phase 4 not started)
+**Next gate:** Phase 4 exit
 
 ## Done
 
@@ -85,24 +85,25 @@
       (#79, #80), v10-to-new key migration (#81), locale coverage (#82), CRC/checksums
       (#83, #85) and the bounded serialisation fuzz gate (#84). Base rows `p3-007` and
       `p3-008` are resolved as superseded-by their continuations `p3-007b`/`p3-008b`.
-- [x] Phase 3 exit evidence drafted in `gates/P3-leaves.md` and checked at main
-      `f6d5fab`: run
+- [x] Phase 3 exit recorded and accepted in `gates/P3-leaves.md`; evidence prepared through
+      https://github.com/seanburkes/playnite-linux/pull/86 and
+      https://github.com/seanburkes/playnite-linux/pull/87. Main `f6d5fab` run
       [43803577215](https://github.com/seanburkes/playnite-linux/actions/runs/43803577215)
       reports Core 1533/1533, Architecture 144/144 and Smoke 4/4 with zero
       failures/skips; the bounded fuzz step printed `FUZZ COMPLETE`; `legacy/` is
       unchanged since Phase 1; the English key-set diff is empty and missing
-      translations are reported. This is **ready for owner acceptance**, not a declared
-      exit.
+      translations are reported. The owner accepted the Phase 3 exit on 2026-11-16; the
+      gate file's deferrals and uncovered items are recorded gaps, not passes.
 
 ## In flight
 
-None. The Phase 3 exit is pending owner acceptance; Phase 4 has not started and is not
-dispatched by the exit draft.
+None. Phase 4 is authorised by the 2026-11-16 Phase 3 acceptance; no Phase 4 unit has been
+dispatched yet.
 
 ## Not started
 
 - Phase 4+ porting units (SQLite migration, settings migration, real library import) and
-  any production code beyond the merged Phase 3 pure-logic leaves.
+  any production code beyond the merged Phase 3 pure-logic leaves; none dispatched yet.
 
 ## Deferred / known limitations
 
@@ -139,9 +140,13 @@ dispatched by the exit draft.
 
 ## Blockers
 
-- No Phase 3 blocker: all Phase 3 pure-logic units are merged and the exit evidence is ready
-  for owner acceptance. Library-open and the negative-proof-log residual remain explicitly
-  unproven.
+- No open Phase 3 blocker: the owner accepted the Phase 3 exit on 2026-11-16 with the
+  deferrals and uncovered items recorded in `gates/P3-leaves.md`. Library-open and the
+  negative-proof-log residual remain explicitly unproven.
+- **Change-control gap:** culture handling and the `Playnite.SDK.Abstractions` v7 freeze /
+  ApiCompat report have no Phase 3 unit. The owner granted an explicit scope waiver for both
+  on 2026-11-16; the plan update remains a Phase 4 dependency for those two items, and the
+  v7 freeze is scheduled as `p6-004` in Phase 6. Neither is delivered or claimed.
 - Release work still needs dependency redistribution/license review. Steam remains greenfield
   with corpus/real-install acceptance rather than a v10 implementation diff; neither is an
   unreported scaffolding test pass.
