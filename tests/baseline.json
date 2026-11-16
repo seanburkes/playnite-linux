@@ -23,9 +23,9 @@
       "skipped": 0
     },
     "Playnite.Core.Tests": {
-      "total": 1630,
-      "executed": 1630,
-      "passed": 1630,
+      "total": 1671,
+      "executed": 1671,
+      "passed": 1671,
       "failed": 0,
       "skipped": 0
     },
@@ -186,5 +186,19 @@
     "run_url": "https://github.com/seanburkes/playnite-linux/actions/runs/43813507631",
     "commit": "7c339cc6373672c79aa83a3782c4864acdfaee81",
     "notes": "Counts independently parsed from downloaded linux-test-results JUnit testcase elements and MTP exit files for actual linux-ci run 43813507631 on https://github.com/seanburkes/playnite-linux/pull/90 at the merged final implementation head 7c339cc6373672c79aa83a3782c4864acdfaee81: Core 1630 total/executed/passed, Architecture 144 total/executed/passed, Smoke 4 total/executed/passed, every suite zero failed/skipped and exit 0. Current main f62b666 includes the settings migration and its real 1583 floor; this is the measured merged union, not the earlier 1580 destination-only subset or an estimated sum. The 47 database cases cover real SQLite schema/repositories, complete graphs, eleven metadata kinds, rollback/cancellation, writer serialization/snapshots, and SIGKILL recovery at eight schema migration checkpoints. Only Core total/executed/passed rises from 1583 to 1630; all existing capture records, other suite floors and empty_projects remain unchanged. Additive oracle-change ratchet authorized by firstmate steering p4-001/001-002 and required inside the PR before readiness by /003. This floor commit changes only baseline/evidence, not production or test-case files; linux-ci on the final pushed evidence head must revalidate the same counted cases before readiness. Source migration reports, dry-run, Steam import row accounting and verified temp-database swap are not implemented or claimed by this destination-only unit."
+  },
+  "p4_004_fix_capture": {
+    "captured_at": "2026-11-16T06:17:25Z",
+    "run_id": 43815358729,
+    "run_url": "https://github.com/seanburkes/playnite-linux/actions/runs/43815358729",
+    "commit": "d86368bfb58ba276eab2565d36017c4bcee6e8f3",
+    "notes": "Counts independently parsed from the downloaded linux-test-results JUnit testcase elements, suite totals, test-counts.json and MTP exit files for linux-ci run 43815358729 on https://github.com/seanburkes/playnite-linux/pull/91 head d86368b, after normally merging origin/main 8c35c45 (the p4-001 SQLite floor of 1630): Playnite.Core.Tests 1642 total / 1642 executed / 1642 passed / 0 failed / 0 skipped, Playnite.Architecture.Tests 144 / 144 / 144 / 0 / 0, Playnite.Smoke.Tests 4 / 4 / 4 / 0 / 0, every MTP exit 0. The 12 added Core cases over the 1630 floor are the settings-migration review fixes (forward-slash UNC mapped/unmapped reporting, forward-slash-relative typed paths, Windows-invalid mapped suffix characters, a leading-double-slash Linux root, a source directly under the filesystem root, restart after cancellation and semantic projection checks for the fullscreenConfig and windowPositions goldens). This raises only the recorded Core floor from 1630 to 1642; Architecture, Smoke, empty_projects and every historical capture are unchanged and no floor is lowered. The ratchet commit changes only tests/baseline.json, the p4-004 unit doc and its shard, never production or test cases, so its own linux-ci run on the final head is the evidence-only delta that revalidates the same 1642 counted cases; the PR is not marked ready until that floor commit is inside it. Additive oracle-change update authorized for this review-follow-up task, as was the original 1583 p4_004_capture."
+  },
+  "p4_001_review_fix_capture": {
+    "captured_at": "2026-11-16T07:20:00Z",
+    "run_id": 43821347337,
+    "run_url": "https://github.com/seanburkes/playnite-linux/actions/runs/43821347337",
+    "commit": "9e354919ea81683ebe1e4ea2f29e497c2a3ec6ca",
+    "notes": "Counts independently parsed from the downloaded linux-test-results JUnit testcase elements, test-counts.json and MTP exit files for actual linux-ci run 43821347337 on https://github.com/seanburkes/playnite-linux/pull/92 at head 9e354919ea81683ebe1e4ea2f29e497c2a3ec6ca, after normally merging origin/main 122018c (the p4-004 settings fix and its 1642 Core floor): Core 1671 total/executed/passed, Architecture 144 total/executed/passed, Smoke 4 total/executed/passed, every suite zero failed/skipped and exit 0. The 29 added Core cases over 1642 are 18 destination-contract cases, four additional schema version 3 SIGKILL checkpoints, five Review B cases (different-spelling and background nesting, insert/update identity rejection, refusal of a non-canonical v1/v2 upgrade) and two game.Id identity cases. The follow-up removes the reachable raw SqliteConnection from LibrarySession, refuses nested WriteAsync on the same destination (including ./ and symlinked spellings and fire-and-forget) instead of stalling on its own writer, applies the canonical D identity rule to game.Id, the eleven metadata tables and game_action.EmulatorId through version 3 triggers plus an upgrade scan, reports dangling emulator ids against a caller-supplied catalogue, and covers a null provider GameId round trip. This run supersedes the same PR's earlier measurements at f05ca56/run 43816863124, 652389a/run 43819146506 and 0b01b99/run 43819539551, all replaced by later fixes in this PR. Only Core total/executed/passed rises from 1642 to 1671; all existing capture records, other suite floors and empty_projects remain unchanged, and the p4_001_capture record is retained unedited. Provenance correction for that record: #90's final head was 83a8e338f7e8afa90306567362f77e22226f2e96 and its own linux-ci run 43814054645 revalidated the same 1630 Core / 144 Architecture / 4 Smoke suite it cites from implementation head 7c339cc. This capture commit changes only metadata and documentation, and CI revalidates the identical test tree on the merge head."
   }
 }

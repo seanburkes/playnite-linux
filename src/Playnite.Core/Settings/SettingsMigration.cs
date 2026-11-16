@@ -40,8 +40,13 @@ public static class SettingsMigration
         var destination = Path.GetFullPath(destinationFile);
         RejectSymbolicLinks(source);
         RejectSymbolicLinks(destination);
-        var sourceDirectory = Path.GetDirectoryName(source)! + Path.DirectorySeparatorChar;
-        if (destination.StartsWith(sourceDirectory, StringComparison.Ordinal))
+        var sourceDirectory = Path.GetDirectoryName(source)!;
+        if (sourceDirectory.Length <= 1)
+        {
+            throw new ArgumentException("A settings source directly under the filesystem root is not supported.", nameof(sourceFile));
+        }
+
+        if (destination.StartsWith(sourceDirectory + Path.DirectorySeparatorChar, StringComparison.Ordinal))
         {
             throw new ArgumentException("The destination must be outside the source directory.", nameof(destinationFile));
         }
@@ -64,8 +69,9 @@ public static class SettingsMigration
             return new(report, false, true);
         }
 
-        // A fixed sibling staging name permits restart after process death. A stale file is
-        // unlinked under an exclusive handle, never truncated (it could be a hard link).
+        // A fixed sibling staging name lets a restart find and discard the abandoned stage.
+        // A stale file is unlinked under an exclusive handle, never truncated (it could be a
+        // hard link). Partial staging is never adopted.
         var temporary = destination + ".settings-migration.tmp";
         RejectSymbolicLinks(temporary);
         cancellationToken.ThrowIfCancellationRequested();
@@ -104,7 +110,8 @@ public static class SettingsMigration
             finally
             {
                 // Unlink while still owning the staging handle: another writer must not lose
-                // its file between our close and cleanup. Process death leaves resumable staging.
+                // its file between our close and cleanup. Process death leaves a partial stage
+                // that the next attempt deletes; it is never resumed from.
                 if (!committed)
                 {
                     File.Delete(temporary);
@@ -186,20 +193,25 @@ public static class SettingsMigration
                 var token = strings.Current;
                 var value = tokens.GetString()!;
                 var property = token.Path;
+                var typedPath = PathProperties.Contains(property);
                 var looksWindows = IsWindowsPath(value) ||
                     (value.Length >= 2 && char.IsAsciiLetter(value[0]) && value[1] == ':') ||
-                    value.StartsWith('\\') || (PathProperties.Contains(property) && value.Contains('\\'));
+                    value.StartsWith('\\') ||
+                    (typedPath && value.Length > 0 && !value.StartsWith('/'));
                 if (!looksWindows)
                 {
                     continue;
                 }
 
                 var normalized = value.Replace('/', '\\');
-                var mapping = IsWindowsPath(value) && tokens.CurrentDepth == 1 && PathProperties.Contains(property)
+                var mapping = IsWindowsPath(value) && tokens.CurrentDepth == 1 && typedPath
                     ? orderedMappings.FirstOrDefault(item => normalized.Equals(item.WindowsRoot, StringComparison.OrdinalIgnoreCase) ||
                         normalized.StartsWith(item.WindowsRoot + "\\", StringComparison.OrdinalIgnoreCase))
                     : null;
-                if (mapping is null || normalized.Split('\\').Any(segment => segment is "." or ".."))
+                var suffix = mapping is null ? null : normalized[mapping.WindowsRoot.Length..].TrimStart('\\');
+                if (mapping is null ||
+                    (suffix is { Length: > 0 } && HasUnsupportedWindowsNameCharacters(suffix)) ||
+                    normalized.Split('\\').Any(segment => segment is "." or ".."))
                 {
                     unmapped.Add(new(property, value, null));
                     // Keep the full owning root property in the bag, not just a leaf value.
@@ -208,8 +220,7 @@ public static class SettingsMigration
                     continue;
                 }
 
-                var suffix = normalized[mapping.WindowsRoot.Length..].TrimStart('\\').Replace('\\', '/');
-                var replacement = suffix.Length == 0 ? mapping.LinuxRoot : mapping.LinuxRoot.TrimEnd('/') + "/" + suffix;
+                var replacement = suffix!.Length == 0 ? mapping.LinuxRoot : mapping.LinuxRoot.TrimEnd('/') + "/" + suffix.Replace('\\', '/');
                 rewritten.Add(new(property, value, replacement));
                 var encoded = Utf8.GetBytes(JsonConvert.SerializeObject(replacement));
                 edits.Add((checked((int)tokens.TokenStartIndex + offset), checked((int)(tokens.BytesConsumed - tokens.TokenStartIndex)), encoded));
@@ -253,10 +264,14 @@ public static class SettingsMigration
     private static SettingsPathMapping ValidateMapping(SettingsPathMapping mapping)
     {
         var windows = mapping.WindowsRoot.Replace('/', '\\').TrimEnd('\\');
+        var windowsWithoutRoot = windows.Length >= 2 && windows[1] == ':' ? windows[2..]
+            : windows.StartsWith("\\\\", StringComparison.Ordinal) ? windows[2..] : windows;
         if (!IsWindowsPath(mapping.WindowsRoot.Replace('/', '\\')) ||
             windows.Split('\\').Any(segment => segment is "." or "..") ||
+            HasUnsupportedWindowsNameCharacters(windowsWithoutRoot) ||
             (windows.StartsWith("\\\\", StringComparison.Ordinal) && windows[2..].Split('\\').Length < 2) ||
             !Path.IsPathFullyQualified(mapping.LinuxRoot) ||
+            mapping.LinuxRoot.StartsWith("//", StringComparison.Ordinal) ||
             mapping.LinuxRoot.Contains('\\') || mapping.LinuxRoot.Split('/').Any(segment => segment is "." or ".."))
         {
             throw new ArgumentException("Mappings require an absolute Windows root and a normalized absolute Linux root.");
@@ -264,9 +279,15 @@ public static class SettingsMigration
         return new(windows, mapping.LinuxRoot.TrimEnd('/') is "" ? "/" : mapping.LinuxRoot.TrimEnd('/'));
     }
 
+    // These characters cannot occur in a Windows file name. A value containing one in the
+    // mapped suffix is not a real v10 path component, so it is reported, not rewritten.
+    private static bool HasUnsupportedWindowsNameCharacters(string value) =>
+        value.Any(character => character < ' ' || character is '<' or '>' or ':' or '"' or '|' or '?' or '*');
+
     private static bool IsWindowsPath(string value) =>
         (value.Length >= 3 && char.IsAsciiLetter(value[0]) && value[1] == ':' && value[2] is '\\' or '/') ||
-        value.StartsWith("\\\\", StringComparison.Ordinal);
+        value.StartsWith("\\\\", StringComparison.Ordinal) ||
+        value.StartsWith("//", StringComparison.Ordinal);
 
     private static JObject ReadV10(string text)
     {
