@@ -1,2 +1,2 @@
 id	wave	area	unit	depends	status	owner	oracle	test	notes
-p3-001	W3	leaves	Paths + XDG abstraction	p2-001	in-progress	core	golden:paths;property:paths	test:paths	docs/port/p3-001-paths.md; additive oracle-change; no aggregate edits
+p3-001	W3	leaves	Paths + XDG abstraction	p2-001	done	core	golden:paths;property:paths	test:paths	Merged https://github.com/seanburkes/playnite-linux/pull/68 at d6401f1; docs/port/p3-001-paths.md records the delivered XDG/path boundary and deferrals; merge commit d6401f1 verified as an ancestor of main e069feb with git merge-base --is-ancestor; aggregates parent-owned
