@@ -28,7 +28,14 @@ lines 164–171, applies empty-translation fallback during loading, not key migr
 `LocalizationMigrationTests.All_1134_frozen_English_keys_migrate_with_empty_sibling_diff_and_no_loss`
 extracts the frozen source independently with the sibling API, migrates it, and calls
 `LocalizationKeySet.English.Diff(result.Migrated)`. Added, removed and changed are all empty;
-all 1,134 keys resolve to their original English text.
+all 1,134 keys resolve to their original English text. The **1,134/0/0** result is an
+identity/lossless contract check by construction because the new English catalog keeps
+the v10 keys. It is not evidence of a v10-to-new rename or a nontrivial migration.
+
+Nontrivial mapping behavior is instead proved by the synthetic old-to-new maps in
+`LocalizationMigrationTests`: renamed destinations and their second-application fixed
+points, collisions, obsolete entries, missing mappings/inputs, and orphan inputs/destinations.
+Those tests, not the English identity counts, exercise rename and diagnostic semantics.
 
 Unknown keys and mappings to missing destinations are reported in `Unmapped`, retaining
 their original values. Explicit obsolete mappings use a null destination and retain their
@@ -68,6 +75,11 @@ idempotence, collisions, ordinal comparison, exact text preservation and immutab
   `docs/port/p3-007b-localisation.md`.
 - Protected shared parity/aggregate files. This unit records its contract in the p3-009 shard.
 
+**Approved protected-path exception:** this PR edits `tests/baseline.json` solely for the
+task-authorized, additive Core floor raise **1,429 → 1,445** and its provenance, under the
+`oracle-change` label. The baseline is not included in the read-only claim above; no golden,
+fixture, extraction artifact or LOC constant is changed.
+
 ## Validation and counted floor
 
 After normally merging current main `4048641` (recorded Core floor **1,429**), both local
@@ -80,6 +92,14 @@ every suite and the native window smoke. Downloaded JUnit testcase elements and 
 independently confirm Core **1,445/1,445**, Architecture **144/144**, Smoke **4/4**, zero
 failed/skipped, every MTP exit 0. This supplies the additive `p3_009_capture` raising only the
 Core floor **1,429 → 1,445**; no local estimate or stale pre-integration count was used. All
-historical captures and other suite floors remain unchanged. The final evidence-only head
-must pass its own fresh linux-ci run before delivery. Independent adversarial reviews are
-firstmate-owned.
+historical captures and other suite floors remain unchanged.
+
+The delivered evidence head `9e806d23ab64b3069f75f7c97daf92da2684ba77` was independently
+revalidated by final-head run
+[43791763526](https://github.com/seanburkes/playnite-linux/actions/runs/43791763526):
+downloaded JUnit confirms the same Core **1,445**, Architecture **144**, Smoke **4**, zero
+failures/skips, every MTP exit 0. Its `src/`, `tests/` (excluding the additive baseline), and
+`scripts/` trees are identical to the cited integration head: only baseline/evidence files
+changed. The subsequent review-honesty correction likewise changes only documentation,
+ledger evidence and baseline provenance; its new head must pass fresh CI before redelivery.
+Independent adversarial reviews are firstmate-owned.
