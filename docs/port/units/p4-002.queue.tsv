@@ -1,2 +1,2 @@
 id	wave	area	unit	depends	status	owner	oracle	test	notes
-p4-002	W4	data	v10 LiteDB importer	p4-001	todo	import	golden:import	test:import	PILOT; isolated
+p4-002	W4	data	v10 LiteDB importer	p4-001	in-progress	import	golden:import	test:import	Isolated raw reader; CLI/Core verified temp writer; 3 expected Steam rows; crash matrix and security exception in docs/port/p4-002-import.md; CI floor/reviews pending

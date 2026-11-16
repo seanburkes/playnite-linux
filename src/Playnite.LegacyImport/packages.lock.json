@@ -2,6 +2,12 @@
   "version": 2,
   "dependencies": {
     "net11.0": {
+      "LiteDB": {
+        "type": "Direct",
+        "requested": "[4.1.4, )",
+        "resolved": "4.1.4",
+        "contentHash": "g4g9JlHzRBZl+Gd2UbiRdszZ7t8wozU2wX7+5xY5uE79tmcgcDhha+ubAP84G1VLbwQmhBGCzRfIx+epLmJciQ=="
+      },
       "Microsoft.CodeAnalysis.BannedApiAnalyzers": {
         "type": "Direct",
         "requested": "[5.6.0, )",

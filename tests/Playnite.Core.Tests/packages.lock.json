@@ -184,6 +184,15 @@
           "xunit.v3.runner.common": "[4.0.3]"
         }
       },
+      "playnite.cli": {
+        "type": "Project",
+        "dependencies": {
+          "Playnite.Core": "[1.0.0, )",
+          "Playnite.LegacyImport.Contracts": "[1.0.0, )",
+          "Playnite.Platform": "[1.0.0, )",
+          "Playnite.Steam": "[1.0.0, )"
+        }
+      },
       "playnite.core": {
         "type": "Project",
         "dependencies": {
@@ -202,6 +211,9 @@
           "Playnite.Core": "[1.0.0, )"
         }
       },
+      "playnite.legacyimport.contracts": {
+        "type": "Project"
+      },
       "playnite.platform": {
         "type": "Project",
         "dependencies": {
@@ -218,6 +230,13 @@
       },
       "playnite.sdk.abstractions": {
         "type": "Project"
+      },
+      "playnite.steam": {
+        "type": "Project",
+        "dependencies": {
+          "Playnite.Core": "[1.0.0, )",
+          "Playnite.Platform": "[1.0.0, )"
+        }
       },
       "settingsmigration.crashhost": {
         "type": "Project",

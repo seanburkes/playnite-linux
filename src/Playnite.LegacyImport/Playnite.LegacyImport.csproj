@@ -3,6 +3,10 @@
     <OutputType>Exe</OutputType>
   </PropertyGroup>
   <ItemGroup>
+    <!-- Owner-authorized raw-reader-only exception; remove when v10 import retires.
+         This is not a sandbox or a claim that LiteDB 4 is safe. -->
+    <NuGetAuditSuppress Include="https://github.com/advisories/GHSA-3x49-g6rc-c284" />
+    <PackageReference Include="LiteDB" />
     <ProjectReference Include="../Playnite.LegacyImport.Contracts/Playnite.LegacyImport.Contracts.csproj" />
   </ItemGroup>
 </Project>
