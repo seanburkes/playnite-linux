@@ -1,2 +1,2 @@
 id	wave	area	unit	depends	status	owner	oracle	test	notes
-p3-009	W3	leaves	Localisation key migration (1,134 keys)	p3-001	todo	ui	golden:loc	test:loc	ADR-022; 37 files
+p3-009	W3	leaves	Localisation v10-to-new key migration	p3-007b	in-progress	fm/p3-009	legacy/source/Playnite/Localization/LocSource.xaml	LocalizationMigrationTests	Explicit 1134-entry identity map with 1131 prefixed and 3 unprefixed keys; deterministic migration report; unmapped and obsolete text retained; sibling English Diff proves empty diff; docs/port/p3-009-localisation-migration.md; key-layer artifacts read-only

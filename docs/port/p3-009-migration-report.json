@@ -1,0 +1,47 @@
+{
+  "command": "python3 scripts/migrations/localization_report.py --check",
+  "inputs": {
+    "legacy/source/Playnite/Localization/LocSource.xaml": "53ab48aa12848ee289b98fc8d05b65f6bbfde06a1f77fcfe8a981680392d3468",
+    "legacy/source/Playnite/Localization/LocalizationKeys.cs": "f875aed83397840fb77ed2eb4dd2ea19c4ad213b7ad481678227f80c2ea8a1f9",
+    "legacy/build/buildLocConstants.ps1": "56f1c33957189e17d597c4749e6672de4714add6cdf2acb2ef8f383175ae9c0a",
+    "src/Playnite.Core/Localization/English.json": "e5d40c217820c3a6e37f771891ce41b369eb1c306c2481f70d3b1e60f9d16aad",
+    "src/Playnite.Core/Migrations/localization-v10.json": "642eb644e2933603337618128e1e0984a1aa7d1ebba04745a8f0a71d8616917c"
+  },
+  "groups": [
+    {
+      "id": "loc-prefixed",
+      "count": 1131,
+      "provenance": {
+        "source": "legacy/source/Playnite/Localization/LocSource.xaml",
+        "constants": "legacy/source/Playnite/Localization/LocalizationKeys.cs",
+        "generator": "legacy/build/buildLocConstants.ps1",
+        "rule": "Preserve resource key verbatim; v10 generator removes LOC only from C# member names, not resource values."
+      }
+    },
+    {
+      "id": "unprefixed",
+      "count": 3,
+      "provenance": {
+        "source": "legacy/source/Playnite/Localization/LocSource.xaml",
+        "constants": "legacy/source/Playnite/Localization/LocalizationKeys.cs",
+        "generator": "legacy/build/buildLocConstants.ps1",
+        "rule": "Preserve resource key verbatim; v10 generator removes LOC only from C# member names, not resource values."
+      }
+    }
+  ],
+  "counts": {
+    "source": 1134,
+    "target": 1134,
+    "mapped": 1134,
+    "unmapped": 0,
+    "obsolete": 0
+  },
+  "unmapped": [],
+  "obsolete": [],
+  "orphanMappings": [],
+  "diff": {
+    "added": [],
+    "removed": [],
+    "changed": []
+  }
+}
