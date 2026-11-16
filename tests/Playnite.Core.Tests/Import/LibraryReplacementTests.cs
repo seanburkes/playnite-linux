@@ -270,16 +270,20 @@ public sealed partial class LibraryMigrationTests
     [Fact]
     [Trait("Invariant", "LibraryImport.DurableReceipt")]
     [Trait("Invariant", "LibraryImport.CrashSafe")]
-    public async Task Post_completion_failure_never_rolls_back_the_confirmed_publication()
+    public async Task Post_completion_failure_leaves_no_success_audit_never_rolls_back_and_refuses_from_artifact_alone()
     {
         await SeedLiveAsync();
         var envelope = await ReadEnvelope();
         await Assert.ThrowsAsync<IOException>(() => ReplaceAsync(envelope, checkpoint: state =>
         {
-            if (state == "Committed") throw new IOException("Injected post-completion failure");
+            if (state != "Committed") return;
+            Assert.False(File.Exists(Destination + ".import-report.json"));
+            throw new IOException("Injected post-completion failure");
         }));
+        Assert.False(File.Exists(Destination + ".import-report.json"));
         var database = await LibraryDatabase.OpenAsync(Destination);
         Assert.Equal(3, (await database.ReadAsync(s => s.Games.GetAllAsync())).Count);
+        Directory.Delete(Destination + ".import", recursive: true);
         await Assert.ThrowsAsync<IOException>(() => ReplaceAsync(envelope));
     }
 
@@ -384,7 +388,7 @@ public sealed partial class LibraryMigrationTests
             Assert.True(File.Exists(Destination + "-shm"));
             File.WriteAllText(Destination + "-journal", "discarded generation journal");
             File.WriteAllText(superJournal, "discarded generation super-journal");
-            Assert.True(File.Exists(Destination + ".import-report.json"));
+            Assert.False(File.Exists(Destination + ".import-report.json"));
             throw new IOException("Injected confirmation-window failure");
         }));
         Assert.Equal(old, await File.ReadAllBytesAsync(Destination));

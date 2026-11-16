@@ -22,9 +22,10 @@ The source v10 directory remains byte-identical; ADR-005 rollback to the v10 cop
 is unchanged. The external JSON report remains an audit artifact, not a commit bit.
 An earlier external report is retained as staging `previous-report.json` before
 the active report is removed. A new success report is staged privately and moved
-atomically to its audit path only after database rename and receipt verification,
-while the lease still excludes readers. Rollback removes
-it, so a failed replacement never leaves a new success report at the live audit path.
+atomically to its audit path only after database rename, receipt verification,
+lease release and the `Committed` completion checkpoint. A fault at `Committed`
+leaves no success audit, but leaves the whole new database and its repeat-run
+receipt intact. Rollback also leaves no new success report at the live audit path.
 
 ### Fingerprint definitions (report v1, additive field)
 
@@ -98,7 +99,7 @@ one-game library, not just a fresh path:
 | Publishing (retained old, before rename) | Entire old database | Import succeeds |
 | Swapped (after rename, before confirmation) | Entire new database **and receipt** | Refuses even without external report |
 | ReceiptConfirmed (before lease release) | Entire new database **and receipt** | Refuses even without external report |
-| Committed (completed) | Entire new database **and receipt** | Refuses even without external report |
+| Committed (completed, before external audit publication) | Entire new database **and receipt**, no success audit | Refuses from artifact alone |
 
 The Windows-produced `tests/fixtures/v10/library` is reused without modification:
 3 expected/imported Steam games, 1 custom game reported, all 9 documents accounted
@@ -175,7 +176,7 @@ the follow-up implementation:
    a read-only probe plus journal/super-journal remnants, and asserts absence of
    every derived file and byte-identical old main **after** rollback.
 3. Misleading audit on rollback: archive the earlier audit, publish the new audit
-   only inside confirmed publication, remove it on rollback; failure/cancellation
+   only after the completion checkpoint, remove it on rollback; failure/cancellation
    tests and the ReceiptConfirmed fault test assert no success report remains.
 4. Source identity wording: retain/document the normalized-intermediate
    `SourceHash`, add and verify the separately named `SourceManifestHash` from the
@@ -193,3 +194,8 @@ connection lifetime is the required isolation boundary, and an idle database
 object must not prevent replacement forever. That boundary and the old-copy
 standalone-file precondition are explicit above. No model changes or new public
 test hooks are introduced; the contention rendezvous is internal and async-local.
+
+Closure Review A additionally required acknowledgment/audit ordering: the external
+audit move now follows `Committed`. The post-completion fault test asserts no audit
+exists both inside the checkpoint and after the thrown failure, proves all new
+rows remain, removes all staging material, and proves artifact-only repeat refusal.

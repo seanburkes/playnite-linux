@@ -204,7 +204,6 @@ public static class LibraryMigration
                 cancellationToken.ThrowIfCancellationRequested();
                 if (!await HasReceiptAsync(destination, cancellationToken, report).ConfigureAwait(false))
                     throw new InvalidDataException("Published artifact lost its migration receipt.");
-                File.Move(stagedReport, reportPath, overwrite: true);
                 checkpoint?.Invoke("ReceiptConfirmed");
                 cancellationToken.ThrowIfCancellationRequested();
             }
@@ -222,6 +221,7 @@ public static class LibraryMigration
             }
         }
         checkpoint?.Invoke("Committed");
+        File.Move(stagedReport, reportPath, overwrite: true);
         return report;
     }
 
