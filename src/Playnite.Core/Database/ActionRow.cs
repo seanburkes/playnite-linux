@@ -2,6 +2,13 @@ using Playnite.Core.Models;
 
 namespace Playnite.Core.Database;
 
+internal sealed class EmulatorReferenceRow
+{
+    public string GameId { get; set; } = "";
+    public int Position { get; set; }
+    public string EmulatorId { get; set; } = "";
+}
+
 internal sealed class ActionRow
 {
     public int Type { get; set; }

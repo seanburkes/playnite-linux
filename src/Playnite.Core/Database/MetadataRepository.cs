@@ -1,4 +1,3 @@
-using Dapper;
 using Playnite.Core.Models;
 
 namespace Playnite.Core.Database;
@@ -40,7 +39,7 @@ public sealed class MetadataRepository<T> where T : DatabaseObject
         var sql = table == "platform"
             ? "INSERT INTO platform(Id, Name, SpecificationId, Icon, Cover, Background, LegacyJson) VALUES (@Id, @Name, @SpecificationId, @Icon, @Cover, @Background, @LegacyJson);"
             : $"INSERT INTO {table}(Id, Name, LegacyJson) VALUES (@Id, @Name, @LegacyJson);";
-        await session.Connection.ExecuteAsync(session.Command(sql, row)).ConfigureAwait(false);
+        await session.ExecuteAsync(sql, row).ConfigureAwait(false);
     }
 
     /// <summary>Replaces a metadata value; missing identity is an error.</summary>
@@ -50,7 +49,7 @@ public sealed class MetadataRepository<T> where T : DatabaseObject
         var sql = table == "platform"
             ? "UPDATE platform SET Name=@Name, SpecificationId=@SpecificationId, Icon=@Icon, Cover=@Cover, Background=@Background, LegacyJson=@LegacyJson WHERE Id=@Id;"
             : $"UPDATE {table} SET Name=@Name, LegacyJson=@LegacyJson WHERE Id=@Id;";
-        if (await session.Connection.ExecuteAsync(session.Command(sql, row)).ConfigureAwait(false) != 1)
+        if (await session.ExecuteAsync(sql, row).ConfigureAwait(false) != 1)
         {
             throw new KeyNotFoundException($"Metadata {item.Value.Id} was not found.");
         }
@@ -59,20 +58,20 @@ public sealed class MetadataRepository<T> where T : DatabaseObject
     /// <summary>Reads one identity, or null if absent.</summary>
     public async Task<StoredMetadata<T>?> GetAsync(Guid id)
     {
-        var row = await session.Connection.QuerySingleOrDefaultAsync<MetadataRow>(session.Command($"SELECT * FROM {table} WHERE Id=@Id;", new { Id = id.ToString("D") })).ConfigureAwait(false);
+        var row = await session.QuerySingleOrDefaultAsync<MetadataRow>($"SELECT * FROM {table} WHERE Id=@Id;", new { Id = id.ToString("D") }).ConfigureAwait(false);
         return row == null ? null : FromRow(row);
     }
 
     /// <summary>Reads all values ordered by canonical identity.</summary>
     public async Task<IReadOnlyList<StoredMetadata<T>>> GetAllAsync()
     {
-        var rows = await session.Connection.QueryAsync<MetadataRow>(session.Command($"SELECT * FROM {table} ORDER BY Id;")).ConfigureAwait(false);
+        var rows = await session.QueryAsync<MetadataRow>($"SELECT * FROM {table} ORDER BY Id;").ConfigureAwait(false);
         return rows.Select(FromRow).ToArray();
     }
 
     /// <summary>Deletes a value, returning false if absent.</summary>
     public async Task<bool> DeleteAsync(Guid id)
-        => await session.Connection.ExecuteAsync(session.Command($"DELETE FROM {table} WHERE Id=@Id;", new { Id = id.ToString("D") })).ConfigureAwait(false) == 1;
+        => await session.ExecuteAsync($"DELETE FROM {table} WHERE Id=@Id;", new { Id = id.ToString("D") }).ConfigureAwait(false) == 1;
 
     private static MetadataRow ToRow(StoredMetadata<T> item)
     {
