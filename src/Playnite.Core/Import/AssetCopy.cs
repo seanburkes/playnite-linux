@@ -57,6 +57,8 @@ public static class AssetCopy
             }
             catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
             {
+                if (reference.Sha256 != null || reference.Size != null)
+                    throw CannotReproduce(reference, exception);
                 results.Add(new(reference, "unreadable", null, null, null, "unavailable"));
                 continue;
             }
@@ -111,9 +113,12 @@ public static class AssetCopy
                             output.Flush(flushToDisk: true);
                         }
                     }
-                    input.Position = 0;
                     ImageDimensions.Result dimensions;
-                    try { dimensions = await ImageDimensions.ReadAsync(input, cancellationToken).ConfigureAwait(false); }
+                    try
+                    {
+                        input.Position = 0;
+                        dimensions = await ImageDimensions.ReadAsync(input, cancellationToken).ConfigureAwait(false);
+                    }
                     catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
                     {
                         throw new SourceReadException(exception);
@@ -124,9 +129,9 @@ public static class AssetCopy
                         Path.GetRelativePath(Path.GetDirectoryName(destination)!, blob).Replace('\\', '/'),
                         dimensions.Width, dimensions.Height, dimensions.Status));
                 }
-                catch (SourceReadException)
+                catch (SourceReadException exception)
                 {
-                    results.Add(new(reference, "unreadable", null, null, null, "unavailable"));
+                    throw CannotReproduce(reference, exception);
                 }
                 finally
                 {
@@ -138,6 +143,9 @@ public static class AssetCopy
     }
 
     private sealed class SourceReadException(Exception inner) : IOException("Cannot read source asset.", inner);
+
+    private static InvalidDataException CannotReproduce(AssetReference reference, Exception exception) =>
+        new($"Source asset cannot reproduce captured bytes: {reference.File}/{reference.Collection}/{reference.Identity}/{reference.Path}", exception);
 
     private static async Task<int> ReadSourceAsync(Stream input, Memory<byte> buffer, CancellationToken cancellationToken)
     {

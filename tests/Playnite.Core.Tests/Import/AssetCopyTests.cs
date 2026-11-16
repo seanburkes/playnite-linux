@@ -297,10 +297,23 @@ public sealed class AssetCopyTests : IDisposable
         var envelope = JObject.Parse(await Envelope());
         var game = ((JArray)envelope["records"]!).First(r => (string?)r["collection"] == "Game");
         game["data"]!["Icon"] = "asset";
+        using (var lease = new FileStream(Path.Combine(Source, "files", "asset"), System.IO.FileMode.Open, FileAccess.ReadWrite, FileShare.None))
+        {
+            var locked = await Assert.ThrowsAsync<InvalidDataException>(() => LibraryMigration.RunAsync(envelope.ToString(), Source, Destination));
+            Assert.Contains("cannot reproduce captured bytes", locked.Message);
+            Assert.Contains("games.db/Game/10000000-0000-0000-0000-000000000001/asset", locked.Message);
+            Assert.False(File.Exists(Destination));
+        }
         File.Delete(Path.Combine(Source, "files", "asset"));
         var error = await Assert.ThrowsAsync<InvalidDataException>(() => LibraryMigration.RunAsync(envelope.ToString(), Source, Destination));
         Assert.Contains("disappeared after reader snapshot", error.Message);
         Assert.Contains("games.db/Game/10000000-0000-0000-0000-000000000001/asset", error.Message);
+        Assert.False(File.Exists(Destination)); Assert.False(Directory.Exists(Store));
+        Directory.CreateDirectory(Path.Combine(Source, "files", "asset"));
+        var replaced = await Assert.ThrowsAsync<InvalidDataException>(() => LibraryMigration.RunAsync(envelope.ToString(), Source, Destination));
+        Assert.Contains("cannot reproduce captured bytes", replaced.Message);
+        Assert.Contains("games.db/Game/10000000-0000-0000-0000-000000000001/asset", replaced.Message);
+        Assert.True(Directory.Exists(Path.Combine(Source, "files", "asset")));
         Assert.False(File.Exists(Destination)); Assert.False(Directory.Exists(Store));
     }
 
