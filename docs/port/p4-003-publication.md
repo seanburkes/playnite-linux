@@ -161,11 +161,22 @@ backup files are deliberate audit/recovery material, not exposed partial data.
 
 ## Validation and review
 
-Local narrow suites and real final-head linux-ci evidence are recorded in the
-unit shard. The CI-backed floor capture is added only after downloading actual
-linux-ci results. Both firstmate-arranged adversarial diff-only reviews filed
-findings on f0c8e8e; fix-head re-reviews and final CI remain gates. No independent
-human approval or merge authority is claimed.
+Final-source actual linux-ci [43964833995](https://github.com/seanburkes/playnite-linux/actions/runs/43964833995)
+at `2e09983dd2270bc3c64a0390b4cced3808aa1ad7` passed warning-as-error locked
+restore/build, bounded fuzz and native smoke. Downloaded JUnit testcase/suite
+totals and MTP exit files independently confirm **Core1779/1779,
+Architecture173/173, Smoke4/4**, zero failures/skips and all exits0. The additive
+floor raises only Core1737 to1779, preserving all earlier captures and other
+suite floors. It measures the combined asset/replacement/marker tree, not an
+estimated branch sum. The earlier combined602e977 run43961824329 measured1776
+before the marker controls and is retained as superseded history, not this floor.
+
+The floor commit changes only baseline/shards/documentation; source and test cases
+are identical to that tested source head. Its own pushed-head linux-ci must
+revalidate the same counts before readiness. Both firstmate-arranged adversarial
+diff-only reviews filed findings; dispositions and closure follow-ups are below.
+Final closure/readiness and the unrelated shared Flatpak/main fix remain gates.
+No independent human approval or merge authority is claimed.
 
 ### Review A/B disposition
 
