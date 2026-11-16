@@ -1,2 +1,2 @@
 id	wave	area	unit	depends	status	owner	oracle	test	notes
-p4-005	W4	data	Asset copy/hash	p4-002	todo	import	golden:assets	test:assets	
+p4-005	W4	data	Asset copy/hash	p4-002	todo	import	golden:assets	test:assets	Still remaining after https://github.com/seanburkes/playnite-linux/pull/94: the reader hashes source files and the importer preserves records, but no unit copies assets by content hash to the destination, records image dimensions or handles missing files. The frozen v10 fixture has no asset payload, so the Phase 4 gate row evidence does not cover assets; no pass is claimed.
