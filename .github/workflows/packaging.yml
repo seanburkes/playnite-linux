@@ -89,6 +89,7 @@ jobs:
             flatpak install --user --noninteractive flathub "$ref"
             flatpak update --user --noninteractive --no-related --commit="$commit" "$ref"
             actual=$(flatpak info --user --show-commit "$ref")
+            echo "After setup: $ref expected=$commit actual=$actual"
             test "$actual" = "$commit"
           done < "$RUNNER_TEMP/runtime-lock.tsv"
       - name: Build, install bundle and smoke the sandboxed Flatpak
@@ -97,11 +98,21 @@ jobs:
         run: |
           set -euo pipefail
           id=io.github.playnite_linux.Playnite
+          runtime_snapshot() {
+            while IFS=$'\t' read -r ref expected; do
+              actual=$(flatpak info --user --show-commit "$ref")
+              echo "$1: $ref expected=$expected actual=$actual"
+            done < "$RUNNER_TEMP/runtime-lock.tsv"
+          }
+          runtime_snapshot 'Before builder'
           flatpak-builder --user --disable-rofiles-fuse --repo=repo build "$id.json"
+          runtime_snapshot 'After builder'
           mkdir artifacts
           flatpak build-bundle repo "artifacts/Playnite-Linux-x86_64.flatpak" "$id"
+          runtime_snapshot 'After build-bundle'
           test -s artifacts/Playnite-Linux-x86_64.flatpak
           flatpak install --user --noninteractive artifacts/Playnite-Linux-x86_64.flatpak
+          runtime_snapshot 'After bundle install'
           version=$(timeout 30s flatpak run --user "$id" --version)
           printf 'Packaged CLI version: %s\n' "$version"
           test "$version" = '1.0.0.0'
@@ -118,6 +129,7 @@ jobs:
             stat --printf='Artifact: %n — %s bytes\n' artifacts/*.flatpak
             while IFS=$'\t' read -r ref expected; do
               commit=$(flatpak info --user --show-commit "$ref")
+              echo "$ref expected=$expected actual=$commit"
               test "$commit" = "$expected"
               echo "$ref commit: $commit"
             done < "$RUNNER_TEMP/runtime-lock.tsv"
