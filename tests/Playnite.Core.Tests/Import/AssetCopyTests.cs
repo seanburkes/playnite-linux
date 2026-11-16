@@ -127,7 +127,7 @@ public sealed class AssetCopyTests : IDisposable
         var game = ((JArray)envelope["records"]!).First(r => (string?)r["collection"] == "Game");
         game["data"]!["Icon"] = "large.png";
         var plan = Path.Combine(temporary, "intermediate.json"); File.WriteAllText(plan, envelope.ToString());
-        var start = Start(Product("tools", "AssetCopy.CrashHost"));
+        var start = Start(Path.Combine(AppContext.BaseDirectory, "AssetCopy.CrashHost.dll"));
         foreach (var arg in new[] { plan, Source, Destination }) start.ArgumentList.Add(arg);
         using var process = Process.Start(start)!;
         try
