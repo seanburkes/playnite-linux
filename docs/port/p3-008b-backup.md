@@ -167,5 +167,6 @@ later-mode symlink preflight and bomb limits. Zero skips.
 
 Local narrow checks at the implementation head: Core **1412 passed / 0 failed / 0 skipped**
 (previous union floor 1365), Architecture **144 passed / 0 failed / 0 skipped**, Core Release
-build **0 warnings / 0 errors**. The counted floor is raised only from a real linux-ci run on
-the final head.
+build **0 warnings / 0 errors**. After normally merging `origin/main` (the p3-007b localisation
+union), the real linux-ci merged head reports **1429/1429** Core, **144/144** Architecture and
+**4/4** Smoke, zero skips; the counted floor is raised to 1429 only from that run.

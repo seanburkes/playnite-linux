@@ -23,9 +23,9 @@
       "skipped": 0
     },
     "Playnite.Core.Tests": {
-      "total": 1412,
-      "executed": 1412,
-      "passed": 1412,
+      "total": 1429,
+      "executed": 1429,
+      "passed": 1429,
       "failed": 0,
       "skipped": 0
     },
@@ -115,5 +115,12 @@
     "run_url": "https://github.com/seanburkes/playnite-linux/actions/runs/43782366884",
     "commit": "a6abbcbb838b5e07814dacaa48f9a310249e0b4c",
     "notes": "a6abbcbb838b5e07814dacaa48f9a310249e0b4c is the implementation head whose linux-ci run 43782366884 produced the counts below; the final head of https://github.com/seanburkes/playnite-linux/pull/78 adds only this additive baseline capture, the localisation contract documentation and the review fix that binds LocalizationKeyTests to the repository legacy/ paths (no test count change), and its own linux-ci run revalidates the same 1382-case Core suite. Counts independently parsed from downloaded linux-test-results JUnit testcase elements, testsuite totals and MTP exit files for run 43782366884: Playnite.Core.Tests 1382 total / 1382 executed / 1382 passed / 0 failed / 0 skipped, exit 0, including 17 LocalizationKeyTests cases; Playnite.Architecture.Tests 144 / 144 / 144 / 0 / 0, exit 0; Playnite.Smoke.Tests 4 / 4 / 4 / 0 / 0, exit 0. This raises the evidenced 1365 Core floor to 1382, the exact 17-case localisation addition rather than a guessed union. Every historical capture, other suite floor and empty_projects remains intact; no count is lowered. The p3_007b shard records this unit; aggregates remain parent-owned. Additive oracle-change update on the same PR that adds the localisation golden."
+  },
+  "p3_008b_union_capture": {
+    "captured_at": "2026-11-16T02:03:00Z",
+    "run_id": 43789085630,
+    "run_url": "https://github.com/seanburkes/playnite-linux/actions/runs/43789085630",
+    "commit": "f40287121da0c31457418b1880e333aabe1dd5b7",
+    "notes": "Counts independently parsed from the downloaded linux-test-results JUnit and MTP exit files for linux-ci run 43789085630 on https://github.com/seanburkes/playnite-linux/pull/79 head f402871 after normally merging origin/main ffc882f (the p3-007b localisation union) into fm/p3-008bb: Playnite.Core.Tests 1429 total / 1429 executed / 1429 passed / 0 failed / 0 skipped, Playnite.Architecture.Tests 144 / 144 / 144 / 0 / 0, Playnite.Smoke.Tests 4 / 4 / 4 / 0 / 0, all MTP exit 0. The 1429 is the real merged union of the 1412 p3-008b archive/backup suite and the 17 p3-007b localisation cases, not a guessed sum. This raises the Core floor from the pre-merge 1412 to 1429; the earlier p3_008b_capture and p3_008b_capture_final records and every other historical capture remain intact, and no suite floor is lowered. The final baseline-only commit revalidates the same counted cases."
   }
 }
