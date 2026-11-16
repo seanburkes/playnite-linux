@@ -219,6 +219,12 @@
       "playnite.sdk.abstractions": {
         "type": "Project"
       },
+      "settingsmigration.crashhost": {
+        "type": "Project",
+        "dependencies": {
+          "Playnite.Core": "[1.0.0, )"
+        }
+      },
       "Dapper": {
         "type": "CentralTransitive",
         "requested": "[2.1.89, )",

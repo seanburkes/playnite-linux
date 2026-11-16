@@ -243,7 +243,12 @@ Property tests (`CsCheck` 5.x):
 
 Fuzzing (`SharpFuzz` + libFuzzer or AFL):
 - VDF, ACF, INI, JSON settings, YAML manifests, ZIP/7z/tar entry names, M3U/CUE.
-- Corpus from real fixtures; run a bounded time in PR CI, longer nightly.
+- Corpus from real fixtures. `linux-ci` keys the budget on the event: pull-request and
+  merge-queue runs target **45 s** and pushes to `main` target **120 s**, both with a
+  **50,000,000-iteration** cap and an outer timeout of the target budget plus 30 s. The
+  target rejects a wall-clock budget under **30 s** or an iteration budget under
+  **100,000**, so a short run cannot pass vacuously; `FUZZ COMPLETE` is printed only after
+  a budget at or above those floors is exhausted cleanly.
 - Every crash becomes a regression test and a fixed corpus entry.
 
 ## 8. Mutation testing
@@ -311,7 +316,7 @@ design, not a proof of the C# implementation.
 | Public API | SDK surface removed/changed without an API report update | every PR |
 | Dependency audit | vulnerable/denied package, license change | every PR + nightly |
 | SBOM | missing/unsigned artifact | release |
-| Fuzz smoke | crash in bounded run | every PR (short), nightly (long) |
+| Fuzz smoke | crash in bounded run | every PR/merge queue (45 s), main push (120 s) |
 | Formal | TLC invariant violation | nightly + `docs/formal/**` |
 | Mutation | score drops below ratchet | nightly |
 | Benchmarks | > tolerance regression | nightly |

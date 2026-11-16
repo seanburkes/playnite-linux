@@ -23,9 +23,9 @@
       "skipped": 0
     },
     "Playnite.Core.Tests": {
-      "total": 1533,
-      "executed": 1533,
-      "passed": 1533,
+      "total": 1583,
+      "executed": 1583,
+      "passed": 1583,
       "failed": 0,
       "skipped": 0
     },
@@ -172,5 +172,12 @@
     "run_url": "https://github.com/seanburkes/playnite-linux/actions/runs/43803577215",
     "commit": "f6d5fab2259633689e21dfcb4da52b025bbfa56b",
     "notes": "p3-exit reconciliation raises the counted Architecture floor from 103 to 144 using the same real linux-ci run 43803577215 at main f6d5fab: Playnite.Architecture.Tests 144 total / 144 executed / 144 passed / 0 failed / 0 skipped, exit 0; Playnite.Core.Tests 1533 total / 1533 executed / 1533 passed / 0 failed / 0 skipped, exit 0; Playnite.Smoke.Tests 4 / 4 / 4 / 0 / 0, exit 0. This PR adds this capture object and raises new.Playnite.Architecture.Tests total/executed/passed from 103 to 144; every Core count and every existing Core capture object is unchanged by this PR. History accuracy: the earlier p3_crc_ds_capture object was amended before its merge to add the 43796922458 revalidation fields, and PR #85's earlier 1515 union capture object was replaced before merge by the 1533 p3_crc_ds_union_capture object; run 43798442753 at 1515 therefore survives only as superseded history cited in that object's notes. This correction does not claim every earlier baseline object is byte-identical. PR-head linux-ci 43804777415 on 61e9df7 and main linux-ci 43803577215 both report 1533 Core / 144 Architecture / 4 Smoke, zero failed/skipped; both fuzz runs used corpus_sha256 1238d2aee830e40b7084501f39ccf90d3c55f8a087e353b97750ff39b6c38193."
+  },
+  "p4_004_capture": {
+    "captured_at": "2026-11-16T05:50:49Z",
+    "run_id": 43812557296,
+    "run_url": "https://github.com/seanburkes/playnite-linux/actions/runs/43812557296",
+    "commit": "260bcc342f820dceb93b151e7c272cc27e9c5926",
+    "notes": "Downloaded linux-test-results JUnit testcase elements, suite totals, test-counts.json and MTP exit files independently confirm Core 1583 total/executed/passed, Architecture 144 total/executed/passed and Smoke 4 total/executed/passed, every suite zero failed/skipped and exit 0. Actual linux-ci run 43812557296 on https://github.com/seanburkes/playnite-linux/pull/89 tested the final implementation head 260bcc342f820dceb93b151e7c272cc27e9c5926 with warning-as-error restore/build, bounded serialization fuzzing and native smoke successful. Core raises from 1533 to the real 1583 union, including 50 settings migration cases; no other suite floor or historical capture is changed. Cases include three protected settings byte-round-trip goldens, Windows path mapping and unmapped reporting, legacy preservation, dry-run/idempotence, complete source fixture byte identity, and actual child-process death without managed cleanup at every write boundary. This additive oracle-change ratchet is authorized by firstmate steering p4-004/001-002. The capture commit changes only baseline/evidence, not implementation or test cases; final pushed-head linux-ci must revalidate these same counts before readiness. SQLite/repository/importer files and protected parity/aggregate files are untouched."
   }
 }

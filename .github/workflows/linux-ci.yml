@@ -181,19 +181,43 @@ jobs:
             --previous-projects "$RUNNER_TEMP/previous-projects.txt" \
             --summary "$GITHUB_STEP_SUMMARY"
 
+      - name: Resolve the fuzz budget
+        id: fuzz_budget
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          set -euo pipefail
+          # Pull-request and merge-queue runs keep the 45 s target so review latency
+          # does not grow; a main push gets 120 s for a longer bounded run. The
+          # iteration cap is the same on every event. FuzzOptions rejects anything
+          # below 30 s or 100,000 iterations, so no resolved budget can be vacuous.
+          case "$EVENT_NAME" in
+            pull_request | merge_group) seconds=45 ;;
+            push) seconds=120 ;;
+            *)
+              echo "::error::Unsupported event $EVENT_NAME; cannot resolve a fuzz budget"
+              exit 1
+              ;;
+          esac
+          iterations=50000000
+          # The outer timeout is the target budget plus 30 s, so a hung case or a
+          # slow parser cannot hold the required job open past that ceiling.
+          printf 'seconds=%s\niterations=%s\ntimeout_seconds=%s\n' \
+            "$seconds" "$iterations" "$((seconds + 30))" >> "$GITHUB_OUTPUT"
+
       - name: Fuzz the serialisation parsers (bounded)
         shell: bash
         env:
-          # The target itself runs for 45 s; the outer timeout is a hard 75 s ceiling
-          # so this required job cannot grow with a hung case or a slow parser.
-          FUZZ_SECONDS: "45"
-          FUZZ_ITERATIONS: "50000000"
+          FUZZ_SECONDS: ${{ steps.fuzz_budget.outputs.seconds }}
+          FUZZ_ITERATIONS: ${{ steps.fuzz_budget.outputs.iterations }}
+          FUZZ_TIMEOUT_SECONDS: ${{ steps.fuzz_budget.outputs.timeout_seconds }}
           FUZZ_SEED: "0x5EED1A2B003C004D"
         run: |
           set -euo pipefail
           log="$RUNNER_TEMP/serialisation-fuzz.log"
           set +e
-          timeout --signal=TERM --kill-after=10s 75s \
+          timeout --signal=TERM --kill-after=10s "${FUZZ_TIMEOUT_SECONDS}s" \
             dotnet tools/Playnite.Fuzz/bin/Release/net11.0/Playnite.Fuzz.dll \
               --corpus tests/fixtures/serialization-fuzz \
               --seed "$FUZZ_SEED" \
