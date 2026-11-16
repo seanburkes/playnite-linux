@@ -139,6 +139,10 @@
     "run_id": 43794960376,
     "run_url": "https://github.com/seanburkes/playnite-linux/actions/runs/43794960376",
     "commit": "006bd571034fed770a5ae5e917730198d5a5ccce",
+    "revalidation_run_id": 43795350288,
+    "revalidation_run_url": "https://github.com/seanburkes/playnite-linux/actions/runs/43795350288",
+    "revalidation_commit": "99fec3a1bbca31797786f5cbc5ff8e102d790bb3",
+    "revalidation_notes": "Final ratchet-head linux-ci independently confirms Core 1455 total / 1455 executed / 1455 passed / 0 failed / 0 skipped, Architecture 144 / 144 / 144 / 0 / 0, Smoke 4 / 4 / 4 / 0 / 0, every MTP exit 0 from the downloaded linux-test-results JUnit testcase elements, suite totals and exit files, with the oracle-change label present. Relative to the integration capture head, all production, script and test-case files are identical: only tests/baseline.json and docs/port/units/p3-loc-coverage-ds.ledger.tsv changed. The captured floor is the real evidenced 1455, not an estimate.",
     "notes": "Counts independently parsed from the downloaded linux-test-results JUnit testcase elements, testsuite totals and MTP exit files for linux-ci run 43794960376 on https://github.com/seanburkes/playnite-linux/pull/82 head 006bd57: Playnite.Core.Tests 1455 total / 1455 executed / 1455 passed / 0 failed / 0 skipped, exit 0, including 10 LocalizationCoverageTests cases; Playnite.Architecture.Tests 144 / 144 / 144 / 0 / 0, exit 0; Playnite.Smoke.Tests 4 / 4 / 4 / 0 / 0, exit 0. This raises the recorded Core union floor from 1445 to the evidenced 1455 (1445 plus 10 coverage cases); no other suite floor is lowered and every historical capture remains intact. The ratchet commit changes only tests/baseline.json and the p3-loc-coverage-ds shard evidence, so linux-ci on the final PR head revalidates the same counted cases."
   }
 }
