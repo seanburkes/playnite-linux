@@ -1,8 +1,8 @@
 # Port status
 
-**Phase:** 3 — implementation merged; exit pending owner acceptance
+**Phase:** 3 — exit pending owner acceptance
 **Updated:** 2026-11-16
-**Next gate:** Phase 4 (only after the owner accepts the Phase 3 exit)
+**Next gate:** Phase 3 exit — owner acceptance (Phase 4 not started)
 
 ## Done
 
@@ -79,7 +79,7 @@
       to v1.1 and empty-library-open to Phase 4. Exit artifact
       https://github.com/seanburkes/playnite-linux/pull/64 merged at `0e39326`;
       owner acceptance authorises Phase 3, without waiving the recorded residual risks.
-- [x] Phase 3 pure-logic units merged: paths/XDG (#68), string/date/enum (#67),
+- [x] Phase 3 pure-logic shards reconciled: paths/XDG (#68), string/date/enum (#67),
       serialisation (#69, #71), models/equality (#72, #74, #75), manifests (#73),
       search/filter/sort (#76), localisation keys and diff (#78), archive/backup
       (#79, #80), v10-to-new key migration (#81), locale coverage (#82), CRC/checksums
@@ -96,8 +96,8 @@
 
 ## In flight
 
-None. Phase 3 units are merged; the exit is pending owner acceptance. Phase 4 has not
-started and is not dispatched by the exit draft.
+None. The Phase 3 exit is pending owner acceptance; Phase 4 has not started and is not
+dispatched by the exit draft.
 
 ## Not started
 
@@ -156,5 +156,5 @@ started and is not dispatched by the exit draft.
 | Windows-only files (non-WPF) | 72 | `scan_legacy.py` |
 | New-suite recorded baseline | 1533 Core + 103 architecture + 4 smoke | `tests/baseline.json`, additive captures through run 43800467861 |
 | Current new-suite cases | 1533 Core + 144 architecture + 4 smoke; zero failures/skips | run 43803577215 on `f6d5fab` |
-| Ported parity rows | 0 | `surface-parity.tsv` (0 of 96 rows ported) |
+| Ported parity rows | 8 adapted of 109 data rows (78 planned, 13 greenfield, 6 deferred, 4 out-of-scope-v1) | `surface-parity.tsv` |
 | Open ADRs | 0 | `00-DECISIONS.md` |

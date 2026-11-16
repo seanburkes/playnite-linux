@@ -16,9 +16,9 @@
   },
   "new": {
     "Playnite.Architecture.Tests": {
-      "total": 103,
-      "executed": 103,
-      "passed": 103,
+      "total": 144,
+      "executed": 144,
+      "passed": 144,
       "failed": 0,
       "skipped": 0
     },
@@ -165,5 +165,12 @@
     "run_url": "https://github.com/seanburkes/playnite-linux/actions/runs/43800467861",
     "commit": "09065d23612e5750cbf3cb99147f5c3c7f4dac37",
     "notes": "Final merged head of https://github.com/seanburkes/playnite-linux/pull/85 after normally merging origin/main 339aa97 (p3-fuzz-ds, Core floor 1463) and measuring the merged tree locally at 1533. Counts independently parsed from the downloaded linux-test-results JUnit testcase elements, testsuite totals and MTP exit files for linux-ci run 43800467861 on https://github.com/seanburkes/playnite-linux/pull/85 head 09065d2: Playnite.Core.Tests 1533 total / 1533 executed / 1533 passed / 0 failed / 0 skipped, exit 0; Playnite.Architecture.Tests 144 / 144 / 144 / 0 / 0, exit 0; Playnite.Smoke.Tests 4 / 4 / 4 / 0 / 0, exit 0. The 1533 is the real union on current main: 1515 (main's 1457 plus this unit's 58 checksum cases) plus the 18 FuzzTargetTests cases from #84, not an assumed sum. This raises only the counted Core floor from 1515 to the measured 1533; main's p3_fuzz_ds_capture and the pre-merge 1503 record are retained, every other historical capture remains intact, and no suite floor is lowered. The earlier 394e3f2 run 43798442753 measured 1515 before #84 merged and is retained as superseded history. The capture commit changes only tests/baseline.json and the p3-crc-ds shard evidence, so linux-ci on the final pushed head revalidates the same counted cases."
+  },
+  "p3_exit_architecture_capture": {
+    "captured_at": "2026-11-16T05:05:00Z",
+    "run_id": 43803577215,
+    "run_url": "https://github.com/seanburkes/playnite-linux/actions/runs/43803577215",
+    "commit": "f6d5fab2259633689e21dfcb4da52b025bbfa56b",
+    "notes": "p3-exit reconciliation raises the counted Architecture floor from 103 to 144 using the same real linux-ci run 43803577215 at main f6d5fab: Playnite.Architecture.Tests 144 total / 144 executed / 144 passed / 0 failed / 0 skipped, exit 0; Playnite.Core.Tests 1533 total / 1533 executed / 1533 passed / 0 failed / 0 skipped, exit 0; Playnite.Smoke.Tests 4 / 4 / 4 / 0 / 0, exit 0. This PR adds this capture object and raises new.Playnite.Architecture.Tests total/executed/passed from 103 to 144; every Core count and every existing Core capture object is unchanged by this PR. History accuracy: the earlier p3_crc_ds_capture object was amended before its merge to add the 43796922458 revalidation fields, and PR #85's earlier 1515 union capture object was replaced before merge by the 1533 p3_crc_ds_union_capture object; run 43798442753 at 1515 therefore survives only as superseded history cited in that object's notes. This correction does not claim every earlier baseline object is byte-identical. PR-head linux-ci 43804777415 on 61e9df7 and main linux-ci 43803577215 both report 1533 Core / 144 Architecture / 4 Smoke, zero failed/skipped; both fuzz runs used corpus_sha256 1238d2aee830e40b7084501f39ccf90d3c55f8a087e353b97750ff39b6c38193."
   }
 }
