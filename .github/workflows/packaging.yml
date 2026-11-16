@@ -86,22 +86,30 @@ jobs:
           python3 packaging/verify-flatpak.py packaging/io.github.playnite_linux.Playnite.json
           python3 -c 'import json; locks=json.load(open("packaging/flatpak-runtime-lock.json")); print("\n".join(f"{ref}\t{commit}" for ref, commit in locks.items()))' > "$RUNNER_TEMP/runtime-lock.tsv"
           while IFS=$'\t' read -r ref commit; do
-            flatpak install --user --noninteractive flathub "$ref"
-            flatpak update --user --noninteractive --no-related --commit="$commit" "$ref"
-            actual=$(flatpak info --user --show-commit "$ref")
-            test "$actual" = "$commit"
+            flatpak install --user --noninteractive --no-related --no-deps flathub "$ref"
+            flatpak update --user --noninteractive --no-related --no-deps --commit="$commit" "$ref"
           done < "$RUNNER_TEMP/runtime-lock.tsv"
+          python3 packaging/verify-flatpak-runtime.py packaging/flatpak-runtime-lock.json 'After setup'
       - name: Build, install bundle and smoke the sandboxed Flatpak
         if: matrix.format == 'Flatpak'
         working-directory: ${{ runner.temp }}/package
         run: |
           set -euo pipefail
           id=io.github.playnite_linux.Playnite
+          verify_runtime() {
+            python3 "$GITHUB_WORKSPACE/packaging/verify-flatpak-runtime.py" \
+              "$GITHUB_WORKSPACE/packaging/flatpak-runtime-lock.json" "$1"
+          }
+          verify_runtime 'Before builder'
           flatpak-builder --user --disable-rofiles-fuse --repo=repo build "$id.json"
+          verify_runtime 'After builder'
           mkdir artifacts
           flatpak build-bundle repo "artifacts/Playnite-Linux-x86_64.flatpak" "$id"
+          verify_runtime 'After build-bundle'
           test -s artifacts/Playnite-Linux-x86_64.flatpak
-          flatpak install --user --noninteractive artifacts/Playnite-Linux-x86_64.flatpak
+          # Dependencies are already deployed from the lock; do not update them to branch tips.
+          flatpak install --user --noninteractive --no-deps artifacts/Playnite-Linux-x86_64.flatpak
+          verify_runtime 'After bundle install'
           version=$(timeout 30s flatpak run --user "$id" --version)
           printf 'Packaged CLI version: %s\n' "$version"
           test "$version" = '1.0.0.0'
@@ -111,16 +119,12 @@ jobs:
           flatpak info --user --show-permissions "$id" > "$RUNNER_TEMP/flatpak-permissions.ini"
           python3 "$GITHUB_WORKSPACE/packaging/verify-flatpak.py" "$id.json" "$RUNNER_TEMP/flatpak-permissions.ini"
           {
+            verify_runtime 'After sandbox smoke'
             echo '## Flatpak: PASS'
             echo "Source commit: $(cat source-commit.txt)"
             echo 'flatpak-builder 1.4.2-1build2; Flatpak 1.14.6-1ubuntu0.1; elfutils 0.190-1.1ubuntu0.1; SDK 11.0.100; .NET runtime 11.0.0; linux-x64'
             echo 'SVG loader librsvg2-common 2.58.0+dfsg-1ubuntu0.1; GDK thumbnailer 2.42.10+dfsg-3ubuntu3.3'
             stat --printf='Artifact: %n — %s bytes\n' artifacts/*.flatpak
-            while IFS=$'\t' read -r ref expected; do
-              commit=$(flatpak info --user --show-commit "$ref")
-              test "$commit" = "$expected"
-              echo "$ref commit: $commit"
-            done < "$RUNNER_TEMP/runtime-lock.tsv"
             cat "$RUNNER_TEMP/flatpak-permissions.ini"
             cat "$installed"/files/lib/playnite/{cli,desktop}/*.runtimeconfig.json
           } | tee -a "$GITHUB_STEP_SUMMARY"
