@@ -134,17 +134,18 @@ public static class LibraryMigration
         await File.WriteAllTextAsync(manifestPath, ownership.ToString(Formatting.None), cancellationToken).ConfigureAwait(false);
         await File.WriteAllTextAsync(Path.Combine(staging, "source.json"), intermediate, cancellationToken).ConfigureAwait(false);
         var assets = await AssetCopy.RunAsync(sourceDirectory, destination + ".assets", references, checkpoint: checkpoint, cancellationToken: cancellationToken).ConfigureAwait(false);
-        foreach (var asset in assets.Where(a => a.Destination != null))
+        foreach (var asset in assets)
         {
             var reference = asset.Reference;
+            var migratedReference = asset.Destination ?? $"playnite-asset://{asset.Outcome}/{Uri.EscapeDataString(reference.Path)}";
             if (reference.Collection == "Game")
             {
                 var game = games.Single(g => g.Value.Id == Guid.Parse(reference.Identity)).Value;
                 switch (reference.Field)
                 {
-                    case "Icon": game.Icon = asset.Destination; break;
-                    case "CoverImage": game.CoverImage = asset.Destination; break;
-                    case "BackgroundImage": game.BackgroundImage = asset.Destination; break;
+                    case "Icon": game.Icon = migratedReference; break;
+                    case "CoverImage": game.CoverImage = migratedReference; break;
+                    case "BackgroundImage": game.BackgroundImage = migratedReference; break;
                 }
             }
             else
@@ -152,9 +153,9 @@ public static class LibraryMigration
                 var platform = (Platform)metadata.Single(m => m.Row.Identity == reference.Identity && m.Row.Collection == reference.Collection).Value;
                 switch (reference.Field)
                 {
-                    case "Icon": platform.Icon = asset.Destination; break;
-                    case "Cover": platform.Cover = asset.Destination; break;
-                    case "Background": platform.Background = asset.Destination; break;
+                    case "Icon": platform.Icon = migratedReference; break;
+                    case "Cover": platform.Cover = migratedReference; break;
+                    case "Background": platform.Background = migratedReference; break;
                 }
             }
         }

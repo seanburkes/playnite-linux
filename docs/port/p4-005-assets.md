@@ -48,12 +48,19 @@ The migration report includes one AssetResult per nonempty imported asset field:
 | missing | FileNotFoundException or DirectoryNotFoundException opening the reference |
 | unreadable | Permission/sharing/source-read failure, not absence |
 | empty | Readable zero-byte file, not absence or unsupported image |
-| external | Absolute Windows/POSIX path or URI retained, not accessed/downloaded |
+| external | Absolute Windows/POSIX path or URI retained in provenance, not accessed/downloaded |
 
 MissingAssets, UnreadableAssets and EmptyAssets count **references**, not distinct
 blobs; each result includes record file/collection/identity, field and asset path.
-Missing/empty/unreadable/external typed references remain unchanged and the
-complete report is written beside the destination. Null/empty fields mean no
+Missing/empty/unreadable/external typed image fields contain the explicit marker
+`playnite-asset://<outcome>/<URI-escaped-original-reference>`, not a plausible
+local file path. Thus a consumer reading only SQLite can distinguish these states
+from valid asset paths without the external report. Original references remain
+unchanged in LegacyJson and the report. The complete report is written beside the
+destination. A source file captured as readable in the reader manifest but deleted
+before copying causes an explicit `disappeared after reader snapshot` refusal,
+including record identity/path, rather than being folded into an originally
+missing reference. Null/empty fields mean no
 reference and produce no asset result. Traversal and symbolic-link components
 are refused rather than followed. Unexpected destination I/O errors fail loudly.
 
@@ -71,8 +78,10 @@ copier itself is idempotent and interrupted migration retries reuse verified blo
 SIGKILL at `AssetPartialCopy` occurs after one 64 KiB write of a 1 MiB source.
 The test verifies only a nonempty, incomplete `.tmp` exists, kills the child
 without managed cleanup, then retries and verifies the complete published hash.
-An abrupt crash can leave an invisible/unreferenced `.tmp` orphan; retry does not
-delete foreign files. This contract promises atomic visibility, not directory
+An abrupt crash can leave an unreferenced `.tmp` orphan that is **visible and
+addressable by its temporary filesystem name**; it is never a hash-named final
+blob or a reference published in SQLite. Retry does not delete foreign files.
+This contract promises atomic final-name visibility, not temporary-file secrecy, directory
 fsync/power-loss durability or automatic orphan garbage collection.
 
 `AssetCopyTests` additionally covers both byte-exact frozen-v10 PNGs and their
@@ -104,3 +113,12 @@ Core **1737**, Architecture **173**, Smoke **4**, all passed with zero failures/
 and all exits 0. The Core floor now protects that additional regression; previous
 captures remain intact. This evidence-only delta still requires final-head CI
 and A re-review/B closure before readiness.
+
+Review B dispositions: unavailable/external states are now explicit in the image
+field itself (tests read SQLite and assert missing, empty, unreadable and external
+markers); reader-then-deleted assets refuse the mixed snapshot explicitly (same
+existing test expanded, no case removed); temporary-file visibility is documented
+honestly above. Existing tests were strengthened without changing the 1737 case
+count. A normal merge of origin/main `17f3e98` preserves its gate-audit note and
+all sibling fields, with aggregate bytes taken unchanged from main. Fresh merged-head
+linux-ci evidence and review closure are still required before readiness.

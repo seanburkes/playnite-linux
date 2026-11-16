@@ -50,6 +50,8 @@ public static class AssetCopy
             try { input = new FileStream(path, System.IO.FileMode.Open, FileAccess.Read, FileShare.Read, 65536, FileOptions.Asynchronous); }
             catch (Exception exception) when (exception is FileNotFoundException or DirectoryNotFoundException)
             {
+                if (reference.Sha256 != null || reference.Size != null)
+                    throw new InvalidDataException($"Source asset disappeared after reader snapshot: {reference.File}/{reference.Collection}/{reference.Identity}/{reference.Path}", exception);
                 results.Add(new(reference, "missing", null, null, null, "unavailable"));
                 continue;
             }

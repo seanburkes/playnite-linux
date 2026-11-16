@@ -51,6 +51,7 @@ public sealed class AssetCopyTests : IDisposable
         Assert.EndsWith("\\missing.png", missing.Reference.Path);
         var database = await LibraryDatabase.OpenAsync(Destination);
         var game = (await database.ReadAsync(s => s.Games.GetAsync(Guid.Parse(missing.Reference.Identity))))!;
+        Assert.Equal("playnite-asset://missing/" + Uri.EscapeDataString(missing.Reference.Path), game.Value.BackgroundImage);
         foreach (var expected in JArray.Parse(File.ReadAllText(Path.Combine(Bundle, "assets.json"))))
         {
             var asset = Assert.Single(report.Assets.Where(a => a.Reference.Sha256 == (string?)expected["sha256"]));
@@ -106,6 +107,11 @@ public sealed class AssetCopyTests : IDisposable
         var report = await LibraryMigration.RunAsync(envelope.ToString(), Source, Destination);
         Assert.Equal(1, report.MissingAssets); Assert.Equal(1, report.EmptyAssets); Assert.Equal(1, report.UnreadableAssets);
         Assert.Equal(["empty", "unreadable", "missing"], report.Assets.Select(a => a.Outcome));
+        var database = await LibraryDatabase.OpenAsync(Destination);
+        var saved = await database.ReadAsync(s => s.Games.GetAsync(Guid.Parse((string)game["data"]!["_id"]!)));
+        Assert.Equal("playnite-asset://empty/empty", saved!.Value.Icon);
+        Assert.Equal("playnite-asset://unreadable/locked", saved.Value.CoverImage);
+        Assert.Equal("playnite-asset://missing/missing", saved.Value.BackgroundImage);
         Assert.False(Directory.Exists(Store));
     }
 
@@ -138,6 +144,9 @@ public sealed class AssetCopyTests : IDisposable
         Assert.Equal("unreadable", unreadable.Reference.Status); Assert.Equal("locked", unreadable.Reference.Path);
         Assert.Equal("10000000-0000-0000-0000-000000000001", unreadable.Reference.Identity);
         Assert.Null(unreadable.Reference.Sha256); Assert.Null(unreadable.Destination);
+        var database = await LibraryDatabase.OpenAsync(Destination);
+        var saved = await database.ReadAsync(s => s.Games.GetAsync(Guid.Parse(unreadable.Reference.Identity)));
+        Assert.Equal("playnite-asset://unreadable/locked", saved!.Value.Icon);
     }
 
     [Fact]
@@ -266,16 +275,33 @@ public sealed class AssetCopyTests : IDisposable
     {
         var result = Assert.Single(await AssetCopy.RunAsync(Source, Store, [new("games.db", "Game", "identity", "Icon", path, null, null)]));
         Assert.Equal("external", result.Outcome); Assert.Null(result.Destination); Assert.False(Directory.Exists(Store));
+        var envelope = JObject.Parse(await Envelope());
+        var game = ((JArray)envelope["records"]!).First(r => (string?)r["collection"] == "Game");
+        game["data"]!["Icon"] = path;
+        await LibraryMigration.RunAsync(envelope.ToString(), Source, Destination);
+        var database = await LibraryDatabase.OpenAsync(Destination);
+        var saved = await database.ReadAsync(s => s.Games.GetAsync(Guid.Parse((string)game["data"]!["_id"]!)));
+        Assert.Equal("playnite-asset://external/" + Uri.EscapeDataString(path), saved!.Value.Icon);
+        Assert.Equal(path, (string?)JObject.Parse(saved.LegacyJson)["Icon"]);
     }
 
     [Fact]
-    public async Task Unmanifested_readable_asset_is_refused_and_emptying_captured_asset_is_a_mismatch()
+    public async Task Unmanifested_emptying_and_reader_then_deleted_assets_are_refused_explicitly()
     {
         var reference = Write("asset", [1, 2, 3]);
         await Assert.ThrowsAsync<InvalidDataException>(() => AssetCopy.RunAsync(Source, Store, [reference with { Sha256 = null, Size = null }]));
         File.WriteAllBytes(Path.Combine(Source, "files", "asset"), []);
         await Assert.ThrowsAsync<InvalidDataException>(() => AssetCopy.RunAsync(Source, Store, [reference]));
         Assert.False(Directory.Exists(Store));
+        File.WriteAllBytes(Path.Combine(Source, "files", "asset"), [1, 2, 3]);
+        var envelope = JObject.Parse(await Envelope());
+        var game = ((JArray)envelope["records"]!).First(r => (string?)r["collection"] == "Game");
+        game["data"]!["Icon"] = "asset";
+        File.Delete(Path.Combine(Source, "files", "asset"));
+        var error = await Assert.ThrowsAsync<InvalidDataException>(() => LibraryMigration.RunAsync(envelope.ToString(), Source, Destination));
+        Assert.Contains("disappeared after reader snapshot", error.Message);
+        Assert.Contains("games.db/Game/10000000-0000-0000-0000-000000000001/asset", error.Message);
+        Assert.False(File.Exists(Destination)); Assert.False(Directory.Exists(Store));
     }
 
     [Fact]
