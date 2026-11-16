@@ -119,16 +119,20 @@ unmapped reporting, forward-slash-relative typed paths, invalid Windows suffix c
 
 ## Evidence
 
-Local Release checks: Core **1583 passed**, Architecture **144 passed**, zero failed/skipped;
-Core build **0 warnings / 0 errors**. The Core count includes 50 migration cases.
+Local Release checks on the merged tree: Core **1642 passed**, Architecture **144 passed**,
+zero failed/skipped; Core build **0 warnings / 0 errors**. The Core count includes 62 migration
+cases and the 1630-case floor from main.
 
-Actual [linux-ci run 43812557296](https://github.com/seanburkes/playnite-linux/actions/runs/43812557296)
-on implementation head `260bcc342f820dceb93b151e7c272cc27e9c5926` of
-https://github.com/seanburkes/playnite-linux/pull/89 passed warning-as-error build, bounded
+Actual [linux-ci run 43815358729](https://github.com/seanburkes/playnite-linux/actions/runs/43815358729)
+on head `d86368bfb58ba276eab2565d36017c4bcee6e8f3` of
+https://github.com/seanburkes/playnite-linux/pull/91 passed warning-as-error build, bounded
 serialization fuzzing and native smoke. Downloaded JUnit testcase elements, suite totals,
-test-counts.json and exit files independently confirm **Core 1583, Architecture 144, Smoke 4**,
-all passed, zero failed/skipped, every MTP exit 0. This actual run raises only Core's floor
-from 1533 to 1583; `p4_004_capture` adds provenance without altering historical records.
-The additive baseline exception is authorized by firstmate steering 001-002 under
-`oracle-change`. Final pushed-head CI must revalidate before readiness. Independent reviews
-are firstmate-owned. Protected parity/aggregate files remain untouched.
+test-counts.json and exit files independently confirm **Core 1642, Architecture 144, Smoke 4**,
+all passed, zero failed/skipped, every MTP exit 0. The run tested the head after normally merging
+main's 1630 floor; this follow-up adds 12 migration cases, raising only Core's floor from 1630 to
+1642. `p4_004_fix_capture` records that run. The floor commit changes only baseline and evidence,
+never production or test cases, so its own linux-ci run on the final head is the evidence-only
+delta revalidating the same 1642 counted cases. The additive baseline exception is authorized for
+this review follow-up under `oracle-change` (as was `p4_004_capture` by firstmate steering
+001-002). Independent reviews are firstmate-owned. Protected parity/aggregate files remain
+untouched.
