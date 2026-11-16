@@ -29,7 +29,7 @@ internal static class ImportCommand
             var error = await errors;
             if (process.ExitCode != 0) throw new InvalidDataException($"Legacy reader failed: {error}");
             var pause = args.Skip(3).FirstOrDefault(a => a.StartsWith("--pause-at=", StringComparison.Ordinal))?[11..];
-            var report = await LibraryMigration.RunAsync(intermediate, destination, args.Contains("--dry-run", StringComparer.Ordinal), state =>
+            var report = await LibraryMigration.RunAsync(intermediate, source, destination, args.Contains("--dry-run", StringComparer.Ordinal), state =>
             {
                 if (state == pause)
                 {

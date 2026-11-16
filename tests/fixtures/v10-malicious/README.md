@@ -1,7 +1,9 @@
 # Additive adversarial v10 fixture
 
-Derived from the existing Windows-produced `tests/fixtures/v10/library` (see its
-parent README/provenance and SHA256SUMS), with **no changes to those source bytes**.
+Derived from the existing Windows-produced `tests/fixtures/v10/library` (see
+`docs/port/units/p1-003.ledger.tsv`, Windows run 43650013648/artifact 14135728206,
+`tools/V10LibraryFixture/Program.cs`, and `tests/fixtures/v10/SHA256SUMS`), with
+**no changes to those source bytes**.
 `Generate.cs` copies that library and updates one raw Game document with inert
 `_type`/`$type` payloads, nested objects and an array. It uses LiteDB 4.1.4's
 LiteEngine API, not BsonMapper. All four original game identities and five metadata

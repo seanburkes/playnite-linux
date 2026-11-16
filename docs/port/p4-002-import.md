@@ -14,8 +14,12 @@ dotnet src/Playnite.Cli/bin/Release/net11.0/Playnite.Cli.dll import-v10 \
   /absolute/v10/library /absolute/destination/library.sqlite [--dry-run]
 ```
 
+The public Core API requires the source directory as well as the destination.
+It checks canonical containment for the live path **and every generated artifact**,
+including a source named exactly like the staging directory, before any write.
 The destination parent must exist and be outside the source. Symbolic links in the
-source, source/destination ancestors, and staging artifacts are refused. Exit 0
+source, source/destination ancestors, and staging artifacts are refused by Core,
+not just by the CLI; the directly invoked reader checks source ancestors too. Exit 0
 prints a JSON report; exit 1 prints an explicit diagnostic on stderr. Dry-run reads
 and transforms, validates references and reports its plan but creates no files,
 locks, SQLite database or directories. Repeated dry-runs are identical no-ops.
@@ -68,7 +72,9 @@ Malformed imported records fail with their identity, rather than reducing counts
 The existing Windows-produced `tests/fixtures/v10` oracle has **4 games: 3 Steam,
 1 custom**, plus **5 metadata records**. Expected/imported/reported: **3/3/1 game**;
 all **9 source documents** accounted for, **8 imported / 1 skipped**. Provenance is
-already recorded in that fixture's README and SHA256SUMS; original bytes are unchanged.
+recorded in `docs/port/units/p1-003.ledger.tsv` (Windows run 43650013648, artifact
+14135728206), `tools/V10LibraryFixture/Program.cs` and the fixture's SHA256SUMS;
+original bytes are unchanged. Tests assert the manifest file set and every hash.
 The additive `v10-malicious` derivative records its generator and provenance and
 does not pretend Linux mutation is independent Windows oracle evidence.
 
@@ -88,6 +94,10 @@ A crash can leave a verified report with no live file: it is an audit/plan artif
 not a commit marker; live-path existence determines publication. No post-publication
 work is needed to make the database usable. Source and backup copies are untouched.
 This tests SIGKILL recovery, not power-loss durability of directory metadata.
+Managed failures also retain owned staging for the same explicit restart path;
+they do not claim automatic cleanup. `SourceHash` is the canonical intermediate
+envelope fingerprint (including its manifest and records), not a substitute for
+the manifest's individual source-file hashes.
 
 | SIGKILL checkpoint | Live path at kill | Restart |
 | --- | --- | --- |
@@ -123,9 +133,26 @@ exhaustion, and future accidental typed mapping remain residual risks. Regressio
 coverage preserves `_type`/`$type` at every nesting level, a nonexistent-assembly
 payload, and a ConstructorTrap with a positive working control. The writer likewise
 preserves the payload without constructing it; source hashes stay unchanged.
+An additional additive `v10-malicious-nested` fixture instruments object and array
+`_type` **and** `$type` paths with NestedConstructorTrap. Its working constructor
+control throws/increments, while both reader and writer leave both trap counters
+zero and retain the exact full document. Existing original and adversarial fixture
+library bytes remain untouched.
 `RawImportTests.Negative_guard_rejects_typed_mapping_and_object_construction` proves
 that BsonMapper, typed GetCollection, ToObject, JSON deserialization and Activator
 patterns are rejected. The guard covers evaluated reader compiler sources.
+It also rejects LiteCollection, BsonSerializer, every Deserialize*/Populate* API,
+AssemblyLoadContext, dynamic dispatch, MethodInfo/ConstructorInfo and Invoke, with
+negative controls for each previously uncovered path. This is a regression guard,
+not a proof against arbitrarily obfuscated future code; review remains required.
+
+The CLI's caller-supplied reader DLL is trusted executable configuration, not an
+untrusted-input/plugin boundary. Do not expose that argument to untrusted callers.
+The CLI currently has no reader timeout; memory/recursion and runaway execution
+remain explicit residual resource risks under the owner's exception, not sandbox
+guarantees. Directory-fsync/power-loss durability is outside this process-death
+contract. None of these limitations weakens the verify-before-publish or read-only
+source rules.
 
 `RawImportTests.LiteDB_and_importer_types_cannot_escape_the_raw_reader_and_reader_cannot_load_SQLite_or_Core`
 checks both dependency directions. It complements the existing architecture table
@@ -143,3 +170,41 @@ exit 0. Core includes main's hardened schema-version-3/settings union (1671) plu
 The additive floor commit retains every earlier capture and requires its own
 linux-ci revalidation before readiness. Two firstmate-arranged adversarial reviews
 remain a merge gate; this capture is not independent human approval.
+
+## Review B disposition (before renewed readiness)
+
+- **P2-1 fixed:** RawImportTests now rejects LiteCollection/BsonSerializer,
+  Deserialize*/Populate*, AssemblyLoadContext, dynamic, MethodInfo/ConstructorInfo
+  and Invoke. Ten added negative cases prove the missed surfaces fail. The audit
+  exception test additionally scans test projects and global build/package files
+  and rejects disabled audit mode or NU1904 NoWarn.
+- **P2-2 fixed:** the additive nested fixture and
+  `Nested_object_and_array_type_paths_have_real_constructor_traps_with_working_controls`
+  instrument the actual nested object/array `_type` and `$type` paths, rather than
+  relying only on Process/FileInfo string assertions. Both constructor counters
+  remain zero through reader and writer, with working throwing/incrementing controls.
+- **P2-3 in delivery gate:** the earlier floor commit `b13630d` was baseline/doc/shard
+  only relative to reviewed `0bf3204`, with no reviewed-code change. Its final-head
+  linux-ci run 43914304294 independently reconfirmed 1695/153/4 and all six checks
+  passed. Review fixes add tests, so a new real-CI floor capture and board completion
+  will follow the final fixes; the queue deliberately remains in-progress meanwhile.
+- **P2-4 fixed:** public RunAsync now requires the source directory and checks source,
+  destination and generated-artifact containment plus all ancestor symlinks itself,
+  before writes, independent of the CLI. Direct-API tests cover source containment,
+  a symlinked parent, a live-path symlink, and source/staging aliasing. The directly
+  invoked reader also rejects source ancestor symlinks.
+- **P3 fixed:** malformed GameId errors now retain record provenance; the broken
+  README citation points to actual Windows provenance; all three fixture SHA256SUMS
+  file sets and bytes are asserted. No earlier fixture library bytes changed.
+- **P3 clarified/retained:** managed failure uses the same owned restartable staging
+  as process death; SourceHash fingerprints the intermediate; no directory-fsync
+  power-loss guarantee; trusted reader-DLL configuration, no reader timeout and
+  unbounded capture remain explicit resource/security limitations. These are not
+  represented as sandbox guarantees or silently claimed fixed.
+- **P3 lock-graph evidence:** the floor head's real locked restore and warning-as-error
+  build both passed. ReferenceOutputAssembly=false builds the reader without linking
+  it into either test runner's deps.json; neither runner deps.json contains LiteDB.
+  Generated lock metadata is not a shipped runtime reference or a second suppression.
+
+Review A and final-head CI/floor/board gates remain required. No independent human
+approval is claimed, and the PR stays draft until both reviews are disposed.

@@ -23,10 +23,21 @@ public static class LibraryMigration
     private sealed record Row(string File, string Collection, string Identity, JObject Data);
 
     /// <summary>Plans without writes, or restarts an owned staging area and publishes to an absent destination.</summary>
-    public static async Task<MigrationReport> RunAsync(string intermediate, string destination, bool dryRun = false,
+    public static async Task<MigrationReport> RunAsync(string intermediate, string sourceDirectory, string destination, bool dryRun = false,
         Action<string>? checkpoint = null, CancellationToken cancellationToken = default)
     {
+        if (!Path.IsPathFullyQualified(sourceDirectory)) throw new ArgumentException("Source must be absolute.", nameof(sourceDirectory));
         if (!Path.IsPathFullyQualified(destination)) throw new ArgumentException("Destination must be absolute.", nameof(destination));
+        sourceDirectory = Path.TrimEndingDirectorySeparator(Path.GetFullPath(sourceDirectory));
+        destination = Path.GetFullPath(destination);
+        RequirePlainDirectory(sourceDirectory);
+        RequirePlainDirectory(Path.GetDirectoryName(destination)!);
+        var artifacts = new[] { destination, destination + ".import", destination + ".import.lock", destination + ".import-report.json" };
+        if (artifacts.Any(path => path == sourceDirectory || path.StartsWith(sourceDirectory + Path.DirectorySeparatorChar, StringComparison.Ordinal)) ||
+            sourceDirectory.StartsWith(destination + ".import" + Path.DirectorySeparatorChar, StringComparison.Ordinal) || sourceDirectory == Path.GetPathRoot(sourceDirectory))
+            throw new ArgumentException("Destination and migration artifacts must be outside the source directory.");
+        if (Path.Exists(destination) && (File.GetAttributes(destination) & FileAttributes.ReparsePoint) != 0)
+            throw new IOException("Destination must not be a symbolic link.");
         cancellationToken.ThrowIfCancellationRequested();
         using var reader = new JsonTextReader(new StringReader(intermediate)) { DateParseHandling = DateParseHandling.None, MaxDepth = 128 };
         var root = JObject.Load(reader, new JsonLoadSettings { DuplicatePropertyNameHandling = DuplicatePropertyNameHandling.Error });
@@ -73,7 +84,7 @@ public static class LibraryMigration
                 }
                 else decisions.Add(Decision(row, "skipped", "Unsupported file/collection; document retained in intermediate."));
             }
-            catch (Exception exception) when (exception is JsonException or ArgumentException or Serialization.SerializationException or InvalidDataException)
+            catch (Exception exception) when (exception is JsonException or ArgumentException or Serialization.SerializationException or InvalidDataException or InvalidCastException or FormatException or OverflowException)
             {
                 throw new InvalidDataException($"Cannot transform {row.File}/{row.Collection}/{row.Identity}: {exception.Message}", exception);
             }
@@ -152,6 +163,13 @@ public static class LibraryMigration
     }
 
     private static MigrationDecision Decision(Row row, string outcome, string reason) => new(row.File, row.Collection, row.Identity, outcome, reason);
+
+    private static void RequirePlainDirectory(string path)
+    {
+        if (!Directory.Exists(path)) throw new DirectoryNotFoundException($"Directory does not exist: {path}");
+        for (var directory = new DirectoryInfo(path); directory != null; directory = directory.Parent)
+            if ((directory.Attributes & FileAttributes.ReparsePoint) != 0) throw new IOException("Symbolic-link source/destination ancestors are not supported.");
+    }
 
     private static T Bind<T>(JObject raw) where T : DatabaseObject
     {

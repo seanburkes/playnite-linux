@@ -10,7 +10,8 @@ internal static class LibraryReader
 {
     internal static object Read(string source)
     {
-        if ((File.GetAttributes(source) & FileAttributes.ReparsePoint) != 0) throw new InvalidDataException("Source cannot be a symbolic link.");
+        for (var directory = new DirectoryInfo(source); directory != null; directory = directory.Parent)
+            if ((directory.Attributes & FileAttributes.ReparsePoint) != 0) throw new InvalidDataException("Source ancestors cannot be symbolic links.");
         var copies = new List<(string Path, byte[] Bytes)>();
         Capture(source, source, copies);
         using var marker = JsonDocument.Parse(copies.Single(c => c.Path == "database.json").Bytes);

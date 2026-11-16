@@ -36,7 +36,7 @@ public sealed class LibraryMigrationTests : IDisposable
         var before = Snapshot(Fixture());
         var envelope = await ReadEnvelope();
         var states = new List<string>();
-        var report = await LibraryMigration.RunAsync(envelope, Destination, checkpoint: states.Add);
+        var report = await LibraryMigration.RunAsync(envelope, Fixture(), Destination, checkpoint: states.Add);
         Assert.Equal(3, report.ExpectedSteam); Assert.Equal(3, report.ImportedSteam);
         Assert.Equal(9, report.Decisions.Count);
         var skip = Assert.Single(report.Decisions.Where(d => d.Outcome == "skipped"));
@@ -60,8 +60,8 @@ public sealed class LibraryMigrationTests : IDisposable
     {
         var before = Snapshot(Fixture());
         var envelope = await ReadEnvelope();
-        var first = await LibraryMigration.RunAsync(envelope, Destination, dryRun: true);
-        var second = await LibraryMigration.RunAsync(envelope, Destination, dryRun: true);
+        var first = await LibraryMigration.RunAsync(envelope, Fixture(), Destination, dryRun: true);
+        var second = await LibraryMigration.RunAsync(envelope, Fixture(), Destination, dryRun: true);
         Assert.Equal(JsonSerializer.Serialize(first), JsonSerializer.Serialize(second));
         Assert.Equal(3, first.ExpectedSteam); Assert.Equal(0, first.ImportedSteam);
         Assert.Empty(Directory.GetFileSystemEntries(temporary));
@@ -72,9 +72,9 @@ public sealed class LibraryMigrationTests : IDisposable
     public async Task Second_real_run_refuses_clearly_and_preserves_existing_database()
     {
         var envelope = await ReadEnvelope();
-        await LibraryMigration.RunAsync(envelope, Destination);
+        await LibraryMigration.RunAsync(envelope, Fixture(), Destination);
         var before = Snapshot(temporary);
-        var error = await Assert.ThrowsAsync<IOException>(() => LibraryMigration.RunAsync(envelope, Destination));
+        var error = await Assert.ThrowsAsync<IOException>(() => LibraryMigration.RunAsync(envelope, Fixture(), Destination));
         Assert.Contains("second run", error.Message);
         Assert.Equal(before, Snapshot(temporary));
     }
@@ -119,7 +119,7 @@ public sealed class LibraryMigrationTests : IDisposable
         Assert.Equal(3, (await database.ReadAsync(s => s.Games.GetAllAsync())).Count);
         Assert.Equal(before, Snapshot(Fixture()));
         var envelope = await ReadEnvelope();
-        await Assert.ThrowsAsync<IOException>(() => LibraryMigration.RunAsync(envelope, Destination));
+        await Assert.ThrowsAsync<IOException>(() => LibraryMigration.RunAsync(envelope, Fixture(), Destination));
     }
 
     [Theory]
@@ -134,10 +134,10 @@ public sealed class LibraryMigrationTests : IDisposable
     {
         var envelope = await ReadEnvelope();
         using var cancel = new CancellationTokenSource();
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => LibraryMigration.RunAsync(envelope, Destination,
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => LibraryMigration.RunAsync(envelope, Fixture(), Destination,
             checkpoint: s => { if (s == state) cancel.Cancel(); }, cancellationToken: cancel.Token));
         Assert.False(File.Exists(Destination));
-        Assert.Equal(3, (await LibraryMigration.RunAsync(envelope, Destination)).ImportedSteam);
+        Assert.Equal(3, (await LibraryMigration.RunAsync(envelope, Fixture(), Destination)).ImportedSteam);
     }
 
     [Fact]
@@ -168,16 +168,16 @@ public sealed class LibraryMigrationTests : IDisposable
     {
         var envelope = await ReadEnvelope();
         using var cancel = new CancellationTokenSource();
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => LibraryMigration.RunAsync(envelope, Destination,
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => LibraryMigration.RunAsync(envelope, Fixture(), Destination,
             checkpoint: s => { if (s == "Copied") cancel.Cancel(); }, cancellationToken: cancel.Token));
         var changed = JObject.Parse(envelope); changed["records"]![0]!["data"]!["Name"] = "different snapshot";
         var before = Snapshot(temporary);
-        var refusal = await Assert.ThrowsAsync<IOException>(() => LibraryMigration.RunAsync(changed.ToString(), Destination));
+        var refusal = await Assert.ThrowsAsync<IOException>(() => LibraryMigration.RunAsync(changed.ToString(), Fixture(), Destination));
         Assert.Contains("not owned", refusal.Message);
         Assert.Equal(before, Snapshot(temporary));
         var linkTarget = Path.Combine(temporary, "unrelated.txt"); File.WriteAllText(linkTarget, "untouched");
         File.CreateSymbolicLink(Path.Combine(Destination + ".import", "foreign-link"), linkTarget);
-        await Assert.ThrowsAsync<IOException>(() => LibraryMigration.RunAsync(envelope, Destination));
+        await Assert.ThrowsAsync<IOException>(() => LibraryMigration.RunAsync(envelope, Fixture(), Destination));
         Assert.Equal("untouched", File.ReadAllText(linkTarget));
     }
 
@@ -188,13 +188,13 @@ public sealed class LibraryMigrationTests : IDisposable
         var records = (JArray)envelope["records"]!;
         var genre = records.Single(r => (string?)r["collection"] == "Genre");
         genre.Remove();
-        var error = await Assert.ThrowsAsync<InvalidDataException>(() => LibraryMigration.RunAsync(envelope.ToString(), Destination));
+        var error = await Assert.ThrowsAsync<InvalidDataException>(() => LibraryMigration.RunAsync(envelope.ToString(), Fixture(), Destination));
         Assert.Contains("10000000-0000-0000-0000-000000000001", error.Message);
         Assert.Contains("20000000-0000-0000-0000-000000000003", error.Message);
         Assert.Empty(Directory.GetFileSystemEntries(temporary));
         records.Add(genre);
         records.Add(records.First!.DeepClone());
-        await Assert.ThrowsAsync<InvalidDataException>(() => LibraryMigration.RunAsync(envelope.ToString(), Destination));
+        await Assert.ThrowsAsync<InvalidDataException>(() => LibraryMigration.RunAsync(envelope.ToString(), Fixture(), Destination));
         Assert.Empty(Directory.GetFileSystemEntries(temporary));
     }
 
@@ -203,7 +203,7 @@ public sealed class LibraryMigrationTests : IDisposable
     public async Task Tampered_written_database_fails_verification_and_never_publishes()
     {
         var envelope = await ReadEnvelope();
-        var error = await Assert.ThrowsAsync<InvalidDataException>(() => LibraryMigration.RunAsync(envelope, Destination, checkpoint: state =>
+        var error = await Assert.ThrowsAsync<InvalidDataException>(() => LibraryMigration.RunAsync(envelope, Fixture(), Destination, checkpoint: state =>
         {
             if (state != "Written") return;
             using var connection = new Microsoft.Data.Sqlite.SqliteConnection($"Data Source={Path.Combine(Destination + ".import", "library.sqlite")};Pooling=False");
@@ -215,7 +215,7 @@ public sealed class LibraryMigrationTests : IDisposable
         Assert.Contains("verification failed", error.Message);
         Assert.False(File.Exists(Destination));
         Assert.False(File.Exists(Destination + ".import-report.json"));
-        Assert.Equal(3, (await LibraryMigration.RunAsync(envelope, Destination)).ImportedSteam);
+        Assert.Equal(3, (await LibraryMigration.RunAsync(envelope, Fixture(), Destination)).ImportedSteam);
     }
 
     [Fact]
@@ -223,7 +223,7 @@ public sealed class LibraryMigrationTests : IDisposable
     {
         var envelope = JObject.Parse(await ReadEnvelope());
         ((JArray)envelope["records"]!).Add(new JObject { ["file"] = "tools.db", ["collection"] = "Unexpected", ["data"] = new JObject { ["_id"] = "unknown-identity" } });
-        var report = await LibraryMigration.RunAsync(envelope.ToString(), Destination, dryRun: true);
+        var report = await LibraryMigration.RunAsync(envelope.ToString(), Fixture(), Destination, dryRun: true);
         Assert.Equal(10, report.Decisions.Count);
         Assert.Contains(report.Decisions, d => d.Identity == "unknown-identity" && d.Outcome == "skipped" && d.Reason.StartsWith("Unsupported", StringComparison.Ordinal));
     }
@@ -251,7 +251,7 @@ public sealed class LibraryMigrationTests : IDisposable
             Assert.Equal("System.Diagnostics.Process, System.Diagnostics.Process", (string?)raw["UnmappedAdversarial"]?["_type"]);
             Assert.Equal("System.IO.FileInfo, System.Private.CoreLib", (string?)raw["UnmappedAdversarial"]?["$type"]);
             Assert.Equal("Untrusted.Payload, nonexistent-untrusted-assembly", (string?)raw["UnmappedAdversarial"]?["Array"]?[0]?["_type"]);
-            Assert.Equal(3, (await LibraryMigration.RunAsync(envelope, Destination)).ImportedSteam);
+            Assert.Equal(3, (await LibraryMigration.RunAsync(envelope, Fixture(true), Destination)).ImportedSteam);
             var db = await LibraryDatabase.OpenAsync(Destination);
             var saved = await db.ReadAsync(s => s.Games.GetAsync(Guid.Parse("10000000-0000-0000-0000-000000000001")));
             Assert.True(JToken.DeepEquals(raw, JObject.Parse(saved!.LegacyJson)));
@@ -268,6 +268,90 @@ public sealed class LibraryMigrationTests : IDisposable
     {
         public static int Calls;
         public ConstructorTrap() { Calls++; throw new InvalidOperationException("Untrusted constructor invoked."); }
+    }
+
+    public sealed class NestedConstructorTrap
+    {
+        public static int Calls;
+        public NestedConstructorTrap() { Calls++; throw new InvalidOperationException("Nested untrusted constructor invoked."); }
+    }
+
+    [Fact]
+    public async Task Nested_object_and_array_type_paths_have_real_constructor_traps_with_working_controls()
+    {
+        NestedConstructorTrap.Calls = 0;
+        Assert.Throws<InvalidOperationException>(() => new NestedConstructorTrap());
+        Assert.Equal(1, NestedConstructorTrap.Calls);
+        NestedConstructorTrap.Calls = 0; ConstructorTrap.Calls = 0;
+        var source = Path.Combine(Root, "tests", "fixtures", "v10-malicious-nested", "library");
+        var before = Snapshot(source);
+        var context = new ReaderContext(Product("Playnite.LegacyImport"));
+        try
+        {
+            var assembly = context.LoadFromAssemblyPath(Product("Playnite.LegacyImport"));
+            var read = assembly.GetType("Playnite.LegacyImport.LibraryReader", true)!.GetMethod("Read", BindingFlags.NonPublic | BindingFlags.Static)!;
+            var envelope = JsonSerializer.Serialize(read.Invoke(null, [source]));
+            var raw = ((JArray)JObject.Parse(envelope)["records"]!).Single(r => r["data"]?["_type"] != null)["data"]!;
+            const string trap = "Playnite.Core.Tests.Import.LibraryMigrationTests+NestedConstructorTrap, Playnite.Core.Tests";
+            Assert.Equal(trap, (string?)raw["UnmappedAdversarial"]?["_type"]);
+            Assert.Equal(trap, (string?)raw["UnmappedAdversarial"]?["$type"]);
+            Assert.Equal(trap, (string?)raw["UnmappedAdversarial"]?["Array"]?[0]?["_type"]);
+            Assert.Equal(trap, (string?)raw["UnmappedAdversarial"]?["Array"]?[0]?["$type"]);
+            Assert.Equal(3, (await LibraryMigration.RunAsync(envelope, source, Destination)).ImportedSteam);
+            var db = await LibraryDatabase.OpenAsync(Destination);
+            var saved = await db.ReadAsync(s => s.Games.GetAsync(Guid.Parse("10000000-0000-0000-0000-000000000001")));
+            Assert.True(JToken.DeepEquals(raw, JObject.Parse(saved!.LegacyJson)));
+            Assert.Equal(0, ConstructorTrap.Calls); Assert.Equal(0, NestedConstructorTrap.Calls);
+            Assert.Equal(before, Snapshot(source));
+        }
+        finally { context.Unload(); }
+    }
+
+    [Theory]
+    [InlineData("v10")]
+    [InlineData("v10-malicious")]
+    [InlineData("v10-malicious-nested")]
+    public void Fixture_file_set_and_every_byte_match_the_recorded_SHA256SUMS(string name)
+    {
+        var bundle = Path.Combine(Root, "tests", "fixtures", name);
+        var entries = File.ReadAllLines(Path.Combine(bundle, "SHA256SUMS")).Select(line => line.Split("  ", 2, StringSplitOptions.None)).ToArray();
+        Assert.Equal(Directory.GetFiles(Path.Combine(bundle, "library"), "*", SearchOption.AllDirectories).Select(p => Path.GetRelativePath(bundle, p)).Order(StringComparer.Ordinal),
+            entries.Select(e => e[1]).Order(StringComparer.Ordinal));
+        foreach (var entry in entries)
+            Assert.Equal(entry[0], Convert.ToHexStringLower(SHA256.HashData(File.ReadAllBytes(Path.Combine(bundle, entry[1])))));
+    }
+
+    [Fact]
+    public async Task Public_Core_API_rejects_source_containment_and_symlinked_parents_without_CLI_help()
+    {
+        var source = Path.Combine(temporary, "source"); Directory.CreateDirectory(source);
+        foreach (var file in Directory.GetFiles(Fixture())) File.Copy(file, Path.Combine(source, Path.GetFileName(file)));
+        var before = Snapshot(source);
+        var envelope = await ReadEnvelope();
+        var contained = await Assert.ThrowsAsync<ArgumentException>(() => LibraryMigration.RunAsync(envelope, source, Path.Combine(source, "library.sqlite")));
+        Assert.Contains("outside the source", contained.Message);
+        var parent = Path.Combine(temporary, "alias"); Directory.CreateSymbolicLink(parent, source);
+        await Assert.ThrowsAsync<IOException>(() => LibraryMigration.RunAsync(envelope, source, Path.Combine(parent, "library.sqlite")));
+        var destinationLink = Path.Combine(temporary, "destination-link"); File.CreateSymbolicLink(destinationLink, Path.Combine(source, "games.db"));
+        await Assert.ThrowsAsync<IOException>(() => LibraryMigration.RunAsync(envelope, source, destinationLink));
+        Assert.Equal(before, Snapshot(source));
+        Assert.False(File.Exists(Destination));
+        var stagingSource = Path.Combine(temporary, "staging-source.import"); Directory.CreateDirectory(stagingSource);
+        foreach (var file in Directory.GetFiles(Fixture())) File.Copy(file, Path.Combine(stagingSource, Path.GetFileName(file)));
+        var stagingBefore = Snapshot(stagingSource);
+        await Assert.ThrowsAsync<ArgumentException>(() => LibraryMigration.RunAsync(envelope, stagingSource, stagingSource[..^7]));
+        Assert.Equal(stagingBefore, Snapshot(stagingSource));
+    }
+
+    [Fact]
+    public async Task Malformed_Steam_GameId_reports_the_exact_record_provenance()
+    {
+        var envelope = JObject.Parse(await ReadEnvelope());
+        var game = ((JArray)envelope["records"]!).First(r => (string?)r["collection"] == "Game");
+        game["data"]!["GameId"] = new JObject { ["unexpected"] = true };
+        var error = await Assert.ThrowsAsync<InvalidDataException>(() => LibraryMigration.RunAsync(envelope.ToString(), Fixture(), Destination));
+        Assert.Contains("games.db/Game/10000000-0000-0000-0000-000000000001", error.Message);
+        Assert.Empty(Directory.GetFileSystemEntries(temporary));
     }
 
     private sealed class ReaderContext(string reader) : AssemblyLoadContext(isCollectible: true)
