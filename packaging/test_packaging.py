@@ -96,6 +96,36 @@ class PackagingTests(unittest.TestCase):
                 self.assertEqual(result.returncode == 0, not (broad_manifest or broad_effective),
                                  result.stdout + result.stderr)
 
+    def test_flatpak_runtime_lock_reports_all_refs_before_failing(self):
+        locks = json.loads((PACKAGING / "flatpak-runtime-lock.json").read_text())
+        flatpak = self.root / "flatpak"
+        for mode in ("match", "mismatch", "missing"):
+            with self.subTest(mode=mode):
+                commits = dict(locks)
+                first = next(iter(commits))
+                if mode == "mismatch":
+                    commits[first] = "f" * 64
+                flatpak.write_text("#!/usr/bin/env python3\nimport sys\n"
+                                   f"commits = {commits!r}\n"
+                                   "assert sys.argv[1:4] == ['info', '--user', '--show-commit']\n"
+                                   + ("print('runtime not installed', file=sys.stderr)\nsys.exit(1)\n"
+                                      if mode == "missing" else "print(commits[sys.argv[4]])\n"))
+                flatpak.chmod(0o755)
+                result = subprocess.run(
+                    ["python3", "-O", str(PACKAGING / "verify-flatpak-runtime.py"),
+                     str(PACKAGING / "flatpak-runtime-lock.json"), "Test stage"],
+                    env={**os.environ, "PATH": f"{self.root}:{os.environ['PATH']}"},
+                    capture_output=True, text=True)
+                self.assertEqual(result.returncode == 0, mode == "match", result.stderr)
+                for ref, expected in locks.items():
+                    actual = "<unavailable>" if mode == "missing" else commits[ref]
+                    self.assertIn(f"Test stage: {ref} expected={expected} actual={actual}",
+                                  result.stdout)
+                if mode != "match":
+                    self.assertIn("Flatpak runtime lock mismatch", result.stderr)
+                if mode == "missing":
+                    self.assertIn("runtime not installed", result.stderr)
+
     def test_assembly_rejects_dirty_input_before_publishing(self):
         repo = self.root / "repo"
         repo.mkdir()
