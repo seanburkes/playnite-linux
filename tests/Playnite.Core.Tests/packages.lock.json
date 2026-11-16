@@ -151,6 +151,12 @@
           "YamlDotNet": "[18.1.0, )"
         }
       },
+      "playnite.fuzz": {
+        "type": "Project",
+        "dependencies": {
+          "Playnite.Core": "[1.0.0, )"
+        }
+      },
       "playnite.platform": {
         "type": "Project",
         "dependencies": {

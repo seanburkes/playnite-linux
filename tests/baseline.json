@@ -23,9 +23,9 @@
       "skipped": 0
     },
     "Playnite.Core.Tests": {
-      "total": 1457,
-      "executed": 1457,
-      "passed": 1457,
+      "total": 1463,
+      "executed": 1463,
+      "passed": 1463,
       "failed": 0,
       "skipped": 0
     },
@@ -133,6 +133,13 @@
     "revalidation_commit": "9e806d23ab64b3069f75f7c97daf92da2684ba77",
     "revalidation_notes": "Final evidence-head linux-ci independently confirms Core 1445, Architecture 144, Smoke 4, all passed, zero failures/skips, every MTP exit 0 from downloaded JUnit testcase elements and suite totals. Relative to the integration capture head, all production, script and test-case files are identical: only tests/baseline.json, docs/port/p3-009-localisation-migration.md and docs/port/units/p3-009.ledger.tsv changed. The English 1134/0/0 count below is an identity/lossless contract check, not evidence of a rename: the new English set retains v10 keys. Nontrivial rename, collision, obsolete, missing, orphan and idempotence semantics are exercised by synthetic old-to-new maps in LocalizationMigrationTests. The baseline edit is the explicitly authorized oracle-change exception to otherwise read-only oracle inputs.",
     "notes": "Actual linux-ci on the p3-009 integration head after normally merging current origin/main 4048641 (including the merged 1429 Core floor). Downloaded linux-test-results JUnit testcase elements and suite totals independently confirm Core 1445 total / 1445 executed / 1445 passed / 0 failed / 0 skipped, Architecture 144 / 144 / 144 / 0 / 0, Smoke 4 / 4 / 4 / 0 / 0, every MTP exit 0. The Core suite includes 16 LocalizationMigrationTests cases. This raises only the merged Core floor from 1429 to the real 1445 count; no stale subset or estimated sum is used, every earlier capture and other suite floor is retained. The capture commit changes only baseline/evidence, not test cases; a fresh linux-ci run on the final pushed head must revalidate these counts before delivery. Mapping evidence is separate from the sibling-owned read-only extraction, English set, LOC constants and loc goldens: 1134 mapped, 0 unmapped, 0 obsolete; empty sibling English key/value diff. Additive oracle-change update authorized by the p3-009 task baseline requirement."
+  },
+  "p3_fuzz_ds_capture": {
+    "captured_at": "2026-11-16T03:02:51Z",
+    "run_id": 43795424207,
+    "run_url": "https://github.com/seanburkes/playnite-linux/actions/runs/43795424207",
+    "commit": "a23bce3637251ec257f34a35a0942bad340b9978",
+    "notes": "Counts independently parsed from the downloaded linux-test-results JUnit testcase elements and MTP exit files for linux-ci run 43795424207 on https://github.com/seanburkes/playnite-linux/pull/84 head a23bce3: Playnite.Core.Tests 1463 total / 1463 executed / 1463 passed / 0 failed / 0 skipped, Playnite.Architecture.Tests 144 / 144 / 144 / 0 / 0, Playnite.Smoke.Tests 4 / 4 / 4 / 0 / 0, all MTP exit 0. The 18 added Core cases (1463 minus the prior 1445 floor) are FuzzTargetTests proving malformed and deep-nesting inputs are rejected cleanly, injected unhandled exceptions and hangs are failures, the mutation stream is reproducible, and the corpus verifies against its manifest. The same run's Fuzz the serialisation parsers (bounded) step printed FUZZ COMPLETE for seed 0x5EED1A2B003C004D with 3,446,055 cases in 120 s and a 638,920-byte peak managed heap. This raises the recorded Core floor from 1445 to the evidenced 1463; Architecture and Smoke floors are unchanged, empty_projects remains unchanged, every historical capture is retained, and no floor is lowered. The ratchet commit changes only tests/baseline.json and the p3-fuzz-ds shard evidence, so linux-ci on the new PR head revalidates the same counted cases."
   },
   "p3_crc_ds_capture": {
     "captured_at": "2026-11-16T03:06:00Z",
