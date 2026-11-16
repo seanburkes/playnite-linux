@@ -488,7 +488,15 @@ public sealed partial class LibraryMigrationTests
         var errors = reader.StandardError.ReadToEndAsync();
         await reader.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(30));
         Assert.True(reader.ExitCode == 0, await errors);
-        var envelope = await envelopeTask;
+        using var input = new Newtonsoft.Json.JsonTextReader(new StringReader(await envelopeTask)) { DateParseHandling = Newtonsoft.Json.DateParseHandling.None };
+        var document = Newtonsoft.Json.Linq.JObject.Load(input);
+        foreach (var reference in Newtonsoft.Json.Linq.JArray.Parse(await File.ReadAllTextAsync(Path.Combine(bundle, "references.json"))))
+        {
+            var row = ((Newtonsoft.Json.Linq.JArray)document["records"]!).Single(r => (string?)r["file"] == (string?)reference["file"] &&
+                (string?)r["collection"] == (string?)reference["collection"] && (string?)r["data"]?["_id"] == (string?)reference["identity"]);
+            row["data"]![(string)reference["field"]!] = reference["path"]!.DeepClone();
+        }
+        var envelope = document.ToString();
         var report = await LibraryMigration.RunAsync(envelope, source, Destination, replaceExisting: true);
         Assert.Equal(3, report.Assets.Count);
         Assert.Equal(1, report.MissingAssets);

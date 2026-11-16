@@ -220,7 +220,8 @@ lease. Explicit replacement consent and artifact-only refusal remain authoritati
 not the asset branch's superseded unconditional existing-path refusal.
 
 The combined regression replaces an existing library using the unchanged Windows
-v10 databases plus p4-005's provenance-bearing `v10-assets` derivative, checks two
+v10 databases plus p4-005's provenance-bearing `v10-assets` derivative (applying
+its `references.json` to the captured intermediate as that unit does), checks two
 copied asset blobs by hash and one missing reference, checks both fingerprint
 columns and exact full ReportJson/audit equality, removes audit/staging, and proves
 repeat refusal from the artifact alone while the source remains byte-identical.
