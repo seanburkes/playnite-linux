@@ -181,6 +181,39 @@ jobs:
             --previous-projects "$RUNNER_TEMP/previous-projects.txt" \
             --summary "$GITHUB_STEP_SUMMARY"
 
+      - name: Fuzz the serialisation parsers (bounded)
+        shell: bash
+        env:
+          # The target itself runs for 45 s; the outer timeout is a hard 75 s ceiling
+          # so this required job cannot grow with a hung case or a slow parser.
+          FUZZ_SECONDS: "45"
+          FUZZ_ITERATIONS: "50000000"
+          FUZZ_SEED: "0x5EED1A2B003C004D"
+        run: |
+          set -euo pipefail
+          log="$RUNNER_TEMP/serialisation-fuzz.log"
+          set +e
+          timeout --signal=TERM --kill-after=10s 75s \
+            dotnet tools/Playnite.Fuzz/bin/Release/net11.0/Playnite.Fuzz.dll \
+              --corpus tests/fixtures/serialization-fuzz \
+              --seed "$FUZZ_SEED" \
+              --seconds "$FUZZ_SECONDS" \
+              --iterations "$FUZZ_ITERATIONS" \
+              --case-timeout-ms 2000 \
+              --max-input-bytes 65536 \
+              --max-memory-mb 256 2>&1 | tee "$log"
+          status=${PIPESTATUS[0]}
+          set -e
+          if [ "$status" -ne 0 ]; then
+            echo "::error::Serialisation fuzz target failed with exit $status: crash, unhandled exception, hang, memory growth or budget overrun."
+            exit "$status"
+          fi
+          if ! grep -q '^FUZZ COMPLETE ' "$log"; then
+            echo "::error::Serialisation fuzz target exited without the FUZZ COMPLETE marker; the budget was not exhausted cleanly."
+            exit 1
+          fi
+          grep '^FUZZ COMPLETE ' "$log" >> "$GITHUB_STEP_SUMMARY"
+
       - name: Install Xvfb for native window smoke
         run: sudo apt-get update && sudo apt-get install --yes xvfb xauth libice6 libsm6 libfontconfig1
 
