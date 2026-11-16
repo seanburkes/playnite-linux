@@ -3,9 +3,15 @@ using Microsoft.Data.Sqlite;
 
 namespace Playnite.Core.Database;
 
-/// <summary>A SQLite library destination. Each operation owns and closes its connection.</summary>
+/// <summary>
+/// A SQLite library destination. Each operation owns and closes its connection.
+/// Operations are not reentrant: a <see cref="WriteAsync{T}"/> callback must not start another
+/// write on the same destination, because that inner write would wait on its own outer writer
+/// until the busy timeout. Such nesting is refused immediately instead.
+/// </summary>
 public sealed class LibraryDatabase
 {
+    private readonly string path;
     private readonly string connectionString;
 
     private LibraryDatabase(string path)
@@ -16,6 +22,7 @@ public sealed class LibraryDatabase
             throw new ArgumentException("A library database path must be absolute.", nameof(path));
         }
 
+        this.path = path;
         connectionString = new SqliteConnectionStringBuilder
         {
             DataSource = path,
@@ -26,7 +33,7 @@ public sealed class LibraryDatabase
     }
 
     /// <summary>Current forward-only destination schema version.</summary>
-    public const int SchemaVersion = 2;
+    public const int SchemaVersion = 3;
 
     /// <summary>Opens or upgrades a destination, refusing unknown schema versions.</summary>
     public static async Task<LibraryDatabase> OpenAsync(string path, CancellationToken cancellationToken = default)
@@ -54,11 +61,20 @@ public sealed class LibraryDatabase
         }
     }
 
-    /// <summary>Reads a consistent snapshot. Repository objects must not escape the callback.</summary>
+    /// <summary>
+    /// Reads a consistent snapshot. Repository objects must not escape the callback.
+    /// A write started from inside a read is allowed and is not part of the snapshot, so the
+    /// outer read keeps seeing the state it started with; a read started from inside a write
+    /// sees only committed state. Neither blocks.
+    /// </summary>
     public Task<T> ReadAsync<T>(Func<LibrarySession, Task<T>> read, CancellationToken cancellationToken = default)
         => ExecuteAsync(read, false, cancellationToken);
 
-    /// <summary>Commits all callback writes together; exceptions or cancellation roll them back.</summary>
+    /// <summary>
+    /// Commits all callback writes together; exceptions or cancellation roll them back.
+    /// Nesting another write for the same destination inside this callback fails immediately
+    /// with <see cref="InvalidOperationException"/> rather than stalling on the outer writer.
+    /// </summary>
     public Task<T> WriteAsync<T>(Func<LibrarySession, Task<T>> write, CancellationToken cancellationToken = default)
         => ExecuteAsync(write, true, cancellationToken);
 
@@ -66,6 +82,7 @@ public sealed class LibraryDatabase
     {
         ArgumentNullException.ThrowIfNull(operation);
         cancellationToken.ThrowIfCancellationRequested();
+        using var nesting = write ? WriteNestingGuard.Enter(path) : default;
         await using var connection = await ConnectAsync(cancellationToken).ConfigureAwait(false);
         if (!write)
         {
@@ -79,5 +96,33 @@ public sealed class LibraryDatabase
         cancellationToken.ThrowIfCancellationRequested();
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
         return result;
+    }
+}
+
+/// <summary>
+/// Tracks the destination writes active in the current async flow. Two instances opened on the
+/// same file share one SQLite writer, so a nested write through either instance would wait on
+/// the outer transaction until the busy timeout and then fail; refusing it fails fast instead.
+/// </summary>
+internal static class WriteNestingGuard
+{
+    private static readonly AsyncLocal<string[]?> Active = new();
+
+    internal static IDisposable? Enter(string destination)
+    {
+        var active = Active.Value ?? [];
+        if (Array.IndexOf(active, destination) >= 0)
+        {
+            throw new InvalidOperationException(
+                $"WriteAsync is already active for '{destination}'. A nested write would wait on its own outer writer; run it in the outer callback or after it completes.");
+        }
+
+        Active.Value = [.. active, destination];
+        return new Scope(active);
+    }
+
+    private sealed class Scope(string[] previous) : IDisposable
+    {
+        public void Dispose() => Active.Value = previous;
     }
 }

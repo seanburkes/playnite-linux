@@ -39,7 +39,13 @@ internal static class SchemaMigrator
             }
 
             checkpoint?.Invoke(version, MigrationStage.BeforeSql);
-            await connection.ExecuteAsync(Command(version == 1 ? LibrarySchema.Version1 : LibrarySchema.Version2)).ConfigureAwait(false);
+            await connection.ExecuteAsync(Command(version switch
+            {
+                1 => LibrarySchema.Version1,
+                2 => LibrarySchema.Version2,
+                3 => LibrarySchema.Version3,
+                _ => throw new InvalidDataException($"No migration is defined for schema version {version}."),
+            })).ConfigureAwait(false);
             checkpoint?.Invoke(version, MigrationStage.AfterSql);
             await connection.ExecuteAsync(Command("INSERT INTO schema_version(version, applied_at) VALUES (@Version, strftime('%Y-%m-%dT%H:%M:%f+00:00','now'));", new { Version = version })).ConfigureAwait(false);
             checkpoint?.Invoke(version, MigrationStage.AfterVersion);

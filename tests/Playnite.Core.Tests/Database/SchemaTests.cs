@@ -30,7 +30,7 @@ public sealed class SchemaTests
         using var fresh = DatabaseTestDirectory.Connect(files.PathFor("fresh.sqlite"));
         using var update = DatabaseTestDirectory.Connect(files.PathFor("upgraded.sqlite"));
         Assert.Equal(await Shape(fresh), await Shape(update));
-        Assert.Equal(new[] { 1, 2 }, (await update.QueryAsync<int>("SELECT version FROM schema_version ORDER BY version;")).ToArray());
+        Assert.Equal(new[] { 1, 2, 3 }, (await update.QueryAsync<int>("SELECT version FROM schema_version ORDER BY version;")).ToArray());
         Assert.Equal("ok", await update.QuerySingleAsync<string>("PRAGMA integrity_check;"));
         Assert.Empty(await update.QueryAsync("PRAGMA foreign_key_check;"));
     }
@@ -51,7 +51,7 @@ public sealed class SchemaTests
     }
 
     [Theory]
-    [InlineData(3)]
+    [InlineData(4)]
     [InlineData(7)]
     public async Task Unknown_or_gapped_versions_are_refused_without_changing_history(int version)
     {
@@ -61,13 +61,13 @@ public sealed class SchemaTests
             await connection.ExecuteAsync("INSERT INTO schema_version VALUES (@Version, 'future');", new { Version = version });
         await Assert.ThrowsAsync<InvalidDataException>(() => LibraryDatabase.OpenAsync(files.PathFor()));
         using var after = DatabaseTestDirectory.Connect(files.PathFor());
-        Assert.Equal(3, await after.QuerySingleAsync<int>("SELECT COUNT(*) FROM schema_version;"));
+        Assert.Equal(4, await after.QuerySingleAsync<int>("SELECT COUNT(*) FROM schema_version;"));
         Assert.Equal("future", await after.QuerySingleAsync<string>("SELECT applied_at FROM schema_version WHERE version=@Version;", new { Version = version }));
     }
 
     public static IEnumerable<object[]> CrashCheckpoints()
     {
-        foreach (var version in new[] { 1, 2 })
+        foreach (var version in new[] { 1, 2, 3 })
             foreach (var stage in Enum.GetValues<MigrationStage>())
                 yield return [version, stage.ToString()];
     }
@@ -77,7 +77,7 @@ public sealed class SchemaTests
     public async Task Sigkill_at_every_migration_checkpoint_is_resumable(int version, string stage)
     {
         using var files = new DatabaseTestDirectory();
-        if (version == 2)
+        if (version > 1)
         {
             using var old = DatabaseTestDirectory.Connect(files.PathFor());
             await SchemaMigrator.ApplyAsync(old, 1, CancellationToken.None);
@@ -105,7 +105,7 @@ public sealed class SchemaTests
         Assert.Equal(LibraryDatabase.SchemaVersion, await after.QuerySingleAsync<int>("SELECT MAX(version) FROM schema_version;"));
         Assert.Equal("ok", await after.QuerySingleAsync<string>("PRAGMA integrity_check;"));
         Assert.Empty(await after.QueryAsync("PRAGMA foreign_key_check;"));
-        if (version == 2)
+        if (version > 1)
             Assert.Equal("preserved", (await resumed.ReadAsync(s => s.Games.GetAsync(GameId)))!.Value.Name);
         await LibraryDatabase.OpenAsync(files.PathFor("fresh.sqlite"));
         using var fresh = DatabaseTestDirectory.Connect(files.PathFor("fresh.sqlite"));
