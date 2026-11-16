@@ -42,17 +42,22 @@ public static class Archive
     {
         limits ??= new ArchiveLimits();
         using var archive = ArchiveFactory.Open(archivePath);
-        var entry = ValidateEntries(archive, limits).FirstOrDefault(e => e.Name == entryName);
+        var entries = ValidateEntries(archive, limits);
+        var entry = entries.FirstOrDefault(e => e.Name == entryName);
         if (entry.Entry is null)
         {
             return null;
         }
 
+        // The caller's remaining total budget is what declared sizes leave after this member;
+        // a member that lies about its declared size still cannot consume more than that.
+        var remaining = limits.TotalBytes - (entries.Sum(e => e.Entry!.Size) - entry.Entry.Size);
         using var source = entry.Entry.OpenEntryStream();
         var result = new MemoryStream();
         try
         {
-            await CopyBoundedAsync(source, result, limits.EntryBytes, cancellationToken).ConfigureAwait(false);
+            await CopyBoundedAsync(source, result, Math.Min(limits.EntryBytes, remaining),
+                cancellationToken).ConfigureAwait(false);
             if (result.Length != entry.Entry.Size)
             {
                 throw new InvalidDataException("Archive member size mismatch.");

@@ -85,7 +85,9 @@ Nothing live is written until each of these steps succeeds:
 6. Only then, with `Overwrite`, reproduce v10's cleanup of the selected roots: library root
    files are deleted, `libraryfiles`/`extension`/`extensiondata` roots are replaced, and
    `themes/{Desktop,Fullscreen}` lose every directory except `Default`; finally the selected
-   staged files are moved into place.
+   staged files are moved into place. Theme cleanup preflights both mode directories, every
+   theme directory and every root file before the first delete, so a symlink in a later mode
+   cannot surface after an earlier theme is already gone.
 
 The move phase is not a transaction: an I/O failure after cleanup can leave a partially
 restored category, exactly as v10 can. The staging gate guarantees that corrupt, truncated,
@@ -117,13 +119,16 @@ wrong-version, missing-member and over-limit archives are rejected before that p
 | `EntryCount` | 100,000 | archive members (manifest included) |
 | `EntryBytes` | 256 MiB (268,435,456) | each declared and each actually decompressed member |
 | `TotalBytes` | 4 GiB (4,294,967,296) | the sum of declared sizes and the sum actually written |
-| Manifest read | 1 MiB and `EntryBytes`, whichever is smaller | manifest decompression |
+| Manifest read | 64 MiB (`ManifestLimitBytes`), `EntryBytes` and the remaining total budget, whichever is smallest | manifest decompression |
 
 The declared sum is checked before decompression, and the copy loop checks each read against
 the remaining per-entry and total budget, so a member that lies about its size is still
-stopped. Restore stages into a bounded temporary tree under the caller's `WorkDirectory`;
-`Directory.Delete(stage, true)` runs in `finally`. Backup applies the same count and size
-budgets to its source files and manifest.
+stopped. `GetEntryStreamAsync` uses the caller's remaining total budget after the other
+declared members, not just `EntryBytes`. The manifest's declared size is checked against the
+manifest cap before any copy starts, so a manifest that lies cannot be read first and rejected
+afterwards. Restore stages into a bounded temporary tree under the caller's `WorkDirectory`;
+`Directory.Delete(stage, true)` runs in `finally` only after the directory is re-checked.
+Backup applies the same count and size budgets to its source files and manifest.
 
 Member names are normalized by converting `\` to `/` and are rejected when empty, rooted,
 containing `:`, containing a control character, or containing an empty, `.` or `..` segment.
@@ -137,17 +142,19 @@ places synthetic payloads in the exact v10 entry roots and member names, records
 every fixture, and refuses to overwrite any existing byte. It is source-derived layout
 evidence, not a captured Windows archive. `tests/golden/archives/v10-full.entries.json` is the
 deterministic listing of the full v10-shaped fixture. The v11 manifest variants are synthetic
-failure inputs for the version, member and hash checks. No pre-existing fixture or golden byte
+failure inputs for the version, member and hash checks; `lying-size.zip` and
+`huge-manifest.zip` patch a declared size so the actual-byte budget and the pre-copy manifest
+cap are exercised without shipping a real bomb. No pre-existing fixture or golden byte
 was changed.
 
 `ArchiveTests` covers listing, normalization, entry reads, tar/zip parity, traversal,
-duplicates, links and limits. `BackupTests` covers the full and minimal round trips, the v10
-fixture restore, exclusions, naming/rotation, overwrite protection, manifest determinism,
-large-manifest validation through the single entry index, all validation failures,
-cancellation, symlinked backup/work paths, work directories inside selected targets and bomb
-limits.
+duplicates, links, limits and a member that lies about its declared size. `BackupTests` covers
+the full and minimal round trips, the v10 fixture restore, exclusions, naming/rotation,
+overwrite protection, manifest determinism, large-manifest validation through the single entry
+index, the manifest size cap, all validation failures, cancellation, symlinked backup/work
+paths, work directories inside selected targets, later-mode symlink preflight and bomb limits.
 
-Local narrow checks at the implementation head: Core **1414 passed / 0 failed / 0 skipped**
+Local narrow checks at the implementation head: Core **1417 passed / 0 failed / 0 skipped**
 (previous union floor 1365), Architecture **144 passed / 0 failed / 0 skipped**, Core Release
 build **0 warnings / 0 errors**. The counted floor is raised only from a real linux-ci run on
 the final head.

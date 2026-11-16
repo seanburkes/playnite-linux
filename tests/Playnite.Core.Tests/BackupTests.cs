@@ -352,6 +352,17 @@ public sealed class BackupTests
     }
 
     [Fact]
+    public async Task Manifest_declared_size_over_the_cap_fails_before_copying()
+    {
+        using var scratch = new Scratch();
+        var exception = await Assert.ThrowsAsync<InvalidDataException>(() => Backup.RestoreBackupAsync(
+            RestoreOptions(scratch, [BackupDataItem.Settings],
+                backupFile: ArchiveTestData.Fixture("huge-manifest.zip"))));
+        Assert.Contains("manifest exceeds", exception.Message);
+        Assert.False(Directory.Exists(scratch.RestoreData));
+    }
+
+    [Fact]
     public async Task Work_directory_inside_a_selected_target_is_rejected_before_cleanup()
     {
         using var scratch = new Scratch();
@@ -384,6 +395,22 @@ public sealed class BackupTests
         await Assert.ThrowsAsync<IOException>(() => Backup.RestoreBackupAsync(
             RestoreOptions(scratch, [BackupDataItem.Settings, BackupDataItem.Library],
                 workDirectory: workLink)));
+    }
+
+    [Fact]
+    public async Task Theme_cleanup_detects_a_later_mode_symlink_before_deleting_earlier_themes()
+    {
+        using var scratch = new Scratch();
+        CreateSource(scratch);
+        await Backup.BackupDataAsync(Options(scratch, scratch.Backup, AllItems), Timestamp);
+        ArchiveTestData.Write(scratch.RestoreData, "Themes/Desktop/Custom/theme.yaml", "old");
+        var outside = Path.Combine(scratch.Root, "outside-themes");
+        Directory.CreateDirectory(outside);
+        Directory.CreateSymbolicLink(Path.Combine(scratch.RestoreData, "Themes/Fullscreen"), outside);
+        await Assert.ThrowsAsync<IOException>(() => Backup.RestoreBackupAsync(
+            RestoreOptions(scratch, [BackupDataItem.Themes], overwrite: true)));
+        Assert.True(File.Exists(Path.Combine(
+            scratch.RestoreData, "Themes/Desktop/Custom/theme.yaml")));
     }
 
     [Fact]

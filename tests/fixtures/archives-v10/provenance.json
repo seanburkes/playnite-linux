@@ -12,8 +12,14 @@
     "duplicate.zip": {
       "sha256": "6029524647e0413379e8795ba87b6e202c6bdec91c9abb30be9cbd6aee98fb42"
     },
+    "huge-manifest.zip": {
+      "sha256": "57580ab5d9102d3a69dc39c2c1b5848f1e443788ef8079996730724628003f73"
+    },
     "linked.tar": {
       "sha256": "145b6d56af71f561b74d7eea0f560f0189b89cedd0f6e6d7cfe8dceaee8efab8"
+    },
+    "lying-size.zip": {
+      "sha256": "bc6b12bd2827521b363f4c1dae3b91dac9c1f13a05334eb782bda3b7cbc95b09"
     },
     "traversal.zip": {
       "sha256": "dba1edc7f75812e204a921323c7c01c9c6aa2a341195e9b6b9d2e0469cd834b6"

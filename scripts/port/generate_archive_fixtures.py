@@ -100,6 +100,27 @@ def zip_bytes(entries, *, directories=()):
     return buffer.getvalue()
 
 
+def patch_declared_size(data, name, size):
+    """Rewrite one member's declared uncompressed size in both ZIP headers."""
+    data = bytearray(data)
+    encoded = name.encode()
+    local = data.find(b"PK\x03\x04")
+    while local != -1:
+        name_length = int.from_bytes(data[local + 26:local + 28], "little")
+        if bytes(data[local + 30:local + 30 + name_length]) == encoded:
+            data[local + 22:local + 26] = size.to_bytes(4, "little")
+            break
+        local = data.find(b"PK\x03\x04", local + 4)
+    central = data.find(b"PK\x01\x02")
+    while central != -1:
+        name_length = int.from_bytes(data[central + 28:central + 30], "little")
+        if bytes(data[central + 46:central + 46 + name_length]) == encoded:
+            data[central + 24:central + 28] = size.to_bytes(4, "little")
+            break
+        central = data.find(b"PK\x01\x02", central + 4)
+    return bytes(data)
+
+
 def tar_bytes(entries, *, link=False):
     buffer = io.BytesIO()
     with tarfile.open(fileobj=buffer, mode="w", format=tarfile.USTAR_FORMAT) as archive:
@@ -139,6 +160,11 @@ def main():
         "v11-wrong-version.zip": zip_bytes(FULL + [(MANIFEST, manifest_bytes(FULL, version=2))]),
         "v11-member-missing.zip": zip_bytes(FULL + [(MANIFEST, manifest_bytes(FULL, omit="library/games.db"))]),
         "v11-hash-mismatch.zip": zip_bytes(FULL + [(MANIFEST, manifest_bytes(FULL, bad_hash=True))]),
+        # Synthetic bomb inputs: both members claim a small declared size in every ZIP header.
+        "lying-size.zip": patch_declared_size(
+            zip_bytes([("library/games.db", b"x" * 64)]), "library/games.db", 8),
+        "huge-manifest.zip": patch_declared_size(
+            zip_bytes([(MANIFEST, b'{"formatVersion":1,"members":[]}\n')]), MANIFEST, 67_108_865),
         "linked.tar": tar_bytes(MINIMAL, link=True),
     }
 

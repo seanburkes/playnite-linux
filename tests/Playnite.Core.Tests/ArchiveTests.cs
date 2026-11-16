@@ -117,6 +117,15 @@ public sealed class ArchiveTests
     }
 
     [Fact]
+    public async Task Entry_stream_stops_a_member_that_lies_about_its_declared_size_at_the_budget()
+    {
+        var exception = await Assert.ThrowsAsync<InvalidDataException>(() => Archive.GetEntryStreamAsync(
+            ArchiveTestData.Fixture("lying-size.zip"), "library/games.db",
+            new ArchiveLimits(EntryBytes: 100, TotalBytes: 16)));
+        Assert.Contains("limits", exception.Message);
+    }
+
+    [Fact]
     public async Task Entry_reads_honor_the_same_limits_and_cancellation()
     {
         await Assert.ThrowsAsync<InvalidDataException>(() => Archive.GetEntryStreamAsync(

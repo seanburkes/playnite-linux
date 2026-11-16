@@ -55,6 +55,8 @@ public static class Backup
 {
     public const string ManifestName = "backup-manifest.json";
     public const int FormatVersion = 1;
+    /// <summary>Upper bound for the manifest member, independent of the per-entry limit.</summary>
+    public const long ManifestLimitBytes = 67_108_864;
 
     private const string LibraryEntryRoot = "library";
     private const string LibraryFilesEntryRoot = "libraryfiles";
@@ -149,7 +151,7 @@ public static class Backup
 
                 var manifest = JsonSerializer.SerializeToUtf8Bytes(
                     new BackupManifest(FormatVersion, members), JsonOptions);
-                if (manifest.LongLength > Math.Min(limits.EntryBytes, 1_048_576) ||
+                if (manifest.LongLength > Math.Min(limits.EntryBytes, ManifestLimitBytes) ||
                     manifest.LongLength > limits.TotalBytes - actualTotal)
                 {
                     throw new InvalidDataException("Backup manifest exceeds archive limits.");
@@ -194,9 +196,17 @@ public static class Backup
         Dictionary<string, BackupManifestMember>? manifestMembers = null;
         if (manifestEntry is not null)
         {
+            var declaredTotal = entries.Sum(e => e.Entry.Length);
+            var remaining = limits.TotalBytes - (declaredTotal - manifestEntry.Length);
+            var manifestLimit = Math.Min(Math.Min(limits.EntryBytes, ManifestLimitBytes), remaining);
+            if (manifestEntry.Length > manifestLimit)
+            {
+                throw new InvalidDataException("Backup manifest exceeds archive limits.");
+            }
+
             using var buffer = new MemoryStream();
             await using var input = manifestEntry.Open();
-            await Archive.CopyBoundedAsync(input, buffer, Math.Min(limits.EntryBytes, 1_048_576),
+            await Archive.CopyBoundedAsync(input, buffer, manifestLimit,
                 cancellationToken).ConfigureAwait(false);
             try
             {
@@ -578,33 +588,53 @@ public static class Backup
 
         if (category == BackupDataItem.Library)
         {
-            foreach (var file in Directory.GetFiles(root))
+            var files = Directory.GetFiles(root);
+            foreach (var file in files)
+            {
+                CheckPath(file);
+            }
+
+            foreach (var file in files)
             {
                 File.Delete(file);
             }
         }
         else if (category == BackupDataItem.Themes)
         {
-            foreach (var mode in ThemeModeDirs)
+            // Preflight every mode directory and descendant before deleting anything, so a
+            // symlink in the second mode cannot surface after the first mode is already gone.
+            var modeDirs = ThemeModeDirs
+                .Select(mode => Path.Combine(root, mode))
+                .Where(Directory.Exists)
+                .ToList();
+            foreach (var modeDir in modeDirs)
             {
-                var modeDir = Path.Combine(root, mode);
                 CheckPath(modeDir);
-                if (!Directory.Exists(modeDir))
-                {
-                    continue;
-                }
+            }
 
-                foreach (var dir in Directory.GetDirectories(modeDir).Where(d =>
-                    !Path.GetFileName(d).Equals(DefaultThemeDirName, StringComparison.OrdinalIgnoreCase)))
-                {
-                    CheckTree(dir);
-                    Directory.Delete(dir, true);
-                }
+            var themeDirs = modeDirs
+                .SelectMany(Directory.GetDirectories)
+                .Where(d => !Path.GetFileName(d).Equals(DefaultThemeDirName, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+            var themeFiles = modeDirs.SelectMany(Directory.GetFiles).ToList();
+            foreach (var dir in themeDirs)
+            {
+                CheckTree(dir);
+            }
 
-                foreach (var file in Directory.GetFiles(modeDir))
-                {
-                    File.Delete(file);
-                }
+            foreach (var file in themeFiles)
+            {
+                CheckPath(file);
+            }
+
+            foreach (var dir in themeDirs)
+            {
+                Directory.Delete(dir, true);
+            }
+
+            foreach (var file in themeFiles)
+            {
+                File.Delete(file);
             }
         }
         else
