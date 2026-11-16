@@ -68,5 +68,18 @@ idempotence, collisions, ordinal comparison, exact text preservation and immutab
   `docs/port/p3-007b-localisation.md`.
 - Protected shared parity/aggregate files. This unit records its contract in the p3-009 shard.
 
-The baseline floor will only be raised using actual linux-ci JUnit evidence; no local or
-estimated case count is a baseline capture. Independent adversarial reviews are firstmate-owned.
+## Validation and counted floor
+
+After normally merging current main `4048641` (recorded Core floor **1,429**), both local
+Release suites passed: Core **1,445**, Architecture **144**, zero failures/skips. The narrow
+Release build completed with zero warnings/errors. Shards-only history validation passed.
+
+Actual `linux-ci` run [43791358506](https://github.com/seanburkes/playnite-linux/actions/runs/43791358506)
+on integration head `926c4fc1e9e45a1a147b45b97fdd26126ec40b99` passed warning-as-error build,
+every suite and the native window smoke. Downloaded JUnit testcase elements and suite totals
+independently confirm Core **1,445/1,445**, Architecture **144/144**, Smoke **4/4**, zero
+failed/skipped, every MTP exit 0. This supplies the additive `p3_009_capture` raising only the
+Core floor **1,429 → 1,445**; no local estimate or stale pre-integration count was used. All
+historical captures and other suite floors remain unchanged. The final evidence-only head
+must pass its own fresh linux-ci run before delivery. Independent adversarial reviews are
+firstmate-owned.

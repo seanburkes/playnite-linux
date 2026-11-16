@@ -23,9 +23,9 @@
       "skipped": 0
     },
     "Playnite.Core.Tests": {
-      "total": 1429,
-      "executed": 1429,
-      "passed": 1429,
+      "total": 1445,
+      "executed": 1445,
+      "passed": 1445,
       "failed": 0,
       "skipped": 0
     },
@@ -122,5 +122,12 @@
     "run_url": "https://github.com/seanburkes/playnite-linux/actions/runs/43789085630",
     "commit": "f40287121da0c31457418b1880e333aabe1dd5b7",
     "notes": "Counts independently parsed from the downloaded linux-test-results JUnit and MTP exit files for linux-ci run 43789085630 on https://github.com/seanburkes/playnite-linux/pull/79 head f402871 after normally merging origin/main ffc882f (the p3-007b localisation union): Playnite.Core.Tests 1429 total / 1429 executed / 1429 passed / 0 failed / 0 skipped, Playnite.Architecture.Tests 144 / 144 / 144 / 0 / 0, Playnite.Smoke.Tests 4 / 4 / 4 / 0 / 0, all MTP exit 0, including the 17 LocalizationKeyTests cases. The 1429 is the real merged union of the 1412 p3-008b archive/backup suite and the 17 p3-007b cases, not a guessed sum. This raises the Core floor from 1412 to 1429; the earlier p3_008b_capture, p3_008b_capture_final and every other historical capture remain intact, and no suite floor is lowered. This baseline-only follow-up carries the same evidence after https://github.com/seanburkes/playnite-linux/pull/79 merged before its final ratchet commit; its linux-ci run revalidates the same counted cases."
+  },
+  "p3_009_capture": {
+    "captured_at": "2026-11-16T02:19:45Z",
+    "run_id": 43791358506,
+    "run_url": "https://github.com/seanburkes/playnite-linux/actions/runs/43791358506",
+    "commit": "926c4fc1e9e45a1a147b45b97fdd26126ec40b99",
+    "notes": "Actual linux-ci on the p3-009 integration head after normally merging current origin/main 4048641 (including the merged 1429 Core floor). Downloaded linux-test-results JUnit testcase elements and suite totals independently confirm Core 1445 total / 1445 executed / 1445 passed / 0 failed / 0 skipped, Architecture 144 / 144 / 144 / 0 / 0, Smoke 4 / 4 / 4 / 0 / 0, every MTP exit 0. The Core suite includes 16 LocalizationMigrationTests cases. This raises only the merged Core floor from 1429 to the real 1445 count; no stale subset or estimated sum is used, every earlier capture and other suite floor is retained. The capture commit changes only baseline/evidence, not test cases; a fresh linux-ci run on the final pushed head must revalidate these counts before delivery. Mapping evidence is separate from the sibling-owned read-only extraction, English set, LOC constants and loc goldens: 1134 mapped, 0 unmapped, 0 obsolete; empty sibling English key/value diff. Additive oracle-change update authorized by the p3-009 task baseline requirement."
   }
 }
