@@ -1,0 +1,2 @@
+id	wave	area	unit	depends	status	owner	oracle	test	notes
+p3-crc-ds	W3	leaves	CRC and checksum helpers	p3-002	in-progress	fm/p3-crc-ds	legacy/source/Playnite/Common/FileSystem_Checksum.cs	tests/Playnite.Core.Tests/ChecksumTests.cs	CRC-32/ISO-HDLC replaces the Crc32.NET Append used by v10; MD5, SHA-256 and AreFileContentsEqual ported with v10 uppercase hex and null/exception behaviour; frozen-v10 oracle goldens are cross-checked against CPython zlib/hashlib; docs/port/p3-crc-ds-checksums.md
