@@ -52,8 +52,9 @@ The migration report includes one AssetResult per nonempty imported asset field:
 
 MissingAssets, UnreadableAssets and EmptyAssets count **references**, not distinct
 blobs; each result includes record file/collection/identity, field and asset path.
-Missing/empty/unreadable/external typed image fields contain the explicit marker
-`playnite-asset://<outcome>/<URI-escaped-original-reference>`, not a plausible
+Missing/empty/unreadable/external typed image fields contain an explicit URI
+marker with scheme `playnite-asset`, authority equal to the outcome, and path
+equal to the URI-escaped original reference, not a plausible
 local file path. Thus a consumer reading only SQLite can distinguish these states
 from valid asset paths without the external report. Original references remain
 unchanged in LegacyJson and the report. The complete report is written beside the
