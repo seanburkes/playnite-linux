@@ -85,7 +85,7 @@ The database adds an explicit SQL destination rather than copying the LiteDB eng
 | Paths/encoding | Text is passed as parameters unchanged, including Windows paths, quotes, Unicode, empty strings and null. Path mapping/reporting belongs to the importer, not the destination. |
 | Transient state | IsInstalling/IsUninstalling/IsLaunching/IsRunning reset false, matching the v10 GamesCollection initialization callback. Read-only computed model properties are not stored. |
 | Errors | Duplicate identities, missing updates, invalid bags and foreign-key failures surface. No INSERT OR IGNORE, replacement inserts, truncation, or exception swallowing. |
-| Lifetime/concurrency | FK enforcement, WAL, 5000ms busy timeout on every connection; immediate writer transactions prevent stale read-to-write upgrades. One writer per destination: a `WriteAsync` callback that starts another `WriteAsync` for the same destination fails immediately with `InvalidOperationException` instead of waiting on its own outer writer until the busy timeout, and that rule includes a write started in the background from inside the callback, fire-and-forget included. The guard key is the canonical absolute path with each directory component and the file resolving their symlink target, so `/tmp/x/./library.sqlite`, `../x/library.sqlite` and a symlink share one key; hard links have no managed identity API and remain backstopped by the busy timeout. A `WriteAsync` inside a `ReadAsync` is allowed and does not join the outer snapshot; a `ReadAsync` inside a `WriteAsync` is allowed and sees only committed state. SQLite's provider executes I/O synchronously even through its async methods; no Task.Run facade in Core. Cancellation is checked at commands and before commit. |
+| Lifetime/concurrency | FK enforcement, WAL, 5000ms busy timeout on every connection; immediate writer transactions prevent stale read-to-write upgrades. One writer per destination: a `WriteAsync` callback that starts another `WriteAsync` for the same destination fails immediately with `InvalidOperationException` instead of waiting on its own outer writer until the busy timeout, and that rule includes a write started in the background from inside the callback, fire-and-forget included. The guard key is the canonical absolute path with each directory component and the file resolving their symlink target, so `/tmp/x/./library.sqlite`, `../x/library.sqlite` and a symlink share one key; a hard-link alias is not detected and is backstopped by the SQLite busy timeout rather than failing fast, because hard links have no managed identity API and no inode-level detection is attempted. A `WriteAsync` inside a `ReadAsync` is allowed and does not join the outer snapshot; a `ReadAsync` inside a `WriteAsync` is allowed and sees only committed state. SQLite's provider executes I/O synchronously even through its async methods; no Task.Run facade in Core. Cancellation is checked at commands and before commit. |
 
 ## Verification
 
@@ -126,11 +126,12 @@ record is retained as history, and this follow-up records the final-head provena
 capture record. The pre-unit merged main floor for #90 was 1583 Core.
 
 This review follow-up measured **1669 Core / 144 Architecture / 4 Smoke** on
-[linux-ci run 43819146506](https://github.com/seanburkes/playnite-linux/actions/runs/43819146506)
-at implementation head `652389a74ab8f44833181db375c45fc577b580aa`, independently counted from
-the downloaded JUnit testcase elements, `test-counts.json` and MTP exit files (all exit 0, zero
-failures/skips). The earlier 1664 measurement on `f05ca56` was superseded by the Review B fixes.
-Current main's floor is 1642 Core; the 27 added cases are 18 destination-contract cases, four
-additional schema version 3 SIGKILL checkpoints, and five Review B cases. The floor commit
-changes only `tests/baseline.json`, this document and the p4-001 queue/ledger shards, so the
-final pushed head's own linux-ci run revalidates the same 1669 cases.
+[linux-ci run 43819539551](https://github.com/seanburkes/playnite-linux/actions/runs/43819539551)
+at final head `0b01b99a8dbfebbd5f711bf92f345f65cc217742`, independently counted from the
+downloaded JUnit testcase elements, `test-counts.json` and MTP exit files (all exit 0, zero
+failures/skips). Current main's floor is 1642 Core; the 27 added cases are 18
+destination-contract cases, four additional schema version 3 SIGKILL checkpoints, and five
+Review B cases. Earlier runs in this PR (`43816863124` at `f05ca56` and `43819146506` at
+`652389a`) were superseded by later fixes. The capture-citation commit changes only
+`tests/baseline.json`, this document and the p4-001 queue/ledger shards, so its own pushed head's
+linux-ci run revalidates the same 1669 cases.
