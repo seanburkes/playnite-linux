@@ -17,12 +17,14 @@ of scope; the unit reports the declarations the v10 loader consumes.
 ## Report and generator
 
 `python3 scripts/loc/generate_coverage.py` writes `docs/port/p3-loc-coverage.json`; `--check`
-verifies it without writing. The report records the exact input paths, their SHA-256 hashes, the
-English key count, the language count, and the rules below, so a stale or hand-edited report is
-detectable; `LocalizationCoverageTests` also recomputes every language from `legacy/` and fails
-on any difference. The report is small because it stores per-language counts plus the short
-missing, extra and placeholder-defect lists; the large untranslated sets are represented by
-their count.
+verifies it without writing. `LocalizationCoverageTests` invokes that exact `--check` command in
+the repository root, so a stale or ungenerated report fails the Core suite, and recomputes every
+language from `legacy/` independently. The report records the exact input paths, their SHA-256
+hashes, the English key count, the language count, and the rules below. The report is small
+because it stores per-language counts plus the short missing, extra and placeholder-defect lists;
+the large untranslated sets are represented by their count. The language and file sets are
+checked against a filesystem enumeration of `legacy/source/Playnite/Localization/*.xaml`, not
+against the report's own list, so deleting a language from the report fails.
 
 Per language the report records:
 
@@ -36,12 +38,13 @@ Per language the report records:
 
 ## Placeholder rule
 
-Compare the ordinal multiset of unescaped .NET composite-format placeholders. A placeholder is
-an unescaped `{`, a nonnegative index, an optional `,alignment` (with optional `-`), an optional
-`:format`, and `}`. Doubled `{{` and `}}` are literal braces and are not placeholders. Dropping,
-adding, duplicating, re-indexing or reformatting a placeholder is a defect, not a missing
-string; an empty translation is untranslated and is not a placeholder defect because English is
-used.
+Compare the ordinal multiset of unescaped **numbered** .NET composite-format placeholders. A
+placeholder is an unescaped `{`, a nonnegative index, an optional `,alignment` (with optional
+`-`), an optional `:format`, and `}`. Doubled `{{` and `}}` are literal braces and are not
+placeholders. Named braces such as `{name}`, percent tokens such as `%s`, and arbitrary brace text
+are outside the validated scope and are not placeholders. Dropping, adding, duplicating,
+re-indexing or reformatting a numbered placeholder is a defect, not a missing string; an empty
+translation is untranslated and is not a placeholder defect because English is used.
 
 The frozen data has 7 real defects in 5 languages: `id_ID` drops `{2}` in
 `LOCSkinApplyError`; `ja_JP` drops `{0}` in `LOCSignInExternalNotif`; `ko_KR` drops `{0}` in
@@ -52,7 +55,9 @@ and `LOCThemeInstallPrompt`. There are no absent or extra keys in the frozen fil
 ## Verification
 
 `LocalizationCoverageTests` recomputes every language from the repository `legacy/` paths and
-requires the committed report to match exactly, including its input hashes; it also proves the
-English source is complete and unchanged, exercises dropped and renamed placeholders, exact
-missing-key reporting, extra keys, empty/whitespace fallback, escaped braces, and determinism.
-No test is skipped and no historical golden is re-accepted or edited.
+requires the committed report to match exactly, including its input hashes; it invokes the
+generator `--check`; it asserts the reported language and file sets equal the frozen filesystem
+enumeration and that dropping one language is rejected; it also proves the English source is
+complete and unchanged, exercises dropped and renamed placeholders, exact missing-key reporting,
+extra keys, empty/whitespace fallback, escaped braces, and determinism. No test is skipped and no
+historical golden is re-accepted or edited.

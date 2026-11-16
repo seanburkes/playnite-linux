@@ -1,7 +1,9 @@
+using System.Diagnostics;
 using System.Text.Json;
 using Playnite;
 using Playnite.Core.Tests.Serialization;
 using Xunit;
+using Xunit.Sdk;
 
 namespace Playnite.Core.Tests;
 
@@ -18,6 +20,29 @@ public sealed class LocalizationCoverageTests
 
     private static string RepositoryFile(string relativePath) =>
         Path.Combine(RepositoryPaths.Root, relativePath);
+
+    private static string RelativePath(string path) =>
+        Path.GetRelativePath(RepositoryPaths.Root, path).Replace('\\', '/');
+
+    private static string[] LocaleFiles() =>
+        Directory.GetFiles(RepositoryFile("legacy/source/Playnite/Localization"), "*.xaml")
+            .Where(path => Path.GetFileName(path) != "LocSource.xaml")
+            .Order(StringComparer.Ordinal)
+            .ToArray();
+
+    private static void AssertReportCoversEveryFrozenLanguage(IEnumerable<JsonElement> reported)
+    {
+        var expectedFiles = LocaleFiles();
+        var entries = reported.ToArray();
+        Assert.Equal(37, expectedFiles.Length);
+        Assert.Equal(expectedFiles.Length, entries.Length);
+        Assert.Equal(
+            expectedFiles.Select(path => Path.GetFileNameWithoutExtension(path)).Order(StringComparer.Ordinal),
+            entries.Select(entry => entry.GetProperty("language").GetString()).Order(StringComparer.Ordinal));
+        Assert.Equal(
+            expectedFiles.Select(RelativePath).Order(StringComparer.Ordinal),
+            entries.Select(entry => entry.GetProperty("file").GetString()).Order(StringComparer.Ordinal));
+    }
 
     private static LocalizationKeySet Set(params (string Key, string Value)[] entries) =>
         new(entries.Select(pair => KeyValuePair.Create(pair.Key, pair.Value)));
@@ -45,25 +70,27 @@ public sealed class LocalizationCoverageTests
         using var document = JsonDocument.Parse(File.ReadAllText(RepositoryFile(ReportPath)));
         var provenance = document.RootElement.GetProperty("provenance");
         var inputs = provenance.GetProperty("inputs");
-        var languages = document.RootElement.GetProperty("languages");
-        var expectedPaths = languages.EnumerateArray()
-            .Select(entry => entry.GetProperty("file").GetString()!)
-            .Append(provenance.GetProperty("english").GetString()!)
+        var languages = document.RootElement.GetProperty("languages").EnumerateArray().ToArray();
+        AssertReportCoversEveryFrozenLanguage(languages);
+
+        var expectedPaths = LocaleFiles()
+            .Select(RelativePath)
+            .Append(EnglishPath)
             .Order(StringComparer.Ordinal)
             .ToArray();
         Assert.Equal(expectedPaths, inputs.EnumerateObject().Select(input => input.Name).Order(StringComparer.Ordinal));
-        Assert.Equal(37, provenance.GetProperty("languageCount").GetInt32());
+        Assert.Equal(languages.Length, provenance.GetProperty("languageCount").GetInt32());
         Assert.Equal(LocalizationKeySet.English.Entries.Count, provenance.GetProperty("keyCount").GetInt32());
         Assert.Equal(
-            languages.EnumerateArray().Select(entry => entry.GetProperty("language").GetString()).Order(StringComparer.Ordinal),
-            languages.EnumerateArray().Select(entry => entry.GetProperty("language").GetString()).ToArray());
+            languages.Select(entry => entry.GetProperty("language").GetString()).Order(StringComparer.Ordinal),
+            languages.Select(entry => entry.GetProperty("language").GetString()).ToArray());
 
         foreach (var relativePath in expectedPaths)
         {
             Assert.Equal(inputs.GetProperty(relativePath).GetString(), RepositoryPaths.Sha256(RepositoryFile(relativePath)));
         }
 
-        foreach (var entry in languages.EnumerateArray())
+        foreach (var entry in languages)
         {
             var language = entry.GetProperty("language").GetString()!;
             var relativePath = entry.GetProperty("file").GetString()!;
@@ -77,6 +104,36 @@ public sealed class LocalizationCoverageTests
                 JsonSerializer.Serialize(committed, ReportOptions),
                 JsonSerializer.Serialize(actual, ReportOptions));
         }
+    }
+
+    [Fact]
+    public void A_report_that_drops_a_language_is_rejected()
+    {
+        using var document = JsonDocument.Parse(File.ReadAllText(RepositoryFile(ReportPath)));
+        var languages = document.RootElement.GetProperty("languages").EnumerateArray().ToArray();
+        Assert.ThrowsAny<XunitException>(() => AssertReportCoversEveryFrozenLanguage(languages.Skip(1)));
+    }
+
+    [Fact]
+    public void The_generator_check_reproduces_the_committed_report()
+    {
+        var startInfo = new ProcessStartInfo("python3")
+        {
+            WorkingDirectory = RepositoryPaths.Root,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+        };
+        startInfo.ArgumentList.Add("scripts/loc/generate_coverage.py");
+        startInfo.ArgumentList.Add("--check");
+        using var process = Process.Start(startInfo)
+            ?? throw new InvalidOperationException("Cannot start the localisation coverage generator.");
+        var output = process.StandardOutput.ReadToEnd();
+        var error = process.StandardError.ReadToEnd();
+        Assert.True(process.WaitForExit(120_000), "The localisation coverage generator timed out.");
+        Assert.True(
+            process.ExitCode == 0,
+            $"The localisation coverage generator failed with exit {process.ExitCode}: {output}{error}");
     }
 
     [Fact]

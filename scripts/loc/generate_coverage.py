@@ -120,9 +120,10 @@ def generate():
                 "untranslated is a declared English key with an empty value, because v10 falls back "
                 "to English for empty translations; whitespace-only text is a translation"),
             "placeholderRule": (
-                "compare the ordinal multiset of unescaped .NET composite-format placeholders; "
-                "{{ and }} are literal braces, so changing or dropping an index or format is a "
-                "defect rather than a missing string"),
+                "compare the ordinal multiset of unescaped numbered .NET composite-format "
+                "placeholders; {{ and }} are literal braces, so changing or dropping an index or "
+                "format is a defect rather than a missing string; named braces such as {name}, "
+                "percent tokens and arbitrary brace text are not placeholders"),
             "textContract": (
                 "XML-decoded character data, preserving source whitespace; not rendered XAML"),
         },

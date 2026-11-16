@@ -125,8 +125,9 @@ public static class LocalizationCoverage
     }
 
     /// <summary>
-    /// Extracts unescaped .NET composite-format placeholders, ordinal sorted, so a changed
-    /// index or format is a mismatch. Doubled braces are literals and are not placeholders.
+    /// Extracts unescaped numbered .NET composite-format placeholders, ordinal sorted, so a
+    /// changed index or format is a mismatch. Doubled braces are literals and are not
+    /// placeholders; named braces, percent tokens and arbitrary brace text are not placeholders.
     /// </summary>
     public static IReadOnlyList<string> ExtractPlaceholders(string text)
     {
