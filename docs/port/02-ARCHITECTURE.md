@@ -40,7 +40,7 @@ LiteDB is never linked into the app or the CLI.
 | --- | --- | --- | --- |
 | `Playnite.SDK.Abstractions` | `net11.0` | Microsoft.CodeAnalysis.PublicApiAnalyzers (private build only), Microsoft.DotNet.ApiCompat.Task (private build only) | Avalonia, Platform, Win32, Core |
 | `Playnite.SDK` | `net11.0` | Abstractions, Avalonia (UI contracts only) | Platform, Win32, Core |
-| `Playnite.Core` | `net11.0` | Abstractions, Microsoft.Data.Sqlite, Dapper, Newtonsoft.Json, YamlDotNet, Tomlyn, NLog | Avalonia, `System.Windows`, `System.Drawing`, `Microsoft.Win32`, `DllImport` |
+| `Playnite.Core` | `net11.0` | Abstractions, Microsoft.Data.Sqlite, Dapper, Newtonsoft.Json, YamlDotNet, Tomlyn, SharpCompress, NLog | Avalonia, `System.Windows`, `System.Drawing`, `Microsoft.Win32`, `DllImport` |
 | `Playnite.Platform` | `net11.0` | Core, Abstractions | Desktop |
 | `Playnite.Platform.Linux` | `net11.0` | Platform, Core, Avalonia (platform UI services only) | Desktop |
 | `Playnite.Steam` | `net11.0` | Core, Platform | Desktop |

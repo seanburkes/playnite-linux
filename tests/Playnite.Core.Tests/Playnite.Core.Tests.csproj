@@ -20,5 +20,7 @@
   <ItemGroup>
     <None Include="../golden/utils-v10.json" Link="utils-v10.json" CopyToOutputDirectory="PreserveNewest" />
     <None Include="../fixtures/manifests-v10/*" Link="manifests-v10/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="../fixtures/archives-v10/*" Link="archives-v10/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="../golden/archives/*" Link="golden-archives/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

@@ -1,0 +1,46 @@
+{
+  "generator": "python3 scripts/port/generate_archive_fixtures.py",
+  "layout_source": "legacy/source/Playnite/Backup.cs:61-65,95-185",
+  "derivation": "Synthetic payload bytes placed in the exact v10 entry roots and member names. The v10 source defines the layout and exclusions, not file bytes; these are not captured Windows archives.",
+  "fixtures": {
+    "backslash.zip": {
+      "sha256": "ddaba1e621d41e5b8addc4c6a347dc36383a92c523d3477e3a572b2cdc7da14d"
+    },
+    "directory.zip": {
+      "sha256": "8b04a584f0c4acfa10985a14dae2e6e3fec78d9d0238cbd88d39d5bf50fd791f"
+    },
+    "duplicate.zip": {
+      "sha256": "6029524647e0413379e8795ba87b6e202c6bdec91c9abb30be9cbd6aee98fb42"
+    },
+    "linked.tar": {
+      "sha256": "145b6d56af71f561b74d7eea0f560f0189b89cedd0f6e6d7cfe8dceaee8efab8"
+    },
+    "traversal.zip": {
+      "sha256": "dba1edc7f75812e204a921323c7c01c9c6aa2a341195e9b6b9d2e0469cd834b6"
+    },
+    "v10-extensiondata-only.zip": {
+      "sha256": "000c14f7ad9a251a55162551539a2c0672b3a0998e9d3da82ac01f1dda6fd7d1"
+    },
+    "v10-full.zip": {
+      "sha256": "a733e94aba36722c365dbf58804f8e54846d9f61914276bd7fb61a7e04461d6d"
+    },
+    "v10-minimal.tar": {
+      "sha256": "0064bb37e40450fb8571325de1e325413d91efcbda56faabefd8b6c6b2a6b535"
+    },
+    "v10-minimal.zip": {
+      "sha256": "71c4dae461c94d789d690f00be545791761be928995b33d9f21e4c7c1f4c29ea"
+    },
+    "v11-full.zip": {
+      "sha256": "d46a22f87d6b0828f7fb3774adef5f0c63aed3605ca0b709c11cb8b9c4e4615d"
+    },
+    "v11-hash-mismatch.zip": {
+      "sha256": "b84e64c7f3ed99d8ec4baaa42b0d1943df6101ed33842892ca497ff253966190"
+    },
+    "v11-member-missing.zip": {
+      "sha256": "a1bc4c4fd552bdc2240da4bd2055aaba7bb1a2af49603c7bb2900a407a3a8b0b"
+    },
+    "v11-wrong-version.zip": {
+      "sha256": "9b9c60adfb154f7b44cbcd92cd88f42cf65a8eacc206625b98d5ff5adb32aa95"
+    }
+  }
+}

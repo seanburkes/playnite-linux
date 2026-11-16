@@ -1,0 +1,18 @@
+{
+  "source": "tests/fixtures/archives-v10/v10-full.zip",
+  "provenance": "Synthetic payload bytes placed in the exact v10 entry roots and member names. The v10 source defines the layout and exclusions, not file bytes; these are not captured Windows archives.",
+  "entries": [
+    "config.json",
+    "fullscreenConfig.json",
+    "library/database.json",
+    "library/games.db",
+    "libraryfiles/cover.png",
+    "libraryfiles/Backgrounds/background.jpg",
+    "extension/TestAddon/extension.yaml",
+    "extension/TestAddon/TestAddon.dll",
+    "extensiondata/TestAddon/data.json",
+    "themes/Desktop/Custom/theme.yaml",
+    "themes/Desktop/Custom/Views/Main.xaml",
+    "themes/Fullscreen/Custom/theme.yaml"
+  ]
+}
