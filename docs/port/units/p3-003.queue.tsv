@@ -1,2 +1,2 @@
 id	wave	area	unit	depends	status	owner	oracle	test	notes
-p3-003	W3	leaves	JSON/YAML/TOML/INI helpers	p2-001	todo	core	golden:serialization	test:serialization	PILOT
+p3-003	W3	leaves	JSON/YAML/TOML/INI helpers	p2-001	done	core	golden:serialization	test:serialization	Pilot delivered by its implementation continuation p3-003c in https://github.com/seanburkes/playnite-linux/pull/69 merged at 0f1c774; the actual-CI union Core baseline was recorded separately by https://github.com/seanburkes/playnite-linux/pull/71 merged at 8c72f31, not by #69; merge commits 0f1c774 and 8c72f31 verified as ancestors of main e069feb; aggregates parent-owned
