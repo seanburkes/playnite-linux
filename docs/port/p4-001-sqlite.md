@@ -87,3 +87,11 @@ migration crash recovery only; it does not claim importer workflow crash coverag
 CI-backed counts and the two adversarial diff-only reviews are delivery gates. The additive
 baseline floor capture is authorized by firstmate steering p4-001/001 and /002 under
 `oracle-change`; existing capture records, fixtures and goldens stay intact.
+
+Merged implementation head `7c339cc6373672c79aa83a3782c4864acdfaee81` includes current main's
+settings migration. Actual [linux-ci run 43813507631](https://github.com/seanburkes/playnite-linux/actions/runs/43813507631)
+passed with **1630 Core / 144 Architecture / 4 Smoke**, zero failures/skips, every MTP exit 0,
+independently counted from downloaded JUnit artifacts. This unit contributes 47 database cases;
+the pre-unit merged main floor is 1583 Core, not the earlier 1533 floor. The narrow Core Release
+build had zero warnings/errors, and the CI warning-as-error build and all five PR checks passed.
+The evidence-only floor commit must be revalidated on its own pushed head before readiness.
