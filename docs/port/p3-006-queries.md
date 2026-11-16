@@ -55,6 +55,13 @@ parity table or aggregate was changed. Pure synchronous computation owns no reso
 cancellation/disposal are not applicable.
 
 Local verification: Core **1365 passed**, Architecture **144 passed**, zero failed or
-skipped; Core Release build **0 warnings, 0 errors**. The existing baseline floor is
-unchanged. PR CI run evidence and independent adversarial reviews are recorded in the
-PR; this document does not claim a Windows/.NET Framework oracle execution.
+skipped; Core Release build **0 warnings, 0 errors**. Actual linux-ci run
+**43775725997** on `9fb148ee502905a8c4aedc9526ad88b87faf4651` confirms these counts
+in downloaded JUnit artifacts (Smoke also 4/4, all MTP exit 0). Firstmate steering
+007–009 authorized raising the Core floor from **1254 to 1365** with an additive
+capture under `oracle-change`, after the preceding union floor merged. A fresh Core
+run on the normal integration merge also passed 1365/1365. All historical captures
+and other floors remain intact. JUnit contains 1254 pre-query cases plus 111 query
+cases; this is not a guessed future merged-head union. Independent adversarial
+reviews are firstmate-owned and recorded in the PR; this document does not claim a
+Windows/.NET Framework oracle execution.
