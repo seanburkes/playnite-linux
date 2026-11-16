@@ -154,7 +154,7 @@ dispatched by the exit draft.
 | Legacy XAML LOC | 68,226 | `scan_legacy.py` |
 | Legacy executed cases (oracle) | 281 passed, 3 excluded | `tests/baseline.json` |
 | Windows-only files (non-WPF) | 72 | `scan_legacy.py` |
-| New-suite recorded baseline | 1533 Core + 103 architecture + 4 smoke | `tests/baseline.json`, additive captures through run 43800467861 |
+| New-suite recorded baseline | 1533 Core + 144 architecture + 4 smoke | `tests/baseline.json`, additive captures through run 43800467861; Architecture floor raised by run 43803577215 |
 | Current new-suite cases | 1533 Core + 144 architecture + 4 smoke; zero failures/skips | run 43803577215 on `f6d5fab` |
 | Ported parity rows | 8 adapted of 109 data rows (78 planned, 13 greenfield, 6 deferred, 4 out-of-scope-v1) | `surface-parity.tsv` |
 | Open ADRs | 0 | `00-DECISIONS.md` |
