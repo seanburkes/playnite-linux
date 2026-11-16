@@ -1,8 +1,6 @@
 using System.Globalization;
 using System.IO.Compression;
 using System.Security.Cryptography;
-using System.Text.Json;
-using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
 
 namespace Playnite;
@@ -26,7 +24,6 @@ public sealed class BackupOptions
     /// <summary>Directory for an automatically named PlayniteBackup-*.zip.</summary>
     public string? OutputDir { get; init; }
     public IReadOnlyCollection<BackupDataItem> BackupItems { get; init; } = [];
-    public bool Overwrite { get; init; }
     public int RotatingBackups { get; init; }
 }
 
@@ -35,29 +32,14 @@ public sealed class BackupRestoreOptions
     public required string BackupFile { get; init; }
     public required string DataDir { get; init; }
     public required string LibraryDir { get; init; }
-    /// <summary>Existing directory used to stage and verify every member before a live write.</summary>
+    /// <summary>Existing directory used to stage and verify every selected member before a live write.</summary>
     public required string WorkDirectory { get; init; }
     public IReadOnlyCollection<BackupDataItem> RestoreItems { get; init; } = [];
-    /// <summary>Explicit opt-in to v10's destructive selected-category replacement.</summary>
-    public bool Overwrite { get; init; }
 }
 
-public sealed record BackupRestoreReport(bool LegacyFormat, IReadOnlyList<string> Warnings);
-
-/// <summary>Wire shape of the v11 integrity manifest written at the archive root.</summary>
-public sealed record BackupManifest(int FormatVersion, List<BackupManifestMember> Members);
-
-/// <summary>One file named by the v11 integrity manifest.</summary>
-public sealed record BackupManifestMember(string Name, long Size, string Sha256);
-
-/// <summary>v10 backup categories, ZIP layout and auto-backup naming, plus a v11 manifest.</summary>
+/// <summary>v10 backup categories, ZIP layout, auto-backup naming and restore semantics.</summary>
 public static class Backup
 {
-    public const string ManifestName = "backup-manifest.json";
-    public const int FormatVersion = 1;
-    /// <summary>Upper bound for the manifest member, independent of the per-entry limit.</summary>
-    public const long ManifestLimitBytes = 67_108_864;
-
     private const string LibraryEntryRoot = "library";
     private const string LibraryFilesEntryRoot = "libraryfiles";
     private const string ExtensionsEntryRoot = "extension";
@@ -66,12 +48,6 @@ public static class Backup
     private const string DefaultThemeDirName = "Default";
     private static readonly string[] ThemeModeDirs = ["Desktop", "Fullscreen"];
     private static readonly string[] ConfigFiles = ["config.json", "fullscreenConfig.json"];
-    private static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow,
-        MaxDepth = 8
-    };
 
     public static string GetAutoBackupFileName(DateTimeOffset timestamp) =>
         $"PlayniteBackup-{timestamp.ToString("yyyy-MM-dd-HH-mm-ss", CultureInfo.InvariantCulture)}.zip";
@@ -88,19 +64,15 @@ public static class Backup
 
         var output = Path.GetFullPath(ResolveOutput(options, timestamp));
         CheckPath(output);
-        if (File.Exists(output) && !options.Overwrite)
-        {
-            throw new IOException("Backup output already exists.");
-        }
 
-        // v10 never packs its own output: the output is deleted (or replaced) before writing.
+        // v10 deletes its own output before packing, so an output inside a source root is not a member.
         var files = GatherFiles(options)
             .Where(f => Path.GetFullPath(f.Path) != output)
             .OrderBy(f => f.Name, StringComparer.Ordinal)
             .ToList();
         var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        long total = 0;
-        if (files.Count + 1 > limits.EntryCount)
+        long declaredTotal = 0;
+        if (files.Count > limits.EntryCount)
         {
             throw new InvalidDataException("Archive exceeds entry limit.");
         }
@@ -119,54 +91,44 @@ public static class Backup
             }
 
             var size = new FileInfo(file.Path).Length;
-            if (size > limits.EntryBytes || size > limits.TotalBytes - total)
+            if (size > limits.EntryBytes || size > limits.TotalBytes - declaredTotal)
             {
                 throw new InvalidDataException("Archive exceeds decompression limits.");
             }
 
-            total += size;
+            declaredTotal += size;
         }
 
         var temporary = output + "." + Path.GetRandomFileName();
+        long extractedDeclared = 0;
         try
         {
             await using (var stream = new FileStream(temporary, FileMode.CreateNew, FileAccess.Write, FileShare.None,
                 81_920, FileOptions.Asynchronous))
             {
                 using var zip = new ZipArchive(stream, ZipArchiveMode.Create, true);
-                var members = new List<BackupManifestMember>(files.Count);
-                long actualTotal = 0;
                 foreach (var file in files)
                 {
                     cancellationToken.ThrowIfCancellationRequested();
                     var entry = zip.CreateEntry(file.Name);
                     entry.LastWriteTime = timestamp;
                     var declared = new FileInfo(file.Path).Length;
+                    var cap = Math.Min(declared, limits.TotalBytes - extractedDeclared);
                     await using var source = File.OpenRead(file.Path);
                     await using var target = entry.Open();
-                    var (size, hash) = await CopyAndHashAsync(source, target,
-                        Math.Min(declared, Math.Min(limits.EntryBytes, limits.TotalBytes - actualTotal)),
+                    var (size, _) = await CopyAndHashAsync(source, target, cap,
                         cancellationToken).ConfigureAwait(false);
-                    actualTotal += size;
-                    members.Add(new BackupManifestMember(file.Name, size, hash));
-                }
+                    if (size != declared)
+                    {
+                        throw new InvalidDataException("Backup source member size mismatch.");
+                    }
 
-                var manifest = JsonSerializer.SerializeToUtf8Bytes(
-                    new BackupManifest(FormatVersion, members), JsonOptions);
-                if (manifest.LongLength > Math.Min(limits.EntryBytes, ManifestLimitBytes) ||
-                    manifest.LongLength > limits.TotalBytes - actualTotal)
-                {
-                    throw new InvalidDataException("Backup manifest exceeds archive limits.");
+                    extractedDeclared += declared;
                 }
-
-                var manifestEntry = zip.CreateEntry(ManifestName);
-                manifestEntry.LastWriteTime = timestamp;
-                await using var manifestStream = manifestEntry.Open();
-                await manifestStream.WriteAsync(manifest, cancellationToken).ConfigureAwait(false);
             }
 
             cancellationToken.ThrowIfCancellationRequested();
-            File.Move(temporary, output, options.Overwrite);
+            File.Move(temporary, output, true);
         }
         finally
         {
@@ -184,7 +146,7 @@ public static class Backup
         }
     }
 
-    public static async Task<BackupRestoreReport> RestoreBackupAsync(BackupRestoreOptions options,
+    public static async Task RestoreBackupAsync(BackupRestoreOptions options,
         ArchiveLimits? limits = null, CancellationToken cancellationToken = default)
     {
         limits ??= new ArchiveLimits();
@@ -193,77 +155,13 @@ public static class Backup
         await using var source = File.OpenRead(options.BackupFile);
         using var zip = new ZipArchive(source, ZipArchiveMode.Read);
         var entries = ValidateZip(zip, limits);
-        var manifestEntry = entries.SingleOrDefault(e => e.Name == ManifestName).Entry;
-        BackupManifest? manifest = null;
-        Dictionary<string, BackupManifestMember>? manifestMembers = null;
-        if (manifestEntry is not null)
-        {
-            var declaredTotal = entries.Sum(e => e.Entry.Length);
-            var remaining = limits.TotalBytes - (declaredTotal - manifestEntry.Length);
-            var manifestLimit = Math.Min(Math.Min(limits.EntryBytes, ManifestLimitBytes), remaining);
-            if (manifestEntry.Length > manifestLimit)
-            {
-                throw new InvalidDataException("Backup manifest exceeds archive limits.");
-            }
 
-            using var buffer = new MemoryStream();
-            await using var input = manifestEntry.Open();
-            await Archive.CopyBoundedAsync(input, buffer, manifestLimit,
-                cancellationToken).ConfigureAwait(false);
-            try
-            {
-                manifest = JsonSerializer.Deserialize<BackupManifest>(buffer.ToArray(), JsonOptions)
-                    ?? throw new InvalidDataException("Missing backup manifest.");
-            }
-            catch (JsonException ex)
-            {
-                throw new InvalidDataException("Invalid backup manifest.", ex);
-            }
-
-            manifestMembers = ValidateManifest(manifest, entries);
-        }
-
-        var warnings = new List<string>();
-        if (manifest is null)
-        {
-            warnings.Add("Legacy v10 backup: no version or integrity manifest.");
-            foreach (var config in ConfigFiles.Where(c => !entries.Any(e => e.Name == c)))
-            {
-                warnings.Add($"Missing optional v10 member: {config}");
-            }
-
-            if (!entries.Any(e => e.Name.StartsWith(LibraryEntryRoot + "/", StringComparison.OrdinalIgnoreCase)))
-            {
-                warnings.Add("Missing optional v10 library members.");
-            }
-        }
-
-        var selected = entries.Where(e => e.Name != ManifestName && Category(e.Name) is { } c &&
+        var selected = entries.Where(e => Category(e.Name) is { } c &&
             options.RestoreItems.Contains(c)).ToList();
-        foreach (var entry in entries.Where(e => e.Name != ManifestName && Category(e.Name) is null))
-        {
-            warnings.Add($"Unrecognized member ignored: {entry.Name}");
-        }
-
         var roots = selected.Select(e => Category(e.Name)!.Value).Distinct().ToList();
         foreach (var category in roots)
         {
-            var root = TargetRoot(options, category);
-            CheckPath(root);
-            if (!options.Overwrite && category != BackupDataItem.Settings && (Directory.Exists(root) || File.Exists(root)))
-            {
-                throw new IOException("Restore target already exists; explicit overwrite required.");
-            }
-        }
-
-        foreach (var entry in selected)
-        {
-            var target = TargetPath(options, entry.Name);
-            CheckPath(target);
-            if (!options.Overwrite && (File.Exists(target) || Directory.Exists(target)))
-            {
-                throw new IOException("Restore target already exists; explicit overwrite required.");
-            }
+            CheckPath(TargetRoot(options, category));
         }
 
         CheckPath(options.WorkDirectory);
@@ -280,38 +178,34 @@ public static class Backup
         var stage = Path.Combine(options.WorkDirectory, "restore-" + Path.GetRandomFileName());
         Directory.CreateDirectory(stage);
         CheckPath(stage);
+        long extractedDeclared = 0;
         try
         {
-            long actualTotal = 0;
-            foreach (var entry in entries)
+            foreach (var entry in selected)
             {
                 cancellationToken.ThrowIfCancellationRequested();
+                var declared = entry.Entry.Length;
+                var cap = Math.Min(declared, limits.TotalBytes - extractedDeclared);
                 var stagedPath = Path.Combine(stage, entry.Name);
                 Directory.CreateDirectory(Path.GetDirectoryName(stagedPath)!);
                 await using var input = entry.Entry.Open();
                 await using var output = new FileStream(stagedPath, FileMode.CreateNew, FileAccess.Write,
                     FileShare.None, 81_920, FileOptions.Asynchronous);
-                var (size, hash) = await CopyAndHashAsync(input, output,
-                    Math.Min(entry.Entry.Length,
-                        Math.Min(limits.EntryBytes, limits.TotalBytes - actualTotal)),
-                    cancellationToken, entry.Entry.Crc32).ConfigureAwait(false);
-                actualTotal += size;
-                if (size != entry.Entry.Length ||
-                    (manifestMembers is not null && entry.Name != ManifestName &&
-                     (!manifestMembers.TryGetValue(entry.Name, out var member) || member.Sha256 != hash)))
+                var (size, _) = await CopyAndHashAsync(input, output, cap, cancellationToken,
+                    entry.Entry.Crc32).ConfigureAwait(false);
+                if (size != declared)
                 {
-                    throw new InvalidDataException("Backup member integrity mismatch.");
+                    throw new InvalidDataException("Backup member size mismatch.");
                 }
+
+                extractedDeclared += declared;
             }
 
-            // No live target is changed until every member (including unselected ones) is verified.
+            // No live target is changed until every selected member is verified.
             cancellationToken.ThrowIfCancellationRequested();
-            if (options.Overwrite)
+            foreach (var category in roots)
             {
-                foreach (var category in roots)
-                {
-                    CleanTarget(options, category);
-                }
+                CleanTarget(options, category);
             }
 
             foreach (var entry in selected)
@@ -319,7 +213,7 @@ public static class Backup
                 var target = TargetPath(options, entry.Name);
                 CheckPath(target);
                 Directory.CreateDirectory(Path.GetDirectoryName(target)!);
-                File.Move(Path.Combine(stage, entry.Name), target, options.Overwrite);
+                File.Move(Path.Combine(stage, entry.Name), target, true);
             }
         }
         finally
@@ -330,8 +224,6 @@ public static class Backup
                 Directory.Delete(stage, true);
             }
         }
-
-        return new BackupRestoreReport(manifest is null, warnings);
     }
 
     /// <summary>
@@ -427,36 +319,6 @@ public static class Backup
                 {
                     throw new InvalidDataException("Archive file/directory collision.");
                 }
-            }
-        }
-
-        return result;
-    }
-
-    private static Dictionary<string, BackupManifestMember> ValidateManifest(BackupManifest manifest,
-        List<(string Name, ZipArchiveEntry Entry)> entries)
-    {
-        if (manifest.FormatVersion != FormatVersion)
-        {
-            throw new InvalidDataException("Unsupported backup format version.");
-        }
-
-        if (manifest.Members is null || manifest.Members.Count != entries.Count - 1)
-        {
-            throw new InvalidDataException("Missing or unexpected backup member.");
-        }
-
-        var declared = entries.ToDictionary(e => e.Name, e => e.Entry.Length, StringComparer.Ordinal);
-        var result = new Dictionary<string, BackupManifestMember>(StringComparer.Ordinal);
-        foreach (var member in manifest.Members)
-        {
-            if (member is null || string.IsNullOrEmpty(member.Name) || member.Sha256 is null ||
-                member.Name == ManifestName || Archive.NormalizeName(member.Name) != member.Name ||
-                !Regex.IsMatch(member.Sha256, "^[0-9A-F]{64}$", RegexOptions.CultureInvariant) ||
-                !declared.TryGetValue(member.Name, out var size) || size != member.Size ||
-                !result.TryAdd(member.Name, member))
-            {
-                throw new InvalidDataException("Missing or invalid required backup member.");
             }
         }
 
@@ -699,7 +561,7 @@ public static class Backup
 
             if (read > maximum - size)
             {
-                throw new InvalidDataException("Archive exceeds decompression limits.");
+                throw new InvalidDataException($"Archive exceeds decompression limits: maximum {maximum} bytes.");
             }
 
             hash.AppendData(buffer, 0, read);

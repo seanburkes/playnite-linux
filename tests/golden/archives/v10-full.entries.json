@@ -1,6 +1,6 @@
 {
   "source": "tests/fixtures/archives-v10/v10-full.zip",
-  "provenance": "Synthetic payload bytes placed in the exact v10 entry roots and member names. The v10 source defines the layout and exclusions, not file bytes; these are not captured Windows archives.",
+  "provenance": "v10 entry roots from legacy/source/Playnite/Backup.cs; synthetic payloads",
   "entries": [
     "config.json",
     "fullscreenConfig.json",

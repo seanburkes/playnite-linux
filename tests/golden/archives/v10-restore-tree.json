@@ -1,0 +1,20 @@
+{
+  "source": "tests/fixtures/archives-v10/v10-full.zip",
+  "provenance": "v10 restore prefix routing",
+  "data": [
+    "Extensions/TestAddon/TestAddon.dll",
+    "Extensions/TestAddon/extension.yaml",
+    "ExtensionsData/TestAddon/data.json",
+    "Themes/Desktop/Custom/Views/Main.xaml",
+    "Themes/Desktop/Custom/theme.yaml",
+    "Themes/Fullscreen/Custom/theme.yaml",
+    "config.json",
+    "fullscreenConfig.json"
+  ],
+  "library": [
+    "database.json",
+    "files/Backgrounds/background.jpg",
+    "files/cover.png",
+    "games.db"
+  ]
+}

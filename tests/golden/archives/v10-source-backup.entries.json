@@ -1,0 +1,18 @@
+{
+  "source": "tests/fixtures/archives-v10/source",
+  "provenance": "v10 backup writer layout and exclusions; no version or member manifest",
+  "entries": [
+    "config.json",
+    "extension/TestAddon/TestAddon.dll",
+    "extension/TestAddon/extension.yaml",
+    "extensiondata/TestAddon/data.json",
+    "fullscreenConfig.json",
+    "library/database.json",
+    "library/games.db",
+    "libraryfiles/Backgrounds/background.jpg",
+    "libraryfiles/cover.png",
+    "themes/Desktop/Custom/Views/Main.xaml",
+    "themes/Desktop/Custom/theme.yaml",
+    "themes/Fullscreen/Custom/theme.yaml"
+  ]
+}

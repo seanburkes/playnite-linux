@@ -49,16 +49,14 @@ public static class Archive
             return null;
         }
 
-        // The caller's remaining total budget is what declared sizes leave after this member;
-        // a member that lies about its declared size still cannot consume more than that.
-        var remaining = limits.TotalBytes - (entries.Sum(e => e.Entry!.Size) - entry.Entry.Size);
+        // This call extracts one selected member, so its remaining budget is the full total.
+        // Cap at the declared size first: a member that lies cannot reach the EntryBytes ceiling.
+        var cap = Math.Min(entry.Entry.Size, limits.TotalBytes);
         using var source = entry.Entry.OpenEntryStream();
         var result = new MemoryStream();
         try
         {
-            await CopyBoundedAsync(source, result,
-                Math.Min(entry.Entry.Size, Math.Min(limits.EntryBytes, remaining)),
-                cancellationToken).ConfigureAwait(false);
+            await CopyBoundedAsync(source, result, cap, cancellationToken).ConfigureAwait(false);
             if (result.Length != entry.Entry.Size)
             {
                 throw new InvalidDataException("Archive member size mismatch.");
@@ -104,7 +102,7 @@ public static class Archive
 
             if (read > maximum - total)
             {
-                throw new InvalidDataException("Archive exceeds decompression limits.");
+                throw new InvalidDataException($"Archive exceeds decompression limits: maximum {maximum} bytes.");
             }
 
             await target.WriteAsync(buffer.AsMemory(0, read), cancellationToken).ConfigureAwait(false);

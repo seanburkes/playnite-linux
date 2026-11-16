@@ -19,9 +19,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 OUT = ROOT / "tests/fixtures/archives-v10"
+SOURCE = OUT / "source"
 GOLDEN = ROOT / "tests/golden/archives"
 FIXED_TIME = (2020, 1, 2, 3, 4, 6)
-MANIFEST = "backup-manifest.json"
 
 FULL = [
     ("config.json", b'{"DatabasePath":"library"}\n'),
@@ -61,23 +61,40 @@ DUPLICATE = [
     ("library/games.db", b"second\n"),
 ]
 
+# A v10-shaped source tree used to pin the backup listing and exclusions. Default and
+# non-mode theme directories are present here precisely so the golden proves they are omitted.
+SOURCE_FILES = {
+    "data/config.json": b'{"DatabasePath":"library"}\n',
+    "data/fullscreenConfig.json": b'{"Monitor":0}\n',
+    "data/Extensions/TestAddon/extension.yaml": b"Id: TestAddon\nName: Test Addon\n",
+    "data/Extensions/TestAddon/TestAddon.dll": b"synthetic-addon\n",
+    "data/ExtensionsData/TestAddon/data.json": b'{"enabled":true}\n',
+    "data/Themes/Desktop/Custom/theme.yaml": b"Id: CustomDesktop\nMode: Desktop\n",
+    "data/Themes/Desktop/Custom/Views/Main.xaml": b"<Grid />\n",
+    "data/Themes/Desktop/Default/theme.yaml": b"built-in\n",
+    "data/Themes/Desktop/readme.txt": b"not a theme\n",
+    "data/Themes/Other/theme.yaml": b"not a mode\n",
+    "data/Themes/Fullscreen/Custom/theme.yaml": b"Id: CustomFullscreen\nMode: Fullscreen\n",
+    "library/database.json": b'{"Id":"v10-test-library"}\n',
+    "library/games.db": b"synthetic-v10-games-db\n",
+    "library/files/cover.png": b"\x89PNG\r\n\x1a\nsynthetic-cover\n",
+    "library/files/Backgrounds/background.jpg": b"synthetic-background\n",
+}
 
-def manifest_members(entries):
-    return [
-        {"name": name, "size": len(data), "sha256": hashlib.sha256(data).hexdigest().upper()}
-        for name, data in entries
-    ]
-
-
-def manifest_bytes(entries, *, version=1, omit=None, bad_hash=False):
-    members = [
-        member for member in manifest_members(entries)
-        if member["name"] != omit
-    ]
-    if bad_hash:
-        members[0]["sha256"] = "0" * 64
-    payload = {"formatVersion": version, "members": members}
-    return (json.dumps(payload, separators=(",", ":"), sort_keys=False) + "\n").encode()
+SOURCE_ENTRIES = [
+    "config.json",
+    "extension/TestAddon/TestAddon.dll",
+    "extension/TestAddon/extension.yaml",
+    "extensiondata/TestAddon/data.json",
+    "fullscreenConfig.json",
+    "library/database.json",
+    "library/games.db",
+    "libraryfiles/Backgrounds/background.jpg",
+    "libraryfiles/cover.png",
+    "themes/Desktop/Custom/Views/Main.xaml",
+    "themes/Desktop/Custom/theme.yaml",
+    "themes/Fullscreen/Custom/theme.yaml",
+]
 
 
 def zip_bytes(entries, *, directories=()):
@@ -146,6 +163,14 @@ def tar_bytes(entries, *, link=False):
     return buffer.getvalue()
 
 
+def write_or_compare(path, data):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if path.exists():
+        assert path.read_bytes() == data, f"Refusing to modify protected evidence: {path}"
+    else:
+        path.write_bytes(data)
+
+
 def main():
     fixtures = {
         "v10-full.zip": zip_bytes(FULL),
@@ -156,15 +181,9 @@ def main():
         "duplicate.zip": zip_bytes(DUPLICATE),
         "backslash.zip": zip_bytes([("library\\games.db", b"synthetic-v10-games-db\n")]),
         "directory.zip": zip_bytes(MINIMAL, directories=("library/",)),
-        "v11-full.zip": zip_bytes(FULL + [(MANIFEST, manifest_bytes(FULL))]),
-        "v11-wrong-version.zip": zip_bytes(FULL + [(MANIFEST, manifest_bytes(FULL, version=2))]),
-        "v11-member-missing.zip": zip_bytes(FULL + [(MANIFEST, manifest_bytes(FULL, omit="library/games.db"))]),
-        "v11-hash-mismatch.zip": zip_bytes(FULL + [(MANIFEST, manifest_bytes(FULL, bad_hash=True))]),
-        # Synthetic bomb inputs: both members claim a small declared size in every ZIP header.
+        # Synthetic bomb input: the member claims 8 bytes but expands to 64 in both headers.
         "lying-size.zip": patch_declared_size(
             zip_bytes([("library/games.db", b"x" * 64)]), "library/games.db", 8),
-        "huge-manifest.zip": patch_declared_size(
-            zip_bytes([(MANIFEST, b'{"formatVersion":1,"members":[]}\n')]), MANIFEST, 67_108_865),
         "linked.tar": tar_bytes(MINIMAL, link=True),
     }
 
@@ -173,39 +192,66 @@ def main():
     hashes = {}
     for name, data in fixtures.items():
         path = OUT / name
-        if path.exists():
-            assert path.read_bytes() == data, f"Refusing to modify protected evidence: {path}"
-        else:
-            path.write_bytes(data)
+        write_or_compare(path, data)
         hashes[name] = hashlib.sha256(data).hexdigest()
+
+    source_hashes = {}
+    for name, data in SOURCE_FILES.items():
+        path = SOURCE / name
+        write_or_compare(path, data)
+        source_hashes[name] = hashlib.sha256(data).hexdigest()
 
     provenance = {
         "generator": "python3 scripts/port/generate_archive_fixtures.py",
         "layout_source": "legacy/source/Playnite/Backup.cs:61-65,95-185",
         "derivation": "Synthetic payload bytes placed in the exact v10 entry roots and member names. "
                       "The v10 source defines the layout and exclusions, not file bytes; these are "
-                      "not captured Windows archives.",
+                      "not captured Windows archives. There is no version or member manifest: that "
+                      "is deferred to Phase 4 with the SQLite backup manifest.",
         "fixtures": {name: {"sha256": hashes[name]} for name in sorted(hashes)},
+        "source_tree": {name: {"sha256": source_hashes[name]} for name in sorted(source_hashes)},
     }
-    provenance_path = OUT / "provenance.json"
-    provenance_bytes = (json.dumps(provenance, indent=2) + "\n").encode()
-    if provenance_path.exists():
-        assert provenance_path.read_bytes() == provenance_bytes, \
-            f"Refusing to modify protected evidence: {provenance_path}"
-    else:
-        provenance_path.write_bytes(provenance_bytes)
+    write_or_compare(OUT / "provenance.json",
+                     (json.dumps(provenance, indent=2) + "\n").encode())
 
     listing = {
         "source": "tests/fixtures/archives-v10/v10-full.zip",
-        "provenance": provenance["derivation"],
+        "provenance": "v10 entry roots from legacy/source/Playnite/Backup.cs; synthetic payloads",
         "entries": [name for name, _ in FULL],
     }
-    golden_path = GOLDEN / "v10-full.entries.json"
-    golden_bytes = (json.dumps(listing, indent=2) + "\n").encode()
-    if golden_path.exists():
-        assert golden_path.read_bytes() == golden_bytes, f"Refusing to modify protected evidence: {golden_path}"
-    else:
-        golden_path.write_bytes(golden_bytes)
+    write_or_compare(GOLDEN / "v10-full.entries.json",
+                     (json.dumps(listing, indent=2) + "\n").encode())
+
+    source_listing = {
+        "source": "tests/fixtures/archives-v10/source",
+        "provenance": "v10 backup writer layout and exclusions; no version or member manifest",
+        "entries": SOURCE_ENTRIES,
+    }
+    write_or_compare(GOLDEN / "v10-source-backup.entries.json",
+                     (json.dumps(source_listing, indent=2) + "\n").encode())
+
+    restore_tree = {
+        "source": "tests/fixtures/archives-v10/v10-full.zip",
+        "provenance": "v10 restore prefix routing",
+        "data": [
+            "Extensions/TestAddon/TestAddon.dll",
+            "Extensions/TestAddon/extension.yaml",
+            "ExtensionsData/TestAddon/data.json",
+            "Themes/Desktop/Custom/Views/Main.xaml",
+            "Themes/Desktop/Custom/theme.yaml",
+            "Themes/Fullscreen/Custom/theme.yaml",
+            "config.json",
+            "fullscreenConfig.json",
+        ],
+        "library": [
+            "database.json",
+            "files/Backgrounds/background.jpg",
+            "files/cover.png",
+            "games.db",
+        ],
+    }
+    write_or_compare(GOLDEN / "v10-restore-tree.json",
+                     (json.dumps(restore_tree, indent=2) + "\n").encode())
 
 
 if __name__ == "__main__":

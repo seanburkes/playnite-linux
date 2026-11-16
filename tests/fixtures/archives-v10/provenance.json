@@ -1,7 +1,7 @@
 {
   "generator": "python3 scripts/port/generate_archive_fixtures.py",
   "layout_source": "legacy/source/Playnite/Backup.cs:61-65,95-185",
-  "derivation": "Synthetic payload bytes placed in the exact v10 entry roots and member names. The v10 source defines the layout and exclusions, not file bytes; these are not captured Windows archives.",
+  "derivation": "Synthetic payload bytes placed in the exact v10 entry roots and member names. The v10 source defines the layout and exclusions, not file bytes; these are not captured Windows archives. There is no version or member manifest: that is deferred to Phase 4 with the SQLite backup manifest.",
   "fixtures": {
     "backslash.zip": {
       "sha256": "ddaba1e621d41e5b8addc4c6a347dc36383a92c523d3477e3a572b2cdc7da14d"
@@ -11,9 +11,6 @@
     },
     "duplicate.zip": {
       "sha256": "6029524647e0413379e8795ba87b6e202c6bdec91c9abb30be9cbd6aee98fb42"
-    },
-    "huge-manifest.zip": {
-      "sha256": "57580ab5d9102d3a69dc39c2c1b5848f1e443788ef8079996730724628003f73"
     },
     "linked.tar": {
       "sha256": "145b6d56af71f561b74d7eea0f560f0189b89cedd0f6e6d7cfe8dceaee8efab8"
@@ -35,18 +32,53 @@
     },
     "v10-minimal.zip": {
       "sha256": "71c4dae461c94d789d690f00be545791761be928995b33d9f21e4c7c1f4c29ea"
+    }
+  },
+  "source_tree": {
+    "data/Extensions/TestAddon/TestAddon.dll": {
+      "sha256": "1ea615f7d798a13809c99b70e1023d1c873450cde2a3355c3984c052af54b480"
     },
-    "v11-full.zip": {
-      "sha256": "d46a22f87d6b0828f7fb3774adef5f0c63aed3605ca0b709c11cb8b9c4e4615d"
+    "data/Extensions/TestAddon/extension.yaml": {
+      "sha256": "982634d705153c3a47a3667de704a96db3a6ff5aadd705169455c5a2aeaa92a4"
     },
-    "v11-hash-mismatch.zip": {
-      "sha256": "b84e64c7f3ed99d8ec4baaa42b0d1943df6101ed33842892ca497ff253966190"
+    "data/ExtensionsData/TestAddon/data.json": {
+      "sha256": "a050ef06ea542b8fd8781f1e945f9adcd03c7ae5190719e66ba826e2059fce12"
     },
-    "v11-member-missing.zip": {
-      "sha256": "a1bc4c4fd552bdc2240da4bd2055aaba7bb1a2af49603c7bb2900a407a3a8b0b"
+    "data/Themes/Desktop/Custom/Views/Main.xaml": {
+      "sha256": "eadef4406947f3b127e91050f51017663dae6f95419c2a4678ac54ca677041da"
     },
-    "v11-wrong-version.zip": {
-      "sha256": "9b9c60adfb154f7b44cbcd92cd88f42cf65a8eacc206625b98d5ff5adb32aa95"
+    "data/Themes/Desktop/Custom/theme.yaml": {
+      "sha256": "d6f23043af365459de21025043d103a0a2468050c5ba98d3baae62ff506aafdf"
+    },
+    "data/Themes/Desktop/Default/theme.yaml": {
+      "sha256": "e4021920941b2e82574433d0263eac6dc62966dcaca88d31d86952d0836dd6fe"
+    },
+    "data/Themes/Desktop/readme.txt": {
+      "sha256": "e98e9f90ea4ec060bb8f647e69e78b2870ab49ab6efd295c5aa428c1a9523190"
+    },
+    "data/Themes/Fullscreen/Custom/theme.yaml": {
+      "sha256": "6967602b04cabfa9c6134774f2f1b94314784dad0eb7fa8224fc70c2894dc48f"
+    },
+    "data/Themes/Other/theme.yaml": {
+      "sha256": "7f4e7c22c2605f8b514f91bc51b4cb5e2c3d4bbb8bbea15c63aad38c3e9a66a4"
+    },
+    "data/config.json": {
+      "sha256": "277c2e2c5dc7838c4b93e106ee7d708d2cbf547e40f1ab10dca1dc3bb11c99fa"
+    },
+    "data/fullscreenConfig.json": {
+      "sha256": "b32ebe6e18b0e42d51b037478e8ed9c0029f25638445b45da66ffe241f64a0a0"
+    },
+    "library/database.json": {
+      "sha256": "518641d7d1b924c2afb4a505857447ac15c69c3889fd8679ddfdeff1fc4c800e"
+    },
+    "library/files/Backgrounds/background.jpg": {
+      "sha256": "a3176a61095726bfcf764a93ffd4e3c8243e1a2bc691315114ae4032237d7347"
+    },
+    "library/files/cover.png": {
+      "sha256": "08d95c7c76c737d2bcabb8f4c964b91c47851828c95c991b4393596e4be30eb3"
+    },
+    "library/games.db": {
+      "sha256": "5d4ab0e728fb70522f7ab32b029478697da1ebb4c67af40c8d6b2bcd1c9eeca7"
     }
   }
 }
