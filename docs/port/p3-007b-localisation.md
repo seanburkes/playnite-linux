@@ -26,12 +26,21 @@ state. The later p3-009 unit owns mapping and migration, not these declarations 
 ## Artifacts and regeneration
 
 Run `python3 scripts/loc/generate_english.py --check` to verify, or omit `--check` to generate
-these **unit-owned** artifacts from the immutable oracle:
+these **unit-owned** artifacts from the immutable oracle. `linux-ci` runs the `--check` form in
+its own step, so the generator is executed against `legacy/` rather than left as an unused
+script:
 
 - `src/Playnite.Core/Localization/English.json`: embedded English dictionary.
 - `src/Playnite.Core/Localization/LOC.cs`: v10-compatible constant declarations.
 - `tests/golden/loc/english-v10.json`: additive golden, with source/constants/v10-generator
   SHA-256 hashes, generation command, text contract, and extracted count.
+
+The golden's provenance names the three frozen inputs by exact repository path.
+`LocalizationKeyTests` resolves those paths from the repository root (`legacy/...`) and hashes
+the files there directly; it does not read a test-output copy, so a copied or generated stub
+cannot stand in for the oracle. A dedicated test asserts the provenance key set is exactly
+those three paths, not a basename-derived set, and `linux-ci` executes the generator `--check`
+against the same frozen tree.
 
 The sibling migration unit must not edit any files under `src/Playnite.Core/Localization/`,
 `tests/golden/loc/`, or `scripts/loc/`, nor `tests/Playnite.Core.Tests/LocalizationKeyTests.cs`
@@ -47,10 +56,14 @@ inputs, rejects duplicate/empty keys and null values, and exposes read-only entr
 are read-only snapshots. DTDs and external entities are prohibited; the caller owns the reader.
 There is no asynchronous work, subscription or retained disposable resource.
 
-`LocalizationKeyTests` checks every English value and constant against the golden, full frozen
-source extraction, all three recorded input hashes and count, empty English diff, removed key
-reporting, changed text and ordering, resolution, naming exceptions, malformed XML/duplicate/DTD
-rejection, immutability, and seeded diff laws / bounded XML text round-trips.
+`English_catalog_and_declarations_match_the_complete_frozen_golden` extracts
+`legacy/source/Playnite/Localization/LocSource.xaml` at its repository path and compares it with
+the golden, the embedded English set and every `LOC` constant.
+`Golden_input_hashes_bind_to_the_frozen_legacy_files_at_their_exact_paths` pins the three
+provenance paths and re-hashes the repository files there. The remaining cases cover the empty
+English diff, removed-key reporting, changed text and ordering, resolution, naming exceptions,
+malformed XML/duplicate/DTD rejection, immutability, and seeded diff laws / bounded XML text
+round-trips.
 
 Local Release runs: Core **1,382 passed**, Architecture **144 passed**, zero skips/failures.
 Actual `linux-ci` run 43782366884 on head `a6abbcb` reports the same: Core 1382/1382,

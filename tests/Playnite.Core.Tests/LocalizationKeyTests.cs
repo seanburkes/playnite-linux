@@ -1,26 +1,37 @@
-using System.Security.Cryptography;
 using System.Text.Json;
 using System.Xml;
 using Playnite;
+using Playnite.Core.Tests.Serialization;
 using Xunit;
 
 namespace Playnite.Core.Tests;
 
 public sealed class LocalizationKeyTests
 {
-    private static readonly string DirectoryPath = Path.Combine(AppContext.BaseDirectory, "golden", "loc");
+    private static readonly string GoldenPath = Path.Combine(AppContext.BaseDirectory, "golden", "loc", "english-v10.json");
+
+    private static readonly string[] FrozenInputs =
+    [
+        "legacy/source/Playnite/Localization/LocSource.xaml",
+        "legacy/source/Playnite/Localization/LocalizationKeys.cs",
+        "legacy/build/buildLocConstants.ps1",
+    ];
 
     private static Dictionary<string, string> GoldenEntries()
     {
-        using var document = JsonDocument.Parse(File.ReadAllText(Path.Combine(DirectoryPath, "english-v10.json")));
+        using var document = JsonDocument.Parse(File.ReadAllText(GoldenPath));
         return document.RootElement.GetProperty("entries").Deserialize<Dictionary<string, string>>()!;
     }
+
+    /// <summary>Resolves a golden provenance path against the repository, never a test-output copy.</summary>
+    private static string RepositoryFile(string relativePath) =>
+        Path.Combine(RepositoryPaths.Root, Path.Combine(relativePath.Split('/')));
 
     [Fact]
     public void English_catalog_and_declarations_match_the_complete_frozen_golden()
     {
         var golden = GoldenEntries();
-        using var source = File.OpenText(Path.Combine(DirectoryPath, "LocSource.xaml"));
+        using var source = File.OpenText(RepositoryFile(FrozenInputs[0]));
         var extracted = LocalizationKeySet.Extract(source);
         Assert.Equal(golden.OrderBy(pair => pair.Key, StringComparer.Ordinal), extracted.Entries);
         Assert.Equal(extracted.Entries, LocalizationKeySet.English.Entries);
@@ -34,17 +45,19 @@ public sealed class LocalizationKeyTests
     }
 
     [Fact]
-    public void Golden_records_the_actual_input_hashes_and_count()
+    public void Golden_input_hashes_bind_to_the_frozen_legacy_files_at_their_exact_paths()
     {
-        using var document = JsonDocument.Parse(File.ReadAllText(Path.Combine(DirectoryPath, "english-v10.json")));
+        using var document = JsonDocument.Parse(File.ReadAllText(GoldenPath));
         var provenance = document.RootElement.GetProperty("provenance");
         var inputs = provenance.GetProperty("inputs");
-        Assert.Equal(3, inputs.EnumerateObject().Count());
-        foreach (var input in inputs.EnumerateObject())
+        Assert.Equal(
+            FrozenInputs.Order(StringComparer.Ordinal),
+            inputs.EnumerateObject().Select(input => input.Name).Order(StringComparer.Ordinal));
+        foreach (var relativePath in FrozenInputs)
         {
-            var file = Path.GetFileName(input.Name);
-            Assert.Equal(input.Value.GetString(),
-                Convert.ToHexStringLower(SHA256.HashData(File.ReadAllBytes(Path.Combine(DirectoryPath, file)))));
+            var path = RepositoryFile(relativePath);
+            Assert.True(File.Exists(path), $"Frozen legacy input is missing: {path}");
+            Assert.Equal(inputs.GetProperty(relativePath).GetString(), RepositoryPaths.Sha256(path));
         }
 
         Assert.Equal(GoldenEntries().Count, provenance.GetProperty("keyCount").GetInt32());
@@ -53,7 +66,7 @@ public sealed class LocalizationKeyTests
     [Fact]
     public void English_compared_with_an_independently_extracted_English_has_an_empty_diff()
     {
-        using var source = File.OpenText(Path.Combine(DirectoryPath, "LocSource.xaml"));
+        using var source = File.OpenText(RepositoryFile(FrozenInputs[0]));
         var diff = LocalizationKeySet.English.Diff(LocalizationKeySet.Extract(source));
         Assert.True(diff.IsEmpty);
         Assert.Empty(diff.Added);
