@@ -1,6 +1,7 @@
 using System.Text;
 using System.Diagnostics;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Playnite.Settings;
 using Xunit;
 
@@ -31,12 +32,35 @@ public sealed class SettingsMigrationTests : IDisposable
         Assert.Equal(bytes, SettingsMigration.ExportV10(await File.ReadAllBytesAsync(Destination)));
         Assert.Equal(bytes, await File.ReadAllBytesAsync(Source));
         Assert.Single(Directory.GetFiles(Path.GetDirectoryName(Source)!));
-        if (name == "config.json")
+        using var sourceDocument = JsonDocument.Parse(bytes);
+        using var envelope = JsonDocument.Parse(await File.ReadAllBytesAsync(Destination));
+        Assert.Empty(envelope.RootElement.GetProperty("report").GetProperty("rewrittenPaths").EnumerateArray());
+        Assert.Empty(envelope.RootElement.GetProperty("report").GetProperty("unmappedPaths").EnumerateArray());
+        var legacy = envelope.RootElement.GetProperty("legacy");
+        var settings = envelope.RootElement.GetProperty("settings");
+        // `settings` is a normalized projection, not a byte copy: known properties are projected
+        // and unknown ones live in `legacy`, so their union must still equal the v10 object.
+        var projected = JsonNode.Parse(settings.GetRawText())!.AsObject();
+        foreach (var property in legacy.EnumerateObject())
         {
-            using var envelope = JsonDocument.Parse(await File.ReadAllBytesAsync(Destination));
-            Assert.Empty(envelope.RootElement.GetProperty("legacy").EnumerateObject());
-            Assert.True(JsonElement.DeepEquals(JsonDocument.Parse(bytes).RootElement,
-                envelope.RootElement.GetProperty("settings")));
+            Assert.False(projected.ContainsKey(property.Name));
+            projected[property.Name] = JsonNode.Parse(property.Value.GetRawText());
+        }
+        Assert.True(JsonNode.DeepEquals(JsonNode.Parse(bytes), projected));
+        switch (name)
+        {
+            case "config.json":
+                Assert.True(JsonElement.DeepEquals(sourceDocument.RootElement, settings));
+                break;
+            case "fullscreenConfig.json":
+                Assert.Equal(2, projected["Rows"]!.GetValue<int>());
+                Assert.Equal("Playnite_builtin_DefaultFullscreen", projected["Theme"]!.GetValue<string>());
+                Assert.Empty(projected["DisabledGameControllers"]!.AsArray());
+                Assert.False(projected["FilterSettings"]!["UseAndFilteringStyle"]!.GetValue<bool>());
+                break;
+            case "windowPositions.json":
+                Assert.Empty(projected["Positions"]!.AsObject());
+                break;
         }
     }
 
@@ -88,11 +112,18 @@ public sealed class SettingsMigrationTests : IDisposable
     [InlineData(@"C:\Games\..\escape")]
     [InlineData(@"C:\Games\.\x")]
     [InlineData(@"\\server\share\x")]
+    [InlineData(@"//server/share/x")]
     [InlineData(@"Z:\unknown")]
     [InlineData(@"C:Games")]
     [InlineData(@"C:")]
     [InlineData(@"\root-relative")]
     [InlineData(@"Games\relative")]
+    [InlineData("games/relative")]
+    [InlineData("./relative")]
+    [InlineData("../relative")]
+    [InlineData(@"C:\Games\bad:name")]
+    [InlineData(@"C:\Games\bad?name")]
+    [InlineData(@"C:\Games\bad|name")]
     public async Task UnmappedPathsAreNeverDroppedOrGuessed(string path)
     {
         await Seed(JsonSerializer.Serialize(new { DatabasePath = path }));
@@ -100,6 +131,36 @@ public sealed class SettingsMigrationTests : IDisposable
         var result = await SettingsMigration.MigrateAsync(Source, Destination, Mappings);
         Assert.Empty(result.Report.RewrittenPaths);
         Assert.Equal(path, Assert.Single(result.Report.UnmappedPaths).Source);
+        Assert.Equal(original, SettingsMigration.ExportV10(await File.ReadAllBytesAsync(Destination)));
+        using var migrated = JsonDocument.Parse(await File.ReadAllBytesAsync(Destination));
+        Assert.False(migrated.RootElement.GetProperty("settings").TryGetProperty("DatabasePath", out _));
+        Assert.Equal(path, migrated.RootElement.GetProperty("legacy").GetProperty("DatabasePath").GetString());
+    }
+
+    [Fact]
+    public async Task ForwardSlashUncPathIsMappedWhenAConfiguredRootMatches()
+    {
+        await Seed(JsonSerializer.Serialize(new { DatabasePath = @"//server/share/game" }));
+        var result = await SettingsMigration.MigrateAsync(Source, Destination,
+            [new(@"\\server\share", "/mnt/share")]);
+        var rewritten = Assert.Single(result.Report.RewrittenPaths);
+        Assert.Equal(@"//server/share/game", rewritten.Source);
+        Assert.Equal("/mnt/share/game", rewritten.Destination);
+        Assert.Empty(result.Report.UnmappedPaths);
+        using var migrated = JsonDocument.Parse(await File.ReadAllBytesAsync(Destination));
+        Assert.Equal("/mnt/share/game",
+            migrated.RootElement.GetProperty("settings").GetProperty("DatabasePath").GetString());
+    }
+
+    [Fact]
+    public async Task ForwardSlashUncPathIsReportedWhenNoConfiguredRootMatches()
+    {
+        await Seed(JsonSerializer.Serialize(new { AutoBackupDir = @"//server/other/backup" }));
+        var original = await File.ReadAllBytesAsync(Source);
+        var result = await SettingsMigration.MigrateAsync(Source, Destination,
+            [new(@"\\server\share", "/mnt/share")]);
+        Assert.Empty(result.Report.RewrittenPaths);
+        Assert.Equal(@"//server/other/backup", Assert.Single(result.Report.UnmappedPaths).Source);
         Assert.Equal(original, SettingsMigration.ExportV10(await File.ReadAllBytesAsync(Destination)));
     }
 
@@ -175,18 +236,29 @@ public sealed class SettingsMigrationTests : IDisposable
     [InlineData(SettingsWriteStep.Written)]
     [InlineData(SettingsWriteStep.Flushed)]
     [InlineData(SettingsWriteStep.Verified)]
-    public async Task CancellationBeforeCommitLeavesNoDestination(SettingsWriteStep step)
+    public async Task CancellationBeforeCommitLeavesNoDestinationAndRestartPublishesSettings(SettingsWriteStep step)
     {
         await Seed("{}");
+        var reached = false;
         using var cancellation = new CancellationTokenSource();
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => SettingsMigration.MigrateAsync(Source, Destination, [],
-            checkpoint: current => { if (current == step) cancellation.Cancel(); }, cancellationToken: cancellation.Token));
+            checkpoint: current =>
+            {
+                if (current != step) return;
+                reached = true;
+                cancellation.Cancel();
+            }, cancellationToken: cancellation.Token));
+        Assert.True(reached);
         Assert.False(File.Exists(Destination));
+        Assert.False(File.Exists(Destination + ".settings-migration.tmp"));
+        var result = await SettingsMigration.MigrateAsync(Source, Destination, []);
+        Assert.False(result.AlreadyMigrated);
+        Assert.Equal("{}", Encoding.UTF8.GetString(SettingsMigration.ExportV10(await File.ReadAllBytesAsync(Destination))));
         Assert.False(File.Exists(Destination + ".settings-migration.tmp"));
     }
 
     [Fact]
-    public async Task AbandonedPartialStageCanBeResumed()
+    public async Task AbandonedPartialStageIsDiscardedAndRestartPublishesFreshSettings()
     {
         await Seed("{}");
         await File.WriteAllTextAsync(Destination + ".settings-migration.tmp", "partial write from dead process");
@@ -205,12 +277,13 @@ public sealed class SettingsMigrationTests : IDisposable
     {
         await Seed("""{"Version":7,"DisabledPlugins":["a","b"]}""");
         var original = await File.ReadAllBytesAsync(Source);
+        var marker = Path.Combine(directory, "reached-" + step);
         var start = new ProcessStartInfo("dotnet") { UseShellExecute = false };
         foreach (var argument in new[]
         {
             "exec", "--runtimeconfig", Path.Combine(AppContext.BaseDirectory, "Playnite.Core.Tests.runtimeconfig.json"),
             "--depsfile", Path.Combine(AppContext.BaseDirectory, "Playnite.Core.Tests.deps.json"),
-            Path.Combine(AppContext.BaseDirectory, "SettingsMigration.CrashHost.dll"), Source, Destination, step.ToString()
+            Path.Combine(AppContext.BaseDirectory, "SettingsMigration.CrashHost.dll"), Source, Destination, step.ToString(), marker
         }) start.ArgumentList.Add(argument);
         using var process = Process.Start(start)!;
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
@@ -223,6 +296,9 @@ public sealed class SettingsMigrationTests : IDisposable
             if (!process.HasExited) process.Kill(entireProcessTree: true);
         }
         Assert.NotEqual(0, process.ExitCode);
+        // The child records the boundary immediately before killing itself, so a child that
+        // died during startup cannot be mistaken for one that exercised the boundary.
+        Assert.Equal(step.ToString(), await File.ReadAllTextAsync(marker));
         Assert.Equal(step == SettingsWriteStep.Committed, File.Exists(Destination));
         Assert.Equal(step is not (SettingsWriteStep.BeforeWrite or SettingsWriteStep.Committed),
             File.Exists(Destination + ".settings-migration.tmp"));
@@ -289,10 +365,20 @@ public sealed class SettingsMigrationTests : IDisposable
     [InlineData("relative", "/games")]
     [InlineData(@"C:\Games", "relative")]
     [InlineData(@"C:\Games", "/games/../elsewhere")]
+    [InlineData(@"C:\Games", "//games")]
+    [InlineData(@"C:\Ga:mes", "/games")]
     public async Task InvalidMappingIsRejectedBeforeWriting(string windows, string linux)
     {
         await Seed("{}");
         await Assert.ThrowsAsync<ArgumentException>(() => SettingsMigration.MigrateAsync(Source, Destination, [new(windows, linux)]));
+        Assert.Empty(Directory.GetFiles(Path.GetDirectoryName(Destination)!));
+    }
+
+    [Fact]
+    public async Task SourceDirectlyUnderFilesystemRootIsRejectedRatherThanRejectingEveryDestination()
+    {
+        await Assert.ThrowsAsync<ArgumentException>(() =>
+            SettingsMigration.MigrateAsync("/playnite-settings-test.json", Destination, []));
         Assert.Empty(Directory.GetFiles(Path.GetDirectoryName(Destination)!));
     }
 

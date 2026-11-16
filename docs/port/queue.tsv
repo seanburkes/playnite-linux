@@ -59,7 +59,7 @@ p3-loc-coverage-ds	W3	leaves	Localisation coverage and placeholder validation	p3
 p4-001	W4	data	SQLite schema/repositories	p3-004	in-progress	core	oracle:GamesCollection/Models; docs/port/p4-001-sqlite.md	test:SchemaTests,RepositoryTests	destination only; importer ownership requires ADR for schema changes
 p4-002	W4	data	v10 LiteDB importer	p4-001	todo	import	golden:import	test:import	PILOT; isolated
 p4-003	W4	data	Atomic swap/rollback	p4-002	todo	import	formal:LibraryImport	test:import	TLA+ invariants
-p4-004	W4	data	Settings migration	p3-003	in-progress	fm/p4-004	tests/golden/settings/*.json	SettingsMigrationTests	docs/port/p4-004-settings-migration.md; lossless settings projection and archive; explicit path mapping/reporting; dry-run and atomic restartable write; SQLite/importer files untouched; actual linux-ci baseline and independent reviews pending
+p4-004	W4	data	Settings migration	p3-003	in-progress	fm/p4-004	tests/golden/settings/*.json	SettingsMigrationTests	docs/port/p4-004-settings-migration.md; lossless settings projection and archive; explicit path mapping/reporting including forward-slash UNC and relative typed paths; dry-run and atomic restartable write that discards partial staging; SQLite/importer files untouched; actual linux-ci baseline and independent reviews pending
 p4-005	W4	data	Asset copy/hash	p4-002	todo	import	golden:assets	test:assets	
 p4-006	W4	data	Skip report (non-Steam)	p4-002	todo	import	golden:skip	test:skip	explicit
 p5-001	W5	steam	VDF/ACF parsers	p3-002	todo	steam	fixtures	vdf	fuzz
