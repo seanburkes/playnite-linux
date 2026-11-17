@@ -10,6 +10,7 @@ public static class SteamLibraryParser
 
     public static SteamParseResult<SteamLibraries> Parse(ReadOnlySpan<byte> bytes, string file, int maxBytes = KeyValues.DefaultMaxBytes)
     {
+        file = SteamFields.FileName(file);
         var issues = new List<SteamParseIssue>();
         KeyValue root;
         try
@@ -66,9 +67,11 @@ public static class SteamLibraryParser
             }
 
             var apps = new Dictionary<uint, ulong>();
+            var appOffsets = new Dictionary<uint, int>();
             if (fields?.Find("apps") is { } appEntry)
             {
                 var valid = appEntry.Object is not null;
+                var invalidOffset = appEntry.ByteOffset;
                 if (appEntry.Object is { } appObject)
                 {
                     foreach (var app in appObject.Entries)
@@ -76,15 +79,18 @@ public static class SteamLibraryParser
                         if (!SteamFields.Id(app.Key, out var id) || !SteamFields.Decimal(app.Text, out var size) || !apps.TryAdd(id, size))
                         {
                             valid = false;
+                            invalidOffset = app.ByteOffset;
                             break;
                         }
+
+                        appOffsets.Add(id, app.ByteOffset);
                     }
                 }
 
                 if (!valid)
                 {
                     apps.Clear();
-                    issues.Add(new(file, entry.Key, "invalid-apps-map", "apps", appEntry.ByteOffset));
+                    issues.Add(new(file, entry.Key, "invalid-apps-map", "apps", invalidOffset));
                 }
             }
 
@@ -93,7 +99,7 @@ public static class SteamLibraryParser
                 if (!appIds.Add(id))
                 {
                     apps.Remove(id);
-                    issues.Add(new(file, entry.Key, "duplicate-appid", id.ToString(System.Globalization.CultureInfo.InvariantCulture), entry.ByteOffset));
+                    issues.Add(new(file, entry.Key, "duplicate-appid", id.ToString(System.Globalization.CultureInfo.InvariantCulture), appOffsets[id]));
                 }
             }
 
@@ -107,7 +113,7 @@ public static class SteamLibraryParser
 
             libraries.Add(new(entry.Key, fullPath, fields?.Text("label"), Number("contentid"),
                 Number("totalsize"), Number("update_clean_bytes_tally"), verified,
-                new System.Collections.ObjectModel.ReadOnlyDictionary<uint, ulong>(apps),
+                fields?.Find("apps") is null ? null : new System.Collections.ObjectModel.ReadOnlyDictionary<uint, ulong>(apps),
                 fields is null ? [] : SteamFields.Bag(fields.Entries.Where(e => !Known.Contains(e.Key)))));
         }
 

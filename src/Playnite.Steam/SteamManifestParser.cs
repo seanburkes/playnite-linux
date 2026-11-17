@@ -18,8 +18,8 @@ public static class SteamManifestParser
 
     public static SteamParseResult<SteamManifest> Parse(ReadOnlySpan<byte> bytes, string file, int maxBytes = KeyValues.DefaultMaxBytes)
     {
-        ArgumentNullException.ThrowIfNull(file);
-        var identity = Path.GetFileName(file);
+        file = SteamFields.FileName(file);
+        var identity = file;
         if (!identity.StartsWith("appmanifest_", StringComparison.Ordinal) || !identity.EndsWith(".acf", StringComparison.Ordinal)
             || !SteamFields.Id(identity[12..^4], out var appId))
         {
@@ -61,7 +61,7 @@ public static class SteamManifestParser
         }
 
         var installDir = fields.Text("installdir");
-        if (!SafeInstallDir(installDir))
+        if (!SteamFields.SafeInstallDir(installDir))
         {
             Invalid("installdir", "invalid-required-field");
         }
@@ -178,39 +178,4 @@ public static class SteamManifestParser
             SteamFields.Bag(fields.Entries.Where(e => !Known.Contains(e.Key)))), issues.AsReadOnly());
     }
 
-    private static bool SafeInstallDir(string? path)
-    {
-        if (string.IsNullOrEmpty(path) || Path.IsPathRooted(path) || path.StartsWith('\\')
-            || (path.Length >= 2 && char.IsAsciiLetter(path[0]) && path[1] == ':'))
-        {
-            return false;
-        }
-
-        // Validate both dialects even on POSIX; keep the decoded metadata unchanged.
-        foreach (var candidate in new[] { path, path.Replace('\\', '/') })
-        {
-            var depth = 0;
-            foreach (var component in candidate.Split('/'))
-            {
-                if (component == "..")
-                {
-                    if (--depth < 0)
-                    {
-                        return false;
-                    }
-                }
-                else if (component is not ("" or "."))
-                {
-                    depth++;
-                }
-            }
-
-            if (depth == 0)
-            {
-                return false;
-            }
-        }
-
-        return true;
-    }
 }

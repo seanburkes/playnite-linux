@@ -140,10 +140,10 @@ public sealed class SteamParserTests(ITestOutputHelper output)
         var libraries = Assert.IsType<SteamLibraries>(result.Value).Libraries;
         Assert.Equal(["0", "1", "2"], libraries.Select(l => l.Index));
         Assert.Equal("/synthetic/steam/root", libraries[0].Path);
-        Assert.Equal(66_000_000_001ul, libraries[0].Apps[42]);
-        Assert.False(libraries[1].Apps.ContainsKey(42));
-        Assert.Equal(2048ul, libraries[1].Apps[44]);
-        Assert.Empty(libraries[2].Apps);
+        Assert.Equal(66_000_000_001ul, libraries[0].Apps![42]);
+        Assert.False(libraries[1].Apps!.ContainsKey(42));
+        Assert.Equal(2048ul, libraries[1].Apps![44]);
+        Assert.Null(libraries[2].Apps);
         Assert.Single(libraries[0].UnknownFields);
         var issue = Assert.Single(result.Issues);
         Assert.Equal("1", issue.Identity);
@@ -167,7 +167,7 @@ public sealed class SteamParserTests(ITestOutputHelper output)
         Assert.Equal("0", Assert.Single(result.Issues).Identity);
         Assert.Equal(reason, result.Issues[0].Reason);
         Assert.Equal("/other", result.Value.Libraries[^1].Path);
-        if (reason == "invalid-apps-map") { Assert.Empty(result.Value.Libraries[0].Apps); }
+        if (reason == "invalid-apps-map") { Assert.Empty(result.Value.Libraries[0].Apps!); }
     }
 
     [Fact]
@@ -216,8 +216,6 @@ public sealed class SteamParserTests(ITestOutputHelper output)
     [InlineData("installdir", "\"..\\\\..\\\\escape\"")]
     [InlineData("installdir", "\"nested/..\\\\../escape\"")]
     [InlineData("installdir", "\"a\\\\b/../../escape\"")]
-    [InlineData("installdir", "\"C:\\\\escape\"")]
-    [InlineData("installdir", "\"\\\\escape\"")]
     [InlineData("appid", "٤٢")]
     [InlineData("StateFlags", "４")]
     [InlineData("StateFlags", "")]
@@ -367,7 +365,7 @@ public sealed class SteamParserTests(ITestOutputHelper output)
         Assert.Null(library.ContentId);
         Assert.Null(library.TotalSize);
         Assert.Null(library.TimeLastUpdateVerified);
-        Assert.Empty(library.Apps);
+        Assert.Empty(library.Apps!);
         Assert.Equal(5, result.Issues.Count);
     }
 
@@ -598,5 +596,126 @@ public sealed class SteamParserTests(ITestOutputHelper output)
         Assert.IsType<KeyValue>(SteamFuzzTarget.Parse(Bytes("libraryfolders { 0 { path relative } }"), KeyValues.DefaultMaxBytes));
         Assert.Throws<ArgumentOutOfRangeException>(() => SteamFuzzTarget.Parse(Bytes(Manifest()), 0));
         Assert.Throws<ArgumentException>(() => Acf(Manifest()).Value!.ToApp("relative", true, true, false));
+    }
+
+    [Fact]
+    public void Library_apps_preserve_absent_empty_populated_and_malformed_presence()
+    {
+        SteamLibrary Library(string extra) => Assert.Single(SteamLibraryParser.Parse(Bytes("libraryfolders { 0 { path /valid " + extra + " } }"), "libraries.vdf").Value!.Libraries);
+        Assert.Null(Library("").Apps);
+        Assert.Empty(Library("apps {}").Apps!);
+        Assert.Equal(2ul, Library("apps { 42 2 }").Apps![42]);
+        Assert.Empty(Library("apps scalar").Apps!);
+    }
+
+    [Theory]
+    [InlineData("../escape")]
+    [InlineData("/absolute")]
+    [InlineData("..\\..\\escape")]
+    [InlineData("a\\b/../../escape")]
+    [InlineData(".")]
+    [InlineData("bad\0path")]
+    public void Public_record_construction_and_with_cannot_bypass_install_path_containment(string directory)
+    {
+        var manifest = Acf(Manifest()).Value! with { InstallDir = directory };
+        Assert.Throws<ArgumentException>(() => manifest.ToApp("/synthetic/root", true, true, false));
+        var app = Acf(Manifest()).Value!.ToApp("/synthetic/root", true, true, false) with { InstallDir = directory };
+        Assert.Throws<ArgumentException>(() => app.InstallPath);
+        Assert.Throws<ArgumentException>(() => (app with { InstallDir = "valid", LibraryPath = "relative" }).InstallPath);
+    }
+
+    [Theory]
+    [InlineData("C:\\escape")]
+    [InlineData("\\escape")]
+    [InlineData("C:relative")]
+    [InlineData("a\\..")]
+    public void Legitimate_posix_names_are_not_rejected_by_windows_name_rules(string directory)
+    {
+        var encoded = directory.Replace("\\", "\\\\", StringComparison.Ordinal);
+        var result = Acf(Manifest().Replace("\"Game\"", "\"" + encoded + "\"", StringComparison.Ordinal));
+        Assert.Empty(result.Issues);
+        var app = Assert.IsType<SteamManifest>(result.Value).ToApp("/synthetic/root", true, true, false);
+        Assert.Equal(directory, app.InstallDir);
+        Assert.Equal("/synthetic/root/steamapps/common/" + directory, app.InstallPath);
+    }
+
+    [Fact]
+    public void Writer_enforces_empty_keys_and_the_same_64_object_depth_bound()
+    {
+        var root = Parse("root {" + string.Concat(Enumerable.Repeat("a {", 63)) + new string('}', 64));
+        Assert.NotEmpty(KeyValues.Write(root));
+        var wrapper = (KeyValuesObject)Activator.CreateInstance(typeof(KeyValuesObject),
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic, null,
+            [new List<KeyValue> { root }], CultureInfo.InvariantCulture)!;
+        var exception = Assert.Throws<ArgumentException>(() => KeyValues.Write(new("wrapper", null, wrapper, 0)));
+        Assert.Contains("depth-limit", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("empty-key", Assert.Throws<ArgumentException>(() => KeyValues.Write(root with { Key = "" })).Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Fuzz_rejects_unrepresentable_oversized_probe_budgets_before_allocation()
+    {
+        foreach (var limit in new[] { int.MaxValue, Array.MaxLength })
+        {
+            Assert.Throws<ArgumentOutOfRangeException>(() => SteamFuzzTarget.Run(new FuzzOptions
+            {
+                CorpusRoot = Corpus, MaxInputBytes = limit,
+            }, TextWriter.Null));
+        }
+    }
+
+    [Theory]
+    [InlineData(" ")]
+    [InlineData("  Synthetic  ")]
+    public void Nonempty_names_preserve_whitespace_without_trimming(string name)
+    {
+        Assert.Equal(name, Acf(Manifest().Replace("\"Synthetic\"", "\"" + name + "\"", StringComparison.Ordinal)).Value!.Name);
+    }
+
+    [Theory]
+    [InlineData("4294967296")]
+    [InlineData("18446744073709551615")]
+    [InlineData("18446744073709551616")]
+    public void Out_of_uint_app_ids_are_rejected_never_wrapped(string id)
+    {
+        Assert.Null(Acf(Manifest(), "appmanifest_" + id + ".acf").Value);
+        Assert.Null(Acf(Manifest().Replace("appid 42", "appid " + id, StringComparison.Ordinal)).Value);
+        var result = SteamLibraryParser.Parse(Bytes("libraryfolders { 0 { path /valid apps { " + id + " 2 } } }"), "libraries.vdf");
+        Assert.Empty(Assert.Single(result.Value!.Libraries).Apps!);
+        Assert.Equal("invalid-apps-map", Assert.Single(result.Issues).Reason);
+    }
+
+    [Theory]
+    [InlineData("LastOwner")]
+    [InlineData("lastowner")]
+    [InlineData("LASTOWNER")]
+    public void Private_root_duplicate_keys_never_reveal_account_data(string root)
+    {
+        const string secret = "76561199999999999";
+        var exception = Assert.Throws<KeyValuesException>(() => Parse($"{root} {{ {secret} a {secret} b }}"));
+        Assert.Null(exception.Key);
+        Assert.DoesNotContain(secret, exception.ToString(), StringComparison.Ordinal);
+        Assert.DoesNotContain("owner", exception.ToString(), StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Diagnostic_filename_arguments_normalize_trailing_slashes_and_reject_null_bytes()
+    {
+        Assert.Equal("file.vdf", Assert.Throws<KeyValuesException>(() => KeyValues.Parse(Bytes("root {"), "/private/file.vdf/")).File);
+        Assert.Equal("appmanifest_42.acf", Assert.Single(Acf("AppState {", "/private/appmanifest_42.acf/").Issues).File);
+        Assert.Equal("file.vdf", Assert.Single(SteamLibraryParser.Parse(Bytes("libraryfolders {"), "/private/file.vdf/").Issues).File);
+        Assert.Throws<ArgumentException>(() => KeyValues.Parse(Bytes("root {}"), "/private/\0file.vdf"));
+        Assert.Throws<ArgumentException>(() => Acf(Manifest(), "/private/\0appmanifest_42.acf"));
+        Assert.Throws<ArgumentException>(() => SteamLibraryParser.Parse(Bytes("libraryfolders {}"), "/private/\0file.vdf"));
+    }
+
+    [Theory]
+    [InlineData("libraryfolders { 0 { path /valid apps { bad 2 } } }", "bad", "invalid-apps-map")]
+    [InlineData("libraryfolders { 0 { path /valid apps { 42 1 } } 1 { path /other apps { 042 2 } } }", "042", "duplicate-appid")]
+    public void Library_app_map_diagnostics_point_at_the_offending_member(string text, string token, string reason)
+    {
+        var issue = Assert.Single(SteamLibraryParser.Parse(Bytes(text), "libraries.vdf").Issues);
+        Assert.Equal(reason, issue.Reason);
+        Assert.Equal(text.IndexOf(token, StringComparison.Ordinal), issue.ByteOffset);
     }
 }

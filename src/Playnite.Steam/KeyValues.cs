@@ -30,9 +30,9 @@ public sealed class KeyValuesObject
 public sealed class KeyValuesException : Exception
 {
     internal KeyValuesException(string file, string reason, int offset, int line, string? key = null)
-        : base($"{Path.GetFileName(file)}: {reason} at byte {offset}, line {line}" + (key is null ? string.Empty : $" (key {key})"))
+        : base($"{SteamFields.FileName(file)}: {reason} at byte {offset}, line {line}" + (key is null ? string.Empty : $" (key {key})"))
     {
-        File = Path.GetFileName(file);
+        File = SteamFields.FileName(file);
         Reason = reason;
         ByteOffset = offset;
         Line = line;
@@ -55,7 +55,7 @@ public static class KeyValues
 
     public static KeyValue Parse(ReadOnlySpan<byte> bytes, string file, int maxBytes = DefaultMaxBytes)
     {
-        ArgumentNullException.ThrowIfNull(file);
+        file = SteamFields.FileName(file);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maxBytes);
         if (bytes.Length > maxBytes)
         {
@@ -100,12 +100,22 @@ public static class KeyValues
     {
         ArgumentNullException.ThrowIfNull(root);
         var output = new StringBuilder();
-        WriteEntry(root, output);
+        WriteEntry(root, output, 1);
         return Utf8.GetBytes(output.ToString());
     }
 
-    private static void WriteEntry(KeyValue entry, StringBuilder output)
+    private static void WriteEntry(KeyValue entry, StringBuilder output, int depth)
     {
+        if (entry.Key.Length == 0)
+        {
+            throw new ArgumentException("empty-key", nameof(entry));
+        }
+
+        if (entry.Object is not null && depth > MaxDepth)
+        {
+            throw new ArgumentException("depth-limit", nameof(entry));
+        }
+
         Quote(entry.Key, output);
         output.Append(' ');
         if (entry.Object is { } obj)
@@ -113,7 +123,7 @@ public static class KeyValues
             output.Append("{\n");
             foreach (var child in obj.Entries)
             {
-                WriteEntry(child, output);
+                WriteEntry(child, output, depth + 1);
             }
 
             output.Append("}\n");
@@ -179,7 +189,7 @@ public static class KeyValues
                 Fail("expected-root-object");
             }
 
-            var root = new KeyValue(key, null, Object(1), offset);
+            var root = new KeyValue(key, null, Object(1, SteamFields.IsOwner(key)), offset);
             Skip();
             if (position != bytes.Length)
             {

@@ -80,6 +80,11 @@ public static class SteamFuzzTarget
     public static FuzzRunResult Run(FuzzOptions options, TextWriter output)
     {
         options.Validate();
+        if (options.MaxInputBytes >= Array.MaxLength)
+        {
+            throw new ArgumentOutOfRangeException(nameof(options), "The oversized probe must fit in a byte array.");
+        }
+
         var seeds = Load(options.CorpusRoot);
         var digest = FuzzCorpus.Digest(seeds);
         var mutator = new FuzzMutator(options.Seed);
