@@ -20,14 +20,25 @@ read or added.
 Directory-shape branches cannot be expressed as committed files, so `SteamDiscoveryTests`
 materialises them in one temporary directory and asserts the result:
 
-- explicit `$STEAM_ROOT` override;
-- the home `.steam/steam` and `.local/share/Steam` paths as one symlinked realpath (duplicate candidate);
+- explicit `$STEAM_ROOT` override, including a relative value reported through the production
+  `LinuxPaths` object;
+- the home `.steam/steam`, home `.steam/root` and `.local/share/Steam` paths as one symlinked
+  realpath (duplicate candidates);
+- `$XDG_DATA_HOME/Steam` when it is set to an absolute non-default location;
 - Flatpak root `.var/app/com.valvesoftware.Steam/.local/share/Steam` under the test home;
-- candidate present without `steamapps`, candidate that is a file, symlink loop;
-- `steamapps` symlinked outside the candidate root or the library root (never followed);
-- duplicate libraries by realpath;
-- `config/libraryfolders.vdf` fallback when `steamapps/libraryfolders.vdf` is absent;
-- oversized and unreadable library files;
-- read-only snapshot: discovery leaves the synthetic tree byte-identical.
+- candidate present without `steamapps`, candidate that is a file, symlink loop, permission
+  denied (unreadable, not missing);
+- realpath `..` after a link is resolved after the link, not lexically collapsed;
+- `steamapps` symlinked outside the candidate root or the library root (never followed), and a
+  self-referential `steamapps` link to `.` (accepted);
+- duplicate libraries by realpath, while distinct libraries on the same disk stay distinct;
+- `config/libraryfolders.vdf` fallback when `steamapps/libraryfolders.vdf` is absent or rejected;
+- oversized, unreadable and zero-length FIFO/device/empty library files (rejected before any
+  read, so nothing blocks), plus stale-mountpoint detection;
+- read-only snapshot including size, mtime, atime, mode and content hashes;
+- bare-filename diagnostics, with no host layout in skip reports.
 
-`SHA256SUMS` pins the exact fixture bytes; a test fails on drift or an unlisted `.vdf`.
+`SteamDiscoveryFuzzTarget` reuses the existing mutator, case timeout and budget policy on these
+seeds and asserts that every mutated `libraryfolders.vdf` either parses or rejects cleanly, with
+absolute returned paths and no private root fields. `SHA256SUMS` pins the exact fixture bytes; a
+test fails on drift or an unlisted `.vdf`.

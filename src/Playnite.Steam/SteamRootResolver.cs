@@ -1,42 +1,56 @@
 using Playnite.Core;
-using CorePaths = Playnite.Core.Paths;
 
 namespace Playnite.Steam;
 
 /// <summary>
 /// Steam root resolution per <c>docs/port/08-STEAM-SPEC.md</c> §1.2: the first candidate in order
 /// whose realpath exists and contains a usable <c>steamapps</c>. Every candidate is reported,
-/// including later ones, so a duplicate realpath (the usual <c>~/.steam/steam</c> symlink) is
+/// including later ones, so a duplicate realpath (the usual home <c>.steam/steam</c> link) is
 /// visible rather than silently collapsed.
 /// </summary>
 public static class SteamRootResolver
 {
     /// <summary>
-    /// Resolves the root from <see cref="IPaths.SteamRootCandidates"/>. The explicit
-    /// <c>$STEAM_ROOT</c> override is recognised as the one candidate that is not one of the three
-    /// standard derivations documented by p3-001; if the override happens to equal a standard
-    /// path, the standard kind wins and the result is unchanged.
+    /// Resolves the root from the captured environment. The explicit override is taken verbatim,
+    /// so a relative value is reported as <see cref="SteamRootState.InvalidPath"/> instead of being
+    /// silently dropped before discovery sees it.
     /// </summary>
-    public static SteamRootDiscovery Discover(IPaths paths, ISteamFileSystem fileSystem)
+    public static SteamRootDiscovery Discover(IEnvironment environment, IPaths paths, ISteamFileSystem fileSystem)
     {
+        ArgumentNullException.ThrowIfNull(environment);
         ArgumentNullException.ThrowIfNull(paths);
         ArgumentNullException.ThrowIfNull(fileSystem);
-        return Probe(Candidates(paths), fileSystem);
+        return Probe(Candidates(environment, paths), fileSystem);
     }
 
-    public static IReadOnlyList<SteamRootCandidate> Candidates(IPaths paths)
+    public static IReadOnlyList<SteamRootCandidate> Candidates(IEnvironment environment, IPaths paths)
     {
+        ArgumentNullException.ThrowIfNull(environment);
         ArgumentNullException.ThrowIfNull(paths);
-        var standard = new[]
+        var candidates = new List<SteamRootCandidate>();
+        var overridden = environment.GetVariable("STEAM_ROOT");
+        if (!string.IsNullOrWhiteSpace(overridden))
         {
-            (SteamRootKind.HomeSteam, System.IO.Path.Combine(paths.Home, ".steam", "steam")),
-            (SteamRootKind.HomeLocalShare, System.IO.Path.Combine(paths.Home, ".local", "share", "Steam")),
-            (SteamRootKind.Flatpak, System.IO.Path.Combine(paths.Home, ".var", "app", "com.valvesoftware.Steam", ".local", "share", "Steam")),
-        };
-        return paths.SteamRootCandidates
-            .Select(path => new SteamRootCandidate(Kind(path, standard), path))
-            .ToList()
-            .AsReadOnly();
+            candidates.Add(new(SteamRootKind.Override, overridden));
+        }
+
+        candidates.Add(new(SteamRootKind.HomeSteam, Path.Combine(paths.Home, ".steam", "steam")));
+        candidates.Add(new(SteamRootKind.HomeSteamRoot, Path.Combine(paths.Home, ".steam", "root")));
+        var homeLocal = Path.Combine(paths.Home, ".local", "share", "Steam");
+        var xdg = environment.GetVariable("XDG_DATA_HOME");
+        if (Paths.IsFullPath(xdg))
+        {
+            var xdgSteam = Path.Combine(xdg!, "Steam");
+            if (!Paths.AreEqual(xdgSteam, homeLocal, "/"))
+            {
+                candidates.Add(new(SteamRootKind.XdgData, xdgSteam));
+            }
+        }
+
+        candidates.Add(new(SteamRootKind.HomeLocalShare, homeLocal));
+        candidates.Add(new(SteamRootKind.Flatpak,
+            Path.Combine(paths.Home, ".var", "app", "com.valvesoftware.Steam", ".local", "share", "Steam")));
+        return candidates.AsReadOnly();
     }
 
     /// <summary>Probes an explicit ordered candidate list. Later usable roots are reported as shadowed.</summary>
@@ -68,7 +82,7 @@ public static class SteamRootResolver
 
     private static SteamRootProbe Inspect(SteamRootCandidate candidate, Dictionary<string, SteamRootKind> seen, string? root, ISteamFileSystem fileSystem)
     {
-        if (!CorePaths.IsFullPath(candidate.Path))
+        if (!Paths.IsFullPath(candidate.Path))
         {
             return new(candidate.Kind, candidate.Path, null, SteamRootState.InvalidPath);
         }
@@ -92,7 +106,7 @@ public static class SteamRootResolver
                 return new(candidate.Kind, candidate.Path, real, SteamRootState.NotDirectory);
             }
 
-            var steamApps = System.IO.Path.Combine(real, "steamapps");
+            var steamApps = Path.Combine(real, "steamapps");
             if (!fileSystem.DirectoryExists(steamApps))
             {
                 return new(candidate.Kind, candidate.Path, real, SteamRootState.SteamAppsMissing);
@@ -118,28 +132,18 @@ public static class SteamRootResolver
         }
     }
 
-    private static SteamRootKind Kind(string path, IEnumerable<(SteamRootKind Kind, string Path)> standard)
-    {
-        foreach (var (kind, known) in standard)
-        {
-            if (CorePaths.AreEqual(known, path, "/"))
-            {
-                return kind;
-            }
-        }
-
-        return SteamRootKind.Override;
-    }
-
     /// <summary>True when <paramref name="path"/> is the root itself or a descendant, on a path boundary.</summary>
     internal static bool IsWithin(string root, string path)
     {
-        if (string.Equals(root, path, StringComparison.Ordinal))
+        if (string.Equals(root, path, PathComparison))
         {
             return true;
         }
 
-        var prefix = root.EndsWith(System.IO.Path.DirectorySeparatorChar) ? root : root + System.IO.Path.DirectorySeparatorChar;
-        return path.StartsWith(prefix, StringComparison.Ordinal);
+        var prefix = root.EndsWith(Path.DirectorySeparatorChar) ? root : root + Path.DirectorySeparatorChar;
+        return path.StartsWith(prefix, PathComparison);
     }
+
+    private static StringComparison PathComparison =>
+        OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
 }

@@ -1,4 +1,12 @@
+using Playnite.Core;
+
 namespace Playnite.Steam;
+
+/// <summary>Outcome of a bounded read of a library file. Only <see cref="Ok"/> carries bytes.</summary>
+public enum SteamFileReadStatus { Ok, Missing, NotRegularFile, TooLarge }
+
+/// <summary>A bounded file read. <see cref="Bytes"/> is null unless <see cref="Status"/> is <see cref="SteamFileReadStatus.Ok"/>.</summary>
+public sealed record SteamFileRead(SteamFileReadStatus Status, byte[]? Bytes);
 
 /// <summary>
 /// Read-only filesystem surface used by discovery. The interface has no mutating member, so a
@@ -8,15 +16,23 @@ public interface ISteamFileSystem
 {
     bool DirectoryExists(string path);
     bool FileExists(string path);
-    long GetFileLength(string path);
-    byte[] ReadAllBytes(string path);
+
+    /// <summary>
+    /// Reads at most <paramref name="maxBytes"/> from a canonical path. A non-regular file is
+    /// rejected before it is opened, so a FIFO or device cannot block or stream forever.
+    /// </summary>
+    SteamFileRead ReadFile(string path, int maxBytes);
 
     /// <summary>
     /// Returns the absolute canonical path with every symbolic link resolved, or <c>null</c> when
     /// the path does not exist (including a dangling link). Throws <see cref="IOException"/> when
-    /// the link chain exceeds the resolution limit.
+    /// the link chain exceeds the resolution limit, and <see cref="UnauthorizedAccessException"/>
+    /// when a component cannot be inspected.
     /// </summary>
     string? GetRealPath(string path);
+
+    /// <summary>True when the canonical path is a filesystem mount point.</summary>
+    bool IsMountPoint(string path);
 }
 
 /// <summary>The host filesystem. Every member is a read; nothing is opened for writing.</summary>
@@ -28,9 +44,77 @@ public sealed class SteamFileSystem : ISteamFileSystem
 
     public bool FileExists(string path) => File.Exists(path);
 
-    public long GetFileLength(string path) => new FileInfo(path).Length;
+    public SteamFileRead ReadFile(string path, int maxBytes)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maxBytes);
+        long length;
+        try
+        {
+            var info = new FileInfo(path);
+            if (!info.Exists)
+            {
+                return new(SteamFileReadStatus.Missing, null);
+            }
 
-    public byte[] ReadAllBytes(string path) => File.ReadAllBytes(path);
+            length = info.Length;
+        }
+        catch (FileNotFoundException)
+        {
+            return new(SteamFileReadStatus.Missing, null);
+        }
+
+        // A FIFO, socket or device reports length zero; so does an empty regular file. None is
+        // opened, so a hostile path cannot block the caller. An empty file is skipped, not parsed.
+        if (length <= 0)
+        {
+            return new(SteamFileReadStatus.NotRegularFile, null);
+        }
+
+        if (length > maxBytes)
+        {
+            return new(SteamFileReadStatus.TooLarge, null);
+        }
+
+        try
+        {
+            // Allocate exactly the stat length and read at most that many bytes: a file that grows
+            // after the stat cannot over-allocate or extend the read.
+            using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Delete,
+                1, FileOptions.SequentialScan);
+            var buffer = new byte[(int)length];
+            var read = 0;
+            while (read < buffer.Length)
+            {
+                var count = stream.Read(buffer, read, buffer.Length - read);
+                if (count == 0)
+                {
+                    break;
+                }
+
+                read += count;
+            }
+
+            return new(SteamFileReadStatus.Ok, read == buffer.Length ? buffer : buffer[..read]);
+        }
+        catch (FileNotFoundException)
+        {
+            return new(SteamFileReadStatus.Missing, null);
+        }
+    }
+
+    public bool IsMountPoint(string path)
+    {
+        var full = Path.GetFullPath(path);
+        foreach (var drive in DriveInfo.GetDrives())
+        {
+            if (string.Equals(Path.GetFullPath(drive.RootDirectory.FullName), full, PathComparison))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
 
     public string? GetRealPath(string path)
     {
@@ -40,11 +124,16 @@ public sealed class SteamFileSystem : ISteamFileSystem
         }
 
         var hops = 0;
-        return Resolve(Path.GetFullPath(path), ref hops);
+        return Resolve(path, ref hops);
     }
 
-    // realpath(3) semantics: re-resolve from the root after every link so a target with
-    // symlinked ancestors is canonical too. The hop budget is shared across the whole walk.
+    private static StringComparison PathComparison =>
+        OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+
+    // realpath(3) semantics: components are resolved left to right, "." is ignored, ".." pops the
+    // already-resolved parent (after any link at that component), and a link restarts resolution
+    // from its target. The input is never lexically normalised first, because that would collapse
+    // "link/../x" before the link is followed.
     private static string? Resolve(string path, ref int hops)
     {
         var root = Path.GetPathRoot(path)!;
@@ -52,8 +141,19 @@ public sealed class SteamFileSystem : ISteamFileSystem
         var current = root;
         for (var index = 0; index < parts.Length; index++)
         {
-            var parent = current;
-            var next = Path.Combine(parent, parts[index]);
+            var part = parts[index];
+            if (part == ".")
+            {
+                continue;
+            }
+
+            if (part == "..")
+            {
+                current = Path.GetDirectoryName(current) ?? root;
+                continue;
+            }
+
+            var next = Path.Combine(current, part);
             var target = new FileInfo(next).LinkTarget;
             if (target is null)
             {
@@ -63,18 +163,37 @@ public sealed class SteamFileSystem : ISteamFileSystem
 
             if (++hops > MaxLinks)
             {
-                throw new IOException($"Too many levels of symbolic links in '{path}'.");
+                throw new IOException("Too many levels of symbolic links.");
             }
 
-            var combined = Path.GetFullPath(target, parent);
+            var combined = Path.IsPathFullyQualified(target) ? target : current + Path.DirectorySeparatorChar + target;
             for (var rest = index + 1; rest < parts.Length; rest++)
             {
-                combined = Path.Combine(combined, parts[rest]);
+                combined += Path.DirectorySeparatorChar + parts[rest];
             }
 
             return Resolve(combined, ref hops);
         }
 
-        return Directory.Exists(current) || File.Exists(current) ? current : null;
+        if (Directory.Exists(current) || File.Exists(current))
+        {
+            return current;
+        }
+
+        // A permission failure makes Exists false, so distinguish it from a genuinely missing path.
+        try
+        {
+            _ = File.GetAttributes(current);
+        }
+        catch (UnauthorizedAccessException)
+        {
+            throw;
+        }
+        catch (IOException)
+        {
+            return null;
+        }
+
+        return current;
     }
 }

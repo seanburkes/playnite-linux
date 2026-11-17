@@ -1,7 +1,7 @@
 namespace Playnite.Steam;
 
-/// <summary>Where a root probe came from. Kinds follow the p3-001 candidate contract.</summary>
-public enum SteamRootKind { Override, HomeSteam, HomeLocalShare, Flatpak }
+/// <summary>Where a root probe came from. Kinds follow the p3-001 candidate contract plus the v1 extras.</summary>
+public enum SteamRootKind { Override, HomeSteam, HomeSteamRoot, XdgData, HomeLocalShare, Flatpak }
 
 /// <summary>Why a root candidate did or did not become the discovered root.</summary>
 public enum SteamRootState
@@ -44,6 +44,8 @@ public enum SteamLibraryStatus
     SteamAppsMissing,
     /// <summary><c>steamapps</c> resolves outside the library root; it is not followed.</summary>
     SteamAppsOutsideLibrary,
+    /// <summary>The path is an existing mount point with no <c>steamapps</c>: an unmounted drive.</summary>
+    StaleMountpoint,
     /// <summary>An earlier library entry in file order resolved to the same realpath.</summary>
     DuplicateLibrary,
     Unreadable,
@@ -62,10 +64,18 @@ public sealed record SteamDiscoveredLibrary(
 {
     public bool IsAvailable => Status == SteamLibraryStatus.Available;
     public string DeclaredPath => Declared.Path;
-    public IReadOnlyDictionary<uint, ulong> Apps => Declared.Apps;
+
+    /// <summary>
+    /// The declared apps map, or null when the file omitted the object. Presence follows the p5-001
+    /// contract: absent is null, a present but empty map is an empty non-null map.
+    /// </summary>
+    public IReadOnlyDictionary<uint, ulong>? Apps => Declared.Apps;
 }
 
-/// <summary>Root discovery, the library file read (if any), every library entry and every skip.</summary>
+/// <summary>
+/// Root discovery, the library file selected (if any), every library entry and every skip. Unknown
+/// root fields are discarded: they are parser detail, not discovery state.
+/// </summary>
 public sealed record SteamDiscoveryResult(
     SteamRootDiscovery Roots,
     string? LibraryFilePath,

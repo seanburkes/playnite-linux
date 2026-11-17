@@ -14,16 +14,19 @@ public static class SteamDiscovery
 
     /// <summary>
     /// Resolves the root, reads <c>steamapps/libraryfolders.vdf</c> (falling back to
-    /// <c>config/libraryfolders.vdf</c> when the primary copy is absent), and joins every parsed
-    /// entry with its availability. Re-run after a mount or refresh; a missing library is kept.
+    /// <c>config/libraryfolders.vdf</c> when the primary copy is absent or rejected), and joins
+    /// every parsed entry with its availability. Re-run after a mount or refresh; a missing
+    /// library is kept.
     /// </summary>
-    public static SteamDiscoveryResult Discover(IPaths paths, ISteamFileSystem fileSystem, int maxBytes = KeyValues.DefaultMaxBytes)
+    public static SteamDiscoveryResult Discover(IEnvironment environment, IPaths paths, ISteamFileSystem fileSystem,
+        int maxBytes = KeyValues.DefaultMaxBytes)
     {
+        ArgumentNullException.ThrowIfNull(environment);
         ArgumentNullException.ThrowIfNull(paths);
         ArgumentNullException.ThrowIfNull(fileSystem);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maxBytes);
 
-        var roots = SteamRootResolver.Discover(paths, fileSystem);
+        var roots = SteamRootResolver.Discover(environment, paths, fileSystem);
         var issues = new List<SteamParseIssue>();
         var libraries = new List<SteamDiscoveredLibrary>();
         if (roots.Root is not { } root)
@@ -31,13 +34,28 @@ public static class SteamDiscovery
             return new(roots, null, libraries.AsReadOnly(), issues.AsReadOnly());
         }
 
-        var file = SelectFile(root, fileSystem);
-        if (file is null)
+        var primary = Path.Combine(root, "steamapps", "libraryfolders.vdf");
+        var secondary = Path.Combine(root, "config", "libraryfolders.vdf");
+        string? file = null;
+        SteamLibraries? parsed = null;
+        if (fileSystem.FileExists(primary))
         {
-            issues.Add(new(System.IO.Path.Combine(root, "steamapps", "libraryfolders.vdf"), "libraryfolders", "library-file-missing", null, 0));
+            file = primary;
+            parsed = TryReadAndParse(primary, root, fileSystem, maxBytes, issues);
         }
 
-        var parsed = file is null ? null : ReadAndParse(file, root, fileSystem, maxBytes, issues);
+        if (parsed is null && fileSystem.FileExists(secondary))
+        {
+            file = secondary;
+            parsed = TryReadAndParse(secondary, root, fileSystem, maxBytes, issues);
+        }
+
+        if (file is null)
+        {
+            issues.Add(new(Path.GetFileName(primary), "libraryfolders", "library-file-missing", null, 0));
+        }
+
+        // Unknown root fields are intentionally discarded here; only typed discovery state escapes.
         var seen = new Dictionary<string, string>(StringComparer.Ordinal);
         foreach (var declared in parsed?.Libraries ?? [])
         {
@@ -54,48 +72,48 @@ public static class SteamDiscovery
         return new(roots, file, libraries.AsReadOnly(), issues.AsReadOnly());
     }
 
-    private static string? SelectFile(string root, ISteamFileSystem fileSystem)
+    private static SteamLibraries? TryReadAndParse(string file, string root, ISteamFileSystem fileSystem, int maxBytes,
+        List<SteamParseIssue> issues)
     {
-        var primary = System.IO.Path.Combine(root, "steamapps", "libraryfolders.vdf");
-        if (fileSystem.FileExists(primary))
-        {
-            return primary;
-        }
-
-        var secondary = System.IO.Path.Combine(root, "config", "libraryfolders.vdf");
-        return fileSystem.FileExists(secondary) ? secondary : null;
-    }
-
-    private static SteamLibraries? ReadAndParse(string file, string root, ISteamFileSystem fileSystem, int maxBytes, List<SteamParseIssue> issues)
-    {
+        var name = Path.GetFileName(file);
         try
         {
+            // Read the canonical path, not the declared one: a link that is swapped after the
+            // containment check must not turn the read into an outside-root read.
             var real = fileSystem.GetRealPath(file);
             if (real is null)
             {
-                issues.Add(new(file, "libraryfolders", "library-file-missing", null, 0));
+                issues.Add(new(name, "libraryfolders", "library-file-missing", null, 0));
                 return null;
             }
 
             if (!SteamRootResolver.IsWithin(root, real))
             {
-                issues.Add(new(file, "libraryfolders", "library-file-outside-root", null, 0));
+                issues.Add(new(name, "libraryfolders", "library-file-outside-root", null, 0));
                 return null;
             }
 
-            if (fileSystem.GetFileLength(file) > maxBytes)
+            var read = fileSystem.ReadFile(real, maxBytes);
+            switch (read.Status)
             {
-                issues.Add(new(file, "libraryfolders", "size-limit", null, 0));
-                return null;
+                case SteamFileReadStatus.Missing:
+                    issues.Add(new(name, "libraryfolders", "library-file-missing", null, 0));
+                    return null;
+                case SteamFileReadStatus.NotRegularFile:
+                    issues.Add(new(name, "libraryfolders", "not-a-regular-file", null, 0));
+                    return null;
+                case SteamFileReadStatus.TooLarge:
+                    issues.Add(new(name, "libraryfolders", "size-limit", null, 0));
+                    return null;
             }
 
-            var result = SteamLibraryParser.Parse(fileSystem.ReadAllBytes(file), file, maxBytes);
+            var result = SteamLibraryParser.Parse(read.Bytes!, name, maxBytes);
             issues.AddRange(result.Issues);
             return result.Value;
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
-            issues.Add(new(file, "libraryfolders", "unreadable-library-file", null, 0));
+            issues.Add(new(name, "libraryfolders", "unreadable-library-file", null, 0));
             return null;
         }
     }
@@ -112,7 +130,7 @@ public static class SteamDiscovery
             resolved = real ?? declared.Path;
             if (seen.TryGetValue(resolved, out var first))
             {
-                issues.Add(new(file, declared.Index, "duplicate-library", first, 0));
+                issues.Add(new(Path.GetFileName(file), declared.Index, "duplicate-library", first, 0));
                 return new(declared.Index, declared, resolved, SteamLibraryStatus.DuplicateLibrary);
             }
 
@@ -134,10 +152,10 @@ public static class SteamDiscovery
             return SteamLibraryStatus.NotDirectory;
         }
 
-        var steamApps = System.IO.Path.Combine(real, "steamapps");
+        var steamApps = Path.Combine(real, "steamapps");
         if (!fileSystem.DirectoryExists(steamApps))
         {
-            return SteamLibraryStatus.SteamAppsMissing;
+            return fileSystem.IsMountPoint(real) ? SteamLibraryStatus.StaleMountpoint : SteamLibraryStatus.SteamAppsMissing;
         }
 
         var steamAppsReal = fileSystem.GetRealPath(steamApps);
