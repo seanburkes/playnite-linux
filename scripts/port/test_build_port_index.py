@@ -291,14 +291,113 @@ class PortIndexTests(unittest.TestCase):
         annotated = (json.dumps(document, indent=2) + "\n").encode()
         baseline.write_bytes(annotated)
         self.assertEqual(annotated, port_index.capture_baseline(baseline, results, run, self.root))
-        run["id"] += 1
-        same_count = json.loads(port_index.capture_baseline(baseline, results, run, self.root))
-        self.assertEqual(len(same_count["main_captures"]), 2)
-        self.assertEqual(same_count["main_captures"][1]["run_id"], run["id"])
-        self.assertEqual(same_count["main_captures"][1]["counts"], document["new"])
-        self.assertEqual(same_count["new"], document["new"])
-        self.assertIn("recorded as provenance without changing the number",
-                      same_count["main_captures"][1]["notes"])
+        # A new run of the same commit and counts adds nothing, by commit id.
+        replay = dict(run, id=run["id"] + 1, updated_at="2026-11-17T00:05:00Z")
+        self.assertIsNone(port_index.capture_baseline(baseline, results, replay, self.root))
+        self.assertEqual(annotated, baseline.read_bytes())
+        self.assertEqual(1, len(json.loads(annotated)["main_captures"]))
+
+    def write_product_commit(self, marker):
+        source = self.root / "src"
+        source.mkdir(exist_ok=True)
+        (source / "Product.cs").write_text(f"// {marker}\n")
+        self.git("add", "-A")
+        self.git("commit", "-q", "-m", f"product change {marker}")
+        return self.git("rev-parse", "HEAD")
+
+    def test_same_count_product_merges_use_one_latest_run_and_stay_idempotent(self):
+        baseline, results, run, _ = self.floor_fixture()
+        baseline.write_bytes(port_index.capture_baseline(baseline, results, run, self.root))
+        head = self.write_product_commit("one")
+        first = dict(run, id=run["id"] + 1, head_sha=head,
+                     updated_at="2026-11-17T00:10:00Z")
+        document = json.loads(port_index.capture_baseline(baseline, results, first, self.root))
+        self.assertEqual(1, len(document["main_captures"]))
+        self.assertEqual(head, document["latest_run"]["commit"])
+        self.assertEqual(document["new"], document["latest_run"]["counts"])
+
+        head = self.write_product_commit("two")
+        second = dict(run, id=run["id"] + 2, head_sha=head,
+                      updated_at="2026-11-17T00:11:00Z")
+        document = json.loads(port_index.capture_baseline(baseline, results, second, self.root))
+        # The capture list never grows for same-count merges; the single
+        # latest_run record is updated in place.
+        self.assertEqual(1, len(document["main_captures"]))
+        self.assertEqual(head, document["latest_run"]["commit"])
+        baseline.write_bytes((json.dumps(document, indent=2, ensure_ascii=False) + "\n").encode())
+
+        replay = dict(second, id=second["id"] + 1, updated_at="2026-11-17T00:12:00Z")
+        self.assertIsNone(port_index.capture_baseline(baseline, results, replay, self.root))
+        self.assertEqual(head, json.loads(baseline.read_text())["latest_run"]["commit"])
+
+    def test_generated_only_head_records_no_capture(self):
+        baseline, results, run, _ = self.floor_fixture()
+        baseline.write_bytes(port_index.capture_baseline(baseline, results, run, self.root))
+        self.git("add", "tests")
+        self.git("commit", "-q", "-m", "chore(port-index): regenerate aggregates")
+        bot_head = self.git("rev-parse", "HEAD")
+        self.assertTrue(port_index._generated_only_head(self.root))
+        before = baseline.read_bytes()
+        bot_run = dict(run, id=run["id"] + 1, head_sha=bot_head,
+                       updated_at="2026-11-17T00:20:00Z")
+        self.assertIsNone(port_index.capture_baseline(baseline, results, bot_run, self.root))
+        self.assertEqual(before, baseline.read_bytes())
+        self.assertEqual(1, len(json.loads(before)["main_captures"]))
+
+    def test_generated_only_detection_uses_the_committed_tree_not_the_message(self):
+        baseline, _, _, _ = self.floor_fixture()
+        # A commit that only writes the baseline is generated-only even though
+        # the fixture used a producer commit message.
+        baseline.write_text(json.dumps({"new": {}}))
+        self.git("add", "tests")
+        self.git("commit", "-q", "-m", "chore(port-index): regenerate aggregates")
+        self.assertTrue(port_index._generated_only_head(self.root))
+        # Aggregate and status writes are generated too.
+        for name in ("docs/port/queue.tsv", "docs/port/PORT-STATUS.md",
+                     "docs/port/units/ownership.paths"):
+            path = self.root / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text("generated\n")
+            self.git("add", name)
+            self.git("commit", "-q", "-m", f"chore(port-index): {name}")
+            self.assertTrue(port_index._generated_only_head(self.root), name)
+        # A product change with the same bot message is not generated-only.
+        (self.root / "src").mkdir(exist_ok=True)
+        (self.root / "src" / "Product.cs").write_text("// product\n")
+        self.git("add", "src")
+        self.git("commit", "-q", "-m", "chore(port-index): regenerate aggregates")
+        self.assertFalse(port_index._generated_only_head(self.root))
+
+    def test_capture_history_is_bounded_and_count_changes_still_append(self):
+        baseline, results, run, _ = self.floor_fixture()
+        total = 2
+        head = run["head_sha"]
+        for step in range(port_index.MAIN_CAPTURE_LIMIT + 2):
+            total += 1
+            cases = "".join(f'<testcase name="case-{number}"/>' for number in range(total))
+            (results / "Core" / "Core.xml").write_text(
+                f'<testsuite tests="{total}">{cases}</testsuite>')
+            counts = {"total": total, "executed": total, "passed": total,
+                      "failed": 0, "skipped": 0}
+            (results / "test-counts.json").write_text(json.dumps(
+                {"failures": [], "projects": {
+                    "Core": {"counts": counts, "exit_code": 0, "outcome": "pass"}}}))
+            capture_run = dict(run, id=run["id"] + step + 1, head_sha=head,
+                               updated_at=f"2026-11-17T01:{step:02d}:00Z")
+            baseline.write_bytes(port_index.capture_baseline(
+                baseline, results, capture_run, self.root))
+            # Commit the capture exactly as the bot would (baseline only),
+            # then land a product commit that leaves the baseline untouched so
+            # the next run's previous-main baseline equals its checked-out one.
+            self.git("add", "tests/baseline.json")
+            self.git("commit", "-q", "-m",
+                     "chore(port-index): regenerate aggregates from unit shards")
+            head = self.write_product_commit(f"count-{step}")
+        document = json.loads(baseline.read_text())
+        self.assertEqual(port_index.MAIN_CAPTURE_LIMIT,
+                         len(document["main_captures"]))
+        self.assertEqual(total, document["main_captures"][-1]["counts"]["Core"]["executed"])
+        self.assertEqual(total, document["new"]["Core"]["executed"])
 
     def test_floor_lowering_refuses_before_any_file_is_written(self):
         baseline, results, run, _ = self.floor_fixture(floor=3)

@@ -338,10 +338,22 @@ The committed baseline is a ratchet and is bot-owned. A pull request does not ed
 code, and refuses to write if any recorded floor would fall. The floor is the maximum over
 every structured capture in the document (`new`, each top-level capture with a `counts`
 object, and every `main_captures` entry) and over the previous `main` baseline, not merely the
-current `new` block. It refuses to delete or rewrite a `main_captures` identity, refuses a
+current `new` block. It refuses to delete or rewrite a `main_captures` identity and refuses a
 `removed_projects` entry that is not backed by real capture evidence or whose project still
-exists, and records every new run's provenance even when its counts are unchanged; a repeated
-run id is idempotent. It preserves every earlier capture and its provenance text.
+exists. Those identity and floor checks run even when the capture itself is skipped, so a bot
+commit cannot launder a deleted capture past the writer.
+
+A run adds evidence only when it can change the floor. A merged-main run whose head commit
+changed nothing but the five generated files (`queue.tsv`, `ledger.tsv`, `PORT-STATUS.md`,
+`ownership.paths`, `baseline.json`), decided from the commit's own tree rather than its
+message, is skipped: it measured the same source tree as its parent and cannot raise a floor,
+so recording it would let the bot capture its own commit in a loop. A run whose counts equal
+the latest capture is deduplicated by run id and commit: the writer keeps a single mutable
+`latest_run` provenance field for it and appends nothing, so repeated runs over an unchanged
+tree are a no-op. Only a real count increase appends a `main_captures` entry, and the list is
+bounded to the newest captures; because `new` always holds the latest validated observation,
+which is at or above every historical maximum, dropping the oldest capture objects cannot
+lower a floor.
 A change may add the first non-null `new` object only when
 its counts meet or exceed the observed run and it names every observed project, so a first
 baseline cannot record zero or omit a project and leave a false floor. It may not delete
