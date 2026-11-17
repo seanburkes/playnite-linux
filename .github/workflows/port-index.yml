@@ -113,7 +113,10 @@ jobs:
 
             # Validate before writing. A bad shard tree must fail here, not be
             # committed by the bot and thereby launder a deletion through main.
-            python3 scripts/port/build_port_index.py check --shards-only --against "$BASE_SHA"
+            # Ownership (fragment immutability, the one-time history migration,
+            # and retirement deletes) is enforced here too, not only in the PR gate.
+            python3 scripts/port/build_port_index.py check --shards-only \
+              --against "$BASE_SHA" --forbid-shard-ownership
 
             python3 scripts/port/build_port_index.py build "${capture_args[@]}"
             python3 scripts/port/build_port_index.py check

@@ -62,10 +62,20 @@ LEDGER_SHARD = re.compile(r"^([a-z0-9]+(?:-[a-z0-9]+)*)\.ledger\.tsv$")
 LEDGER_FRAGMENT = re.compile(
     r"^([a-z0-9]+(?:-[a-z0-9]+)*)\.ledger\.d/(?:.+)$"
 )
-FRAGMENT_NAME = re.compile(r"^(\d+)-([a-z0-9][a-z0-9-]*)\.tsv$")
+FRAGMENT_NAME = re.compile(r"^([1-9]\d*)-([a-z0-9][a-z0-9-]*)\.tsv$")
 
 UNITS_DIR = "docs/port/units/"
 UNITS_NON_EVIDENCE = frozenset({"README.md", "removed.tsv", "ledger-corrections.tsv"})
+QUEUE_SUFFIX = ".queue.tsv"
+# Non-prefixed paths can still be owned by a unit when its queue row names them
+# in the oracle/test columns. Only these roots are considered: docs/ and legacy/
+# are shared or frozen, and a token there would over-claim sibling files.
+DECLARED_OWNERSHIP_ROOTS = ("tests/golden/", "tests/fixtures/", "tools/")
+FILE_SUFFIXES = (
+    ".cs", ".csproj", ".json", ".md", ".props", ".txt", ".yaml", ".yml",
+    ".sh", ".py", ".ini", ".toml", ".xml",
+)
+
 
 
 class GuardError(Exception):
@@ -270,12 +280,88 @@ def _one_unit(path: str, matches: list[str]) -> tuple[frozenset[str], str | None
     return frozenset(unique), None
 
 
-def attribute_path(path: str, units: set[str]) -> tuple[frozenset[str], str | None]:
+def _declared_prefix(token: str) -> str | None:
+    """Turn one oracle/test token into a path prefix under a unit-owned root."""
+    token = token.strip().strip("`'\"")
+    if not token:
+        return None
+    lowered = token.lower()
+    for prefix in ("golden:", "test:", "oracle:", "fixture:", "legacy:"):
+        if lowered.startswith(prefix):
+            token = token[len(prefix):].strip()
+            break
+    if not token.startswith(DECLARED_OWNERSHIP_ROOTS):
+        return None
+    token = token.rstrip(".,;")
+    if "{" in token:
+        token = token[: token.index("{")]
+    if "*" in token:
+        token = token[: token.index("*")]
+    token = token.rstrip("/")
+    if not token or token + "/" in DECLARED_OWNERSHIP_ROOTS:
+        return None
+    last = token.rsplit("/", 1)[-1]
+    if "." in last and last.lower().endswith(FILE_SUFFIXES):
+        parent = token.rsplit("/", 1)[0] if "/" in token else ""
+        return parent + "/" if parent else None
+    return token + "/"
+
+
+def declared_path_prefixes(repo: Path, revisions: list[str | None]) -> dict[str, set[str]]:
+    """Collect non-prefixed unit assets declared by each unit's queue row.
+
+    The queue row's ``oracle`` and ``test`` columns are the contract that names
+    unit-owned fixtures and tools whose paths do not carry the unit prefix. A
+    path that two units declare is left to ``_one_unit`` to fail as ambiguous.
+    """
+    declared: dict[str, set[str]] = {}
+    for revision in revisions:
+        if revision is None:
+            continue
+        try:
+            names = _tree_paths(repo, revision, "docs/port/units")
+        except GuardError:
+            continue
+        for name in names:
+            if not name.startswith(UNITS_DIR) or not name.endswith(QUEUE_SUFFIX):
+                continue
+            relative = name[len(UNITS_DIR):]
+            if "/" in relative:
+                continue
+            unit = relative[: -len(QUEUE_SUFFIX)]
+            if not UNIT_ID.fullmatch(unit):
+                continue
+            data = read_at(repo, revision, name)
+            if data is None:
+                continue
+            fields = parse_queue_shard(data, unit, name)
+            for column in ("oracle", "test"):
+                value = fields[QUEUE_COLUMNS.index(column)]
+                for token in re.split(r"[;\s]+", value):
+                    prefix = _declared_prefix(token)
+                    if prefix:
+                        declared.setdefault(unit, set()).add(prefix)
+    # A prefix two units claim is not an exclusive owner. Keep it shared rather
+    # than failing every unrelated PR that touches the tool or golden root.
+    owners: dict[str, set[str]] = {}
+    for unit, prefixes in declared.items():
+        for prefix in prefixes:
+            owners.setdefault(prefix, set()).add(unit)
+    return {
+        unit: {prefix for prefix in prefixes if len(owners[prefix]) == 1}
+        for unit, prefixes in declared.items()
+    }
+
+
+def attribute_path(path: str, units: set[str],
+                   declared: dict[str, set[str]] | None = None
+                   ) -> tuple[frozenset[str], str | None]:
     """Map one changed path to the unit namespace it belongs to.
 
     An unmatched path is shared/process material.  A path that could belong to
     more than one unit, or is an unrecognised entry under ``docs/port/units``,
-    is ambiguous and fails closed.
+    is ambiguous and fails closed. A non-prefixed path named by exactly one
+    unit's queue oracle/test columns is attributed to that unit.
     """
 
     if path.startswith(UNITS_DIR):
@@ -301,26 +387,31 @@ def attribute_path(path: str, units: set[str]) -> tuple[frozenset[str], str | No
             return _one_unit(path, [unit for unit in units if relative.startswith(f"{unit}-")])
         return frozenset(), None
 
+    matches: list[str] = []
     for prefix in ("tests/golden/", "tests/fixtures/"):
         if path.startswith(prefix):
             relative = path[len(prefix):]
-            return _one_unit(path, [unit for unit in units if relative.startswith(f"{unit}-")])
-
+            matches.extend(unit for unit in units if relative.startswith(f"{unit}-"))
     if path.startswith("tools/"):
         relative = path[len("tools/"):]
-        matches = []
         for unit in units:
             if relative == unit:
                 matches.append(unit)
             elif relative.startswith(unit) and relative[len(unit)] in "-._/":
                 matches.append(unit)
+    if not matches and declared:
+        for unit, prefixes in declared.items():
+            if any(path.startswith(prefix) for prefix in prefixes):
+                matches.append(unit)
+    if path.startswith(DECLARED_OWNERSHIP_ROOTS):
         return _one_unit(path, matches)
 
     return frozenset(), None
 
 
 def touched_units(
-    changes: list[Change], units: set[str], expected: str | None
+    changes: list[Change], units: set[str], expected: str | None,
+    declared: dict[str, set[str]] | None = None,
 ) -> dict[str, list[str]]:
     """Group changed paths by unit namespace, rejecting ambiguous paths."""
 
@@ -330,7 +421,7 @@ def touched_units(
     touched: dict[str, list[str]] = {}
     errors: list[str] = []
     for change in changes:
-        attributed, error = attribute_path(change.path, known)
+        attributed, error = attribute_path(change.path, known, declared)
         if error:
             errors.append(error)
             continue

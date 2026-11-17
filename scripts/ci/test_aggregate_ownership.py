@@ -1,6 +1,7 @@
 """Plan-guards aggregate ownership must compare against the fork point."""
 
 from pathlib import Path
+import json
 import os
 import subprocess
 import sys
@@ -13,12 +14,13 @@ PORT_TOOL = ROOT / "scripts" / "port" / "build_port_index.py"
 
 
 def base_port_tool():
-    """The tool version committed on origin/main (the live base tool)."""
-    result = subprocess.run(
-        ["git", "-C", str(ROOT), "show",
-         "origin/main:scripts/port/build_port_index.py"],
-        capture_output=True, text=True, check=False)
-    return result.stdout if result.returncode == 0 else PORT_TOOL.read_text()
+    """The generator the base materialisation represents in these tests.
+
+    After this change is on main, the base commit carries the same rules as the
+    head. Tests that need a pre-change base tool use an explicit stub instead
+    (see ``pre_baseline_repo``).
+    """
+    return PORT_TOOL.read_text()
 
 QUEUE_HEADER = "id\twave\tarea\tunit\tdepends\tstatus\towner\toracle\ttest\tnotes\n"
 
@@ -98,6 +100,10 @@ def stale_pr_repo(root):
     build(root)
     main_tip = commit(root, "main aggregate regeneration")
     git(root, "checkout", "-q", "pr")
+    # A pull-request checkout is the synthetic merge with current main: the
+    # bot-owned status is main's, while queue/ledger may still be the fork's.
+    git(root, "checkout", main_tip, "--", "docs/port/PORT-STATUS.md")
+    commit(root, "carry current main status")
     return base, main_tip
 
 
@@ -117,11 +123,12 @@ def run_tool(repo, base_sha, recorded_base=None):
         cwd=repo, env=env, capture_output=True, text=True, check=False)
 
 
-def run_step(script, repo, base_sha, recorded_base=None):
+def run_step(script, repo, base_sha, recorded_base=None, extra_env=None):
     env = os.environ.copy()
     env["BASE_SHA"] = base_sha
     env["RECORDED_BASE"] = recorded_base or base_sha
     env["RUNNER_TEMP"] = str(repo / "runner")
+    env.update(extra_env or {})
     (repo / "runner").mkdir(exist_ok=True)
     return subprocess.run(["bash", "-e", "-c", script], cwd=repo, env=env,
                           capture_output=True, text=True, check=False)
@@ -166,7 +173,7 @@ def recorded_repo(repo):
     git(repo, "checkout", "-q", "main")
     git(repo, "checkout", "-q", "-b", "pr")
     git(repo, "checkout", recorded, "--", "docs/port/queue.tsv",
-        "docs/port/ledger.tsv")
+        "docs/port/ledger.tsv", "docs/port/PORT-STATUS.md")
     commit(repo, "carry recorded-base aggregates")
     return base, recorded
 
@@ -185,6 +192,71 @@ def merge_main_then_advance(repo, edit_aggregate=False):
         queue.write_text(queue.read_text() + "edited in merge\n")
         commit(repo, "edit aggregate in merge")
     return newer_main
+
+
+BASE_STATUS = (
+    "# Port status\n\n"
+    "<!-- port-status:narrative:start -->\n"
+    "## Hand-written narrative\nold narrative\n"
+    "<!-- port-status:narrative:end -->\n\n"
+    "## Units\n\n| Unit | Wave |\n| --- | --- |\n| p1-001 | W1 |\n"
+)
+MAIN_STATUS = BASE_STATUS.replace("| p1-001 | W1 |", "| p1-001 | W1 |\n| p1-002 | W2 |")
+BASE_BASELINE = {
+    "new": {"Core": {"total": 1779, "executed": 1779, "passed": 1779,
+                     "failed": 0, "skipped": 0}},
+    "main_captures": [{
+        "run_id": 1,
+        "run_url": "https://example.invalid/actions/runs/1",
+        "commit": "a" * 40,
+        "captured_at": "2026-11-16T00:00:00Z",
+        "counts": {"Core": {"total": 1779, "executed": 1779, "passed": 1779,
+                            "failed": 0, "skipped": 0}},
+        "notes": "old capture",
+    }],
+}
+MAIN_BASELINE = json.loads(json.dumps(BASE_BASELINE))
+MAIN_BASELINE["new"]["Core"] = {"total": 1781, "executed": 1781, "passed": 1781,
+                                "failed": 0, "skipped": 0}
+MAIN_BASELINE["main_captures"].append({
+    "run_id": 2,
+    "run_url": "https://example.invalid/actions/runs/2",
+    "commit": "b" * 40,
+    "captured_at": "2026-11-17T00:00:00Z",
+    "counts": {"Core": {"total": 1781, "executed": 1781, "passed": 1781,
+                        "failed": 0, "skipped": 0}},
+    "notes": "current capture",
+})
+
+
+def pre_baseline_repo(root):
+    """A pre-#102 base tool plus old baseline/status, and a newer main."""
+    git(root, "init", "-q")
+    git(root, "config", "user.email", "aggregate-test@example.invalid")
+    git(root, "config", "user.name", "Aggregate Test")
+    (root / "scripts" / "port").mkdir(parents=True)
+    # The old tool predates baseline and status handling, exactly like a
+    # pre-#102 base. If plan-guards copies it over the head tool, this test's
+    # stale restore slips through.
+    (root / "scripts" / "port" / "build_port_index.py").write_text(
+        "import sys\nsys.exit(0)\n")
+    write_shard(root, "p1-001")
+    (root / "docs" / "port" / "queue.tsv").write_text(
+        QUEUE_HEADER
+        + "p1-001\tW2\ttest\tp1-001\t-\ttodo\tfm/test\t-\t-\tshard\n")
+    (root / "docs" / "port" / "ledger.tsv").write_text(
+        "timestamp\tunit\tfrom\tto\tactor\tevidence\n")
+    (root / "docs" / "port" / "PORT-STATUS.md").write_text(BASE_STATUS)
+    (root / "tests").mkdir()
+    (root / "tests" / "baseline.json").write_text(json.dumps(BASE_BASELINE))
+    base = commit(root, "pre-baseline base")
+    git(root, "branch", "-M", "main")
+    use_head_tool(root)
+    (root / "tests" / "baseline.json").write_text(json.dumps(MAIN_BASELINE))
+    (root / "docs" / "port" / "PORT-STATUS.md").write_text(MAIN_STATUS)
+    main_tip = commit(root, "main raises the floor and regenerates status")
+    return base, main_tip
+
 
 
 class AggregateOwnershipTests(unittest.TestCase):
@@ -370,7 +442,44 @@ class AggregateOwnershipTests(unittest.TestCase):
             result = run_step(run_block(PLAN_GUARDS, "Port aggregates are generated on main"),
                               repo, main_tip)
             self.assertEqual(1, result.returncode, result.stdout + result.stderr)
-            self.assertIn("changed: docs/port/queue.tsv", result.stderr)
+            self.assertIn("scripts/port/build_port_index.py differs from", result.stdout)
+            self.assertIn("oracle-change label", result.stdout)
+
+    def test_plan_guards_runs_the_head_tool_not_the_base_copy(self):
+        step = run_block(PLAN_GUARDS, "Port aggregates are generated on main")
+        self.assertNotIn('cp "$base_tool" "$head_tool"', step)
+        self.assertIn("always run the head tool", step.lower())
+
+    def test_stale_pre_baseline_base_cannot_restore_old_baseline_or_status(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary)
+            base, main_tip = pre_baseline_repo(repo)
+            git(repo, "checkout", "-q", "-b", "stale", base)
+            use_head_tool(repo)
+            commit(repo, "stale branch carries the head generator")
+            result = run_step(
+                run_block(PLAN_GUARDS, "Port aggregates are generated on main"),
+                repo, base, main_tip,
+                {"PORT_TOOL_CHANGE_AUTHORIZED": "true"},
+            )
+            self.assertEqual(1, result.returncode, result.stdout + result.stderr)
+            self.assertIn("changed: tests/baseline.json", result.stderr)
+            self.assertIn("historical capture maximum 1781", result.stderr)
+            self.assertIn("changed: docs/port/PORT-STATUS.md", result.stderr)
+            self.assertIn("generated content differs from the recorded base", result.stderr)
+
+    def test_stale_base_pr_carrying_current_baseline_and_status_passes(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary)
+            base, main_tip = pre_baseline_repo(repo)
+            git(repo, "checkout", "-q", "-b", "clean", base)
+            git(repo, "merge", "--no-ff", "-q", "-m", "merge main", "main")
+            result = run_step(
+                run_block(PLAN_GUARDS, "Port aggregates are generated on main"),
+                repo, base, main_tip,
+                {"PORT_TOOL_CHANGE_AUTHORIZED": "true"},
+            )
+            self.assertEqual(0, result.returncode, result.stdout + result.stderr)
 
     def test_stale_live_pr_whole_chain_passes(self):
         with tempfile.TemporaryDirectory() as temporary:

@@ -23,8 +23,10 @@ QUEUE_HEADER = "\t".join(
 LEDGER_HEADER = "\t".join(["timestamp", "unit", "from", "to", "actor", "evidence"])
 
 
-def queue_row(unit: str, status: str, notes: str = "") -> str:
-    return "\t".join([unit, "W4", "data", "Thing", "-", status, "tester", "-", "-", notes])
+def queue_row(unit: str, status: str, notes: str = "", oracle: str = "-",
+              test: str = "-") -> str:
+    return "\t".join([unit, "W4", "data", "Thing", "-", status, "tester",
+                      oracle, test, notes])
 
 
 def ledger_row(unit: str, evidence: str) -> str:
@@ -81,10 +83,11 @@ class Fixture:
         self.git("commit", "--allow-empty", "-q", "-m", message)
         return self.git("rev-parse", "HEAD").strip()
 
-    def set_queue(self, unit: str, status: str, notes: str = "") -> None:
+    def set_queue(self, unit: str, status: str, notes: str = "",
+                  oracle: str = "-", test: str = "-") -> None:
         self.write(
             f"docs/port/units/{unit}.queue.tsv",
-            QUEUE_HEADER + "\n" + queue_row(unit, status, notes) + "\n",
+            QUEUE_HEADER + "\n" + queue_row(unit, status, notes, oracle, test) + "\n",
         )
 
     def add_fragment(
@@ -183,6 +186,36 @@ class OwnershipGuardTests(unittest.TestCase):
         self.assertIn("unit: p4-003", result.stdout)
         self.assertIn("docs/port/units/p4-003.queue.tsv", result.stdout)
 
+    def test_declared_non_prefixed_asset_is_charged_to_its_unit(self) -> None:
+        self.fixture.set_queue(
+            "p4-003", "in-progress",
+            oracle="tests/golden/settings/*.json",
+        )
+        self.fixture.write("tests/golden/settings/config.json", "changed\n")
+        self.fixture.append("docs/port/p4-002-import.md", "foreign\n")
+        head = self.fixture.commit("declared asset plus a foreign unit")
+
+        result = self.fixture.ownership(head, "--branch", "fm/p4-003")
+
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertIn("tests/golden/settings/config.json", result.stdout)
+        self.assertIn("docs/port/p4-002-import.md (unit p4-002)", result.stdout)
+
+    def test_declared_non_prefixed_asset_passes_for_its_owner(self) -> None:
+        self.fixture.set_queue(
+            "p4-003", "in-progress",
+            oracle="tests/golden/settings/*.json",
+        )
+        self.fixture.write("tests/golden/settings/config.json", "changed\n")
+        self.fixture.add_fragment(head=self.fixture.base)
+        head = self.fixture.commit("owns the declared asset")
+
+        result = self.fixture.ownership(head, "--branch", "fm/p4-003")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("unit: p4-003", result.stdout)
+        self.assertIn("tests/golden/settings/config.json", result.stdout)
+
     def test_process_pr_touching_no_unit_evidence_passes(self) -> None:
         self.fixture.append("src/Playnite.Core/Thing.cs", "// process change\n")
         self.fixture.write(".github/workflows/process.yml", "name: process\n")
@@ -265,6 +298,27 @@ class EvidenceGuardTests(unittest.TestCase):
         self.assertIn("docs/port/units/p4-003.queue.tsv", result.stderr)
         self.assertIn("docs/port/units/p4-003.ledger.d/123-<slug>.tsv", result.stderr)
 
+    def test_verbatim_history_migration_passes_without_a_queue_transition(self) -> None:
+        row = ledger_row("p4-003", "recorded history")
+        legacy = "docs/port/units/p4-003.ledger.tsv"
+        self.fixture.write(legacy, LEDGER_HEADER + "\n" + row + "\n")
+        base = self.fixture.commit("legacy row in base")
+        self.fixture.base = base
+        content = (self.fixture.root / legacy).read_bytes()
+        (self.fixture.root / legacy).unlink()
+        history = "docs/port/units/p4-003.ledger.d/0000-history.tsv"
+        self.fixture.write(history, content.decode("utf-8"))
+        head = self.fixture.commit("verbatim history migration")
+
+        result = self.fixture.evidence(head, "--branch", "fm/p4-003")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("migration: docs/port/units/p4-003.ledger.tsv", result.stdout)
+        self.assertIn("0000-history.tsv (verbatim)", result.stdout)
+        process = self.fixture.evidence(head)
+        self.assertEqual(process.returncode, 0, process.stderr)
+        self.assertIn("migration:", process.stdout)
+
     def test_fragment_and_queue_transition_passes(self) -> None:
         implementation = self.fixture.commit("implementation head")
         self.fixture.set_queue("p4-003", "in-progress")
@@ -318,6 +372,17 @@ class EvidenceGuardTests(unittest.TestCase):
 
         self.assertEqual(result.returncode, 1, result.stderr)
         self.assertIn("does not name the pull request", result.stderr)
+
+    def test_fragment_filename_rejects_a_leading_zero(self) -> None:
+        implementation = self.fixture.commit("implementation head")
+        self.fixture.set_queue("p4-003", "in-progress")
+        self.fixture.add_fragment(head=implementation, name="0123-evidence.tsv")
+        head = self.fixture.commit("fragment with a leading zero")
+
+        result = self.fixture.evidence(head, "--branch", "fm/p4-003")
+
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertIn("must be named 123-<short-slug>.tsv", result.stderr)
 
     def test_fragment_filename_must_name_current_pr(self) -> None:
         implementation = self.fixture.commit("implementation head")

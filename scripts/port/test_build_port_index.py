@@ -81,6 +81,20 @@ class PortIndexTests(unittest.TestCase):
         self.commit("rewrite fragment")
         self.assertTrue(port_index.shard_ownership_errors(self.root, merged))
 
+    def test_unit_pr_cannot_edit_a_foreign_shared_record(self):
+        self.write_queue_shard("p1-001", queue_row("p1-001"))
+        self.write_queue_shard("p1-002", queue_row("p1-002"))
+        self.write_corrections(("p1-001", "2026-11-15T00:00:00Z",
+                                "2026-11-15T01:00:00Z", "fm/old", "reason"))
+        base = self.start_git_history()
+        self.write_queue_shard("p1-002", queue_row("p1-002", status="in-progress"))
+        self.write_corrections(("p1-001", "2026-11-15T00:00:00Z",
+                                "2026-11-15T01:00:00Z", "fm/foreign", "rewritten"))
+        self.commit("unit PR edits a foreign correction")
+        errors = port_index.shard_ownership_errors(self.root, base)
+        self.assertIn("may not add, edit, or delete the record for p1-001",
+                      " ".join(errors))
+
     def test_cross_unit_queue_or_fragments_fail_ownership(self):
         self.write_queue_shard("p1-001", queue_row("p1-001"))
         base = self.start_git_history()
@@ -96,6 +110,73 @@ class PortIndexTests(unittest.TestCase):
         self.write_ledger_shard("p1-001", ledger_row("2026-11-15T00:00:00Z", "p1-001"))
         self.commit("legacy append")
         self.assertIn("legacy history is frozen", " ".join(port_index.shard_ownership_errors(self.root, base)))
+
+    def test_verbatim_history_migration_passes_ownership_and_preserves_rows(self):
+        self.write_queue_shard("p1-001", queue_row("p1-001"))
+        row = ledger_row("2026-11-15T00:00:00Z", "p1-001", evidence="history")
+        self.write_ledger_shard("p1-001", row)
+        self.build()
+        before = (self.queue.read_bytes(), self.ledger.read_bytes())
+        base = self.start_git_history()
+        legacy = self.units / "p1-001.ledger.tsv"
+        content = legacy.read_bytes()
+        legacy.unlink()
+        history_dir = self.units / "p1-001.ledger.d"
+        history_dir.mkdir()
+        (history_dir / port_index.HISTORY_NAME).write_bytes(content)
+        self.commit("migrate legacy history verbatim")
+        self.assertEqual(
+            [], port_index.shard_ownership_errors(self.root, base),
+            port_index.shard_ownership_errors(self.root, base),
+        )
+        status, output = self.check_with_git(
+            "--shards-only", "--against", base, "--forbid-aggregate-changes")
+        self.assertEqual(0, status, output)
+        self.build()
+        self.assertEqual(before, (self.queue.read_bytes(), self.ledger.read_bytes()))
+        self.assertIn(row, self.ledger.read_text())
+
+    def test_history_migration_requires_deleting_the_legacy_file(self):
+        self.write_queue_shard("p1-001", queue_row("p1-001"))
+        row = ledger_row("2026-11-15T00:00:00Z", "p1-001")
+        self.write_ledger_shard("p1-001", row)
+        self.build()
+        base = self.start_git_history()
+        history_dir = self.units / "p1-001.ledger.d"
+        history_dir.mkdir()
+        (history_dir / port_index.HISTORY_NAME).write_text(
+            LEDGER_HEADER + "\n" + row + "\n")
+        self.commit("history without deleting legacy")
+        errors = port_index.shard_ownership_errors(self.root, base)
+        self.assertIn("must delete docs/port/units/p1-001.ledger.tsv", " ".join(errors))
+
+    def test_history_migration_must_be_verbatim(self):
+        self.write_queue_shard("p1-001", queue_row("p1-001"))
+        row = ledger_row("2026-11-15T00:00:00Z", "p1-001")
+        self.write_ledger_shard("p1-001", row)
+        self.build()
+        base = self.start_git_history()
+        legacy = self.units / "p1-001.ledger.tsv"
+        legacy.unlink()
+        history_dir = self.units / "p1-001.ledger.d"
+        history_dir.mkdir()
+        (history_dir / port_index.HISTORY_NAME).write_text(
+            LEDGER_HEADER + "\n" + row.replace("evidence", "rewritten") + "\n")
+        self.commit("rewrite during migration")
+        errors = port_index.shard_ownership_errors(self.root, base)
+        self.assertIn("must copy", " ".join(errors))
+        self.assertIn("verbatim", " ".join(errors))
+
+    def test_legacy_delete_without_migration_or_retirement_fails(self):
+        self.write_queue_shard("p1-001", queue_row("p1-001"))
+        self.write_ledger_shard("p1-001", ledger_row("2026-11-15T00:00:00Z", "p1-001"))
+        self.build()
+        base = self.start_git_history()
+        (self.units / "p1-001.ledger.tsv").unlink()
+        self.commit("delete legacy history")
+        errors = port_index.shard_ownership_errors(self.root, base)
+        self.assertIn("legacy history is frozen", " ".join(errors))
+        self.assertIn("removed.tsv", " ".join(errors))
 
     def test_baseline_edit_fails_pr_guard_even_if_counts_rise(self):
         self.write_queue_shard("p1-001", queue_row("p1-001"))
@@ -117,7 +198,10 @@ class PortIndexTests(unittest.TestCase):
     def test_status_narrative_is_editable_but_generated_content_is_not(self):
         self.write_queue_shard("p1-001", queue_row("p1-001"))
         path = self.root / "docs/port/PORT-STATUS.md"
-        path.write_text(f"# Port status\n{port_index.NARRATIVE_START}\nprose\n{port_index.NARRATIVE_END}\n")
+        path.write_text(
+            f"# Port status\n{port_index.NARRATIVE_START}\n"
+            f"{port_index.NARRATIVE_HEADING}\nprose\n{port_index.NARRATIVE_END}\n"
+        )
         self.build()
         base = self.start_git_history()
         path.write_text(path.read_text().replace("prose", "revised prose"))
@@ -125,13 +209,40 @@ class PortIndexTests(unittest.TestCase):
         self.assertEqual([], port_index.changed_aggregates(self.root, base, self.queue, self.ledger))
         path.write_text(path.read_text().replace("## Units", "## Made up"))
         self.commit("generated status edit")
-        self.assertIn("docs/port/PORT-STATUS.md", port_index.changed_aggregates(self.root, base, self.queue, self.ledger))
+        self.assertTrue(any(
+            item.startswith("docs/port/PORT-STATUS.md")
+            for item in port_index.changed_aggregates(self.root, base, self.queue, self.ledger)
+        ))
+
+    def test_status_narrative_edit_cannot_add_a_generated_table(self):
+        self.write_queue_shard("p1-001", queue_row("p1-001"))
+        path = self.root / "docs" / "port" / "PORT-STATUS.md"
+        path.write_text(
+            f"{port_index.NARRATIVE_START}\n{port_index.NARRATIVE_HEADING}\n"
+            f"prose\n{port_index.NARRATIVE_END}\n"
+        )
+        self.build()
+        base = self.start_git_history()
+        path.write_text(
+            path.read_text().replace(
+                "prose",
+                "## Unit summary\n| Status | Units |\n| --- | ---: |\n| done | 99 |",
+            )
+        )
+        self.commit("narrative impersonates a generated table")
+        failures = port_index.changed_aggregates(
+            self.root, base, self.queue, self.ledger)
+        self.assertIn("may not contain the generated marker '## Unit summary'",
+                      " ".join(failures))
 
     def test_status_fragment_regeneration_is_idempotent(self):
         self.write_queue_shard("p1-001", queue_row("p1-001", status="done"))
         self.write_fragment("p1-001", "123-proof.tsv", ledger_row("2026-11-15T00:00:00Z", "p1-001"))
         status = self.root / "docs/port/PORT-STATUS.md"
-        status.write_text(f"{port_index.NARRATIVE_START}\nretained\n{port_index.NARRATIVE_END}\n")
+        status.write_text(
+            f"{port_index.NARRATIVE_START}\n{port_index.NARRATIVE_HEADING}\n"
+            f"retained\n{port_index.NARRATIVE_END}\n"
+        )
         self.build()
         first = [path.read_bytes() for path in (self.queue, self.ledger, status)]
         self.build()
@@ -180,7 +291,13 @@ class PortIndexTests(unittest.TestCase):
         baseline.write_bytes(annotated)
         self.assertEqual(annotated, port_index.capture_baseline(baseline, results, run, self.root))
         run["id"] += 1
-        self.assertEqual(annotated, port_index.capture_baseline(baseline, results, run, self.root))
+        same_count = json.loads(port_index.capture_baseline(baseline, results, run, self.root))
+        self.assertEqual(len(same_count["main_captures"]), 2)
+        self.assertEqual(same_count["main_captures"][1]["run_id"], run["id"])
+        self.assertEqual(same_count["main_captures"][1]["counts"], document["new"])
+        self.assertEqual(same_count["new"], document["new"])
+        self.assertIn("recorded as provenance without changing the number",
+                      same_count["main_captures"][1]["notes"])
 
     def test_floor_lowering_refuses_before_any_file_is_written(self):
         baseline, results, run, _ = self.floor_fixture(floor=3)
@@ -207,6 +324,171 @@ class PortIndexTests(unittest.TestCase):
         baseline.write_text(json.dumps(document))
         with self.assertRaisesRegex(port_index.PortIndexError, "without a retirement record"):
             port_index.capture_baseline(baseline, results, run, self.root)
+
+    def test_capture_refuses_a_floor_below_a_historical_capture(self):
+        baseline, results, run, _ = self.floor_fixture(floor=2)
+        document = json.loads(baseline.read_text())
+        document["main_captures"] = [{
+            "run_id": 9,
+            "run_url": "https://example.invalid/actions/runs/9",
+            "commit": "a" * 40,
+            "captured_at": "2026-11-16T00:00:00Z",
+            "counts": {"Core": {"total": 3, "executed": 3, "passed": 3,
+                                "failed": 0, "skipped": 0}},
+            "notes": "historical capture",
+        }]
+        baseline.write_text(json.dumps(document))
+        with self.assertRaisesRegex(
+                port_index.PortIndexError,
+                "Core: executed floor 2 is below the historical capture maximum 3"):
+            port_index.capture_baseline(baseline, results, run, self.root)
+
+    def test_capture_refuses_a_deleted_previous_main_capture(self):
+        baseline, results, run, _ = self.floor_fixture(floor=2)
+        document = json.loads(baseline.read_text())
+        document["main_captures"] = [{
+            "run_id": 9,
+            "run_url": "https://example.invalid/actions/runs/9",
+            "commit": "a" * 40,
+            "captured_at": "2026-11-16T00:00:00Z",
+            "counts": {"Core": {"total": 2, "executed": 2, "passed": 2,
+                                "failed": 0, "skipped": 0}},
+            "notes": "historical capture",
+        }]
+        baseline.write_text(json.dumps(document))
+        self.git("add", "tests")
+        self.git("commit", "-q", "-m", "record main capture")
+        tampered = json.loads(baseline.read_text())
+        tampered.pop("main_captures")
+        baseline.write_text(json.dumps(tampered))
+        self.git("add", "tests")
+        self.git("commit", "-q", "-m", "delete main capture")
+        run["head_sha"] = self.git("rev-parse", "HEAD")
+        run["id"] = 10
+        with self.assertRaisesRegex(
+                port_index.PortIndexError,
+                "main_captures entry for run 9 was removed or rewritten"):
+            port_index.capture_baseline(baseline, results, run, self.root)
+
+    def test_stale_base_pr_restoring_old_generated_status_fails(self):
+        self.write_queue_shard("p1-001", queue_row("p1-001"))
+        status = self.root / "docs" / "port" / "PORT-STATUS.md"
+        status.write_text(
+            f"{port_index.NARRATIVE_START}\n{port_index.NARRATIVE_HEADING}\n"
+            f"old prose\n{port_index.NARRATIVE_END}\n"
+        )
+        self.build()
+        fork = self.start_git_history()
+        old_status = status.read_bytes()
+        self.write_queue_shard("p1-001", queue_row("p1-001", status="done"))
+        self.build()
+        recorded = self.commit_all("main regenerates status")
+        self.git("checkout", "-q", "-b", "stale", fork)
+        self.assertEqual(old_status, status.read_bytes())
+        failures = port_index.changed_aggregates(
+            self.root, fork, self.queue, self.ledger, recorded)
+        self.assertTrue(
+            any(item.startswith("docs/port/PORT-STATUS.md") for item in failures),
+            failures,
+        )
+        self.assertIn("generated content differs from the recorded base",
+                      " ".join(failures))
+
+    def test_stale_base_pr_restoring_old_baseline_fails(self):
+        self.write_queue_shard("p1-001", queue_row("p1-001"))
+        baseline = self.root / "tests" / "baseline.json"
+        baseline.parent.mkdir()
+        old = {
+            "new": {"Core": {"total": 1779, "executed": 1779, "passed": 1779,
+                             "failed": 0, "skipped": 0}},
+            "main_captures": [{
+                "run_id": 1,
+                "run_url": "https://example.invalid/actions/runs/1",
+                "commit": "a" * 40,
+                "captured_at": "2026-11-16T00:00:00Z",
+                "counts": {"Core": {"total": 1779, "executed": 1779,
+                                    "passed": 1779, "failed": 0, "skipped": 0}},
+                "notes": "old main capture",
+            }],
+        }
+        baseline.write_text(json.dumps(old))
+        self.build()
+        self.start_git_history()
+        fork = self.commit_all("fork with the old baseline")
+        upgraded = json.loads(json.dumps(old))
+        upgraded["new"]["Core"] = {"total": 1781, "executed": 1781,
+                                   "passed": 1781, "failed": 0, "skipped": 0}
+        upgraded["main_captures"].append({
+            "run_id": 2,
+            "run_url": "https://example.invalid/actions/runs/2",
+            "commit": "b" * 40,
+            "captured_at": "2026-11-17T00:00:00Z",
+            "counts": {"Core": {"total": 1781, "executed": 1781,
+                                "passed": 1781, "failed": 0, "skipped": 0}},
+            "notes": "current main capture",
+        })
+        baseline.write_text(json.dumps(upgraded))
+        recorded = self.commit_all("main raises the floor")
+        self.git("checkout", "-q", "-b", "stale", fork)
+        self.assertEqual(json.loads(baseline.read_text()), old)
+        failures = port_index.changed_aggregates(
+            self.root, fork, self.queue, self.ledger, recorded)
+        joined = " ".join(failures)
+        self.assertIn("tests/baseline.json", joined)
+        self.assertIn("historical capture maximum 1781", joined)
+
+    def test_stale_base_pr_deleting_a_main_capture_fails(self):
+        self.write_queue_shard("p1-001", queue_row("p1-001"))
+        baseline = self.root / "tests" / "baseline.json"
+        baseline.parent.mkdir()
+        document = {
+            "new": {"Core": {"total": 1781, "executed": 1781, "passed": 1781,
+                             "failed": 0, "skipped": 0}},
+            "main_captures": [{
+                "run_id": 44005557177,
+                "run_url": "https://example.invalid/actions/runs/44005557177",
+                "commit": "c" * 40,
+                "captured_at": "2026-11-17T02:51:34Z",
+                "counts": {"Core": {"total": 1781, "executed": 1781,
+                                    "passed": 1781, "failed": 0, "skipped": 0}},
+                "notes": "handoff",
+            }],
+        }
+        baseline.write_text(json.dumps(document))
+        self.build()
+        self.start_git_history()
+        fork = self.commit_all("fork with the main capture")
+        tampered = json.loads(json.dumps(document))
+        tampered["main_captures"] = []
+        baseline.write_text(json.dumps(tampered))
+        self.commit_all("delete the main capture")
+        failures = port_index.changed_aggregates(
+            self.root, fork, self.queue, self.ledger, fork)
+        self.assertIn("main_captures entry for run 44005557177 was removed or rewritten",
+                      " ".join(failures))
+
+    def test_narrative_requires_a_hand_written_heading(self):
+        self.write_queue_shard("p1-001", queue_row("p1-001"))
+        status = self.root / "docs" / "port" / "PORT-STATUS.md"
+        status.write_text(
+            f"{port_index.NARRATIVE_START}\nprose without a heading\n"
+            f"{port_index.NARRATIVE_END}\n"
+        )
+        code, output = self.run_build()
+        self.assertEqual(1, code, output)
+        self.assertIn("must begin with '## Hand-written narrative'", output)
+
+    def test_narrative_cannot_impersonate_a_generated_table(self):
+        self.write_queue_shard("p1-001", queue_row("p1-001"))
+        status = self.root / "docs" / "port" / "PORT-STATUS.md"
+        status.write_text(
+            f"{port_index.NARRATIVE_START}\n{port_index.NARRATIVE_HEADING}\n"
+            f"## Unit summary\n| Status | Units |\n| --- | ---: |\n| done | 99 |\n"
+            f"{port_index.NARRATIVE_END}\n"
+        )
+        code, output = self.run_build()
+        self.assertEqual(1, code, output)
+        self.assertIn("may not contain the generated marker '## Unit summary'", output)
 
     def test_local_path_categories_name_the_offending_document_row(self):
         paths = ("$HOME/task-proof", "${HOME}/task-proof", "~/task-proof", r"C:\Users\alice\proof.log",
@@ -479,6 +761,11 @@ class PortIndexTests(unittest.TestCase):
 
     def commit(self, message):
         self.git("add", "docs")
+        self.git("commit", "-q", "-m", message)
+        return self.git("rev-parse", "HEAD")
+
+    def commit_all(self, message):
+        self.git("add", "-A")
         self.git("commit", "-q", "-m", message)
         return self.git("rev-parse", "HEAD")
 
@@ -1785,6 +2072,42 @@ class PortIndexTests(unittest.TestCase):
         self.assertEqual(status, 0, output)
         self.assertIn("shards are valid", output)
 
+    def test_post_merge_ownership_gate_runs_without_the_aggregate_paths(self):
+        self.write_queue_shard("p1-001", queue_row("p1-001"))
+        self.build()
+        base = self.start_git_history()
+        self.write_fragment("p1-001", "123-a.tsv",
+                            ledger_row("2026-11-15T00:00:00Z", "p1-001", evidence="a"))
+        self.write_fragment("p1-001", "124-b.tsv",
+                            ledger_row("2026-11-15T00:00:01Z", "p1-001", evidence="b"))
+        self.commit("two fragments from a merge")
+        # History validation alone accepts both new rows; only the ownership
+        # gate rejects two fragments in one change.
+        status, output = self.check_with_git("--shards-only", "--against", base)
+        self.assertEqual(0, status, output)
+        status, output = self.check_with_git(
+            "--shards-only", "--against", base, "--forbid-shard-ownership")
+        self.assertEqual(1, status, output)
+        self.assertIn("exactly one ledger fragment", output)
+
+    def test_post_merge_ownership_gate_rejects_an_edited_history_migration(self):
+        self.write_queue_shard("p1-001", queue_row("p1-001"))
+        row = ledger_row("2026-11-15T00:00:00Z", "p1-001")
+        self.write_ledger_shard("p1-001", row)
+        self.build()
+        base = self.start_git_history()
+        legacy = self.units / "p1-001.ledger.tsv"
+        legacy.unlink()
+        history_dir = self.units / "p1-001.ledger.d"
+        history_dir.mkdir()
+        (history_dir / port_index.HISTORY_NAME).write_text(
+            LEDGER_HEADER + "\n" + row.replace("evidence", "rewritten") + "\n")
+        self.commit("rewrite during migration")
+        status, output = self.check_with_git(
+            "--shards-only", "--against", base, "--forbid-shard-ownership")
+        self.assertEqual(1, status, output)
+        self.assertIn("must copy", output)
+
     def test_pull_request_that_edits_an_aggregate_fails(self):
         self.write_queue_shard("p1-001", queue_row("p1-001"))
         self.build()
@@ -1896,8 +2219,9 @@ class PortIndexTests(unittest.TestCase):
         self.assertIn("--capture-results", workflow)
         self.assertIn("tests/baseline.json", workflow)
         self.assertIn("docs/port/PORT-STATUS.md", workflow)
+        self.assertIn("--forbid-shard-ownership", workflow)
         self.assertLess(
-            workflow.index("check --shards-only --against \"$BASE_SHA\""),
+            workflow.index("build_port_index.py check --shards-only"),
             workflow.index("build_port_index.py build"),
         )
 
@@ -1924,6 +2248,16 @@ class PortIndexTests(unittest.TestCase):
 
         self.assertEqual(status, 1)
         self.assertIn("--forbid-aggregate-changes requires --against", output)
+
+    def test_bypass_proofs_run_in_ci_and_live_in_protected_paths(self):
+        plan = (port_index.ROOT / ".github" / "workflows" / "plan-guards.yml").read_text()
+        linux = (port_index.ROOT / ".github" / "workflows" / "linux-ci.yml").read_text()
+        # The negative proofs are under scripts/, which plan-guards lists as
+        # protected: an unlabelled PR cannot weaken them, and an oracle-change PR
+        # is the owner-authorised route. Both suites run in required workflows.
+        self.assertIn("scripts/ci scripts/port", plan)
+        self.assertIn("unittest discover -s scripts/port", plan)
+        self.assertIn("unittest discover -s scripts/ci", linux)
 
 
 if __name__ == "__main__":

@@ -56,6 +56,32 @@ unit without a queue shard, a fragment directory without a queue shard, and unex
 entries in this directory. To inspect what main will generate, run `build` in a scratch
 checkout and discard the generated files; never include them in the PR.
 
+## Ownership enforcement
+
+The one-unit ownership check runs wherever the shard tree is compared with a base. On a pull
+request, `plan-guards` passes `--forbid-aggregate-changes` against the fork point, which
+enforces both generated-file ownership and shard ownership with the head commit's rules. The
+post-merge `port-index` writer passes `--forbid-shard-ownership` against the previous `main`
+commit before it writes, so a merge cannot launder an edited legacy ledger, a second fragment,
+or a non-verbatim migration through the bot. `--forbid-shard-ownership` is the narrow form for
+a tree-only check; `--forbid-aggregate-changes` implies it.
+
+`docs/port/units/<unit>.queue.tsv` is a single file per unit. Two open PRs for the same unit
+both change it, so the second must rebase and re-run CI; the guard cannot predict a concurrent
+branch, and git's normal merge conflict is the lock. Non-prefixed unit assets are attributed
+through the queue row's `oracle` and `test` columns (for example
+`tests/golden/settings/*.json`), so a PR that touches an owned non-prefixed asset and another
+unit's evidence fails instead of treating the asset as shared. The shared
+`README.md`/`removed.tsv`/`ledger-corrections.tsv` files remain process material; validate them
+with `check --against` so retirement and correction records are checked.
+
+`docs/port/PORT-STATUS.md` is regenerated from the queue and ledger shards. Its only
+hand-written part is the prose between the `port-status:narrative:start` and
+`port-status:narrative:end` markers; every table outside those markers is generated. The
+narrative must begin with `## Hand-written narrative` and may not contain the generated banner
+or a generated heading (`# Port status`, `## Unit summary`, `## Ledger`, `## Units`), so a
+hand-written block cannot impersonate a generated table.
+
 ## Ledger history is append-only in content
 
 Ledger history is append-only in content. The legacy `<unit>.ledger.tsv` shard is frozen: it
@@ -66,7 +92,14 @@ and `+00:00`) are compared as instants.
 
 A unit may migrate its legacy shard once: move the rows verbatim into
 `<unit>.ledger.d/0000-history.tsv` and delete the legacy file in the same change. History rows
-keep the aggregate's historical ordering; fragments always follow them.
+keep the aggregate's historical ordering; fragments always follow them. The ownership gate
+accepts that migration only as this exact paired move: the history bytes must equal the deleted
+legacy bytes, the history file may only be added, and deleting the legacy file without either
+the migration or a recorded retirement is rejected. A retirement that deletes the legacy file
+must also delete the queue shard and add the unit to `removed.tsv` in the same change. A pure
+verbatim migration is a process change: the unit-evidence guard accepts the paired delete/add
+without a queue transition or a new PR fragment, but it still fails if the bytes differ or if
+the change also touches the queue shard.
 
 `check --against <ref>` enforces this against a base commit that must be a strict ancestor of
 HEAD, per unit, as a multiset: every base ledger row must still exist at head with identical
@@ -88,10 +121,6 @@ unit. That ordering is derived output: `build` produces it, and the post-merge
 `port-index` workflow on `main` is the only writer that commits it. Contributors never
 hand-order or hand-edit an aggregate. The parent job's regeneration normalises order after
 every merge.
-
-`docs/port/PORT-STATUS.md` is regenerated from the queue and ledger shards. Its only
-hand-written part is the prose between the `port-status:narrative:start` and
-`port-status:narrative:end` markers; every table outside those markers is generated.
 
 ### One-off timestamp corrections
 

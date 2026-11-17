@@ -175,6 +175,8 @@ jobs:
           BASE_SHA: ${{ steps.policy_base.outputs.sha }}
           RECORDED_BASE: ${{ steps.policy_base.outputs.recorded }}
           PORT_INDEX_PR: ${{ github.event.pull_request.number }}
+          PORT_TOOL_CHANGE_AUTHORIZED: ${{ github.event_name == 'merge_group' || contains(github.event.pull_request.labels.*.name, 'oracle-change') }}
+          PORT_BASELINE_NOTE_EDITS: ${{ github.event_name == 'merge_group' || contains(github.event.pull_request.labels.*.name, 'oracle-change') }}
         run: |
           set -euo pipefail
           # Compare against the fork point, not a stale recorded base. Main's
@@ -196,16 +198,23 @@ jobs:
           # port-index workflow regenerates and commits them on main. A pull
           # request owns only its unit shards, so even a correctly regenerated
           # aggregate change fails here.
+          #
+          # Always run the HEAD tool with the HEAD rules. Copying the base
+          # commit's tool over it would let a stale-base PR be judged by a tool
+          # that predates the baseline and status rules. A head tool change is
+          # allowed only when the oracle-change gate authorised the change.
           head_tool="$PWD/scripts/port/build_port_index.py"
-          if git cat-file -e "$BASE_SHA:scripts/port/build_port_index.py" 2>/dev/null; then
-            base_tool="$RUNNER_TEMP/base-port/build_port_index.py"
-            mkdir -p "$(dirname "$base_tool")"
-            git show "$BASE_SHA:scripts/port/build_port_index.py" > "$base_tool"
-            cp "$head_tool" "$RUNNER_TEMP/build_port_index.head.py"
-            cp "$base_tool" "$head_tool"
-            trap 'cp "$RUNNER_TEMP/build_port_index.head.py" "$head_tool"' EXIT
-          else
-            echo "::warning::BOOTSTRAP: base commit has no scripts/port/build_port_index.py; using the head tool"
+          if [ ! -f "$head_tool" ]; then
+            echo "::error::$head_tool is missing at head; the aggregate gate cannot run head rules"
+            exit 1
+          fi
+          if git cat-file -e "$BASE_SHA:scripts/port/build_port_index.py" 2>/dev/null && \
+             ! git diff --quiet "$BASE_SHA" -- scripts/port/build_port_index.py; then
+            if [ "${PORT_TOOL_CHANGE_AUTHORIZED:-false}" != "true" ]; then
+              echo "::error::scripts/port/build_port_index.py differs from $BASE_SHA; this gate runs the head rules and a generator change requires the oracle-change label"
+              exit 1
+            fi
+            echo "::notice::generator differs from the base commit; running the authorised head tool"
           fi
           python3 "$head_tool" check --shards-only \
             --against "$merge_base" --forbid-aggregate-changes
@@ -236,16 +245,9 @@ jobs:
             fi
           fi
           head_tool="$PWD/scripts/port/build_port_index.py"
-          if [ -n "$ref" ] && \
-             git cat-file -e "$BASE_SHA:scripts/port/build_port_index.py" 2>/dev/null; then
-            base_tool="$RUNNER_TEMP/base-port/build_port_index.py"
-            mkdir -p "$(dirname "$base_tool")"
-            git show "$BASE_SHA:scripts/port/build_port_index.py" > "$base_tool"
-            cp "$head_tool" "$RUNNER_TEMP/build_port_index.head.py"
-            cp "$base_tool" "$head_tool"
-            trap 'cp "$RUNNER_TEMP/build_port_index.head.py" "$head_tool"' EXIT
-          else
-            echo "::warning::BOOTSTRAP: base commit has no scripts/port/build_port_index.py; using the head tool"
+          if [ ! -f "$head_tool" ]; then
+            echo "::error::$head_tool is missing at head; the shard gate cannot run head rules"
+            exit 1
           fi
           python3 "$head_tool" check "${args[@]}"
 

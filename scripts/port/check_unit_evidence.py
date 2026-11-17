@@ -35,6 +35,7 @@ from unit_guard_common import (  # noqa: E402
     REAL_QUEUE_STATES,
     GuardError,
     changed_paths,
+    declared_path_prefixes,
     derive_branch_unit,
     known_units,
     merge_base,
@@ -73,6 +74,34 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
 
 def _queue_path(unit: str) -> str:
     return f"docs/port/units/{unit}{QUEUE_SUFFIX}"
+
+
+def _pure_history_migration(repo: Path, base: str, head: str, unit: str,
+                            changes) -> bool:
+    legacy = f"docs/port/units/{unit}.ledger.tsv"
+    history = f"docs/port/units/{unit}{FRAGMENT_DIR}0000-history.tsv"
+    statuses = {change.path: change.status for change in changes}
+    if statuses.get(legacy) != "D" or statuses.get(history) != "A":
+        return False
+    base_bytes = read_at(repo, base, legacy)
+    head_bytes = read_at(repo, head, history)
+    return base_bytes is not None and head_bytes is not None and base_bytes == head_bytes
+
+
+def _migration_unit(changes) -> str | None:
+    """Return the single unit with a paired legacy delete and history add."""
+    deletes = set()
+    adds = set()
+    for change in changes:
+        if change.status == "D" and change.path.endswith(".ledger.tsv"):
+            deletes.add(change.path[: -len(".ledger.tsv")].rsplit("/", 1)[-1])
+        elif (change.status == "A"
+              and change.path.endswith("/0000-history.tsv")
+              and ".ledger.d/" in change.path):
+            directory = change.path.split(".ledger.d/", 1)[0]
+            adds.add(directory.rsplit("/", 1)[-1])
+    common = deletes & adds
+    return common.pop() if len(common) == 1 else None
 
 
 def _check_queue(
@@ -186,6 +215,7 @@ def main(argv: list[str]) -> int:
         )
         changes = changed_paths(repo, merge, head)
         units = known_units(repo, [base, head, merge])
+        declared = declared_path_prefixes(repo, [base, head, merge])
 
         expected = args.unit
         if expected is not None and not expected:
@@ -198,7 +228,9 @@ def main(argv: list[str]) -> int:
             )
         expected = expected or branch_unit
 
-        touched = touched_units(changes, units, expected)
+        touched = touched_units(changes, units, expected, declared)
+        if expected is None:
+            expected = _migration_unit(changes)
         if expected is None:
             queue_owners = [
                 unit
@@ -239,6 +271,14 @@ def main(argv: list[str]) -> int:
             raise GuardError(
                 f"unit PR {expected} touches foreign unit evidence:\n{details}"
             )
+
+        if _pure_history_migration(repo, base, head, expected, changes):
+            legacy = f"docs/port/units/{expected}.ledger.tsv"
+            history = f"docs/port/units/{expected}{FRAGMENT_DIR}0000-history.tsv"
+            if set(touched.get(expected, [])) <= {legacy, history}:
+                print(f"unit: {expected}")
+                print(f"migration: {legacy} -> {history} (verbatim)")
+                return 0
 
         errors: list[str] = []
         queue_detail = None

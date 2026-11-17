@@ -28,6 +28,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from unit_guard_common import (  # noqa: E402
     GuardError,
     changed_paths,
+    declared_path_prefixes,
     derive_branch_unit,
     format_paths,
     known_units,
@@ -62,6 +63,7 @@ def main(argv: list[str]) -> int:
         if args.diff_file:
             changes = paths_from_diff_file(Path(args.diff_file))
             units = known_units(repo, [head, None])
+            declared = declared_path_prefixes(repo, [head])
         else:
             if not args.base:
                 raise GuardError("--base is required unless --diff-file is used")
@@ -72,6 +74,7 @@ def main(argv: list[str]) -> int:
                 merge = merge_base(repo, base, head)
             changes = changed_paths(repo, merge, head)
             units = known_units(repo, [base, head, merge])
+            declared = declared_path_prefixes(repo, [base, head, merge])
 
         expected = args.unit
         if expected is not None and not expected:
@@ -84,7 +87,7 @@ def main(argv: list[str]) -> int:
             )
         expected = expected or branch_unit
 
-        touched = touched_units(changes, units, expected)
+        touched = touched_units(changes, units, expected, declared)
         if not touched:
             print("unit: (none)")
             print("process PR: no unit evidence namespace is touched")
