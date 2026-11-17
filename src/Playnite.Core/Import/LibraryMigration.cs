@@ -265,6 +265,7 @@ public static class LibraryMigration
             }
         }
         checkpoint?.Invoke("Committed");
+        checkpoint?.Invoke("BeforeReportMove");
         File.Move(stagedReport, reportPath, overwrite: true);
         return report;
     }

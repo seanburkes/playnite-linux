@@ -288,6 +288,52 @@ public sealed partial class LibraryMigrationTests
     }
 
     [Fact]
+    [Trait("Invariant", "LibraryImport.SourceUnchanged")]
+    [Trait("Invariant", "LibraryImport.CrashSafe")]
+    [Trait("Invariant", "LibraryImport.DurableReceipt")]
+    [Trait("Invariant", "LibraryImport.RepeatRunSafe")]
+    [Trait("Invariant", "LibraryImport.ReaderNeverPartial")]
+    [Trait("Invariant", "LibraryImport.AtomicLive")]
+    public async Task SIGKILL_at_report_move_after_Committed_leaves_no_success_report_and_repeat_refuses_from_receipt_alone()
+    {
+        var database = await SeedLiveAsync();
+        var source = Snapshot(Fixture());
+        // A stale previous success audit must not survive this replacement either.
+        await File.WriteAllTextAsync(Destination + ".import-report.json", "previous success report");
+        using var process = StartCli("--replace-existing", "--pause-at=BeforeReportMove");
+        var output = process.StandardOutput.ReadToEndAsync();
+        try
+        {
+            Assert.Equal("checkpoint:BeforeReportMove", await process.StandardError.ReadLineAsync().WaitAsync(TimeSpan.FromSeconds(30)));
+            Assert.False(File.Exists(Destination + ".import-report.json"));
+            Assert.True(File.Exists(Path.Combine(Destination + ".import", "report.json")));
+            Assert.Equal(new[] { "220", "570", "400" }, (await database.ReadAsync(s => s.Games.GetAllAsync())).Select(g => g.Value.GameId));
+        }
+        finally
+        {
+            if (!process.HasExited) process.Kill(entireProcessTree: true);
+            await process.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(10));
+        }
+        await output;
+        Assert.NotEqual(0, process.ExitCode);
+        Assert.False(File.Exists(Destination + ".import-report.json"));
+        var reportJson = await File.ReadAllTextAsync(Path.Combine(Destination + ".import", "report.json"));
+        using (var connection = new SqliteConnection($"Data Source={Destination};Pooling=False"))
+        {
+            await connection.OpenAsync();
+            Assert.Equal(reportJson, await connection.ExecuteScalarAsync<string>("SELECT ReportJson FROM playnite_migration_receipt WHERE Id=1;"));
+        }
+        Directory.Delete(Destination + ".import", recursive: true);
+        var published = await File.ReadAllBytesAsync(Destination);
+        var envelope = await ReadEnvelope();
+        var error = await Assert.ThrowsAsync<IOException>(() => ReplaceAsync(envelope));
+        Assert.Contains("durable migration receipt", error.Message);
+        Assert.Equal(published, await File.ReadAllBytesAsync(Destination));
+        Assert.False(File.Exists(Destination + ".import-report.json"));
+        Assert.Equal(source, Snapshot(Fixture()));
+    }
+
+    [Fact]
     [Trait("Invariant", "LibraryImport.ReaderNeverPartial")]
     [Trait("Invariant", "LibraryImport.AtomicLive")]
     public async Task Reader_started_after_unconfirmed_rename_sees_only_old_after_rollback()
