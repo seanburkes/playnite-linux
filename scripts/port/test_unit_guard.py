@@ -21,6 +21,7 @@ QUEUE_HEADER = "\t".join(
     ["id", "wave", "area", "unit", "depends", "status", "owner", "oracle", "test", "notes"]
 )
 LEDGER_HEADER = "\t".join(["timestamp", "unit", "from", "to", "actor", "evidence"])
+OWNERSHIP_HEADER = "path\tunit\tcommit\tpull"
 
 
 def queue_row(unit: str, status: str, notes: str = "") -> str:
@@ -31,8 +32,16 @@ def ledger_row(unit: str, evidence: str) -> str:
     return "\t".join(["2026-11-16T00:00:00Z", unit, "in-progress", "done", "tester", evidence])
 
 
+def claim(path: str, unit: str, pull: int = 96) -> tuple[str, str, str, str]:
+    return (path, unit, "a" * 40, f"pull/{pull}")
+
+
 class Fixture:
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        ownership: list[tuple[str, str, str, str]] | None = None,
+        files: dict[str, str] | None = None,
+    ) -> None:
         self._temporary = tempfile.TemporaryDirectory(prefix="port-unit-guard-")
         self.root = Path(self._temporary.name)
         self.git("init", "-q")
@@ -49,6 +58,9 @@ class Fixture:
         self.write("tests/fixtures/p4-002-source/README.md", "fixture\n")
         self.write("tools/p4-002-tool/README.md", "tool\n")
         self.write("src/Playnite.Core/Thing.cs", "// product\n")
+        for path, content in (files or {}).items():
+            self.write(path, content)
+        self.set_ownership(ownership or [])
         self.base = self.commit("base")
 
     def cleanup(self) -> None:
@@ -75,6 +87,10 @@ class Fixture:
     def append(self, relative: str, content: str) -> None:
         with (self.root / relative).open("a", encoding="utf-8") as handle:
             handle.write(content)
+
+    def set_ownership(self, rows: list[tuple[str, str, str, str]]) -> None:
+        lines = [OWNERSHIP_HEADER] + ["\t".join(row) for row in rows]
+        self.write("docs/port/units/ownership.paths", "\n".join(lines) + "\n")
 
     def commit(self, message: str) -> str:
         self.git("add", "-A")
@@ -238,6 +254,306 @@ class OwnershipGuardTests(unittest.TestCase):
         self.assertIn("docs/port/units/p4-003.queue.tsv", result.stdout)
         self.assertIn("at most one unit evidence namespace", result.stderr)
 
+    def test_cross_unit_product_file_fails_with_map_evidence(self) -> None:
+        path = "src/Playnite.Core/Import/AssetCopy.cs"
+        self.fixture = Fixture(
+            ownership=[claim(path, "p4-005")], files={path: "// asset copy\n"}
+        )
+        self.addCleanup(self.fixture.cleanup)
+        self.fixture.append(path, "// foreign product bytes\n")
+        head = self.fixture.commit("p4-003 carries p4-005 product")
+
+        result = self.fixture.ownership(head, "--branch", "fm/p4-003")
+
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertIn(f"{path} (unit p4-005; pull/96 at commit {'a' * 40})", result.stdout)
+        self.assertIn("foreign unit ownership", result.stderr)
+        self.assertIn("owned by p4-005", result.stderr)
+
+    def test_cross_unit_shared_test_fails(self) -> None:
+        path = "tests/Playnite.Core.Tests/Import/AssetCopyTests.cs"
+        self.fixture = Fixture(
+            ownership=[claim(path, "p4-005")], files={path: "// asset tests\n"}
+        )
+        self.addCleanup(self.fixture.cleanup)
+        self.fixture.append(path, "// foreign test bytes\n")
+        head = self.fixture.commit("p4-003 carries p4-005 tests")
+
+        result = self.fixture.ownership(head, "--branch", "fm/p4-003")
+
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertIn(f"{path} (unit p4-005", result.stdout)
+        self.assertIn("foreign unit ownership", result.stderr)
+
+    def test_cross_unit_fixture_and_tool_fail(self) -> None:
+        fixture = "tests/fixtures/v10-assets/assets.json"
+        tool = "tools/AssetCopy.CrashHost/Program.cs"
+        self.fixture = Fixture(
+            ownership=[claim(fixture, "p4-005"), claim(tool, "p4-005")],
+            files={fixture: "{}\n", tool: "// crash host\n"},
+        )
+        self.addCleanup(self.fixture.cleanup)
+        self.fixture.append(fixture, "\n")
+        self.fixture.append(tool, "// foreign\n")
+        head = self.fixture.commit("p4-003 carries p4-005 fixture and tool")
+
+        result = self.fixture.ownership(head, "--branch", "fm/p4-003")
+
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertIn(f"{fixture} (unit p4-005", result.stdout)
+        self.assertIn(f"{tool} (unit p4-005", result.stdout)
+        self.assertIn("foreign unit ownership", result.stderr)
+
+    def test_foreign_owned_path_without_a_declaration_fails(self) -> None:
+        path = "src/Playnite.Core/Import/AssetCopy.cs"
+        self.fixture = Fixture(
+            ownership=[claim(path, "p4-005")], files={path: "// asset copy\n"}
+        )
+        self.addCleanup(self.fixture.cleanup)
+        self.fixture.append(path, "// undeclared change\n")
+        head = self.fixture.commit("no unit declaration")
+
+        result = self.fixture.ownership(head, "--branch", "fm/port-u2")
+
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertIn("declares no unit", result.stderr)
+        self.assertIn(f"{path} (unit p4-005", result.stderr)
+
+    def test_marker_declaration_is_explicit(self) -> None:
+        path = "src/Playnite.Core/Import/Own.cs"
+        self.fixture = Fixture(
+            ownership=[claim(path, "p4-003", pull=123)], files={path: "// own\n"}
+        )
+        self.addCleanup(self.fixture.cleanup)
+        self.fixture.append(path, "// work\n")
+        implementation = self.fixture.commit("implementation")
+        self.fixture.set_queue("p4-003", "in-progress")
+        self.fixture.add_fragment(head=implementation)
+        head = self.fixture.commit("Port-Unit: p4-003\n\nevidence")
+
+        ownership = self.fixture.ownership(head, "--branch", "fm/port-u2")
+        evidence = self.fixture.evidence(head, "--branch", "fm/port-u2")
+
+        self.assertEqual(ownership.returncode, 0, ownership.stderr)
+        self.assertIn("unit: p4-003", ownership.stdout)
+        self.assertEqual(evidence.returncode, 0, evidence.stderr)
+        self.assertIn("unit: p4-003", evidence.stdout)
+
+    def test_conflicting_marker_and_branch_fail(self) -> None:
+        path = "src/Playnite.Core/Import/Own.cs"
+        self.fixture = Fixture(
+            ownership=[claim(path, "p4-003", pull=123)], files={path: "// own\n"}
+        )
+        self.addCleanup(self.fixture.cleanup)
+        self.fixture.append(path, "// work\n")
+        head = self.fixture.commit("Port-Unit: p4-003")
+
+        result = self.fixture.ownership(head, "--branch", "fm/p4-002")
+
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertIn("conflicting units", result.stderr)
+
+    def test_bot_owned_map_cannot_be_edited_by_a_pr(self) -> None:
+        self.fixture.set_ownership([claim("src/Playnite.Core/Thing.cs", "p4-003")])
+        head = self.fixture.commit("edit ownership map")
+
+        result = self.fixture.ownership(head, "--branch", "fm/p4-003")
+
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertIn("bot-owned", result.stderr)
+        self.assertIn("ownership.paths", result.stderr)
+
+    def test_ambiguous_map_rows_fail_closed(self) -> None:
+        path = "src/Playnite.Core/Thing.cs"
+        self.fixture = Fixture(
+            ownership=[claim(path, "p4-002"), claim(path, "p4-003")]
+        )
+        self.addCleanup(self.fixture.cleanup)
+        self.fixture.append(path, "// change\n")
+        head = self.fixture.commit("ambiguous map")
+
+        result = self.fixture.ownership(head, "--branch", "fm/p4-003")
+
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertIn("ambiguous ownership", result.stderr)
+        self.assertIn(path, result.stderr)
+
+    def test_path_traversal_diff_entry_fails_closed(self) -> None:
+        diff = self.fixture.root.parent / "traversal.diff"
+        diff.write_text("../escape.cs\n", encoding="utf-8")
+        head = self.fixture.commit("no changes")
+
+        result = self.fixture.run(
+            "check_unit_ownership.py",
+            "--head",
+            head,
+            "--diff-file",
+            str(diff),
+            "--unit",
+            "p4-003",
+        )
+
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertIn("path traversal", result.stderr.lower())
+        self.assertIn("../escape.cs", result.stderr)
+
+    def test_diff_file_rename_charges_both_paths(self) -> None:
+        path = "src/Playnite.Core/Import/AssetCopy.cs"
+        self.fixture = Fixture(
+            ownership=[claim(path, "p4-005")], files={path: "// asset copy\n"}
+        )
+        self.addCleanup(self.fixture.cleanup)
+        diff = self.fixture.root.parent / "rename.diff"
+        diff.write_text(
+            f"R100\t{path}\tsrc/Playnite.Core/Import/Moved.cs\n", encoding="utf-8"
+        )
+        head = self.fixture.commit("no changes")
+
+        result = self.fixture.run(
+            "check_unit_ownership.py",
+            "--base",
+            self.fixture.base,
+            "--head",
+            head,
+            "--diff-file",
+            str(diff),
+            "--unit",
+            "p4-003",
+        )
+
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertIn(f"{path} (unit p4-005", result.stdout)
+        self.assertIn("foreign unit ownership", result.stderr)
+
+    def test_escaping_symlink_fails_closed(self) -> None:
+        path = self.fixture.root / "docs/port/p4-003-publication.md"
+        path.unlink()
+        path.symlink_to("/etc/passwd")
+        head = self.fixture.commit("absolute symlink")
+
+        result = self.fixture.ownership(head, "--branch", "fm/p4-003")
+
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertIn("symlink", result.stderr)
+        self.assertIn("outside the repository", result.stderr)
+
+    def test_symlink_chain_to_a_path_outside_the_repository_fails(self) -> None:
+        self.fixture.write("tests/fixtures/v10-assets/assets.json", "{}\n")
+        (self.fixture.root / "tests/fixtures/v10-assets/escape").symlink_to("/etc/passwd")
+        self.fixture.base = self.fixture.commit("base with escaping target")
+        (self.fixture.root / "tests/fixtures/p4-003-link.json").symlink_to(
+            "v10-assets/escape"
+        )
+        head = self.fixture.commit("chained symlink")
+
+        result = self.fixture.ownership(head, "--branch", "fm/p4-003")
+
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertIn("symlink", result.stderr)
+        self.assertIn("outside the repository", result.stderr)
+
+    def test_symlink_to_a_foreign_owned_path_fails_closed(self) -> None:
+        target = "tests/fixtures/v10-assets/assets.json"
+        link = "tests/fixtures/p4-003-link.json"
+        self.fixture = Fixture(
+            ownership=[claim(target, "p4-005")], files={target: "{}\n"}
+        )
+        self.addCleanup(self.fixture.cleanup)
+        (self.fixture.root / link).symlink_to("v10-assets/assets.json")
+        head = self.fixture.commit("symlink to foreign bytes")
+
+        result = self.fixture.ownership(head, "--branch", "fm/p4-003")
+
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertIn("symlink", result.stderr)
+        self.assertIn("owned by unit p4-005", result.stderr)
+
+    def test_rename_and_deletion_of_a_foreign_path_fail(self) -> None:
+        path = "src/Playnite.Core/Import/AssetCopy.cs"
+        self.fixture = Fixture(
+            ownership=[claim(path, "p4-005")], files={path: "// asset copy\n"}
+        )
+        self.addCleanup(self.fixture.cleanup)
+        (self.fixture.root / path).rename(self.fixture.root / "src/Playnite.Core/Import/Moved.cs")
+        head = self.fixture.commit("rename foreign path")
+
+        renamed = self.fixture.ownership(head, "--branch", "fm/p4-003")
+        self.assertEqual(renamed.returncode, 1, renamed.stderr)
+        self.assertIn(f"{path} (unit p4-005", renamed.stdout)
+
+        (self.fixture.root / "src/Playnite.Core/Import/Moved.cs").unlink()
+        head = self.fixture.commit("delete moved path")
+        deleted = self.fixture.ownership(head, "--branch", "fm/p4-003")
+        self.assertEqual(deleted.returncode, 1, deleted.stderr)
+        self.assertIn("foreign unit ownership", deleted.stderr)
+
+    def test_reconstructed_96_97_shape_fails_on_real_names(self) -> None:
+        paths = [
+            "src/Playnite.Core/Import/AssetCopy.cs",
+            "tests/Playnite.Core.Tests/Import/AssetCopyTests.cs",
+            "tests/fixtures/v10-assets/assets.json",
+            "tools/AssetCopy.CrashHost/Program.cs",
+        ]
+        self.fixture = Fixture(
+            ownership=[claim(path, "p4-005") for path in paths],
+            files={path: "owned by p4-005\n" for path in paths},
+        )
+        self.addCleanup(self.fixture.cleanup)
+        self.fixture.append("docs/port/p4-003-publication.md", "own contract\n")
+        self.fixture.set_queue("p4-003", "in-progress")
+        self.fixture.add_fragment(head=self.fixture.base)
+        for path in paths:
+            self.fixture.append(path, "foreign bytes\n")
+        head = self.fixture.commit("p4-003 PR carrying p4-005 product and tests")
+
+        ownership = self.fixture.ownership(head, "--branch", "fm/p4-003")
+        evidence = self.fixture.evidence(head, "--branch", "fm/p4-003")
+
+        self.assertEqual(ownership.returncode, 1, ownership.stderr)
+        for path in paths:
+            self.assertIn(f"{path} (unit p4-005", ownership.stdout)
+        self.assertIn("foreign unit ownership", ownership.stderr)
+        self.assertIn("owned by p4-005", ownership.stderr)
+        self.assertEqual(evidence.returncode, 1, evidence.stderr)
+        self.assertIn("unit-owned paths owned by another unit", evidence.stderr)
+
+    def test_legitimate_single_unit_still_passes(self) -> None:
+        path = "src/Playnite.Core/Import/Own.cs"
+        self.fixture = Fixture(
+            ownership=[claim(path, "p4-003", pull=123)], files={path: "// own\n"}
+        )
+        self.addCleanup(self.fixture.cleanup)
+        self.fixture.append(path, "// implementation\n")
+        implementation = self.fixture.commit("implementation head")
+        self.fixture.set_queue("p4-003", "in-progress")
+        self.fixture.add_fragment(head=implementation)
+        head = self.fixture.commit("evidence head")
+
+        ownership = self.fixture.ownership(head, "--branch", "fm/p4-003")
+        evidence = self.fixture.evidence(head, "--branch", "fm/p4-003")
+
+        self.assertEqual(ownership.returncode, 0, ownership.stderr)
+        self.assertIn("unit: p4-003", ownership.stdout)
+        self.assertIn(f"ownership: {path}", ownership.stdout)
+        self.assertEqual(evidence.returncode, 0, evidence.stderr)
+        self.assertIn("unit: p4-003", evidence.stdout)
+
+    def test_unit_declared_pr_without_fragment_fails(self) -> None:
+        path = "src/Playnite.Core/Import/Own.cs"
+        self.fixture = Fixture(
+            ownership=[claim(path, "p4-003", pull=123)], files={path: "// own\n"}
+        )
+        self.addCleanup(self.fixture.cleanup)
+        self.fixture.append(path, "// no evidence\n")
+        head = self.fixture.commit("product only")
+
+        result = self.fixture.evidence(head, "--branch", "fm/p4-003")
+
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertIn("carries no unit evidence", result.stderr)
+        self.assertIn("missing required ledger fragment", result.stderr)
+        self.assertIn(f"{path} (owned by p4-003", result.stderr)
+
 
 class EvidenceGuardTests(unittest.TestCase):
     def setUp(self) -> None:
@@ -369,7 +685,7 @@ class EvidenceGuardTests(unittest.TestCase):
         self.assertIn("touches foreign unit evidence", result.stderr)
         self.assertIn("docs/port/p4-002-import.md (unit p4-002)", result.stderr)
 
-    def test_fragment_must_name_an_ancestor_head(self) -> None:
+    def test_fragment_must_name_a_commit_produced_by_this_pr(self) -> None:
         self.fixture.set_queue("p4-003", "in-progress")
         # An all-zero id cannot resolve to an ancestor.
         self.fixture.add_fragment(head="1" * 40)
@@ -378,7 +694,10 @@ class EvidenceGuardTests(unittest.TestCase):
         result = self.fixture.evidence(head, "--branch", "fm/p4-003")
 
         self.assertEqual(result.returncode, 1, result.stderr)
-        self.assertIn("not an ancestor of PR head", result.stderr)
+        self.assertIn(
+            "not the pull request head or a commit produced by this pull request",
+            result.stderr,
+        )
 
     def test_fragment_cannot_cite_the_merge_base_as_its_head(self) -> None:
         self.fixture.set_queue("p4-003", "in-progress")
@@ -390,6 +709,31 @@ class EvidenceGuardTests(unittest.TestCase):
         self.assertEqual(result.returncode, 1, result.stderr)
         self.assertIn("names the merge base", result.stderr)
         self.assertIn("commit produced by this pull request", result.stderr)
+
+    def test_fragment_cannot_cite_an_unrelated_base_ancestor_run(self) -> None:
+        self.fixture.commit("pre-PR commit")
+        pre_pr = self.fixture.git("rev-parse", "HEAD").strip()
+        self.fixture.base = self.fixture.commit("base after pre-PR commit")
+        self.fixture.set_queue("p4-003", "in-progress")
+        self.fixture.add_fragment(head=pre_pr)
+        head = self.fixture.commit("fragment citing an unrelated ancestor")
+
+        result = self.fixture.evidence(head, "--branch", "fm/p4-003")
+
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertIn("unrelated ancestor's run", result.stderr)
+        self.assertIn(pre_pr, result.stderr)
+
+    def test_fragment_can_cite_a_commit_produced_by_this_pr(self) -> None:
+        implementation = self.fixture.commit("implementation head")
+        self.fixture.set_queue("p4-003", "in-progress")
+        self.fixture.add_fragment(head=implementation)
+        head = self.fixture.commit("evidence head")
+
+        result = self.fixture.evidence(head, "--branch", "fm/p4-003")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn(f"head {implementation}", result.stdout)
 
 
 class WorkflowShapeTests(unittest.TestCase):

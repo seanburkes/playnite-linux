@@ -15,19 +15,35 @@ A unit owns exactly these paths (the contract enforced by
 
 Everything else is shared product, process, generated, or oracle material and
 is outside the unit evidence namespace.  Aggregates (``docs/port/queue.tsv``,
-``docs/port/ledger.tsv``), ``tests/baseline.json`` and generated status content
-are never unit evidence and are never PR-editable.
+``docs/port/ledger.tsv``), ``tests/baseline.json``, generated status content and
+``docs/port/units/ownership.paths`` are never unit evidence and are never
+PR-editable.
+
+Path ownership map
+------------------
+``docs/port/units/ownership.paths`` is a bot-generated TSV with the exact header
+``path<TAB>unit<TAB>commit<TAB>pull``.  It extends ownership beyond evidence to
+product source, shared tests, non-prefixed fixtures and tools: a path is owned by
+the unit whose merged commit most recently introduced or changed it.  The guard
+reads the map from the pull request's base commit, never its head, and fails a
+change to a path owned by another unit or any unit-owned path in a PR that
+declares no unit.  A path the map does not list stays shared.
 
 Ledger fragments
 ----------------
 ``docs/port/units/<unit>.ledger.d/<pr>-<slug>.tsv`` is a ledger shard: the
 normal ledger header followed by one or more rows whose ``unit`` column is the
-owning unit.  Its evidence column must name the pull request, the validated
-head commit and the real linux-ci run whose result it relies on.  The guard
-accepts the historical free-text forms (``PR #97``, ``pull/97``,
-``head 2e09983...`` and ``actions/runs/43964833995``); the head may be an
-ancestor of the pull-request head because a fragment cannot name its own commit
-before that commit exists.
+owning unit.  Its evidence column must name the pull request, a head commit
+produced by this pull request and the real linux-ci run whose result it relies
+on.  The guard accepts the historical free-text forms (``PR #97``, ``pull/97``,
+``head 2e09983...`` and ``actions/runs/43964833995``).  The cited head must be
+on the pull request side of the merge base (or the merge commit, when supplied);
+an unrelated base-branch ancestor is rejected rather than treated as evidence.
+
+Diff paths are repository-relative with no traversal component.  Renames are
+expanded to an explicit delete plus add, deletions are checked like any other
+change, and added or modified symlinks must resolve inside the repository and
+must not borrow another unit's owned bytes.
 
 This module deliberately knows nothing about the aggregate generator.  It uses
 git plumbing only: no checkout, fetch, reset, or write occurs in the worktree.
@@ -37,6 +53,7 @@ from __future__ import annotations
 
 import json
 import os
+import posixpath
 import re
 import subprocess
 import urllib.error
@@ -65,7 +82,30 @@ LEDGER_FRAGMENT = re.compile(
 FRAGMENT_NAME = re.compile(r"^(\d+)-([a-z0-9][a-z0-9-]*)\.tsv$")
 
 UNITS_DIR = "docs/port/units/"
-UNITS_NON_EVIDENCE = frozenset({"README.md", "removed.tsv", "ledger-corrections.tsv"})
+UNITS_NON_EVIDENCE = frozenset(
+    {"README.md", "removed.tsv", "ledger-corrections.tsv", "ownership.paths"}
+)
+
+# Bot-generated path ownership map.  It lives beside the unit shards so a
+# reviewer sees it with the evidence, but it is never PR-editable and is read
+# from the pull request's base commit, never from its head.
+OWNERSHIP_MAP = "docs/port/units/ownership.paths"
+OWNERSHIP_HEADER = "path\tunit\tcommit\tpull"
+OWNERSHIP_ROOTS = ("src/", "tests/", "tools/")
+OWNERSHIP_EXACT_EXCLUDES = frozenset({"tests/baseline.json"})
+OWNERSHIP_SUFFIX_EXCLUDES = (
+    ".csproj",
+    ".slnx",
+    ".sln",
+    ".props",
+    ".targets",
+    ".lock.json",
+    ".editorconfig",
+    ".gitignore",
+    ".gitattributes",
+)
+OWNERSHIP_NAME_EXCLUDES = frozenset({"global.json", "nuget.config", "NuGet.config"})
+OWNERSHIP_PULL = re.compile(r"^pull/([1-9][0-9]*)$")
 
 
 class GuardError(Exception):
@@ -76,6 +116,20 @@ class GuardError(Exception):
 class Change:
     status: str
     path: str
+
+
+@dataclass(frozen=True)
+class OwnershipClaim:
+    path: str
+    unit: str
+    commit: str
+    pull: str
+
+    @property
+    def evidence(self) -> str:
+        if self.pull == "-":
+            return f"commit {self.commit}"
+        return f"{self.pull} at commit {self.commit}"
 
 
 def git(repo: Path, *args: str) -> bytes:
@@ -141,13 +195,42 @@ def merge_base(repo: Path, base: str, head: str) -> str:
     return shas[0]
 
 
+def path_error(path: str) -> str | None:
+    """Return why a diff path is unsafe, or ``None`` when it is a plain path.
+
+    A path is repository-relative, has no traversal or empty component, and is
+    not absolute in POSIX, Windows-drive, or UNC spelling.  Rejecting ``..``
+    explicitly matters most for the offline diff-file mode, where the entries
+    are caller-supplied rather than produced by git.
+    """
+
+    if not path:
+        return "the path is empty"
+    if "\0" in path or "\n" in path or "\r" in path:
+        return "the path contains a control character"
+    if path.startswith("/") or path.startswith("\\") or re.match(r"^[A-Za-z]:", path):
+        return "the path is absolute"
+    parts = path.split("/")
+    if any(part in {"", ".", ".."} for part in parts):
+        return "the path contains an empty, '.', or '..' component (path traversal)"
+    return None
+
+
+def _checked_path(path: str, source: str) -> str:
+    error = path_error(path)
+    if error:
+        raise GuardError(f"invalid path in {source}: {path!r}: {error}")
+    return path
+
+
 def changed_paths(repo: Path, base: str, head: str) -> list[Change]:
     """Return name-status changes between two commits.
 
-    Rename detection is deliberately disabled: a rename is a delete plus an add,
-    so both the old and new unit namespaces are charged.  A rename status in the
-    output therefore means git was not asked as expected and the diff is
-    ambiguous.
+    Rename detection is deliberately disabled: a rename is an explicit delete
+    of the old path plus an add of the new path, so both the old and new unit
+    namespaces are charged instead of a path-only text match.  The parser still
+    understands a scored ``R``/``C`` record and turns it into the same delete
+    plus add, so a git configuration change cannot hide half a rename.
     """
 
     output = git(
@@ -165,26 +248,42 @@ def changed_paths(repo: Path, base: str, head: str) -> list[Change]:
     parts = output.split(b"\0")
     if parts and parts[-1] == b"":
         parts.pop()
-    if len(parts) % 2 != 0:
-        raise GuardError("git diff returned an incomplete NUL-separated name-status record")
     changes: list[Change] = []
-    for index in range(0, len(parts), 2):
+    index = 0
+    while index < len(parts):
         try:
             status = parts[index].decode("ascii", "strict")
-            path = parts[index + 1].decode("utf-8", "strict")
         except UnicodeDecodeError as exc:
-            raise GuardError("git diff contains a non-UTF-8 path; refusing an ambiguous diff") from exc
-        if status not in {"A", "C", "D", "M", "R", "T", "U", "X", "B"} or status in {"R", "C"}:
-            raise GuardError(f"unsupported or ambiguous git diff status {status!r} for {path!r}")
-        if (
-            not path
-            or path.startswith("/")
-            or "\0" in path
-            or "\n" in path
-            or "\r" in path
-        ):
-            raise GuardError(f"invalid path in git diff: {path!r}")
-        changes.append(Change(status, path))
+            raise GuardError("git diff contains a non-ASCII status; refusing an ambiguous diff") from exc
+        index += 1
+        if status[0] in {"R", "C"} and re.fullmatch(r"[RC][0-9]*", status):
+            pass
+        elif status not in {"A", "D", "M", "T", "U", "X", "B"}:
+            raise GuardError(f"unsupported or ambiguous git diff status {status!r}")
+        if status[0] in {"R", "C"}:
+            if index + 2 > len(parts):
+                raise GuardError("git diff returned an incomplete rename record")
+            try:
+                old = parts[index].decode("utf-8", "strict")
+                new = parts[index + 1].decode("utf-8", "strict")
+            except UnicodeDecodeError as exc:
+                raise GuardError(
+                    "git diff contains a non-UTF-8 path; refusing an ambiguous diff"
+                ) from exc
+            index += 2
+            changes.append(Change("D", _checked_path(old, "git diff")))
+            changes.append(Change("A", _checked_path(new, "git diff")))
+            continue
+        if index >= len(parts):
+            raise GuardError("git diff returned an incomplete name-status record")
+        try:
+            path = parts[index].decode("utf-8", "strict")
+        except UnicodeDecodeError as exc:
+            raise GuardError(
+                "git diff contains a non-UTF-8 path; refusing an ambiguous diff"
+            ) from exc
+        index += 1
+        changes.append(Change(status, _checked_path(path, "git diff")))
     changes.sort(key=lambda item: item.path)
     if len({item.path for item in changes}) != len(changes):
         raise GuardError("git diff lists the same path more than once; refusing an ambiguous diff")
@@ -192,22 +291,44 @@ def changed_paths(repo: Path, base: str, head: str) -> list[Change]:
 
 
 def paths_from_diff_file(path: Path) -> list[Change]:
-    """Read a simple one-path-per-line diff for offline ownership checks."""
+    """Read a name-status or one-path-per-line diff for offline checks.
+
+    Accepted records are ``<path>`` (treated as modified), ``<status><TAB><path>``
+    and ``Rnnn<TAB><old><TAB><new>``.  Renames are expanded to an explicit delete
+    plus add, exactly as the git path does.
+    """
 
     try:
         text = path.read_text(encoding="utf-8")
     except (OSError, UnicodeDecodeError) as exc:
         raise GuardError(f"cannot read diff file {path}: {exc}") from exc
-    paths = text.splitlines()
-    if not paths:
+    lines = text.splitlines()
+    if not lines:
         raise GuardError(f"diff file {path} contains no paths")
-    if any(not item.strip() for item in paths):
-        raise GuardError(f"diff file {path} contains a blank path; refusing an ambiguous diff")
     result: list[Change] = []
-    for item in paths:
-        if item.startswith("/") or "\0" in item or "\n" in item or "\r" in item:
-            raise GuardError(f"invalid path in diff file {path}: {item!r}")
-        result.append(Change("M", item))
+    for line in lines:
+        if not line.strip():
+            raise GuardError(f"diff file {path} contains a blank path; refusing an ambiguous diff")
+        fields = line.split("\t")
+        if len(fields) == 1:
+            result.append(Change("M", _checked_path(fields[0], f"diff file {path}")))
+            continue
+        status = fields[0]
+        if status[0] in {"R", "C"} and re.fullmatch(r"[RC][0-9]*", status):
+            pass
+        elif status not in {"A", "D", "M", "T", "U", "X", "B"}:
+            raise GuardError(f"diff file {path} has an unsupported status {status!r}")
+        if status[0] in {"R", "C"}:
+            if len(fields) != 3:
+                raise GuardError(
+                    f"diff file {path} rename record needs status, old and new path"
+                )
+            result.append(Change("D", _checked_path(fields[1], f"diff file {path}")))
+            result.append(Change("A", _checked_path(fields[2], f"diff file {path}")))
+            continue
+        if len(fields) != 2:
+            raise GuardError(f"diff file {path} has a malformed record: {line!r}")
+        result.append(Change(status, _checked_path(fields[1], f"diff file {path}")))
     result.sort(key=lambda entry: entry.path)
     if len({entry.path for entry in result}) != len(result):
         raise GuardError(f"diff file {path} repeats a path; refusing an ambiguous diff")
@@ -339,6 +460,266 @@ def touched_units(
     if errors:
         raise GuardError("\n".join(errors))
     return {unit: sorted(paths) for unit, paths in sorted(touched.items())}
+
+
+def bot_owned_errors(changes: list[Change]) -> list[str]:
+    """Reject PR edits to the generated ownership map, even to identical bytes."""
+
+    return [
+        f"{change.path} is bot-owned and generated on main; a pull request must "
+        "not add, edit, rename or delete the ownership map"
+        for change in changes
+        if change.path == OWNERSHIP_MAP
+    ]
+
+
+def ownership_map_exists(repo: Path, revision: str) -> bool:
+    return read_at(repo, revision, OWNERSHIP_MAP) is not None
+
+
+def load_ownership_map(repo: Path, revision: str) -> dict[str, OwnershipClaim]:
+    """Read and validate the bot-generated map at a base revision.
+
+    The map is deliberately read from the pull request's base, never from its
+    head: a branch cannot manufacture ownership for itself.  A missing map is
+    the bootstrap state before the post-merge generator first writes it.
+    """
+
+    data = read_at(repo, revision, OWNERSHIP_MAP)
+    if data is None:
+        return {}
+    try:
+        text = data.decode("utf-8", "strict")
+    except UnicodeDecodeError as exc:
+        raise GuardError(f"{OWNERSHIP_MAP}: not valid UTF-8") from exc
+    lines = text.split("\n")
+    if lines and lines[-1] == "":
+        lines.pop()
+    if not lines:
+        raise GuardError(f"{OWNERSHIP_MAP}: empty ownership map")
+    if lines[0] != OWNERSHIP_HEADER:
+        raise GuardError(f"{OWNERSHIP_MAP}:1: expected the exact ownership header")
+    claims: dict[str, OwnershipClaim] = {}
+    previous = ""
+    for offset, line in enumerate(lines[1:], start=2):
+        if not line:
+            raise GuardError(f"{OWNERSHIP_MAP}:{offset}: blank row")
+        fields = line.split("\t")
+        if len(fields) != 4:
+            raise GuardError(
+                f"{OWNERSHIP_MAP}:{offset}: expected 4 tab-separated fields, "
+                f"got {len(fields)}"
+            )
+        path, unit, commit, pull = fields
+        error = path_error(path)
+        if error:
+            raise GuardError(f"{OWNERSHIP_MAP}:{offset}: {path!r}: {error}")
+        if not UNIT_ID.fullmatch(unit):
+            raise GuardError(f"{OWNERSHIP_MAP}:{offset}: invalid unit id {unit!r}")
+        if not re.fullmatch(r"[0-9a-f]{40}", commit):
+            raise GuardError(
+                f"{OWNERSHIP_MAP}:{offset}: commit must be a full 40-hex id, got {commit!r}"
+            )
+        if pull != "-" and not OWNERSHIP_PULL.fullmatch(pull):
+            raise GuardError(
+                f"{OWNERSHIP_MAP}:{offset}: pull must be 'pull/<number>' or '-', got {pull!r}"
+            )
+        if path in claims:
+            first = claims[path]
+            raise GuardError(
+                f"{OWNERSHIP_MAP}:{offset}: ambiguous ownership for {path}: "
+                f"already claimed by {first.unit} ({first.evidence}), now {unit} "
+                f"({pull if pull != '-' else commit}); refusing to guess"
+            )
+        if previous and path < previous:
+            raise GuardError(
+                f"{OWNERSHIP_MAP}:{offset}: rows must be sorted by path; "
+                f"{path!r} follows {previous!r}"
+            )
+        previous = path
+        claims[path] = OwnershipClaim(path, unit, commit, pull)
+    return claims
+
+
+def ownership_claim_for(
+    path: str, claims: dict[str, OwnershipClaim]
+) -> OwnershipClaim | None:
+    return claims.get(path)
+
+
+def ownership_hits(
+    changes: list[Change], claims: dict[str, OwnershipClaim]
+) -> dict[str, OwnershipClaim]:
+    """Map each changed path that the base map attributes to its owner."""
+
+    return {
+        change.path: claims[change.path]
+        for change in changes
+        if change.path in claims
+    }
+
+
+def _tree_entry(repo: Path, revision: str, path: str) -> tuple[str, str] | None:
+    output = git(repo, "--literal-pathspecs", "ls-tree", "-z", revision, "--", path)
+    entries = [item for item in output.split(b"\0") if item]
+    if not entries:
+        return None
+    if len(entries) != 1:
+        raise GuardError(f"{revision}:{path}: git returned more than one tree entry")
+    try:
+        header, name = entries[0].split(b"\t", 1)
+        mode, kind, sha = header.decode("ascii", "strict").split(" ")
+        decoded = name.decode("utf-8", "strict")
+    except (ValueError, UnicodeDecodeError) as exc:
+        raise GuardError(f"{revision}:{path}: malformed git tree entry") from exc
+    if decoded != path:
+        raise GuardError(f"{revision}:{path}: git returned tree entry {decoded!r}")
+    return mode, sha
+
+
+def _resolve_symlink(path: str, target: str) -> str:
+    if not target:
+        raise GuardError(f"symlink {path} has an empty target")
+    if target.startswith("/") or target.startswith("\\") or re.match(r"^[A-Za-z]:", target):
+        raise GuardError(
+            f"symlink {path} points outside the repository: {target!r}"
+        )
+    joined = posixpath.normpath(posixpath.join(posixpath.dirname(path), target))
+    if joined in {"", ".", ".."} or joined.startswith("../") or joined.startswith("/"):
+        raise GuardError(
+            f"symlink {path} escapes the repository root: {target!r}"
+        )
+    return joined
+
+
+def _resolve_symlink_chain(repo: Path, head: str, path: str, target: str) -> str:
+    """Follow in-repository symlink targets and reject chains that escape or loop."""
+
+    resolved = _resolve_symlink(path, target)
+    seen = {path}
+    for _depth in range(16):
+        if resolved in seen:
+            raise GuardError(f"symlink {path} resolves through a loop at {resolved}")
+        seen.add(resolved)
+        entry = _tree_entry(repo, head, resolved)
+        if entry is None or entry[0] != "120000":
+            return resolved
+        data = git(repo, "cat-file", "blob", entry[1])
+        try:
+            next_target = data.decode("utf-8", "strict")
+        except UnicodeDecodeError as exc:
+            raise GuardError(f"symlink {resolved} has a non-UTF-8 target") from exc
+        if "\0" in next_target or "\n" in next_target or "\r" in next_target:
+            raise GuardError(f"symlink {resolved} has a control character in its target")
+        resolved = _resolve_symlink(resolved, next_target)
+    raise GuardError(f"symlink {path} has too many chained targets to resolve safely")
+
+
+def symlink_errors(
+    repo: Path,
+    base: str,
+    head: str,
+    changes: list[Change],
+    claims: dict[str, OwnershipClaim],
+    declared: str | None,
+) -> list[str]:
+    """Reject symlinks in added or modified paths that escape or borrow bytes.
+
+    Deletions are allowed: removing a previously unsafe link is a repair.  A
+    link that stays inside the repository is still checked against the ownership
+    map, so a unit's own namespace cannot point at another unit's bytes.
+    """
+
+    errors: list[str] = []
+    for change in changes:
+        if change.status == "D":
+            continue
+        entry = _tree_entry(repo, head, change.path)
+        if entry is None:
+            raise GuardError(f"{change.path}: changed path is absent at head")
+        mode, sha = entry
+        if mode != "120000":
+            continue
+        data = git(repo, "cat-file", "blob", sha)
+        try:
+            target = data.decode("utf-8", "strict")
+        except UnicodeDecodeError as exc:
+            raise GuardError(f"symlink {change.path} has a non-UTF-8 target") from exc
+        if "\0" in target or "\n" in target or "\r" in target:
+            raise GuardError(f"symlink {change.path} has a control character in its target")
+        try:
+            resolved = _resolve_symlink_chain(repo, head, change.path, target)
+        except GuardError as exc:
+            errors.append(str(exc))
+            continue
+        claim = claims.get(resolved)
+        if claim is not None and claim.unit != declared:
+            errors.append(
+                f"symlink {change.path} points at {resolved}, owned by unit "
+                f"{claim.unit} ({claim.evidence}); the PR declares {declared or '(none)'}"
+            )
+    return errors
+
+
+def derive_marker_unit(repo: Path, head: str, units: set[str]) -> str | None:
+    """Return a ``Port-Unit: <unit>`` trailer from the pull request head commit."""
+
+    try:
+        message = git(repo, "log", "-1", "--format=%B", head).decode("utf-8", "strict")
+    except UnicodeDecodeError as exc:
+        raise GuardError("the pull request head commit message is not valid UTF-8") from exc
+    found: set[str] = set()
+    for line in message.splitlines():
+        match = re.fullmatch(r"(?i)port-unit\s*:\s*(\S+)\s*", line)
+        if not match:
+            continue
+        candidate = match.group(1)
+        if not UNIT_ID.fullmatch(candidate):
+            raise GuardError(
+                f"Port-Unit marker names invalid unit id {candidate!r}; "
+                "use lowercase letters, digits and hyphens"
+            )
+        if candidate not in units:
+            raise GuardError(
+                f"Port-Unit marker names unknown unit {candidate!r}; "
+                "add its queue shard or correct the marker"
+            )
+        found.add(candidate)
+    if len(found) > 1:
+        raise GuardError(
+            "the pull request names more than one unit in its Port-Unit markers: "
+            + ", ".join(sorted(found))
+        )
+    return next(iter(found), None)
+
+
+def declared_unit(
+    repo: Path,
+    *,
+    head: str,
+    units: set[str],
+    branch: str | None,
+    explicit: str | None,
+) -> str | None:
+    """Resolve the unit a pull request declares, failing on disagreement."""
+
+    if explicit is not None and not explicit:
+        raise GuardError("--unit must not be empty")
+    if explicit is not None and not UNIT_ID.fullmatch(explicit):
+        raise GuardError(f"--unit {explicit!r} is not a valid unit id")
+    branch_unit = derive_branch_unit(branch, units)
+    marker_unit = derive_marker_unit(repo, head, units)
+    named = [value for value in (explicit, branch_unit, marker_unit) if value is not None]
+    if len(set(named)) > 1:
+        raise GuardError(
+            "the pull request declares conflicting units: "
+            + ", ".join(sorted(set(named)))
+        )
+    if explicit and explicit not in units:
+        raise GuardError(
+            f"--unit {explicit!r} is not a known unit; add its queue shard first"
+        )
+    return named[0] if named else None
 
 
 def derive_branch_unit(branch: str | None, units: set[str]) -> str | None:
@@ -498,18 +879,34 @@ def _run_references(text: str) -> list[tuple[str, str | None]]:
     return references
 
 
+def _is_ancestor(repo: Path, ancestor: str, descendant: str) -> bool:
+    try:
+        git(repo, "merge-base", "--is-ancestor", ancestor, descendant)
+    except GuardError:
+        return False
+    return True
+
+
 def validate_fragment_evidence(
     evidence: list[str],
     *,
     unit: str,
     pr_number: int,
     repo: Path,
+    base: str,
     head: str,
     merge_base: str,
     repo_slug: str | None,
     verify_ci: bool,
+    merge_commit: str | None = None,
 ) -> str:
-    """Check the fragment names this PR, a produced head commit, and its CI run."""
+    """Check the fragment names this PR, a commit it produced, and its CI run.
+
+    A cited head must be the pull request head, a commit on the pull request
+    side of the merge base, or the merge commit the fragment describes.  Any
+    other ancestor -- including an older commit from the base branch -- is an
+    unrelated run and cannot certify this change.
+    """
 
     text = "\n".join(evidence)
     prs = _pr_references(text)
@@ -531,27 +928,41 @@ def validate_fragment_evidence(
             "expected a 40-hex commit id or 'head <sha>'"
         )
     valid_heads: list[str] = []
+    saw_merge_base = False
     for candidate in head_candidates:
         try:
             resolved = resolve_commit(repo, candidate, "fragment head")
         except GuardError:
             continue
-        try:
-            git(repo, "merge-base", "--is-ancestor", resolved, head)
-        except GuardError:
+        if resolved == merge_base:
+            saw_merge_base = True
             continue
-        valid_heads.append(resolved)
+        produced = resolved == head
+        if not produced and merge_commit is not None and resolved == merge_commit:
+            produced = True
+        if not produced:
+            # A PR-side commit is reachable from the head but not from the base
+            # tip.  Reachability from the merge base alone would accept a
+            # base-branch commit merely merged into the branch.
+            produced = (
+                _is_ancestor(repo, resolved, head)
+                and not _is_ancestor(repo, resolved, base)
+            )
+        if produced:
+            valid_heads.append(resolved)
     if not valid_heads:
+        if saw_merge_base:
+            raise GuardError(
+                f"fragment for {unit} names the merge base {merge_base} as its head; "
+                "the evidence must name a commit produced by this pull request"
+            )
         raise GuardError(
             f"fragment for {unit} names head {', '.join(head_candidates)}, "
-            f"which is not an ancestor of PR head {head}"
+            f"which is not the pull request head or a commit produced by this pull "
+            f"request (merge base {merge_base}); an unrelated ancestor's run cannot "
+            "certify this change"
         )
     claimed_head = valid_heads[0]
-    if claimed_head == merge_base:
-        raise GuardError(
-            f"fragment for {unit} names the merge base {merge_base} as its head; "
-            "the evidence must name a commit produced by this pull request"
-        )
 
     runs = _run_references(text)
     if not runs:

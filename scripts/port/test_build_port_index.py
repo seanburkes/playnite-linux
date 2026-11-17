@@ -1896,6 +1896,7 @@ class PortIndexTests(unittest.TestCase):
         self.assertIn("--capture-results", workflow)
         self.assertIn("tests/baseline.json", workflow)
         self.assertIn("docs/port/PORT-STATUS.md", workflow)
+        self.assertIn("docs/port/units/ownership.paths", workflow)
         self.assertLess(
             workflow.index("check --shards-only --against \"$BASE_SHA\""),
             workflow.index("build_port_index.py build"),
@@ -1924,6 +1925,188 @@ class PortIndexTests(unittest.TestCase):
 
         self.assertEqual(status, 1)
         self.assertIn("--forbid-aggregate-changes requires --against", output)
+
+    def ownership_map(self):
+        return self.units / "ownership.paths"
+
+    def test_ownership_map_derives_from_ledger_recorded_pr_commits(self):
+        self.write_queue_shard("p1-001", queue_row("p1-001"))
+        self.write_ledger_shard(
+            "p1-001",
+            ledger_row("2026-11-15T00:00:00Z", "p1-001",
+                       evidence="pull/50 delivered the path"),
+        )
+        self.build()
+        self.start_git_history()
+        product = self.root / "src" / "App" / "Thing.cs"
+        product.parent.mkdir(parents=True)
+        product.write_text("// thing\n")
+        self.write_queue_shard("p1-001", queue_row("p1-001", status="done"))
+        self.git("add", "-A")
+        self.git("commit", "-q", "-m", "feat: add thing (#50)")
+        commit = self.git("rev-parse", "HEAD")
+
+        self.build()
+
+        rows = self.ownership_map().read_text().splitlines()
+        self.assertEqual(port_index.OWNERSHIP_HEADER, rows[0])
+        self.assertIn(f"src/App/Thing.cs\tp1-001\t{commit}\tpull/50", rows)
+
+    def test_ownership_map_excludes_evidence_generated_and_build_files(self):
+        self.write_queue_shard("p1-001", queue_row("p1-001"))
+        self.write_queue_shard("p1-002", queue_row("p1-002"))
+        self.write_ledger_shard(
+            "p1-001",
+            ledger_row("2026-11-15T00:00:00Z", "p1-001", evidence="pull/51"),
+        )
+        self.build()
+        self.start_git_history()
+        for relative in (
+            "src/App/Thing.cs",
+            "tests/App.Tests/ThingTests.cs",
+            "tests/fixtures/v10-assets/assets.json",
+            "tools/AssetCopy.CrashHost/Program.cs",
+            "tests/fixtures/p1-001-source/README.md",
+            "tests/golden/p1-001-golden/data.json",
+            "tools/p1-001-tool/README.md",
+            "tests/baseline.json",
+            "tests/App.Tests/App.Tests.csproj",
+        ):
+            path = self.root / relative
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text("{}\n")
+        self.write_queue_shard("p1-001", queue_row("p1-001", status="done"))
+        self.git("add", "-A")
+        self.git("commit", "-q", "-m", "feat: paths (#51)")
+
+        self.build()
+
+        body = self.ownership_map().read_text()
+        for included in (
+            "src/App/Thing.cs",
+            "tests/App.Tests/ThingTests.cs",
+            "tests/fixtures/v10-assets/assets.json",
+            "tools/AssetCopy.CrashHost/Program.cs",
+        ):
+            self.assertIn(included + "\t", body)
+        for excluded in (
+            "tests/golden/p1-001-golden/data.json",
+            "tests/fixtures/p1-001-source/README.md",
+            "tools/p1-001-tool/README.md",
+            "tests/baseline.json",
+            "tests/App.Tests/App.Tests.csproj",
+        ):
+            self.assertNotIn(excluded + "\t", body)
+
+    def test_ownership_map_ownership_follows_the_last_unit_mapped_commit(self):
+        self.write_queue_shard("p1-001", queue_row("p1-001"))
+        self.write_queue_shard("p1-002", queue_row("p1-002"))
+        self.write_ledger_shard(
+            "p1-001",
+            ledger_row("2026-11-15T00:00:00Z", "p1-001", evidence="pull/52"),
+        )
+        self.write_ledger_shard(
+            "p1-002",
+            ledger_row("2026-11-15T00:01:00Z", "p1-002", evidence="pull/53"),
+        )
+        self.build()
+        self.start_git_history()
+        product = self.root / "src" / "App" / "Thing.cs"
+        product.parent.mkdir(parents=True)
+        product.write_text("// one\n")
+        self.write_queue_shard("p1-001", queue_row("p1-001", status="in-progress"))
+        self.git("add", "-A")
+        self.git("commit", "-q", "-m", "feat: first (#52)")
+        product.write_text("// two\n")
+        self.write_queue_shard("p1-002", queue_row("p1-002", status="in-progress"))
+        self.git("add", "-A")
+        self.git("commit", "-q", "-m", "feat: second (#53)")
+        second = self.git("rev-parse", "HEAD")
+
+        self.build()
+
+        self.assertIn(
+            f"src/App/Thing.cs\tp1-002\t{second}\tpull/53",
+            self.ownership_map().read_text().splitlines(),
+        )
+
+    def test_ownership_map_ignores_a_commit_no_ledger_records(self):
+        self.write_queue_shard("p1-001", queue_row("p1-001"))
+        self.build()
+        self.start_git_history()
+        product = self.root / "src" / "App" / "Thing.cs"
+        product.parent.mkdir(parents=True)
+        product.write_text("// unrecorded\n")
+        self.write_queue_shard("p1-001", queue_row("p1-001", status="done"))
+        self.git("add", "-A")
+        self.git("commit", "-q", "-m", "chore: unrecorded (#55)")
+
+        self.build()
+
+        self.assertNotIn(
+            "src/App/Thing.cs\t", self.ownership_map().read_text()
+        )
+
+    def test_ownership_map_is_byte_idempotent(self):
+        self.write_queue_shard("p1-001", queue_row("p1-001"))
+        self.write_ledger_shard(
+            "p1-001",
+            ledger_row("2026-11-15T00:00:00Z", "p1-001", evidence="pull/54"),
+        )
+        self.build()
+        self.start_git_history()
+        product = self.root / "src" / "App" / "Thing.cs"
+        product.parent.mkdir(parents=True)
+        product.write_text("// thing\n")
+        self.write_queue_shard("p1-001", queue_row("p1-001", status="done"))
+        self.git("add", "-A")
+        self.git("commit", "-q", "-m", "feat: thing (#54)")
+        self.build()
+        first = self.ownership_map().read_bytes()
+
+        self.build()
+
+        self.assertEqual(first, self.ownership_map().read_bytes())
+        self.assertEqual(first, port_index.render_ownership_map(
+            self.root, self.units, port_index.build_index(self.units)))
+
+    def test_check_rejects_a_hand_edited_ownership_map(self):
+        self.write_queue_shard("p1-001", queue_row("p1-001"))
+        self.build()
+        self.start_git_history()
+        self.ownership_map().write_text(
+            port_index.OWNERSHIP_HEADER
+            + "\n"
+            + "src/Fake.cs\tp1-001\t"
+            + "a" * 40
+            + "\tpull/1\n"
+        )
+
+        status, output = self.check()
+
+        self.assertEqual(status, 1)
+        self.assertIn("ownership.paths is not generated output", output)
+
+    def test_forbid_aggregate_changes_rejects_the_ownership_map(self):
+        self.write_queue_shard("p1-001", queue_row("p1-001"))
+        self.build()
+        base = self.start_git_history()
+        self.ownership_map().write_text(
+            port_index.OWNERSHIP_HEADER
+            + "\n"
+            + "src/Fake.cs\tp1-001\t"
+            + "a" * 40
+            + "\tpull/1\n"
+        )
+        self.git("add", "docs")
+        self.git("commit", "-q", "-m", "edit ownership map")
+
+        status, output = self.check_with_git(
+            "--shards-only", "--against", base, "--forbid-aggregate-changes")
+
+        self.assertEqual(status, 1)
+        self.assertIn("changed: docs/port/units/ownership.paths", output)
+        self.assertIn("bot-owned", output)
 
 
 if __name__ == "__main__":

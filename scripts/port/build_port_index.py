@@ -50,6 +50,14 @@ the prose between the narrative markers, and, when `--capture-results` and
 `tests/baseline.json`. The baseline writer refuses to lower any recorded floor and
 preserves every earlier capture and its provenance.
 
+`build` also writes `docs/port/units/ownership.paths`, derived from merged first-parent
+commits recorded in the unit ledgers. The exact header is
+`path<TAB>unit<TAB>commit<TAB>pull`; candidate paths are product source, shared tests and
+tools, and the last unit-mapped commit that introduced or changed a path owns it. Unit
+evidence namespaces, generated aggregates, the baseline and shared build metadata stay
+outside the map, and a path no unit-mapped commit touched stays shared. The map is
+deterministic and bot-owned: a pull request may not add, edit, rename or delete it.
+
 The migration PR that first adds `docs/port/units` is the one legitimate
 pre-migration base: `--allow-pre-migration-base` acknowledges the history skip
 and prints a notice instead of passing silently.
@@ -80,6 +88,8 @@ ROOT = Path(__file__).resolve().parents[2]
 UNITS = ROOT / "docs" / "port" / "units"
 STATUS_GENERATED_PATH = "docs/port/PORT-STATUS.md"
 BASELINE_GENERATED_PATH = "tests/baseline.json"
+OWNERSHIP_GENERATED_PATH = "docs/port/units/ownership.paths"
+OWNERSHIP_HEADER = "path\tunit\tcommit\tpull"
 NARRATIVE_START = "<!-- port-status:narrative:start -->"
 NARRATIVE_END = "<!-- port-status:narrative:end -->"
 FRAGMENT_SUFFIX = ".ledger.d"
@@ -211,7 +221,7 @@ _UNIT_ID = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)*")
 _WAVE = re.compile(r"W(\d+)")
 
 ALLOWED_UNIT_FILES = (
-    f"{README_NAME}, {REMOVED_NAME}, {CORRECTIONS_NAME}, "
+    f"{README_NAME}, {REMOVED_NAME}, {CORRECTIONS_NAME}, ownership.paths, "
     f"<unit-id>{QUEUE_SUFFIX}, <unit-id>{LEDGER_SUFFIX} and "
     f"<unit-id>{FRAGMENT_SUFFIX}/<pr>-<short-slug>.tsv"
 )
@@ -375,6 +385,10 @@ def _discover(
                     )
                 else:
                     ledger_paths.append(fragment)
+            continue
+        if name == "ownership.paths":
+            if not entry.is_file() or entry.is_symlink():
+                errors.append(f"{entry}: ownership.paths must be a regular file")
             continue
         if name == README_NAME:
             if not entry.is_file():
@@ -715,6 +729,178 @@ def render(units: Path) -> tuple[bytes, bytes]:
     return render_index(build_index(units))
 
 
+OWNERSHIP_ROOTS = ("src/", "tests/", "tools/")
+OWNERSHIP_EXACT_EXCLUDES = frozenset({BASELINE_GENERATED_PATH})
+OWNERSHIP_SUFFIX_EXCLUDES = (
+    ".csproj",
+    ".slnx",
+    ".sln",
+    ".props",
+    ".targets",
+    ".lock.json",
+    ".editorconfig",
+    ".gitignore",
+    ".gitattributes",
+)
+OWNERSHIP_NAME_EXCLUDES = frozenset({"global.json", "nuget.config", "NuGet.config"})
+_PR_SUBJECT = re.compile(r"\(#([1-9][0-9]*)\)")
+_PR_EVIDENCE = re.compile(r"(?:pull/|PR\s*#\s*)([1-9][0-9]*)", re.IGNORECASE)
+
+
+def _ownership_candidate(path: str, units: set[str]) -> bool:
+    """True when a path is product/test/tool material a unit can own.
+
+    Unit evidence namespaces (``tests/golden/<unit>-*`` etc.) stay in the
+    existing attribution check, generated/bot-owned files stay bot-owned, and
+    shared build metadata such as project and lock files stays shared.  Nothing
+    here infers ownership from a file name; the name only selects the roots the
+    ownership map covers.
+    """
+
+    if not path.startswith(OWNERSHIP_ROOTS):
+        return False
+    if path in OWNERSHIP_EXACT_EXCLUDES:
+        return False
+    if any(path.endswith(suffix) for suffix in OWNERSHIP_SUFFIX_EXCLUDES):
+        return False
+    if Path(path).name in OWNERSHIP_NAME_EXCLUDES:
+        return False
+    if "/bin/" in path or "/obj/" in path:
+        return False
+    for prefix in ("tests/golden/", "tests/fixtures/"):
+        if path.startswith(prefix):
+            relative = path[len(prefix):]
+            if any(relative.startswith(f"{unit}-") for unit in units):
+                return False
+    if path.startswith("tools/"):
+        relative = path[len("tools/"):]
+        for unit in units:
+            if relative == unit or (
+                relative.startswith(unit) and relative[len(unit)] in "-._/"
+            ):
+                return False
+    return True
+
+
+def _unit_claims(index: ShardIndex, units: Path) -> dict[int, set[str]]:
+    """Which units' ledger evidence records each pull request.
+
+    Fragment file names are exact.  Legacy rows may mention another unit in
+    prose, so their references are only claims; the merged commit's queue-shard
+    change is the stronger signal used first by ``_commit_unit``.
+    """
+
+    claims: dict[int, set[str]] = {}
+    for unit, rows in sorted(index.ledger.items()):
+        for row in rows:
+            for match in _PR_EVIDENCE.finditer(row.fields[5]):
+                claims.setdefault(int(match.group(1)), set()).add(unit)
+    if units.is_dir():
+        for fragment in sorted(units.glob("*.ledger.d/*.tsv")):
+            match = FRAGMENT_NAME.fullmatch(fragment.name)
+            if match is None:
+                continue
+            unit = fragment.parent.name[:-len(FRAGMENT_SUFFIX)]
+            claims.setdefault(int(match.group(1)), set()).add(unit)
+    return claims
+
+
+def _first_parent_commits(root: Path) -> list[tuple[str, str]]:
+    try:
+        output = _git(root, "log", "--first-parent", "--reverse",
+                      "--format=%H%x09%s", "HEAD")
+    except PortIndexError:
+        return []
+    commits: list[tuple[str, str]] = []
+    for line in output.decode("utf-8", "replace").splitlines():
+        if "\t" not in line:
+            continue
+        sha, subject = line.split("\t", 1)
+        if re.fullmatch(r"[0-9a-f]{40}", sha):
+            commits.append((sha, subject))
+    return commits
+
+
+def _commit_paths(root: Path, sha: str) -> list[str]:
+    parent = subprocess.run(
+        ["git", "-C", str(root), "rev-parse", "--verify", "--quiet", f"{sha}^"],
+        capture_output=True,
+    )
+    if parent.returncode != 0:
+        # The first-parent root commit has no parent: every path is introduced.
+        listing = _git(root, "ls-tree", "-r", "--name-only", "-z", sha)
+    else:
+        listing = _git(root, "diff", "--no-ext-diff", "--no-textconv", "--no-renames",
+                       "--name-only", "-z", f"{sha}^", sha)
+    return [item.decode("utf-8", "replace") for item in listing.split(b"\0") if item]
+
+
+def _commit_unit(
+    sha: str,
+    subject: str,
+    paths: list[str],
+    units: set[str],
+    claims: dict[int, set[str]],
+) -> tuple[str, str] | None:
+    """Resolve one merged commit to one unit, or ``None`` when shared/ambiguous.
+
+    The queue shard changed by the commit is the pull request's recorded unit
+    declaration, but only when that pull request is itself recorded in a ledger.
+    When a commit changes no queue shard (a pure product/test commit), fall back
+    to an unambiguous ledger claim.  Two units, or a commit no ledger records,
+    is not owned: it cannot transfer ownership and it cannot erase a claim.
+    """
+
+    queue_units = {
+        match.group(1)
+        for path in paths
+        if (match := re.fullmatch(
+            r"docs/port/units/([a-z0-9]+(?:-[a-z0-9]+)*)\.queue\.tsv", path))
+        and match.group(1) in units
+    }
+    subject_match = _PR_SUBJECT.search(subject)
+    pr = int(subject_match.group(1)) if subject_match else None
+    if len(queue_units) == 1:
+        if pr is None or pr not in claims:
+            return None
+        return next(iter(queue_units)), "queue"
+    if pr is not None:
+        referenced = claims.get(pr, set()) & units
+        if len(referenced) == 1:
+            return next(iter(referenced)), "ledger"
+    return None
+
+
+def render_ownership_map(root: Path, units: Path, index: ShardIndex) -> bytes:
+    """Derive the bot-owned path map from merged commits recorded in ledgers.
+
+    Ownership is the last unit-mapped commit that introduced or changed a path.
+    Later commits that belong to no single unit (merge/process/maintenance
+    commits that touch several units) neither transfer nor erase an existing
+    claim, so maintenance noise cannot silently make a product file shared.
+    """
+
+    unit_ids = set(index.queue)
+    claims = _unit_claims(index, units)
+    owners: dict[str, tuple[str, str, str]] = {}
+    for sha, subject in _first_parent_commits(root):
+        paths = _commit_paths(root, sha)
+        resolved = _commit_unit(sha, subject, paths, unit_ids, claims)
+        if resolved is None:
+            continue
+        unit, _source = resolved
+        subject_match = _PR_SUBJECT.search(subject)
+        pull = f"pull/{subject_match.group(1)}" if subject_match else "-"
+        for path in paths:
+            if _ownership_candidate(path, unit_ids):
+                owners[path] = (unit, sha, pull)
+    lines = [OWNERSHIP_HEADER]
+    for path in sorted(owners):
+        unit, sha, pull = owners[path]
+        lines.append(f"{path}\t{unit}\t{sha}\t{pull}")
+    return ("\n".join(lines) + "\n").encode("utf-8")
+
+
 def snapshot_from_dir(units: Path, queue: Path, ledger: Path) -> BaseSnapshot | None:
     """Read a base checkout of the shards and aggregates for history comparison."""
     if not units.is_dir():
@@ -818,7 +1004,7 @@ def changed_aggregates(root: Path, ref: str, queue: Path, ledger: Path,
             raise PortIndexError(f"cannot resolve recorded base {recorded_base!r}")
         recorded = resolved_recorded
     paths = (_repo_relative(queue, root), _repo_relative(ledger, root),
-             BASELINE_GENERATED_PATH, STATUS_GENERATED_PATH)
+             BASELINE_GENERATED_PATH, STATUS_GENERATED_PATH, OWNERSHIP_GENERATED_PATH)
     listing = _git(
         root, "diff", "--name-only", "-z", merge_base, "HEAD", "--", *paths
     )
@@ -923,7 +1109,12 @@ def shard_ownership_errors(root: Path, ref: str, unit: str | None = None,
             continue
         status, name = fields
         path = Path(name)
-        if path.name.endswith(QUEUE_SUFFIX):
+        if path.name == "ownership.paths":
+            errors.append(
+                f"{name}: the path ownership map is generated on main; a pull "
+                "request must not add, edit, rename or delete it"
+            )
+        elif path.name.endswith(QUEUE_SUFFIX):
             owned.add(path.name[:-len(QUEUE_SUFFIX)])
         elif path.parent.name.endswith(FRAGMENT_SUFFIX):
             owned.add(path.parent.name[:-len(FRAGMENT_SUFFIX)])
@@ -1503,15 +1694,17 @@ def main(
                               if args.capture_results else None)
             status_bytes = render_status(
                 index, status.read_text() if status.exists() else "")
+            ownership_bytes = render_ownership_map(root, units, index)
         except (PortIndexError, OSError, ValueError, KeyError, TypeError) as exc:
             print(f"error: {exc}", file=sys.stderr)
             return 1
         queue.write_bytes(queue_bytes)
         ledger.write_bytes(ledger_bytes)
         status.write_bytes(status_bytes)
+        (root / OWNERSHIP_GENERATED_PATH).write_bytes(ownership_bytes)
         if baseline_bytes is not None:
             baseline.write_bytes(baseline_bytes)
-        print(f"wrote {queue}, {ledger} and {status}")
+        print(f"wrote {queue}, {ledger}, {status} and {root / OWNERSHIP_GENERATED_PATH}")
         return 0
 
     if args.forbid_aggregate_changes:
@@ -1555,7 +1748,18 @@ def main(
         else:
             print(f"error: {status} is missing; run the generator build", file=sys.stderr)
             status_ok = False
-        if not (queue_ok and ledger_ok and status_ok):
+        ownership = root / OWNERSHIP_GENERATED_PATH
+        if ownership.exists():
+            try:
+                ownership_ok = _check_file(
+                    ownership, render_ownership_map(root, units, index))
+            except PortIndexError as exc:
+                print(f"error: {exc}", file=sys.stderr)
+                ownership_ok = False
+        else:
+            print(f"error: {ownership} is missing; run the generator build", file=sys.stderr)
+            ownership_ok = False
+        if not (queue_ok and ledger_ok and status_ok and ownership_ok):
             return 1
 
     ref = args.against or os.environ.get("PORT_INDEX_BASE_REF", "").strip()

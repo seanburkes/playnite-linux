@@ -34,16 +34,21 @@ from unit_guard_common import (  # noqa: E402
     QUEUE_COLUMNS,
     REAL_QUEUE_STATES,
     GuardError,
+    bot_owned_errors,
     changed_paths,
-    derive_branch_unit,
+    declared_unit,
     known_units,
+    load_ownership_map,
     merge_base,
+    ownership_hits,
+    ownership_map_exists,
     parse_ledger_fragment,
     parse_queue_shard,
     read_at,
     repo_root,
     repository_slug,
     resolve_commit,
+    symlink_errors,
     touched_units,
     validate_fragment_evidence,
 )
@@ -63,6 +68,10 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--unit", help="owning unit asserted by the caller")
     parser.add_argument("--branch", help="pull-request head ref, for example fm/p4-003")
     parser.add_argument("--repo-slug", help="owner/name used to validate cited CI runs")
+    parser.add_argument(
+        "--merge-commit",
+        help="merged commit a fragment may describe instead of a pre-merge head",
+    )
     parser.add_argument(
         "--verify-ci",
         action="store_true",
@@ -113,6 +122,7 @@ def _check_queue(
 
 def _check_fragment(
     repo: Path,
+    base: str,
     head: str,
     merge: str,
     unit: str,
@@ -121,6 +131,7 @@ def _check_fragment(
     *,
     repo_slug: str | None,
     verify_ci: bool,
+    merge_commit: str | None,
 ) -> str:
     prefix = f"docs/port/units/{unit}{FRAGMENT_DIR}"
     fragments = [item for item in changes if item.path.startswith(prefix)]
@@ -163,10 +174,12 @@ def _check_fragment(
         unit=unit,
         pr_number=pr_number,
         repo=repo,
+        base=base,
         head=head,
         merge_base=merge,
         repo_slug=repo_slug,
         verify_ci=verify_ci,
+        merge_commit=merge_commit,
     )
     return f"{change.path} ({detail})"
 
@@ -187,47 +200,57 @@ def main(argv: list[str]) -> int:
         changes = changed_paths(repo, merge, head)
         units = known_units(repo, [base, head, merge])
 
-        expected = args.unit
-        if expected is not None and not expected:
-            raise GuardError("--unit must not be empty")
-        branch_unit = derive_branch_unit(args.branch, units)
-        if expected and branch_unit and expected != branch_unit:
-            raise GuardError(
-                f"--unit {expected} conflicts with branch {args.branch!r}, "
-                f"which names {branch_unit}"
-            )
-        expected = expected or branch_unit
+        map_errors = bot_owned_errors(changes)
+        if map_errors:
+            raise GuardError("\n".join(map_errors))
+
+        expected = declared_unit(
+            repo, head=head, units=units, branch=args.branch, explicit=args.unit
+        )
+        claims = (
+            load_ownership_map(repo, base)
+            if ownership_map_exists(repo, base)
+            else load_ownership_map(repo, merge)
+        )
+        merge_commit = (
+            resolve_commit(repo, args.merge_commit, "merge commit")
+            if args.merge_commit
+            else None
+        )
+        link_errors = symlink_errors(repo, base, head, changes, claims, expected)
+        if link_errors:
+            raise GuardError("\n".join(link_errors))
 
         touched = touched_units(changes, units, expected)
+        owned = ownership_hits(changes, claims)
         if expected is None:
-            queue_owners = [
-                unit
-                for unit, paths in touched.items()
-                if _queue_path(unit) in paths
-            ]
-            if len(queue_owners) == 1:
-                expected = queue_owners[0]
-            elif len(queue_owners) > 1:
-                raise GuardError(
-                    "cannot determine the owning unit: the diff changes queue "
-                    f"shards for {', '.join(sorted(queue_owners))}"
+            if touched or owned:
+                details = "\n".join(
+                    f"  {path} (owned by {claim.unit}; {claim.evidence})"
+                    for path, claim in sorted(owned.items())
                 )
-            elif touched:
                 raise GuardError(
-                    "cannot determine the owning unit for touched unit evidence "
-                    f"({', '.join(touched)}); name the branch fm/<unit> or pass --unit"
+                    "the pull request changes unit-owned material but declares no "
+                    "unit; name the branch fm/<unit>, add a 'Port-Unit: <unit>' "
+                    "head-commit trailer, or pass --unit"
+                    + (f":\n{details}" if details else
+                       f"; touched unit evidence: {', '.join(sorted(touched))}")
                 )
-            else:
-                print("unit: (none)")
-                print("process PR: no unit evidence namespace is touched")
-                return 0
+            print("unit: (none)")
+            print("process PR: no unit-owned or unit evidence path is touched")
+            return 0
 
         if not touched:
+            details = "\n".join(
+                f"  {path} (owned by {claim.unit}; {claim.evidence})"
+                for path, claim in sorted(owned.items())
+            )
             raise GuardError(
                 f"unit PR {expected} carries no unit evidence: "
                 f"missing required queue transition {_queue_path(expected)} and "
                 f"missing required ledger fragment "
                 f"docs/port/units/{expected}{FRAGMENT_DIR}{args.pr}-<slug>.tsv"
+                + (f"; unit-owned paths changed:\n{details}" if details else "")
             )
         foreign = sorted(unit for unit in touched if unit != expected)
         if foreign:
@@ -238,6 +261,18 @@ def main(argv: list[str]) -> int:
             )
             raise GuardError(
                 f"unit PR {expected} touches foreign unit evidence:\n{details}"
+            )
+        foreign_owned = {
+            path: claim for path, claim in owned.items() if claim.unit != expected
+        }
+        if foreign_owned:
+            details = "\n".join(
+                f"  {path} (owned by {claim.unit}; {claim.evidence})"
+                for path, claim in sorted(foreign_owned.items())
+            )
+            raise GuardError(
+                f"unit PR {expected} touches unit-owned paths owned by another "
+                f"unit:\n{details}"
             )
 
         errors: list[str] = []
@@ -250,6 +285,7 @@ def main(argv: list[str]) -> int:
         try:
             fragment_detail = _check_fragment(
                 repo,
+                base,
                 head,
                 merge,
                 expected,
@@ -257,6 +293,7 @@ def main(argv: list[str]) -> int:
                 changes,
                 repo_slug=repository_slug(repo, args.repo_slug),
                 verify_ci=args.verify_ci,
+                merge_commit=merge_commit,
             )
         except GuardError as exc:
             errors.append(str(exc))

@@ -84,12 +84,16 @@ single writer on `main`; workers edit unit shards and never the aggregates thems
   when there are none).
 - `docs/port/units/removed.tsv` holds one `unit`/`reason`/`approved-by` row per deliberately
   retired unit.
+- `docs/port/units/ownership.paths` is the bot-generated map of the product source, shared
+  tests, non-prefixed fixtures and tools each unit introduced or last changed. The unit guard
+  reads it from the pull request base and rejects a change to a path another unit owns.
 - `docs/port/queue.tsv` and `docs/port/ledger.tsv` are generated from those shards by the
   parent-owned `port-index` workflow after merge. A pull request must not include either file
   in its diff, even with freshly generated content; CI rejects that change.
 
 A unit id is lowercase letters, digits, and single hyphens. The units directory is enumerated
-strictly: `README.md`, `removed.tsv`, and correctly named shards are the only accepted entries.
+strictly: `README.md`, `removed.tsv`, `ownership.paths`, and correctly named shards are the only
+accepted entries.
 A subdirectory, wrong-case suffix, backup suffix, trailing space, or other unexpected file is an
 error rather than a silently ignored shard. Ledger history is append-only in content: never
 edit, delete, or duplicate an existing row. Order is not part of the contract; a new row may
