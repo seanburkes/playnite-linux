@@ -825,6 +825,20 @@ def _without_notes(value):
     return value
 
 
+def _top_level_captures(document: dict) -> dict[str, object]:
+    """Capture-like top-level objects with human notes removed.
+
+    These are the historical provenance records such as ``p4_exit_capture``
+    and ``new_capture``. They are not interchangeable with ``main_captures``.
+    """
+    markers = {"run_id", "run_url", "commit", "captured_at", "counts"}
+    return {
+        key: _without_notes(value)
+        for key, value in document.items()
+        if key != "new" and isinstance(value, dict) and markers & set(value)
+    }
+
+
 def _count_row_errors(project: str, row, label: str) -> list[str]:
     errors: list[str] = []
     if not isinstance(project, str) or not project.strip():
@@ -1047,6 +1061,15 @@ def baseline_change_errors(head: dict, expected: dict) -> list[str]:
             details.append(
                 f"main_captures entry for run {capture.get('run_id')} was removed or "
                 "rewritten; capture history is append-only"
+            )
+
+    expected_top_level = _top_level_captures(expected) if isinstance(expected, dict) else {}
+    head_top_level = _top_level_captures(head) if isinstance(head, dict) else {}
+    for key, value in expected_top_level.items():
+        if head_top_level.get(key) != value:
+            details.append(
+                f"capture record {key} was removed or rewritten; capture history is "
+                "append-only"
             )
 
     for project, record in expected_removed.items():
@@ -1552,6 +1575,15 @@ def capture_baseline(baseline: Path, results: Path, run: dict, root: Path) -> by
                 raise PortIndexError(
                     f"main_captures entry for run {entry.get('run_id')} was removed or "
                     "rewritten; capture history is append-only"
+                )
+
+        previous_top_level = _top_level_captures(previous_document)
+        current_top_level = _top_level_captures(document)
+        for key, value in previous_top_level.items():
+            if current_top_level.get(key) != value:
+                raise PortIndexError(
+                    f"capture record {key} was removed or rewritten; capture history "
+                    "is append-only"
                 )
 
     for project in sorted(retired):

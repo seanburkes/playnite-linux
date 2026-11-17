@@ -127,11 +127,30 @@ def run_step(script, repo, base_sha, recorded_base=None, extra_env=None):
     env = os.environ.copy()
     env["BASE_SHA"] = base_sha
     env["RECORDED_BASE"] = recorded_base or base_sha
+    env["PORT_GUARD_MAIN_TIP"] = recorded_base or base_sha
+    env["PORT_GUARD_TOOL"] = str(repo / "scripts" / "port" / "build_port_index.py")
     env["RUNNER_TEMP"] = str(repo / "runner")
     env.update(extra_env or {})
     (repo / "runner").mkdir(exist_ok=True)
     return subprocess.run(["bash", "-e", "-c", script], cwd=repo, env=env,
                           capture_output=True, text=True, check=False)
+
+
+def select_guard_tool(repo, main_tip, authorized=False):
+    env = os.environ.copy()
+    env["MAIN_TIP_OVERRIDE"] = main_tip
+    env["PORT_TOOL_CHANGE_AUTHORIZED"] = "true" if authorized else "false"
+    env["REPO_ROOT"] = str(repo)
+    result = subprocess.run(
+        ["bash", str(ROOT / "scripts" / "port" / "select_guard_tool.sh")],
+        cwd=repo, env=env, capture_output=True, text=True, check=False,
+    )
+    values = {}
+    for line in result.stdout.splitlines():
+        if "=" in line:
+            key, value = line.split("=", 1)
+            values[key] = value
+    return result, values
 
 
 def outputs(path):
@@ -433,33 +452,70 @@ class AggregateOwnershipTests(unittest.TestCase):
     def test_head_aggregate_tool_substitution_cannot_weaken_checks(self):
         with tempfile.TemporaryDirectory() as temporary:
             repo = Path(temporary)
-            _, main_tip = stale_pr_repo(repo)
+            main_tip = merge_main(repo)
             (repo / "scripts" / "port" / "build_port_index.py").write_text(
                 "import sys\nsys.exit(0)\n")
             queue = repo / "docs" / "port" / "queue.tsv"
             queue.write_text(queue.read_text() + "edit\n")
             commit(repo, "weaken head tool and edit aggregate")
-            result = run_step(run_block(PLAN_GUARDS, "Port aggregates are generated on main"),
-                              repo, main_tip)
-            self.assertEqual(1, result.returncode, result.stdout + result.stderr)
-            self.assertIn("scripts/port/build_port_index.py differs from", result.stdout)
-            self.assertIn("oracle-change label", result.stdout)
+            selected, _ = select_guard_tool(repo, main_tip)
+            self.assertEqual(1, selected.returncode, selected.stdout + selected.stderr)
+            self.assertIn("scripts/port/build_port_index.py differs from current main",
+                          selected.stderr)
+            self.assertIn("oracle-change label", selected.stderr)
 
-    def test_plan_guards_runs_the_head_tool_not_the_base_copy(self):
+    def test_plan_guards_selects_the_tool_from_current_main(self):
         step = run_block(PLAN_GUARDS, "Port aggregates are generated on main")
         self.assertNotIn('cp "$base_tool" "$head_tool"', step)
-        self.assertIn("always run the head tool", step.lower())
+        self.assertIn("current main tip", step)
+        self.assertIn("--recorded-base \"$main_tip\"", step)
+        workflow = PLAN_GUARDS.read_text()
+        self.assertIn("scripts/port/select_guard_tool.sh", workflow)
+
+    def test_select_guard_tool_uses_current_main_for_a_stale_head(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary)
+            base, main_tip = pre_baseline_repo(repo)
+            git(repo, "checkout", "-q", "-b", "stale", base)
+            (repo / "README.md").write_text("stale branch\n")
+            commit(repo, "stale branch descendant")
+            selected, values = select_guard_tool(repo, main_tip)
+            self.assertEqual(0, selected.returncode, selected.stdout + selected.stderr)
+            self.assertTrue(values["PORT_GUARD_TOOL"].endswith(
+                ".guard_build_port_index.py"), values)
+            self.assertEqual(main_tip, values["PORT_GUARD_MAIN_TIP"])
+            self.assertIn("using current-main rules", selected.stderr)
+
+    def test_select_guard_tool_uses_head_when_it_contains_main(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary)
+            base, main_tip = pre_baseline_repo(repo)
+            git(repo, "checkout", "-q", "-b", "clean", base)
+            git(repo, "merge", "--no-ff", "-q", "-m", "merge main", "main")
+            selected, values = select_guard_tool(repo, main_tip)
+            self.assertEqual(0, selected.returncode, selected.stdout + selected.stderr)
+            self.assertEqual(str(repo / "scripts" / "port" / "build_port_index.py"),
+                             values["PORT_GUARD_TOOL"])
+            self.assertEqual(main_tip, values["PORT_GUARD_MAIN_TIP"])
 
     def test_stale_pre_baseline_base_cannot_restore_old_baseline_or_status(self):
         with tempfile.TemporaryDirectory() as temporary:
             repo = Path(temporary)
             base, main_tip = pre_baseline_repo(repo)
             git(repo, "checkout", "-q", "-b", "stale", base)
-            use_head_tool(repo)
-            commit(repo, "stale branch carries the head generator")
+            # The real stale case: the PR head keeps the old tool and old
+            # baseline/status and does not contain current main.
+            (repo / "README.md").write_text("stale branch\n")
+            commit(repo, "stale branch descendant")
+            selected, values = select_guard_tool(repo, main_tip)
+            self.assertEqual(0, selected.returncode, selected.stdout + selected.stderr)
+            self.assertTrue(values["PORT_GUARD_TOOL"].endswith(
+                ".guard_build_port_index.py"), values)
             result = run_step(
                 run_block(PLAN_GUARDS, "Port aggregates are generated on main"),
                 repo, base, main_tip,
+                {"PORT_GUARD_TOOL": values["PORT_GUARD_TOOL"],
+                 "PORT_GUARD_MAIN_TIP": values["PORT_GUARD_MAIN_TIP"]},
             )
             self.assertEqual(1, result.returncode, result.stdout + result.stderr)
             self.assertIn("changed: tests/baseline.json", result.stderr)
@@ -473,9 +529,13 @@ class AggregateOwnershipTests(unittest.TestCase):
             base, main_tip = pre_baseline_repo(repo)
             git(repo, "checkout", "-q", "-b", "clean", base)
             git(repo, "merge", "--no-ff", "-q", "-m", "merge main", "main")
+            selected, values = select_guard_tool(repo, main_tip)
+            self.assertEqual(0, selected.returncode, selected.stdout + selected.stderr)
             result = run_step(
                 run_block(PLAN_GUARDS, "Port aggregates are generated on main"),
                 repo, base, main_tip,
+                {"PORT_GUARD_TOOL": values["PORT_GUARD_TOOL"],
+                 "PORT_GUARD_MAIN_TIP": values["PORT_GUARD_MAIN_TIP"]},
             )
             self.assertEqual(0, result.returncode, result.stdout + result.stderr)
 

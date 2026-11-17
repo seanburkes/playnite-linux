@@ -272,14 +272,19 @@ then run from the base copy. The aggregate and shard-history steps materialise
 script but it cannot be materialised, the job fails instead of falling back. Only while the
 base genuinely lacks a script (including the materialiser itself) does the head copy run, with
 a named `BOOTSTRAP` warning; once `main` contains the script, every later run uses the base
-copy. The base SHA and the recorded event base come directly from the event fields in the
-workflow, not from a PR-controlled helper; `policy_base.sha` is their fork point and
-`policy_base.recorded` is the event base. The protected gate, results checker, capture, and
-lister all consume `policy_base.sha` (the fork point), not the recorded base; only aggregate
-ownership consumes `policy_base.recorded`. A policy change that adds a new tool capability is
-therefore bootstrapped by design: the introducing PR runs the previous base materialiser and
-scripts, and the new capability is live from the first merge that carries it. This applies to
-the aggregate tool and to the gate/checker/capture/lister policy scripts alike. This keeps a pull request from weakening the gate,
+copy. This applies to the protected gate/checker/capture/lister policy scripts. The base SHA
+and the recorded event base come directly from the event fields in the workflow, not from a
+PR-controlled helper; `policy_base.sha` is their fork point and `policy_base.recorded` is the
+event base. Those policy scripts consume `policy_base.sha` (the fork point). Generated-path
+ownership does not use the event base: the `Select the port guard tool` step fetches the
+current `main` tip and selects the generator from it. If the PR head contains current `main`,
+the head tool runs (it carries main's rules plus any reviewed PR change); if the PR is stale
+and does not contain current `main`, the current-main tool is materialised inside the checkout
+and runs instead, so an old PR cannot keep an old tool that predates the baseline and status
+checks. A head tool difference from current `main` on a contained PR requires the
+`oracle-change` label. The baseline/status comparison uses the fetched current-main tip, never
+`policy_base.recorded`.
+This keeps a pull request from weakening the gate,
 the results check, the aggregate tool, or the base project list in its own checkout. The protected-path diff is
 taken from the merge base to `HEAD`, so a PR
 branched before a protected-path change landed on `main` is not charged for that main-side

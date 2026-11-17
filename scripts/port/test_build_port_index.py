@@ -467,6 +467,74 @@ class PortIndexTests(unittest.TestCase):
         self.assertIn("main_captures entry for run 44005557177 was removed or rewritten",
                       " ".join(failures))
 
+    def test_capture_refuses_a_deleted_top_level_capture(self):
+        baseline, results, run, _ = self.floor_fixture(floor=2)
+        document = json.loads(baseline.read_text())
+        document["p4_exit_capture"] = {
+            "run_id": 9,
+            "run_url": "https://example.invalid/actions/runs/9",
+            "commit": "a" * 40,
+            "captured_at": "2026-11-16T00:00:00Z",
+            "counts": {"Core": {"total": 2, "executed": 2, "passed": 2,
+                                "failed": 0, "skipped": 0}},
+            "notes": "historical capture",
+        }
+        baseline.write_text(json.dumps(document))
+        self.git("add", "tests")
+        self.git("commit", "-q", "-m", "record top-level capture")
+        tampered = json.loads(baseline.read_text())
+        tampered.pop("p4_exit_capture")
+        baseline.write_text(json.dumps(tampered))
+        self.git("add", "tests")
+        self.git("commit", "-q", "-m", "delete top-level capture")
+        run["head_sha"] = self.git("rev-parse", "HEAD")
+        run["id"] = 10
+        with self.assertRaisesRegex(
+                port_index.PortIndexError,
+                "capture record p4_exit_capture was removed or rewritten"):
+            port_index.capture_baseline(baseline, results, run, self.root)
+
+    def test_stale_base_pr_deleting_a_top_level_capture_fails(self):
+        self.write_queue_shard("p1-001", queue_row("p1-001"))
+        baseline = self.root / "tests" / "baseline.json"
+        baseline.parent.mkdir()
+        document = {
+            "new": {"Core": {"total": 1781, "executed": 1781, "passed": 1781,
+                             "failed": 0, "skipped": 0}},
+            "main_captures": [{
+                "run_id": 44005557177,
+                "run_url": "https://example.invalid/actions/runs/44005557177",
+                "commit": "c" * 40,
+                "captured_at": "2026-11-17T02:51:34Z",
+                "counts": {"Core": {"total": 1781, "executed": 1781,
+                                    "passed": 1781, "failed": 0, "skipped": 0}},
+                "notes": "handoff",
+            }],
+            "p4_exit_capture": {
+                "run_id": 43998974769,
+                "run_url": "https://example.invalid/actions/runs/43998974769",
+                "commit": "d" * 40,
+                "captured_at": "2026-11-17T02:05:09Z",
+                "counts": {"Core": {"total": 1779, "executed": 1779,
+                                    "passed": 1779, "failed": 0, "skipped": 0}},
+                "notes": "stale history",
+            },
+        }
+        baseline.write_text(json.dumps(document))
+        self.build()
+        self.start_git_history()
+        fork = self.commit_all("fork with the top-level capture")
+        tampered = json.loads(json.dumps(document))
+        tampered.pop("p4_exit_capture")
+        baseline.write_text(json.dumps(tampered))
+        self.commit_all("delete the top-level capture")
+        failures = port_index.changed_aggregates(
+            self.root, fork, self.queue, self.ledger, fork)
+        self.assertIn(
+            "capture record p4_exit_capture was removed or rewritten",
+            " ".join(failures),
+        )
+
     def test_narrative_requires_a_hand_written_heading(self):
         self.write_queue_shard("p1-001", queue_row("p1-001"))
         status = self.root / "docs" / "port" / "PORT-STATUS.md"

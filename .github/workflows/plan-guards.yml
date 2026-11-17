@@ -109,6 +109,21 @@ jobs:
         run: |
           bash "$MATERIALISER" "$BASE_SHA" "$RUNNER_TEMP" "$GITHUB_OUTPUT"
 
+      - name: Select the port guard tool from current main
+        if: >-
+          github.event_name == 'pull_request' ||
+          github.event_name == 'merge_group'
+        shell: bash
+        env:
+          PORT_TOOL_CHANGE_AUTHORIZED: ${{ github.event_name == 'merge_group' || contains(github.event.pull_request.labels.*.name, 'oracle-change') }}
+        run: |
+          set -euo pipefail
+          eval "$(bash scripts/port/select_guard_tool.sh)"
+          {
+            printf 'PORT_GUARD_TOOL=%s\n' "$PORT_GUARD_TOOL"
+            printf 'PORT_GUARD_MAIN_TIP=%s\n' "$PORT_GUARD_MAIN_TIP"
+          } >> "$GITHUB_ENV"
+
       - name: Frozen snapshot and dependency pin are unconditionally immutable
         if: >-
           github.event_name == 'pull_request' ||
@@ -173,15 +188,12 @@ jobs:
         shell: bash
         env:
           BASE_SHA: ${{ steps.policy_base.outputs.sha }}
-          RECORDED_BASE: ${{ steps.policy_base.outputs.recorded }}
           PORT_INDEX_PR: ${{ github.event.pull_request.number }}
-          PORT_TOOL_CHANGE_AUTHORIZED: ${{ github.event_name == 'merge_group' || contains(github.event.pull_request.labels.*.name, 'oracle-change') }}
           PORT_BASELINE_NOTE_EDITS: ${{ github.event_name == 'merge_group' || contains(github.event.pull_request.labels.*.name, 'oracle-change') }}
         run: |
           set -euo pipefail
           # Compare against the fork point, not a stale recorded base. Main's
-          # post-merge aggregate regeneration is not this PR's change. The
-          # recorded event base is the other legitimate base-side snapshot.
+          # post-merge aggregate regeneration is not this PR's change.
           if [ -z "${BASE_SHA:-}" ] || printf '%s' "$BASE_SHA" | grep -Eq '^0+$'; then
             echo "::error::No comparison base SHA is available for aggregate ownership"
             exit 1
@@ -199,29 +211,23 @@ jobs:
           # request owns only its unit shards, so even a correctly regenerated
           # aggregate change fails here.
           #
-          # Always run the HEAD tool with the HEAD rules. Copying the base
-          # commit's tool over it would let a stale-base PR be judged by a tool
-          # that predates the baseline and status rules. Compare the head tool
-          # with the recorded mainline, not the fork point: a stale PR that
-          # merged main legitimately carries main's tool. A tool difference from
-          # the current mainline is a PR change and needs the oracle-change gate.
-          head_tool="$PWD/scripts/port/build_port_index.py"
-          if [ ! -f "$head_tool" ]; then
-            echo "::error::$head_tool is missing at head; the aggregate gate cannot run head rules"
+          # The tool is selected against the current main tip, never the PR
+          # event base. A stale PR that does not contain current main is judged
+          # by current-main rules, so it cannot keep an old tool that predates
+          # the baseline and status checks.
+          tool="${PORT_GUARD_TOOL:-}"
+          main_tip="${PORT_GUARD_MAIN_TIP:-}"
+          if [ -z "$tool" ] || [ ! -f "$tool" ]; then
+            echo "::error::No port guard tool was selected from current main; refusing the PR event-base fallback"
             exit 1
           fi
-          tool_base="${RECORDED_BASE:-$BASE_SHA}"
-          if [ -n "$tool_base" ] && ! printf '%s' "$tool_base" | grep -Eq '^0+$' && \
-             git cat-file -e "$tool_base:scripts/port/build_port_index.py" 2>/dev/null && \
-             ! git diff --quiet "$tool_base" -- scripts/port/build_port_index.py; then
-            if [ "${PORT_TOOL_CHANGE_AUTHORIZED:-false}" != "true" ]; then
-              echo "::error::scripts/port/build_port_index.py differs from $tool_base; this gate runs the head rules and a generator change requires the oracle-change label"
-              exit 1
-            fi
-            echo "::notice::generator differs from the recorded mainline; running the authorised head tool"
+          if [ -z "$main_tip" ] || ! printf '%s' "$main_tip" | grep -Eq '^[0-9a-f]{40}$'; then
+            echo "::error::No current main tip was selected; generated-path ownership cannot fall back to the PR event base"
+            exit 1
           fi
-          python3 "$head_tool" check --shards-only \
-            --against "$merge_base" --forbid-aggregate-changes
+          python3 "$tool" check --shards-only \
+            --against "$merge_base" --forbid-aggregate-changes \
+            --recorded-base "$main_tip"
 
       - name: Port shards are valid and history is preserved
         shell: bash
@@ -248,7 +254,7 @@ jobs:
               args+=(--against "$ref" --allow-pre-migration-base)
             fi
           fi
-          head_tool="$PWD/scripts/port/build_port_index.py"
+          head_tool="${PORT_GUARD_TOOL:-$PWD/scripts/port/build_port_index.py}"
           if [ ! -f "$head_tool" ]; then
             echo "::error::$head_tool is missing at head; the shard gate cannot run head rules"
             exit 1

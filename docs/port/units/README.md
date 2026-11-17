@@ -60,11 +60,14 @@ checkout and discard the generated files; never include them in the PR.
 
 The one-unit ownership check runs wherever the shard tree is compared with a base. On a pull
 request, `plan-guards` passes `--forbid-aggregate-changes` against the fork point, which
-enforces both generated-file ownership and shard ownership with the head commit's rules. The
-post-merge `port-index` writer passes `--forbid-shard-ownership` against the previous `main`
-commit before it writes, so a merge cannot launder an edited legacy ledger, a second fragment,
-or a non-verbatim migration through the bot. `--forbid-shard-ownership` is the narrow form for
-a tree-only check; `--forbid-aggregate-changes` implies it.
+enforces both generated-file ownership and shard ownership. The generator is selected from the
+current `main` tip fetched at guard time: a PR head that contains current `main` runs its head
+tool, while a stale head that does not contain current `main` runs the current-main tool, so an
+old PR cannot keep a tool that predates these rules. The post-merge `port-index` writer passes
+`--forbid-shard-ownership` against the previous `main` commit before it writes, so a merge
+cannot launder an edited legacy ledger, a second fragment, or a non-verbatim migration through
+the bot. `--forbid-shard-ownership` is the narrow form for a tree-only check;
+`--forbid-aggregate-changes` implies it.
 
 `docs/port/units/<unit>.queue.tsv` is a single file per unit. Two open PRs for the same unit
 both change it, so the second must rebase and re-run CI; the guard cannot predict a concurrent
