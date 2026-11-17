@@ -1,13 +1,11 @@
-"""A pull request may add tests but may not silently drop existing guard proofs.
+"""Negative proofs for the guard-test inventory policy.
 
-The ownership and evidence guards are only as strong as their negative proofs.
-This module compares every ``scripts/port/test_*.py`` file at the pull request
-base with the head: a base test case must still exist and the head must not
-contain fewer ``self.assert*`` calls.  Counts and names cannot catch every
-weakening, but they stop a PR from deleting a proof or replacing it with an
-empty test.  When no base revision is available locally the check passes
-against HEAD so the suite remains runnable outside CI; plan-guards supplies
-BASE_SHA on every pull request.
+The independent enforcement is ``scripts/port/check_guard_tests.py``, run by
+plan-guards as a plain script so deleting any unittest file (including this one)
+cannot disable it.  These tests keep the policy's own negative proofs: a
+deleted file, a renamed file, a removed case and a lower assertion count all
+fail.  When no base revision is available locally the live check uses HEAD so
+the suite remains runnable outside CI; plan-guards supplies BASE_SHA.
 """
 
 from __future__ import annotations
@@ -16,55 +14,66 @@ import os
 import re
 import subprocess
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-TESTS = ROOT / "scripts" / "port"
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-TEST_CASE = re.compile(r"^\s*def\s+(test_[A-Za-z0-9_]+)\s*\(", re.MULTILINE)
-ASSERTION = re.compile(r"\bself\.assert[A-Za-z0-9_]+")
+import check_guard_tests as inventory  # noqa: E402
 
-
-def _git(*args: str) -> str | None:
-    completed = subprocess.run(
-        ["git", "-C", str(ROOT), *args], capture_output=True, text=True
-    )
-    return completed.stdout if completed.returncode == 0 else None
+TEST_CASE = inventory.TEST_CASE
+ASSERTION = inventory.ASSERTION
 
 
 def base_revision() -> str | None:
     explicit = os.environ.get("BASE_SHA", "").strip()
     if re.fullmatch(r"[0-9a-f]{40}", explicit):
         return explicit
-    resolved = _git("rev-parse", "--verify", "--quiet", "origin/main^{commit}")
-    if resolved and re.fullmatch(r"[0-9a-f]{40}", resolved.strip()):
-        return resolved.strip()
+    completed = __import__("subprocess").run(
+        ["git", "-C", str(ROOT), "rev-parse", "--verify", "--quiet",
+         "origin/main^{commit}"],
+        capture_output=True,
+        text=True,
+    )
+    if completed.returncode == 0 and re.fullmatch(
+        r"[0-9a-f]{40}", completed.stdout.strip()
+    ):
+        return completed.stdout.strip()
     return None
 
 
-def integrity_errors(base: str, head: str, label: str = "<test>") -> list[str]:
-    errors: list[str] = []
-    missing = sorted(set(TEST_CASE.findall(base)) - set(TEST_CASE.findall(head)))
-    for name in missing:
-        errors.append(f"{label}: test case {name} present at the base is missing at head")
-    base_assertions = len(ASSERTION.findall(base))
-    head_assertions = len(ASSERTION.findall(head))
-    if head_assertions < base_assertions:
-        errors.append(
-            f"{label}: {head_assertions} assertions at head is fewer than "
-            f"{base_assertions} at the base; a pull request may add a proof but "
-            "must not weaken one"
-        )
-    return errors
-
-
 class GuardIntegrityTests(unittest.TestCase):
+    @staticmethod
+    def _init(repo: Path) -> None:
+        subprocess.run(["git", "-C", str(repo), "init", "-q"], check=True)
+        subprocess.run(
+            ["git", "-C", str(repo), "config", "user.email", "guard@example.invalid"],
+            check=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(repo), "config", "user.name", "Guard Inventory"],
+            check=True,
+        )
+
+    @staticmethod
+    def _commit(repo: Path, message: str) -> str:
+        subprocess.run(["git", "-C", str(repo), "add", "-A"], check=True)
+        subprocess.run(
+            ["git", "-C", str(repo), "commit", "-q", "--allow-empty", "-m", message],
+            check=True,
+        )
+        return subprocess.run(
+            ["git", "-C", str(repo), "rev-parse", "HEAD"],
+            check=True, capture_output=True, text=True,
+        ).stdout.strip()
+
     def test_removed_case_is_detected(self) -> None:
         base = "class T:\n    def test_kept(self):\n        self.assertTrue(1)\n    def test_removed(self):\n        self.assertTrue(2)\n"
         head = "class T:\n    def test_kept(self):\n        self.assertTrue(1)\n"
 
-        errors = integrity_errors(base, head)
+        errors = inventory.integrity_errors(base, head, "test_sample.py")
 
         self.assertTrue(any("test_removed" in error for error in errors))
 
@@ -72,23 +81,66 @@ class GuardIntegrityTests(unittest.TestCase):
         base = "def test_one(self):\n    self.assertTrue(1)\n    self.assertFalse(0)\n"
         head = "def test_one(self):\n    self.assertTrue(1)\n"
 
-        errors = integrity_errors(base, head)
+        errors = inventory.integrity_errors(base, head, "test_sample.py")
 
         self.assertTrue(any("fewer than" in error for error in errors))
 
-    def test_current_guard_suite_keeps_every_base_case_and_assertion(self) -> None:
+    def test_deleted_guard_test_file_is_detected(self) -> None:
+        base = {"scripts/port/test_unit_guard.py": "def test_one(self):\n    self.assertTrue(1)\n"}
+        head = {"scripts/port/test_build_port_index.py": "def test_one(self):\n    self.assertTrue(1)\n"}
+
+        errors = inventory.missing_file_errors(base, head)
+
+        self.assertTrue(any("test_unit_guard.py" in error for error in errors))
+
+    def test_renamed_guard_test_file_is_detected(self) -> None:
+        base = {"scripts/port/test_unit_guard.py": "def test_one(self):\n    self.assertTrue(1)\n"}
+        head = {"scripts/port/test_unit_guard_renamed.py": "def test_one(self):\n    self.assertTrue(1)\n"}
+
+        errors = inventory.missing_file_errors(base, head)
+
+        self.assertTrue(any("test_unit_guard.py" in error for error in errors))
+
+    def test_a_real_deleted_guard_file_is_detected(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="guard-inventory-") as temporary:
+            repo = Path(temporary)
+            self._init(repo)
+            path = repo / "scripts/port/test_unit_guard.py"
+            path.parent.mkdir(parents=True)
+            path.write_text("def test_one(self):\n    self.assertTrue(1)\n")
+            base = self._commit(repo, "base")
+            path.unlink()
+            self._commit(repo, "delete the guard test")
+
+            errors = inventory.check(repo, base, "HEAD")
+
+        self.assertTrue(any("test_unit_guard.py" in error for error in errors))
+
+    def test_a_real_renamed_guard_file_is_detected(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="guard-inventory-") as temporary:
+            repo = Path(temporary)
+            self._init(repo)
+            path = repo / "scripts/port/test_unit_guard.py"
+            path.parent.mkdir(parents=True)
+            path.write_text("def test_one(self):\n    self.assertTrue(1)\n")
+            base = self._commit(repo, "base")
+            subprocess.run(
+                ["git", "-C", str(repo), "mv",
+                 "scripts/port/test_unit_guard.py",
+                 "scripts/port/test_unit_guard_renamed.py"],
+                check=True, capture_output=True,
+            )
+            self._commit(repo, "rename the guard test")
+
+            errors = inventory.check(repo, base, "HEAD")
+
+        self.assertTrue(any("test_unit_guard.py" in error for error in errors))
+
+    def test_current_guard_suite_keeps_every_base_file_case_and_assertion(self) -> None:
         base = base_revision()
         if base is None:
             return
-        errors: list[str] = []
-        for path in sorted(TESTS.glob("test_*.py")):
-            relative = path.relative_to(ROOT).as_posix()
-            original = _git("show", f"{base}:{relative}")
-            if original is None:
-                continue
-            errors.extend(
-                integrity_errors(original, path.read_text(encoding="utf-8"), relative)
-            )
+        errors = inventory.check(ROOT, base, "HEAD")
         self.assertEqual([], errors, "\n".join(errors))
 
 

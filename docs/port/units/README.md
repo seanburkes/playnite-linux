@@ -120,9 +120,12 @@ fragment describes. A run from an unrelated base-branch ancestor, from a main co
 after the branch point, or from the event base itself is rejected, so a rebased or
 fast-forwarded branch cannot borrow a main commit's CI.
 
-The negative proofs themselves are protected: `scripts/port/test_guard_integrity.py` compares
-the complete `scripts/port/test_*.py` file set with the pull request base and fails if a base
-test file is deleted or renamed away, a base test case disappears, or the assertion count drops.
+The negative proofs themselves are protected by `scripts/port/check_guard_tests.py`, which
+plan-guards runs as a plain script (not a unittest, so deleting a test file cannot disable it).
+It enumerates the `scripts/port/test_*.py` files at the base and head and fails when a base test
+file is deleted or renamed away, the head set shrinks, a base test case disappears, or the
+assertion count drops. `scripts/port/test_guard_integrity.py` keeps the negative proofs for that
+policy, including real delete and rename cases.
 
 ## Ledger history is append-only in content
 

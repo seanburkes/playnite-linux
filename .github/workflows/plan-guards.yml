@@ -168,6 +168,17 @@ jobs:
           BASE_SHA: ${{ steps.policy_base.outputs.sha }}
         run: python3 -m unittest discover -s scripts/port -p 'test_*.py'
 
+      - name: Port guard test files cannot be deleted or weakened
+        env:
+          BASE_SHA: ${{ steps.policy_base.outputs.sha }}
+        run: |
+          set -euo pipefail
+          if [ -z "${BASE_SHA:-}" ] || printf '%s' "$BASE_SHA" | grep -Eq '^0+$'; then
+            echo "::error::No comparison base SHA is available for guard-test integrity"
+            exit 1
+          fi
+          python3 scripts/port/check_guard_tests.py --base "$BASE_SHA" --head HEAD
+
       - name: Port aggregates are generated on main
         if: >-
           github.event_name == 'pull_request' ||
