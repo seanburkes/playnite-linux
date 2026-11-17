@@ -290,7 +290,12 @@ re-reads the PR's `oracle-change` label through the API because merge-group even
 carry PR labels. It fails closed on a batched group, which does not identify exactly one PR,
 and reports that single-PR limitation explicitly.
 
-The committed baseline is a ratchet. A change may add the first non-null `new` object only when
+The committed baseline is a ratchet and is bot-owned. A pull request never edits
+`tests/baseline.json`; the post-merge `port-index` workflow reads the completed merged-main
+`linux-ci` run's downloaded JUnit and MTP exit artifacts, validates every project and exit
+code, and refuses to write if any recorded floor would fall. It appends a `main_captures`
+record with the run id, URL, commit and time while preserving every earlier capture and its
+provenance text. A change may add the first non-null `new` object only when
 its counts meet or exceed the observed run and it names every observed project, so a first
 baseline cannot record zero or omit a project and leave a false floor. It may not delete
 `tests/baseline.json`, reset `new` to null, lower a retained
@@ -320,7 +325,9 @@ unfiltered triggers, and the Windows jobs retain their narrower oracle triggers.
 ### New-suite baseline at Phase 2 exit
 
 `tests/baseline.json` currently has `new: null`; Core.Tests is still a marker-only scaffold,
-while p2-002 supplies real architecture cases. Do not replace `new: null` with a fabricated
+while p2-002 supplies real architecture cases. This historical bootstrap is superseded: the
+baseline is now bot-owned by the post-merge `port-index` workflow, and PRs never edit it.
+Do not replace `new: null` with a fabricated
 zero-test baseline. At Phase 2 exit, after every remaining empty project has real tests and the
 Linux CI run is green, the oracle owner records the new suite **per project under
 `tests/baseline.json`'s `new` object**, in a separate `oracle-change` PR through the

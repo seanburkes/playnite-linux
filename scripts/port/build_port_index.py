@@ -18,9 +18,16 @@ only a local convenience fallback.
 
 History is append-only in content, not in order. A new row may carry any instant,
 including one older than rows already recorded, so an out-of-order merge cannot
-fail validation. `build` sorts the generated aggregate by instant then unit; that
-ordering is produced by the parent-owned regeneration on main, and contributors
-never hand-order or hand-edit an aggregate.
+fail validation. `build` sorts legacy/history rows by instant then unit and appends
+per-PR ledger fragments in numeric-PR then filename order; that ordering is produced
+by the parent-owned regeneration on main, and contributors never hand-order or
+hand-edit an aggregate.
+
+Ledger evidence lives in per-PR fragments,
+`docs/port/units/<unit>.ledger.d/<pr>-<short-slug>.tsv`. A legacy
+`<unit>.ledger.tsv` remains readable and frozen, and may be migrated verbatim to
+`<unit>.ledger.d/0000-history.tsv`. Fragments are immutable after merge, so a pull
+request never appends to a file another PR also writes.
 
 A timestamp correction recorded in `docs/port/units/ledger-corrections.tsv` in
 the same change may change only the timestamp of one existing base row, and only
@@ -31,9 +38,17 @@ correction records are themselves append-only.
 Pull requests validate the shard tree only. `--shards-only` skips the byte
 comparison against the committed aggregates, which are generated on main by the
 post-merge `port-index` workflow. `--forbid-aggregate-changes` fails when the
-branch changed either aggregate since its merge base with `--against`, so a pull
-request owns only its unit shards and a stale branch does not appear to revert
-aggregates that landed on main.
+branch changed `docs/port/queue.tsv`, `docs/port/ledger.tsv`, `tests/baseline.json`
+or generated `PORT-STATUS.md` content since its merge base with `--against`, so a
+pull request owns only its unit shards and a stale branch does not appear to revert
+aggregates that landed on main. The same gate checks fragment ownership: one unit
+namespace and at most one new immutable fragment named for this PR.
+
+`build` also regenerates `docs/port/PORT-STATUS.md` from the shards, preserving only
+the prose between the narrative markers, and, when `--capture-results` and
+`--capture-run` point at a completed merged-main `linux-ci` run's artifacts, ratchets
+`tests/baseline.json`. The baseline writer refuses to lower any recorded floor and
+preserves every earlier capture and its provenance.
 
 The migration PR that first adds `docs/port/units` is the one legitimate
 pre-migration base: `--allow-pre-migration-base` acknowledges the history skip
@@ -47,6 +62,8 @@ from __future__ import annotations
 import argparse
 import difflib
 import hashlib
+import importlib.util
+import json
 from functools import lru_cache
 import os
 import re
@@ -61,8 +78,16 @@ from urllib.parse import unquote
 
 ROOT = Path(__file__).resolve().parents[2]
 UNITS = ROOT / "docs" / "port" / "units"
-QUEUE = ROOT / "docs" / "port" / "queue.tsv"
-LEDGER = ROOT / "docs" / "port" / "ledger.tsv"
+STATUS_GENERATED_PATH = "docs/port/PORT-STATUS.md"
+BASELINE_GENERATED_PATH = "tests/baseline.json"
+NARRATIVE_START = "<!-- port-status:narrative:start -->"
+NARRATIVE_END = "<!-- port-status:narrative:end -->"
+FRAGMENT_SUFFIX = ".ledger.d"
+FRAGMENT_NAME = re.compile(r"([1-9][0-9]*)-([a-z0-9]+(?:-[a-z0-9]+)*)\.tsv")
+# One-time migration target, if a unit chooses to move its legacy ledger shard
+# into the fragment directory. It holds the old rows verbatim and is ordered
+# with history, before every per-PR fragment.
+HISTORY_NAME = "0000-history.tsv"
 
 # Task directories, not standard system roots. Changes are protected policy changes.
 LOCAL_TASK_ROOTS = ("/tmp/opencode", "/srv/firstmate", "/var/lib/firstmate")
@@ -187,7 +212,8 @@ _WAVE = re.compile(r"W(\d+)")
 
 ALLOWED_UNIT_FILES = (
     f"{README_NAME}, {REMOVED_NAME}, {CORRECTIONS_NAME}, "
-    f"<unit-id>{QUEUE_SUFFIX} and <unit-id>{LEDGER_SUFFIX}"
+    f"<unit-id>{QUEUE_SUFFIX}, <unit-id>{LEDGER_SUFFIX} and "
+    f"<unit-id>{FRAGMENT_SUFFIX}/<pr>-<short-slug>.tsv"
 )
 
 
@@ -240,6 +266,7 @@ class ShardIndex:
     ledger: dict[str, tuple[LedgerRow, ...]]
     removed: dict[str, tuple[str, ...]]
     corrections: tuple[LedgerCorrection, ...]
+    fragments: tuple[LedgerRow, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -331,6 +358,24 @@ def _discover(
 
     for entry in sorted(units.iterdir(), key=lambda path: path.name):
         name = entry.name
+        if name.endswith(FRAGMENT_SUFFIX):
+            unit = name[:-len(FRAGMENT_SUFFIX)]
+            if not _UNIT_ID.fullmatch(unit) or not entry.is_dir() or entry.is_symlink():
+                errors.append(f"{entry}: invalid ledger fragment directory")
+                continue
+            if not (units / f"{unit}{QUEUE_SUFFIX}").is_file():
+                errors.append(f"{entry}: fragment namespace has no queue shard for {unit!r}")
+            for fragment in sorted(entry.iterdir()):
+                if (not (FRAGMENT_NAME.fullmatch(fragment.name)
+                         or fragment.name == HISTORY_NAME)
+                        or not fragment.is_file() or fragment.is_symlink()):
+                    errors.append(
+                        f"{fragment}: expected <numeric-pr>-<short-slug>.tsv "
+                        f"or {HISTORY_NAME}"
+                    )
+                else:
+                    ledger_paths.append(fragment)
+            continue
         if name == README_NAME:
             if not entry.is_file():
                 errors.append(f"{entry}: {README_NAME} must be a regular file")
@@ -415,13 +460,20 @@ def _collect_queue(paths: list[Path]) -> tuple[dict[str, QueueRow], list[str]]:
 
 def _collect_ledger(
     paths: list[Path], queue_ids: set[str]
-) -> tuple[dict[str, tuple[LedgerRow, ...]], list[str]]:
+) -> tuple[dict[str, tuple[LedgerRow, ...]], list[str], tuple[LedgerRow, ...]]:
+    """Parse legacy shards, migrated history, then per-PR fragments.
+
+    Fragments are returned separately, in numeric-PR then filename order, so the
+    aggregate can place history first and every fragment after it. The per-unit
+    mapping keeps the same rows for the history-preservation check.
+    """
     errors: list[str] = []
     rows: dict[str, tuple[LedgerRow, ...]] = {}
+    fragments: list[LedgerRow] = []
     seen_rows: dict[tuple[object, ...], str] = {}
 
-    for path in sorted(paths, key=lambda item: item.name):
-        unit_id = path.name[: -len(LEDGER_SUFFIX)]
+    for path in sorted(paths, key=ledger_path_key):
+        unit_id = ledger_path_unit(path)
         if unit_id not in queue_ids:
             errors.append(f"{path}: ledger shard has no queue shard for {unit_id!r}")
             continue
@@ -457,10 +509,29 @@ def _collect_ledger(
                 )
                 continue
             seen_rows[identity] = f"{path}:{lineno}"
-            shard_rows.append(LedgerRow(tuple(fields)))
-        rows[unit_id] = tuple(shard_rows)
+            row = LedgerRow(tuple(fields))
+            shard_rows.append(row)
+            if _is_fragment(path):
+                fragments.append(row)
+        rows[unit_id] = rows.get(unit_id, ()) + tuple(shard_rows)
 
-    return rows, errors
+    return rows, errors, tuple(fragments)
+
+
+def _is_fragment(path: Path) -> bool:
+    return path.parent.name.endswith(FRAGMENT_SUFFIX) and path.name != HISTORY_NAME
+
+
+def ledger_path_unit(path: Path) -> str:
+    return (path.parent.name[:-len(FRAGMENT_SUFFIX)]
+            if path.parent.name.endswith(FRAGMENT_SUFFIX)
+            else path.name[:-len(LEDGER_SUFFIX)])
+
+
+def ledger_path_key(path: Path) -> tuple:
+    match = FRAGMENT_NAME.fullmatch(path.name)
+    return ((1, int(match[1]), path.name, ledger_path_unit(path)) if match
+            else (0, 0, path.name, ledger_path_unit(path)))
 
 
 def _collect_removed(path: Path) -> dict[str, tuple[str, ...]]:
@@ -557,7 +628,7 @@ def build_index(units: Path) -> ShardIndex:
     if not queue_rows and not errors:
         errors.append(f"{units}: no queue shards found")
 
-    ledger_rows, ledger_errors = _collect_ledger(ledger_paths, set(queue_rows))
+    ledger_rows, ledger_errors, fragments = _collect_ledger(ledger_paths, set(queue_rows))
     errors.extend(ledger_errors)
 
     removed: dict[str, tuple[str, ...]] = {}
@@ -601,23 +672,27 @@ def build_index(units: Path) -> ShardIndex:
 
     if errors:
         raise PortIndexError("\n".join(errors))
-    return ShardIndex(queue_rows, ledger_rows, removed, corrections)
+    return ShardIndex(queue_rows, ledger_rows, removed, corrections, fragments)
 
 
 def _ordered_ledger_rows(index: ShardIndex) -> tuple[LedgerRow, ...]:
     """The ledger rows in generated aggregate order.
 
-    The key is total: instant, then unit, then the remaining fields. Rows that
-    share an instant and unit therefore order by content rather than by their
-    position in a shard, so reordering a shard cannot change generated bytes.
+    Legacy shards and any migrated history come first, ordered by instant, then
+    unit, then the remaining fields. That key is total, so reordering a history
+    shard cannot change generated bytes. Per-PR fragments follow history in
+    numeric-PR then filename order, regardless of their timestamps, so a new
+    fragment always lands after already-generated history.
     """
-    rows = [row for unit_id in sorted(index.ledger) for row in index.ledger[unit_id]]
+    fragment_rows = set(index.fragments)
+    rows = [row for unit_id in sorted(index.ledger) for row in index.ledger[unit_id]
+            if row not in fragment_rows]
     return tuple(
         sorted(
             rows,
             key=lambda row: (_timestamp(row.timestamp), row.unit, row.fields[2:]),
         )
-    )
+    ) + index.fragments
 
 
 def render_index(index: ShardIndex) -> tuple[bytes, bytes]:
@@ -661,25 +736,12 @@ def snapshot_from_dir(units: Path, queue: Path, ledger: Path) -> BaseSnapshot | 
         queue_shards[unit_id] = tuple(fields)
 
     ledger_shards: dict[str, tuple[tuple[str, ...], ...]] = {}
-    for path in sorted(units.glob(f"*{LEDGER_SUFFIX}"), key=lambda item: item.name):
-        unit_id = path.name[: -len(LEDGER_SUFFIX)]
-        if not _UNIT_ID.fullmatch(unit_id):
-            raise PortIndexError(f"{path}: invalid unit id {unit_id!r}")
-        if unit_id not in queue_shards:
-            raise PortIndexError(f"{path}: ledger shard has no queue shard for {unit_id!r}")
-        parsed = _read_shard(path, LEDGER_HEADER, LEDGER_COLUMNS)
-        rows: list[tuple[str, ...]] = []
-        for lineno, fields in parsed:
-            if fields[1] != unit_id:
-                raise PortIndexError(
-                    f"{path}:{lineno}: ledger unit {fields[1]!r} does not match filename {unit_id!r}"
-                )
-            try:
-                _timestamp(fields[0])
-            except ValueError as exc:
-                raise PortIndexError(f"{path}:{lineno}: {exc}") from exc
-            rows.append(tuple(fields))
-        ledger_shards[unit_id] = tuple(rows)
+    _, ledger_paths, _, _, discovery_errors = _discover(units)
+    collected, ledger_errors, _ = _collect_ledger(ledger_paths, set(queue_shards))
+    if discovery_errors or ledger_errors:
+        raise PortIndexError("\n".join(discovery_errors + ledger_errors))
+    ledger_shards = {unit: tuple(row.fields for row in rows)
+                     for unit, rows in collected.items()}
 
     removed: dict[str, tuple[str, ...]] = {}
     removed_path = units / REMOVED_NAME
@@ -755,7 +817,8 @@ def changed_aggregates(root: Path, ref: str, queue: Path, ledger: Path,
         if not resolved_recorded:
             raise PortIndexError(f"cannot resolve recorded base {recorded_base!r}")
         recorded = resolved_recorded
-    paths = (_repo_relative(queue, root), _repo_relative(ledger, root))
+    paths = (_repo_relative(queue, root), _repo_relative(ledger, root),
+             BASELINE_GENERATED_PATH, STATUS_GENERATED_PATH)
     listing = _git(
         root, "diff", "--name-only", "-z", merge_base, "HEAD", "--", *paths
     )
@@ -767,12 +830,20 @@ def changed_aggregates(root: Path, ref: str, queue: Path, ledger: Path,
     for side in base_sides:
         for name in changed:
             content = _git_bytes(root, "show", f"{side}:{name}")
-            if content is not None:
-                allowed[name].add(content)
+            if content is None:
+                continue
+            if name == STATUS_GENERATED_PATH:
+                content = generated_status_content(content)
+            allowed[name].add(content)
     failures = []
     for name in changed:
         head = _git_bytes(root, "show", f"HEAD:{name}")
         merge_content = _git_bytes(root, "show", f"{merge_base}:{name}")
+        if name == STATUS_GENERATED_PATH:
+            if head is not None:
+                head = generated_status_content(head)
+            if merge_content is not None:
+                merge_content = generated_status_content(merge_content)
         if head is None or merge_content is None:
             failures.append(name)
             continue
@@ -780,6 +851,190 @@ def changed_aggregates(root: Path, ref: str, queue: Path, ledger: Path,
             continue
         failures.append(name)
     return failures
+
+
+def generated_status_content(content: bytes) -> bytes:
+    try:
+        text = content.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise PortIndexError(f"{STATUS_GENERATED_PATH}: invalid UTF-8: {exc}") from exc
+    if NARRATIVE_START not in text and NARRATIVE_END not in text:
+        return content
+    narrative(text)  # Reject malformed or duplicate markers, not a blanket bypass.
+    before, rest = text.split(NARRATIVE_START)
+    _, after = rest.split(NARRATIVE_END)
+    return (before + NARRATIVE_START + NARRATIVE_END + after).encode("utf-8")
+
+
+def narrative(text: str) -> str:
+    if text.count(NARRATIVE_START) != 1 or text.count(NARRATIVE_END) != 1:
+        raise PortIndexError("PORT-STATUS narrative requires exactly one start/end marker pair")
+    before, rest = text.split(NARRATIVE_START)
+    if NARRATIVE_END in before or NARRATIVE_END not in rest:
+        raise PortIndexError("PORT-STATUS narrative markers are reversed")
+    return rest.split(NARRATIVE_END)[0]
+
+
+def render_status(index: ShardIndex, previous: str) -> bytes:
+    if NARRATIVE_START in previous or NARRATIVE_END in previous:
+        prose = narrative(previous)
+    else:
+        # One-time migration: retain the limitations, decisions and blockers,
+        # not the stale hand-maintained boards the shard tables replace.
+        prose = ("\n## Deferred / known limitations"
+                 + previous.partition("## Deferred / known limitations")[2].partition("## Metrics")[0]
+                 if previous.strip() else "\n")
+    lines = ["# Port status", "",
+             "<!-- Generated by scripts/port/build_port_index.py; edit unit shards only. -->",
+             "", NARRATIVE_START + prose + NARRATIVE_END, "",
+             "## Unit summary", "", "| Status | Units |", "| --- | ---: |"]
+    counts = Counter(row.fields[5] for row in index.queue.values())
+    lines.extend(f"| {status} | {count} |" for status, count in sorted(counts.items()))
+    lines.extend(["", "## Ledger", "", "| Metric | Value |", "| --- | ---: |",
+                  f"| Ledger rows | {sum(len(rows) for rows in index.ledger.values())} |",
+                  f"| Ledger fragments | {len(index.fragments)} |"])
+    lines.extend(["", "## Units", "",
+                  "| Unit | Wave | Area | Work | Status | Evidence |",
+                  "| --- | --- | --- | --- | --- | --- |"])
+
+    def cell(value):
+        return value.replace("|", "\\|").replace("\n", " ")
+
+    for row in sorted(index.queue.values(),
+                      key=lambda row: (_wave_key(row.fields[1]), row.fields[0])):
+        fields = row.fields
+        evidence = f"`units/{fields[0]}.*`; {len(index.ledger.get(fields[0], ()))} ledger rows"
+        lines.append("| " + " | ".join(map(cell, (*fields[:4], fields[5], evidence))) + " |")
+    return ("\n".join(lines) + "\n").encode("utf-8")
+
+
+def shard_ownership_errors(root: Path, ref: str, unit: str | None = None,
+                           pr: str | None = None) -> list[str]:
+    """Existing evidence is frozen; a PR adds only its own evidence namespace."""
+    changes = _git(root, "diff", "--name-status", "--no-renames", ref, "HEAD", "--",
+                   "docs/port/units").decode().splitlines()
+    errors = []
+    owned = set()
+    fragments = []
+    for change in changes:
+        fields = change.split("\t")
+        if len(fields) != 2:
+            errors.append(f"unexpected diff record: {change!r}")
+            continue
+        status, name = fields
+        path = Path(name)
+        if path.name.endswith(QUEUE_SUFFIX):
+            owned.add(path.name[:-len(QUEUE_SUFFIX)])
+        elif path.parent.name.endswith(FRAGMENT_SUFFIX):
+            owned.add(path.parent.name[:-len(FRAGMENT_SUFFIX)])
+            match = FRAGMENT_NAME.fullmatch(path.name)
+            fragments.append(name)
+            if status != "A" or match is None or (pr and match[1] != str(pr)):
+                errors.append(
+                    f"{name}: a PR may only add one immutable "
+                    f"<its-pr>-<short-slug>.tsv ledger fragment"
+                )
+        elif path.name.endswith(LEDGER_SUFFIX):
+            errors.append(f"{name}: legacy history is frozen; add a ledger fragment instead")
+    if len(owned) > 1 or (unit is not None and owned - {unit}):
+        errors.append(
+            "a PR owns exactly one unit queue/evidence namespace: "
+            + ", ".join(sorted(owned))
+        )
+    if len(fragments) > 1:
+        errors.append("a PR may add exactly one ledger fragment")
+    return errors
+
+
+def capture_baseline(baseline: Path, results: Path, run: dict, root: Path) -> bytes:
+    """Validate downloaded merged-main JUnit/exit artifacts before raising floors."""
+    if not isinstance(run, dict):
+        raise PortIndexError("floor capture run must be a JSON object")
+    if (run.get("event") != "push" or run.get("head_branch") != "main"
+            or run.get("conclusion") != "success" or run.get("name") != "linux-ci"
+            or not re.fullmatch(r"[0-9a-f]{40}", run.get("head_sha", ""))
+            or not isinstance(run.get("id"), int)
+            or not isinstance(run.get("html_url"), str)
+            or not isinstance(run.get("updated_at"), str)):
+        raise PortIndexError("floor capture requires a successful main-push linux-ci run")
+    if run["head_sha"] != _git(root, "rev-parse", "HEAD").decode().strip():
+        raise PortIndexError("floor capture run head does not match checked-out merged main")
+    document = json.loads(baseline.read_text())
+    if not isinstance(document, dict):
+        raise PortIndexError("baseline must be a JSON object")
+    spec = importlib.util.spec_from_file_location(
+        "linux_results", ROOT / "scripts/ci/check_linux_test_results.py")
+    checker = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(checker)
+    report = json.loads((results / "test-counts.json").read_text())
+    if report.get("failures") or not report.get("projects"):
+        raise PortIndexError("floor capture artifact reports failures or no projects")
+    projects = report["projects"]
+    discovered = _git(
+        root, "ls-tree", "-r", "--name-only", "HEAD", "--", "tests"
+    ).decode().splitlines()
+    expected = set()
+    for name in discovered:
+        if name.endswith(".csproj") and re.search(
+                rb"<IsTestProject>\s*true\s*</IsTestProject>|Microsoft\.NET\.Test\.Sdk",
+                _git(root, "show", f"HEAD:{name}")):
+            expected.add(Path(name).stem)
+    if set(projects) != expected:
+        raise PortIndexError("floor artifact project set differs from merged-main test projects")
+    counted = document.get("new") or {}
+    if not isinstance(counted, dict):
+        raise PortIndexError("baseline new suite must be an object")
+    retired = set(document.get("removed_projects") or {})
+    missing = set(counted) - set(projects) - retired
+    if missing:
+        raise PortIndexError(
+            "floor capture omits recorded project(s) without a retirement record: "
+            + ", ".join(sorted(missing))
+        )
+    observed = {}
+    for project, result in sorted(projects.items()):
+        if not re.fullmatch(r"[A-Za-z0-9_.-]+", project):
+            raise PortIndexError("invalid project name in floor artifact")
+        directory = results / project
+        counts = checker.read_counts(directory / f"{project}.xml")
+        exit_code = int((directory / "exit-code.txt").read_text())
+        if (exit_code != 0 or result.get("exit_code") != 0 or result.get("counts") != counts
+                or result.get("outcome") != "pass" or counts["failed"] or counts["skipped"]
+                or counts["executed"] == 0):
+            raise PortIndexError(f"{project}: invalid or unsuccessful floor artifact")
+        for field in ("total", "executed", "passed"):
+            if counts[field] < counted.get(project, {}).get(field, 0):
+                raise PortIndexError(f"{project}: refusing to lower recorded {field} floor")
+        observed[project] = counts
+    # Preserve every pre-existing capture and its provenance under its original key.
+    captures = document.setdefault("main_captures", [])
+    if not isinstance(captures, list):
+        raise PortIndexError("main_captures must be a list")
+    capture = {"run_id": run["id"], "run_url": run["html_url"],
+               "commit": run["head_sha"], "captured_at": run["updated_at"],
+               "counts": observed,
+               "notes": "Counts parsed from this merged-main linux-ci run's downloaded "
+                        "JUnit and MTP exit artifacts; all previous capture records are retained."}
+    matches = [item for item in captures
+               if isinstance(item, dict) and item.get("run_id") == run["id"]]
+    identity = ("run_id", "run_url", "commit", "captured_at", "counts")
+    if len(matches) > 1 and any(
+            {key: item.get(key) for key in identity}
+            != {key: matches[0].get(key) for key in identity}
+            for item in matches[1:]):
+        raise PortIndexError(
+            "floor capture run is recorded more than once with different provenance")
+    if matches and {key: matches[0].get(key) for key in identity} != {
+            key: capture.get(key) for key in identity}:
+        raise PortIndexError("floor capture run already recorded with different provenance")
+    if not matches and observed != counted:
+        captures.append(capture)
+    document["new"] = observed
+    empty = document.get("empty_projects")
+    if isinstance(empty, dict):
+        for project in observed:
+            empty.pop(project, None)
+    return (json.dumps(document, indent=2, ensure_ascii=False) + "\n").encode()
 
 
 def _is_strict_ancestor(root: Path, ref: str) -> bool:
@@ -1168,14 +1423,20 @@ def main(
     argv: list[str] | None = None,
     *,
     units: Path = UNITS,
-    queue: Path = QUEUE,
-    ledger: Path = LEDGER,
-    root: Path = ROOT,
     base_loader=None,
     ancestor_guard=None,
 ) -> int:
+    # One shard base owns every output and repository/history operation.
+    units = units.resolve()
+    root = units.parents[2]
+    queue = units.parent / "queue.tsv"
+    ledger = units.parent / "ledger.tsv"
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("mode", choices=("build", "check"))
+    parser.add_argument("--capture-results", type=Path)
+    parser.add_argument("--capture-run", type=Path)
+    parser.add_argument("--unit", help="unit owned by this PR")
+    parser.add_argument("--pr", default=os.environ.get("PORT_INDEX_PR"), help="PR number for its new fragment")
     parser.add_argument(
         "--against",
         metavar="REF",
@@ -1231,9 +1492,26 @@ def main(
         return 1
 
     if args.mode == "build":
+        status = root / STATUS_GENERATED_PATH
+        baseline = root / BASELINE_GENERATED_PATH
+        try:
+            if bool(args.capture_results) != bool(args.capture_run):
+                raise PortIndexError(
+                    "floor capture requires both --capture-results and --capture-run")
+            baseline_bytes = (capture_baseline(baseline, args.capture_results,
+                              json.loads(args.capture_run.read_text()), root)
+                              if args.capture_results else None)
+            status_bytes = render_status(
+                index, status.read_text() if status.exists() else "")
+        except (PortIndexError, OSError, ValueError, KeyError, TypeError) as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 1
         queue.write_bytes(queue_bytes)
         ledger.write_bytes(ledger_bytes)
-        print(f"wrote {queue} and {ledger}")
+        status.write_bytes(status_bytes)
+        if baseline_bytes is not None:
+            baseline.write_bytes(baseline_bytes)
+        print(f"wrote {queue}, {ledger} and {status}")
         return 0
 
     if args.forbid_aggregate_changes:
@@ -1248,25 +1526,36 @@ def main(
         try:
             changed = changed_aggregates(root, args.against, queue, ledger,
                                          recorded_base)
+            ownership = shard_ownership_errors(root, args.against, args.unit, args.pr)
         except PortIndexError as exc:
             print(f"error: {exc}", file=sys.stderr)
             return 1
-        if changed:
+        if changed or ownership:
             print(
-                "error: pull requests must not modify the generated aggregates. "
-                "Edit only your unit shard under docs/port/units/ and leave "
-                "docs/port/queue.tsv and docs/port/ledger.tsv to the post-merge "
-                "port-index workflow; drop those file changes from this PR.",
+                "error: pull requests must not modify generated or bot-owned files. "
+                "Edit only your own unit shards under docs/port/units/ (one queue "
+                "shard and at most one new <pr>-<slug>.tsv ledger fragment) and leave "
+                "docs/port/queue.tsv, docs/port/ledger.tsv, docs/port/PORT-STATUS.md "
+                "and tests/baseline.json to the post-merge port-index workflow; drop "
+                "those file changes from this PR.",
                 file=sys.stderr,
             )
             for name in changed:
                 print(f"  changed: {name}", file=sys.stderr)
+            for error in ownership:
+                print(f"  ownership: {error}", file=sys.stderr)
             return 1
 
     if not args.shards_only:
         queue_ok = _check_file(queue, queue_bytes)
         ledger_ok = _check_file(ledger, ledger_bytes)
-        if not (queue_ok and ledger_ok):
+        status = root / STATUS_GENERATED_PATH
+        if status.exists():
+            status_ok = _check_file(status, render_status(index, status.read_text()))
+        else:
+            print(f"error: {status} is missing; run the generator build", file=sys.stderr)
+            status_ok = False
+        if not (queue_ok and ledger_ok and status_ok):
             return 1
 
     ref = args.against or os.environ.get("PORT_INDEX_BASE_REF", "").strip()

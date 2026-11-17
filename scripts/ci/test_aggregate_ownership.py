@@ -206,11 +206,7 @@ class AggregateOwnershipTests(unittest.TestCase):
             result = run_step(run_block(PLAN_GUARDS, "Port aggregates are generated on main"),
                               repo, main_tip)
             self.assertEqual(1, result.returncode)
-            self.assertIn("error: pull requests must not modify the generated aggregates. "
-                          "Edit only your unit shard under docs/port/units/ and leave "
-                          "docs/port/queue.tsv and docs/port/ledger.tsv to the post-merge "
-                          "port-index workflow; drop those file changes from this PR.",
-                          result.stderr)
+            self.assertIn("error: pull requests must not modify", result.stderr)
             self.assertIn("changed: docs/port/queue.tsv", result.stderr)
 
     def test_pr_editing_only_its_shard_passes(self):
