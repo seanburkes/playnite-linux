@@ -733,7 +733,16 @@ public sealed class SteamDiscoveryTests : IDisposable
 
         var before = Snapshot(home);
         _ = Discover();
-        Assert.Equal(before, Snapshot(home));
+        var after = Snapshot(home);
+
+        Assert.Equal(before.Select(entry => entry.Path), after.Select(entry => entry.Path));
+        for (var i = 0; i < before.Count; i++)
+        {
+            // A read-only call may legitimately advance atime by reading; every other property is
+            // byte-identical, and atime never moves backwards.
+            Assert.Equal(before[i] with { Atime = 0 }, after[i] with { Atime = 0 });
+            Assert.True(after[i].Atime >= before[i].Atime);
+        }
     }
 
     [Fact]
@@ -823,11 +832,12 @@ public sealed class SteamDiscoveryTests : IDisposable
     private static IReadOnlyDictionary<uint, ulong> Apps(SteamDiscoveredLibrary library) =>
         Assert.IsAssignableFrom<IReadOnlyDictionary<uint, ulong>>(library.Apps);
 
-    private static string[] Snapshot(string path)
+    private static List<SnapshotEntry> Snapshot(string path)
     {
-        var lines = new List<string>();
+        var entries = new List<SnapshotEntry>();
         Walk(path);
-        return [.. lines.Order(StringComparer.Ordinal)];
+        entries.Sort((left, right) => string.CompareOrdinal(left.Path, right.Path));
+        return entries;
 
         void Walk(string directory)
         {
@@ -836,23 +846,25 @@ public sealed class SteamDiscoveryTests : IDisposable
                 var info = new FileInfo(entry);
                 if (info.LinkTarget is { } target)
                 {
-                    lines.Add($"{entry}|link|{target}");
+                    entries.Add(new(entry, "link", 0, 0, 0, "n/a", target));
                 }
                 else if (Directory.Exists(entry))
                 {
-                    lines.Add($"{entry}|dir|{info.LastWriteTimeUtc.Ticks}|{info.LastAccessTimeUtc.Ticks}|{Mode(entry)}");
+                    entries.Add(new(entry, "dir", 0, info.LastWriteTimeUtc.Ticks, info.LastAccessTimeUtc.Ticks, Mode(entry), string.Empty));
                     Walk(entry);
                 }
                 else
                 {
-                    lines.Add($"{entry}|file|{info.Length}|{info.LastWriteTimeUtc.Ticks}|{info.LastAccessTimeUtc.Ticks}|{Mode(entry)}|" +
-                        Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(entry))));
+                    entries.Add(new(entry, "file", info.Length, info.LastWriteTimeUtc.Ticks, info.LastAccessTimeUtc.Ticks,
+                        Mode(entry), Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(entry)))));
                 }
             }
         }
 
         static string Mode(string path) => OperatingSystem.IsWindows() ? "n/a" : File.GetUnixFileMode(path).ToString();
     }
+
+    private sealed record SnapshotEntry(string Path, string Kind, long Length, long Mtime, long Atime, string Mode, string Detail);
 
     private sealed class RecordingFileSystem(ISteamFileSystem inner) : ISteamFileSystem
     {
