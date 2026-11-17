@@ -327,7 +327,7 @@ discovered and run cannot be retired. Prior removal records are immutable, and `
 plus `replacement_executed` must be a string and a nonnegative integer. A recorded rename must
 carry the retired project's executed floor to the replacement. Test discovery for the run uses
 the same test-project filter as the base list. On a pull request, `changed_aggregates` compares
-the baseline and generated status with the recorded event base (the current mainline), so a
+the baseline and generated status with the current `main` tip fetched at guard time, so a
 stale branch that restores an older floor, deletes a capture, or carries an older generated
 table fails even when the three-dot diff cannot see the restore. A human note edit in the
 baseline is allowed only in a reviewed `oracle-change` PR and only when every floor and capture
@@ -340,9 +340,9 @@ is asserted to have no `continue-on-error` and to exit nonzero on a violation. A
 commit (a brand-new branch's first push) keeps the first-baseline addition path open.
 
 The shard ownership rules are enforced on both sides of the merge: `plan-guards` runs the
-head generator with `--forbid-aggregate-changes` (which includes ownership) against the fork
-point, and the post-merge writer runs `--forbid-shard-ownership` against the previous `main`
-commit before it writes. The latter rejects an edited legacy ledger, a second fragment, a
+generator selected from the current `main` tip with `--forbid-aggregate-changes` (which includes
+ownership) against the fork point, and the post-merge writer runs
+`--forbid-shard-ownership` against the previous `main` commit before it writes. The latter rejects an edited legacy ledger, a second fragment, a
 non-verbatim `0000-history.tsv` migration, or a retirement delete that `removed.tsv` does not
 record. `PORT-STATUS.md` keeps only one hand-written narrative window; it must begin with
 `## Hand-written narrative` and may not contain a generated banner or generated heading.
