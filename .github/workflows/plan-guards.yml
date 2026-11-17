@@ -201,20 +201,24 @@ jobs:
           #
           # Always run the HEAD tool with the HEAD rules. Copying the base
           # commit's tool over it would let a stale-base PR be judged by a tool
-          # that predates the baseline and status rules. A head tool change is
-          # allowed only when the oracle-change gate authorised the change.
+          # that predates the baseline and status rules. Compare the head tool
+          # with the recorded mainline, not the fork point: a stale PR that
+          # merged main legitimately carries main's tool. A tool difference from
+          # the current mainline is a PR change and needs the oracle-change gate.
           head_tool="$PWD/scripts/port/build_port_index.py"
           if [ ! -f "$head_tool" ]; then
             echo "::error::$head_tool is missing at head; the aggregate gate cannot run head rules"
             exit 1
           fi
-          if git cat-file -e "$BASE_SHA:scripts/port/build_port_index.py" 2>/dev/null && \
-             ! git diff --quiet "$BASE_SHA" -- scripts/port/build_port_index.py; then
+          tool_base="${RECORDED_BASE:-$BASE_SHA}"
+          if [ -n "$tool_base" ] && ! printf '%s' "$tool_base" | grep -Eq '^0+$' && \
+             git cat-file -e "$tool_base:scripts/port/build_port_index.py" 2>/dev/null && \
+             ! git diff --quiet "$tool_base" -- scripts/port/build_port_index.py; then
             if [ "${PORT_TOOL_CHANGE_AUTHORIZED:-false}" != "true" ]; then
-              echo "::error::scripts/port/build_port_index.py differs from $BASE_SHA; this gate runs the head rules and a generator change requires the oracle-change label"
+              echo "::error::scripts/port/build_port_index.py differs from $tool_base; this gate runs the head rules and a generator change requires the oracle-change label"
               exit 1
             fi
-            echo "::notice::generator differs from the base commit; running the authorised head tool"
+            echo "::notice::generator differs from the recorded mainline; running the authorised head tool"
           fi
           python3 "$head_tool" check --shards-only \
             --against "$merge_base" --forbid-aggregate-changes

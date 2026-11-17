@@ -460,7 +460,6 @@ class AggregateOwnershipTests(unittest.TestCase):
             result = run_step(
                 run_block(PLAN_GUARDS, "Port aggregates are generated on main"),
                 repo, base, main_tip,
-                {"PORT_TOOL_CHANGE_AUTHORIZED": "true"},
             )
             self.assertEqual(1, result.returncode, result.stdout + result.stderr)
             self.assertIn("changed: tests/baseline.json", result.stderr)
@@ -477,7 +476,6 @@ class AggregateOwnershipTests(unittest.TestCase):
             result = run_step(
                 run_block(PLAN_GUARDS, "Port aggregates are generated on main"),
                 repo, base, main_tip,
-                {"PORT_TOOL_CHANGE_AUTHORIZED": "true"},
             )
             self.assertEqual(0, result.returncode, result.stdout + result.stderr)
 
