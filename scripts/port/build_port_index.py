@@ -60,9 +60,12 @@ the prose between the narrative markers, and, when `--capture-results` and
 `--capture-run` point at a completed merged-main `linux-ci` run's artifacts, ratchets
 `tests/baseline.json`. The baseline writer derives a floor from every structured
 capture in the document and from the previous main baseline, refuses to lower any
-recorded floor, refuses to delete or rewrite a `main_captures` identity, records every
-new run's provenance even when its counts are unchanged, and preserves every earlier
-capture. The narrative must begin with a hand-written heading and may not contain a
+recorded floor, and refuses to delete or rewrite a `main_captures` identity. A run
+whose head commit changed only files this writer generates proves nothing new and is
+skipped, so the bot cannot capture its own commit. A run that adds no count over the
+latest capture is deduplicated by run id and commit into one updated `latest_run`
+field instead of a new capture object, and the capture list is bounded. The narrative
+must begin with a hand-written heading and may not contain a
 generated-table marker.
 
 `build` also writes `docs/port/units/ownership.paths`, derived from reachable merged
@@ -106,6 +109,23 @@ UNITS = ROOT / "docs" / "port" / "units"
 STATUS_GENERATED_PATH = "docs/port/PORT-STATUS.md"
 BASELINE_GENERATED_PATH = "tests/baseline.json"
 OWNERSHIP_GENERATED_PATH = "docs/port/units/ownership.paths"
+# Files this writer alone commits. A merged-main run whose head commit changed
+# nothing but these measured the same source tree as its parent, so capturing it
+# would only feed the bot its own commit.
+GENERATED_WRITE_PATHS = frozenset({
+    "docs/port/queue.tsv",
+    "docs/port/ledger.tsv",
+    STATUS_GENERATED_PATH,
+    OWNERSHIP_GENERATED_PATH,
+    BASELINE_GENERATED_PATH,
+})
+# Provenance is bounded. ``new`` always holds the latest validated observation,
+# which is at or above every historical maximum, so dropping the oldest capture
+# objects cannot lower a floor.
+MAIN_CAPTURE_LIMIT = 10
+# One updated provenance record for same-count merges, instead of a new
+# ``main_captures`` object on every run.
+LATEST_RUN_KEY = "latest_run"
 OWNERSHIP_HEADER = "path\tunit\tcommit\tpull"
 NARRATIVE_START = "<!-- port-status:narrative:start -->"
 NARRATIVE_END = "<!-- port-status:narrative:end -->"
@@ -1053,7 +1073,49 @@ def _top_level_captures(document: dict) -> dict[str, object]:
     return {
         key: _without_notes(value)
         for key, value in document.items()
-        if key != "new" and isinstance(value, dict) and markers & set(value)
+        if key not in ("new", LATEST_RUN_KEY)
+        and isinstance(value, dict) and markers & set(value)
+    }
+
+
+def _generated_only_head(root: Path, rev: str = "HEAD") -> bool:
+    """True when a commit's own tree changed only files this writer generates.
+
+    The decision comes from the diff against the commit's first parent, not from
+    the commit message, so a hand-written commit that happens to look generated
+    is not skipped and a bot commit cannot dodge the check by renaming itself.
+    """
+    parent = _git_bytes(root, "rev-parse", "--verify", "--quiet", f"{rev}^")
+    if not parent or not parent.strip():
+        return False
+    listing = _git(root, "diff", "--no-ext-diff", "--no-textconv", "--no-renames",
+                   "--name-only", "-z", f"{rev}^", rev)
+    names = [name for name in listing.decode("utf-8", "replace").split("\0") if name]
+    return bool(names) and all(name in GENERATED_WRITE_PATHS for name in names)
+
+
+def _latest_capture_counts(document: dict) -> dict | None:
+    """Counts of the latest recorded capture, falling back to the ``new`` floor."""
+    captures = document.get("main_captures")
+    if isinstance(captures, list):
+        for capture in reversed(captures):
+            if isinstance(capture, dict) and isinstance(capture.get("counts"), dict):
+                return capture["counts"]
+    new = document.get("new")
+    return new if isinstance(new, dict) else None
+
+
+def _record_latest_run(document: dict, run: dict, observed: dict) -> None:
+    """Update the single provenance slot used when a run adds no capture."""
+    document[LATEST_RUN_KEY] = {
+        "run_id": run["id"],
+        "run_url": run["html_url"],
+        "commit": run["head_sha"],
+        "captured_at": run["updated_at"],
+        "counts": observed,
+        "notes": "Latest merged-main run that added no new capture; updated in "
+                 "place instead of appending a main_captures entry, so repeated "
+                 "runs of the same tree cannot grow the provenance list.",
     }
 
 
@@ -1105,7 +1167,7 @@ def baseline_capture_floors(document: dict) -> tuple[dict[str, dict[str, int]], 
                     merge(project, row, "new")
 
     for key in sorted(document):
-        if key == "new":
+        if key in ("new", LATEST_RUN_KEY):
             continue
         value = document[key]
         if isinstance(value, dict) and isinstance(value.get("counts"), dict):
@@ -1168,6 +1230,20 @@ def baseline_document_errors(document: dict) -> list[str]:
     else:
         for project, record in removed.items():
             errors.extend(_removal_record_errors(project, record, "removed_projects"))
+
+    latest_run = document.get(LATEST_RUN_KEY)
+    if latest_run is not None:
+        if not isinstance(latest_run, dict):
+            errors.append("latest_run must be an object")
+        else:
+            if not isinstance(latest_run.get("commit"), str) or not latest_run["commit"]:
+                errors.append("latest_run must name the commit it observed")
+            counts = latest_run.get("counts")
+            if not isinstance(counts, dict):
+                errors.append("latest_run must contain a counts object")
+            else:
+                for project, row in counts.items():
+                    errors.extend(_count_row_errors(project, row, "latest_run.counts"))
 
     new = document.get("new")
     if new is None:
@@ -1702,8 +1778,14 @@ def shard_ownership_errors(root: Path, ref: str, unit: str | None = None,
 
 
 
-def capture_baseline(baseline: Path, results: Path, run: dict, root: Path) -> bytes:
-    """Validate downloaded merged-main JUnit/exit artifacts before raising floors."""
+def capture_baseline(baseline: Path, results: Path, run: dict,
+                     root: Path) -> bytes | None:
+    """Validate merged-main artifacts and return the ratcheted baseline bytes.
+
+    ``None`` means the run adds no information and the baseline must be left
+    untouched: the head commit is generated-only, or the observation is already
+    recorded for this commit or at these counts.
+    """
     if not isinstance(run, dict):
         raise PortIndexError("floor capture run must be a JSON object")
     if (run.get("event") != "push" or run.get("head_branch") != "main"
@@ -1735,39 +1817,12 @@ def capture_baseline(baseline: Path, results: Path, run: dict, root: Path) -> by
     document_errors = baseline_document_errors(document)
     if document_errors:
         raise PortIndexError("baseline document is invalid: " + "; ".join(document_errors))
-    spec = importlib.util.spec_from_file_location(
-        "linux_results", ROOT / "scripts/ci/check_linux_test_results.py")
-    checker = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(checker)
-    report = json.loads((results / "test-counts.json").read_text())
-    if report.get("failures") or not report.get("projects"):
-        raise PortIndexError("floor capture artifact reports failures or no projects")
-    projects = report["projects"]
-    discovered = _git(
-        root, "ls-tree", "-r", "--name-only", "HEAD", "--", "tests"
-    ).decode().splitlines()
-    expected = set()
-    for name in discovered:
-        if name.endswith(".csproj") and re.search(
-                rb"<IsTestProject>\s*true\s*</IsTestProject>|Microsoft\.NET\.Test\.Sdk",
-                _git(root, "show", f"HEAD:{name}")):
-            expected.add(Path(name).stem)
-    if set(projects) != expected:
-        raise PortIndexError("floor artifact project set differs from merged-main test projects")
-    counted = document.get("new") or {}
-    if not isinstance(counted, dict):
-        raise PortIndexError("baseline new suite must be an object")
-    retired = set(document.get("removed_projects") or {})
-    missing = set(counted) - set(projects) - retired
-    if missing:
-        raise PortIndexError(
-            "floor capture omits recorded project(s) without a retirement record: "
-            + ", ".join(sorted(missing))
-        )
 
     # Historical floors come from every structured capture in the head document
     # and from the previous main baseline. A floor may only rise; a tampered
-    # document cannot talk the bot into accepting a lower value.
+    # document cannot talk the bot into accepting a lower value. These identity
+    # checks run even for a generated-only head so a bot commit cannot launder a
+    # deleted capture past the writer.
     floors, floor_errors = baseline_capture_floors(document)
     if floor_errors:
         raise PortIndexError("baseline capture floors are invalid: " + "; ".join(floor_errors))
@@ -1812,6 +1867,42 @@ def capture_baseline(baseline: Path, results: Path, run: dict, root: Path) -> by
                     f"capture record {key} was removed or rewritten; capture history "
                     "is append-only"
                 )
+
+    if _generated_only_head(root):
+        # This run tested a commit that changed only writer-owned files, so its
+        # counts cannot differ from its parent's on product grounds. Recording
+        # it would let the bot feed on its own commit and republish forever.
+        return None
+
+    spec = importlib.util.spec_from_file_location(
+        "linux_results", ROOT / "scripts/ci/check_linux_test_results.py")
+    checker = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(checker)
+    report = json.loads((results / "test-counts.json").read_text())
+    if report.get("failures") or not report.get("projects"):
+        raise PortIndexError("floor capture artifact reports failures or no projects")
+    projects = report["projects"]
+    discovered = _git(
+        root, "ls-tree", "-r", "--name-only", "HEAD", "--", "tests"
+    ).decode().splitlines()
+    expected = set()
+    for name in discovered:
+        if name.endswith(".csproj") and re.search(
+                rb"<IsTestProject>\s*true\s*</IsTestProject>|Microsoft\.NET\.Test\.Sdk",
+                _git(root, "show", f"HEAD:{name}")):
+            expected.add(Path(name).stem)
+    if set(projects) != expected:
+        raise PortIndexError("floor artifact project set differs from merged-main test projects")
+    counted = document.get("new") or {}
+    if not isinstance(counted, dict):
+        raise PortIndexError("baseline new suite must be an object")
+    retired = set(document.get("removed_projects") or {})
+    missing = set(counted) - set(projects) - retired
+    if missing:
+        raise PortIndexError(
+            "floor capture omits recorded project(s) without a retirement record: "
+            + ", ".join(sorted(missing))
+        )
 
     for project in sorted(retired):
         if project in projects:
@@ -1877,15 +1968,42 @@ def capture_baseline(baseline: Path, results: Path, run: dict, root: Path) -> by
             key: capture.get(key) for key in identity}:
         raise PortIndexError("floor capture run already recorded with different provenance")
     if not matches:
-        # Every new run records provenance, including a same-count run. The run
-        # id keeps a replayed capture idempotent.
-        if observed == counted:
-            capture["notes"] = (
-                "Counts parsed from this merged-main linux-ci run's downloaded JUnit "
-                "and MTP exit artifacts; they equal the current floor. The run is "
-                "recorded as provenance without changing the number."
-            )
-        captures.append(capture)
+        same_commit = next(
+            (item for item in captures
+             if isinstance(item, dict) and item.get("commit") == run["head_sha"]),
+            None,
+        )
+        latest_counts = _latest_capture_counts(document)
+        if same_commit is not None:
+            if observed == same_commit.get("counts"):
+                # This commit is already recorded (by run id or by commit) with
+                # the same counts; the run adds no information.
+                return None
+            # A re-run of an already captured commit measured more cases. Keep
+            # one record per commit: update the mutable provenance slot instead
+            # of appending a second capture object for the same commit.
+            _record_latest_run(document, run, observed)
+        elif latest_counts is not None and observed == latest_counts:
+            # No count change: provenance lives in the single latest_run field,
+            # so a real same-count merge is recorded once and a second run of
+            # the same unchanged tree writes nothing.
+            existing = document.get(LATEST_RUN_KEY)
+            if (isinstance(existing, dict)
+                    and existing.get("commit") == run["head_sha"]
+                    and existing.get("counts") == observed):
+                return None
+            _record_latest_run(document, run, observed)
+        else:
+            # A genuine count change is the only thing that appends a capture.
+            if observed == counted:
+                capture["notes"] = (
+                    "Counts parsed from this merged-main linux-ci run's downloaded "
+                    "JUnit and MTP exit artifacts; they equal the current floor. The "
+                    "run is recorded as provenance without changing the number."
+                )
+            captures.append(capture)
+            if len(captures) > MAIN_CAPTURE_LIMIT:
+                del captures[:-MAIN_CAPTURE_LIMIT]
     document["new"] = observed
     empty = document.get("empty_projects")
     if isinstance(empty, dict):
