@@ -199,7 +199,14 @@ jobs:
           # request owns only its unit shards, so even a correctly regenerated
           # aggregate change fails here.
           head_tool="$PWD/scripts/port/build_port_index.py"
-          if git cat-file -e "$BASE_SHA:scripts/port/build_port_index.py" 2>/dev/null; then
+          map_bootstrap=false
+          if ! git cat-file -e "$BASE_SHA:docs/port/units/ownership.paths" 2>/dev/null \
+             && git cat-file -e "HEAD:docs/port/units/ownership.paths" 2>/dev/null; then
+            map_bootstrap=true
+            echo "::warning::BOOTSTRAP: base has no ownership.paths; using the head tool for this first map"
+          fi
+          if [ "$map_bootstrap" = false ] \
+             && git cat-file -e "$BASE_SHA:scripts/port/build_port_index.py" 2>/dev/null; then
             base_tool="$RUNNER_TEMP/base-port/build_port_index.py"
             mkdir -p "$(dirname "$base_tool")"
             git show "$BASE_SHA:scripts/port/build_port_index.py" > "$base_tool"
@@ -207,7 +214,7 @@ jobs:
             cp "$base_tool" "$head_tool"
             trap 'cp "$RUNNER_TEMP/build_port_index.head.py" "$head_tool"' EXIT
           else
-            echo "::warning::BOOTSTRAP: base commit has no scripts/port/build_port_index.py; using the head tool"
+            echo "::warning::BOOTSTRAP: base commit has no scripts/port/build_port_index.py or no ownership map; using the head tool"
           fi
           python3 "$head_tool" check --shards-only \
             --against "$merge_base" --forbid-aggregate-changes
@@ -238,7 +245,14 @@ jobs:
             fi
           fi
           head_tool="$PWD/scripts/port/build_port_index.py"
-          if [ -n "$ref" ] && \
+          map_bootstrap=false
+          if [ -n "$ref" ] \
+             && ! git cat-file -e "$BASE_SHA:docs/port/units/ownership.paths" 2>/dev/null \
+             && git cat-file -e "HEAD:docs/port/units/ownership.paths" 2>/dev/null; then
+            map_bootstrap=true
+            echo "::warning::BOOTSTRAP: base has no ownership.paths; using the head tool for this first map"
+          fi
+          if [ "$map_bootstrap" = false ] && [ -n "$ref" ] && \
              git cat-file -e "$BASE_SHA:scripts/port/build_port_index.py" 2>/dev/null; then
             base_tool="$RUNNER_TEMP/base-port/build_port_index.py"
             mkdir -p "$(dirname "$base_tool")"
@@ -247,7 +261,7 @@ jobs:
             cp "$base_tool" "$head_tool"
             trap 'cp "$RUNNER_TEMP/build_port_index.head.py" "$head_tool"' EXIT
           else
-            echo "::warning::BOOTSTRAP: base commit has no scripts/port/build_port_index.py; using the head tool"
+            echo "::warning::BOOTSTRAP: base commit has no scripts/port/build_port_index.py or no ownership map; using the head tool"
           fi
           python3 "$head_tool" check "${args[@]}"
 
