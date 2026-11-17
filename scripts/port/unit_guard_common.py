@@ -696,6 +696,37 @@ def read_ownership_map(
     )
 
 
+def first_map_errors(
+    repo: Path, head: str, changes: list[Change], base_has_map: bool | None
+) -> list[str]:
+    """A first map must equal a deterministic regeneration of the head history."""
+
+    adding = [
+        change for change in changes
+        if change.path == OWNERSHIP_MAP and change.status == "A"
+    ]
+    if base_has_map is not False or not adding:
+        return []
+    try:
+        import build_port_index  # local import avoids a cycle at module load
+
+        units = repo / "docs" / "port" / "units"
+        index = build_port_index.build_index(units)
+        expected = build_port_index.render_ownership_map(repo, units, index)
+    except Exception as exc:  # fail closed on any generator error
+        raise GuardError(
+            f"ownership map unavailable: cannot regenerate the first map: {exc}"
+        ) from exc
+    actual = read_at(repo, head, OWNERSHIP_MAP)
+    if actual != expected:
+        raise GuardError(
+            "ownership map unavailable: the first map does not match a "
+            "deterministic regeneration of the head history; a process PR may "
+            "seed only the generated map, not arbitrary ownership"
+        )
+    return []
+
+
 def ownership_hits(
     changes: list[Change], ownership: OwnershipMap
 ) -> dict[str, tuple[OwnershipClaim, ...]]:
@@ -857,9 +888,12 @@ def symlink_errors(
             errors.append(str(exc))
             continue
         claims = ownership.claims.get(resolved, ())
-        if not claims:
+        if claims:
+            allowed = claim_is_allowed(claims, declared)
+        else:
             # A directory target can expose files owned by another unit even when
-            # the directory itself has no row in the map.
+            # the directory itself has no row in the map.  Every claim in the
+            # subtree must allow the declaration; mixed ownership is refused.
             prefix = resolved.rstrip("/") + "/"
             subtree = [
                 claim
@@ -867,8 +901,11 @@ def symlink_errors(
                 if path.startswith(prefix)
                 for claim in rows
             ]
+            allowed = all(
+                claim_is_allowed((claim,), declared) for claim in subtree
+            ) if subtree else True
             claims = tuple(subtree)
-        if claims and not claim_is_allowed(claims, declared):
+        if not allowed:
             owners = ", ".join(
                 f"{claim.unit} ({claim.evidence})" for claim in claims
             )
@@ -1105,14 +1142,15 @@ def _is_ancestor(repo: Path, ancestor: str, descendant: str) -> bool:
     return True
 
 
-def _pr_commits(repo: Path, merge_base: str, head: str) -> set[str]:
+def _pr_commits(repo: Path, merge_base: str, base: str, head: str) -> set[str]:
     """Commits on the pull request's own first-parent spine after the fork.
 
-    Main commits merged into the branch sit on a second-parent chain and are
-    deliberately excluded, as is every commit reachable from the merge base.
+    Main commits merged into the branch sit on a second-parent chain, and every
+    commit reachable from the merge base or the event base is excluded, so a
+    rebased or fast-forwarded branch cannot cite a main commit's real run.
     """
 
-    output = git(repo, "rev-list", "--first-parent", head, f"^{merge_base}")
+    output = git(repo, "rev-list", "--first-parent", head, f"^{merge_base}", f"^{base}")
     return {
         line.strip()
         for line in output.decode("ascii", "strict").splitlines()
@@ -1126,6 +1164,7 @@ def validate_fragment_evidence(
     unit: str,
     pr_number: int,
     repo: Path,
+    base: str,
     head: str,
     merge_base: str,
     repo_slug: str | None,
@@ -1161,7 +1200,7 @@ def validate_fragment_evidence(
         )
     valid_heads: list[str] = []
     saw_merge_base = False
-    pr_commits = _pr_commits(repo, merge_base, head)
+    pr_commits = _pr_commits(repo, merge_base, base, head)
     for candidate in head_candidates:
         try:
             resolved = resolve_commit(repo, candidate, "fragment head")

@@ -39,6 +39,7 @@ from unit_guard_common import (  # noqa: E402
     changed_paths,
     claim_is_allowed,
     declared_unit,
+    first_map_errors,
     known_units,
     merge_base,
     ownership_hits,
@@ -125,6 +126,7 @@ def _check_queue(
 
 def _check_fragment(
     repo: Path,
+    base: str,
     head: str,
     merge: str,
     unit: str,
@@ -176,6 +178,7 @@ def _check_fragment(
         unit=unit,
         pr_number=pr_number,
         repo=repo,
+        base=base,
         head=head,
         merge_base=merge,
         repo_slug=repo_slug,
@@ -209,6 +212,7 @@ def main(argv: list[str]) -> int:
         )
         if map_errors:
             raise GuardError("\n".join(map_errors))
+        first_map_errors(repo, head, changes, ownership_map_exists(repo, base))
 
         expected = declared_unit(
             repo, head=head, units=units, branch=args.branch, explicit=args.unit
@@ -223,6 +227,15 @@ def main(argv: list[str]) -> int:
         if ownership is None:
             ownership = OwnershipMap(
                 {}, False, "ownership.paths is missing at the base and merge base"
+            )
+        if product and not ownership.available:
+            raise GuardError(
+                "ownership map unavailable ("
+                + (ownership.reason or "no validated base map")
+                + "); product/test/tool changes cannot be checked for foreign "
+                "ownership even when the PR declares a unit. Restore or regenerate "
+                "the base ownership map before changing product material. "
+                "Offending paths:\n" + "\n".join(f"  {path}" for path in product)
             )
         merge_commit = (
             resolve_commit(repo, args.merge_commit, "merge commit")
@@ -262,7 +275,8 @@ def main(argv: list[str]) -> int:
                     message
                     + (f":\n{details}" if details else
                        "; offending paths:\n" + "\n".join(
-                           f"  {path}" for path in (product or sorted(touched))))
+                           [f"  {path}" for path in product]
+                           or [f"  {path}" for paths in touched.values() for path in paths]))
                 )
             print("unit: (none)")
             print("process PR: no unit-owned or product/test/tool path is touched")
@@ -319,6 +333,7 @@ def main(argv: list[str]) -> int:
         try:
             fragment_detail = _check_fragment(
                 repo,
+                base,
                 head,
                 merge,
                 expected,

@@ -1755,7 +1755,19 @@ def main(
             changed = changed_aggregates(root, args.against, queue, ledger,
                                          recorded_base)
             ownership = shard_ownership_errors(root, args.against, args.unit, args.pr)
-        except PortIndexError as exc:
+            merge = _git(root, "merge-base", args.against, "HEAD").decode(
+                "ascii", "replace").strip()
+            if merge and _map_bootstrap_allowed(root, merge):
+                actual = (root / OWNERSHIP_GENERATED_PATH).read_bytes()
+                if actual != render_ownership_map(root, units, index):
+                    print(
+                        "error: the first ownership map does not match a "
+                        "deterministic regeneration of HEAD; a process PR may "
+                        "seed only the generated map, not arbitrary ownership",
+                        file=sys.stderr,
+                    )
+                    return 1
+        except (PortIndexError, OSError) as exc:
             print(f"error: {exc}", file=sys.stderr)
             return 1
         if changed or ownership:

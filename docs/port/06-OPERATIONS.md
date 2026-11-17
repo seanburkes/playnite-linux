@@ -89,9 +89,11 @@ single writer on `main`; workers edit unit shards and never the aggregates thems
   several owners; `*` marks explicitly shared material and any declared unit may change it. The
   unit guard reads the map from the pull request base, rejects a change to a path owned only by
   other units, and fails closed with `ownership map unavailable` when the map is missing, empty
-  or fails validation. New and unowned product paths still require a unit declaration and a
-  ledger fragment. The one bootstrap change that adds the first map may do so only when it
-  touches no product/test/tool path.
+  or fails validation. In that state any product/test/tool change fails, even for a declared
+  unit, because foreign ownership cannot be checked. New and unowned product paths still require
+  a unit declaration and a ledger fragment, and a queue or fragment change never infers a unit
+  from the queue. The one bootstrap change that adds the first map may do so only when it touches
+  no product/test/tool path, and the map must match a deterministic regeneration of head.
 - `docs/port/queue.tsv` and `docs/port/ledger.tsv` are generated from those shards by the
   parent-owned `port-index` workflow after merge. A pull request must not include either file
   in its diff, even with freshly generated content; CI rejects that change.

@@ -42,6 +42,7 @@ from unit_guard_common import (  # noqa: E402
     changed_paths,
     claim_is_allowed,
     declared_unit,
+    first_map_errors,
     format_paths,
     known_units,
     merge_base,
@@ -129,10 +130,24 @@ def main(argv: list[str]) -> int:
         )
         if map_errors:
             raise GuardError("\n".join(map_errors))
+        first_map_errors(
+            repo, head, changes,
+            ownership_map_exists(repo, base) if base else None,
+        )
 
         declared = declared_unit(
             repo, head=head, units=units, branch=args.branch, explicit=args.unit
         )
+
+        if product and not ownership.available:
+            raise GuardError(
+                "ownership map unavailable ("
+                + (ownership.reason or "no validated base map")
+                + "); product/test/tool changes cannot be checked for foreign "
+                "ownership even when the PR declares a unit. Restore or regenerate "
+                "the base ownership map before changing product material. "
+                "Offending paths:\n" + "\n".join(f"  {path}" for path in product)
+            )
 
         if base is not None and merge is not None:
             link_errors = symlink_errors(repo, base, head, changes, ownership, declared)
@@ -161,7 +176,12 @@ def main(argv: list[str]) -> int:
                     "Offending paths:\n"
                     + "\n".join(
                         _claim_lines(owned)
-                        or [f"  {path}" for path in (product or sorted(touched))]
+                        or [f"  {path}" for path in product]
+                        or [
+                            f"  {path}"
+                            for paths in touched.values()
+                            for path in paths
+                        ]
                     )
                 )
             print("unit: (none)")

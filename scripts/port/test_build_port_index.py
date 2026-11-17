@@ -2181,6 +2181,29 @@ class PortIndexTests(unittest.TestCase):
 
         self.assertEqual(0, status, output)
 
+    def test_first_map_must_match_deterministic_regeneration(self):
+        self.write_queue_shard("p1-001", queue_row("p1-001"))
+        self.build()
+        self.start_git_history()
+        self.git("rm", "-q", "docs/port/units/ownership.paths")
+        self.git("add", "docs")
+        self.git("commit", "-q", "-m", "remove map for bootstrap test")
+        base = self.git("rev-parse", "HEAD")
+        evidence = self.git("rev-parse", "HEAD")
+        self.ownership_map().write_text(
+            port_index.OWNERSHIP_HEADER
+            + "\n"
+            + f"src/Fake.cs\tp1-001\t{evidence}\tpull/96\n"
+        )
+        self.git("add", "docs")
+        self.git("commit", "-q", "-m", "forge the first map")
+
+        status, output = self.check_with_git(
+            "--shards-only", "--against", base, "--forbid-aggregate-changes")
+
+        self.assertEqual(1, status)
+        self.assertIn("does not match a deterministic regeneration", output)
+
     def test_first_map_addition_is_rejected_when_product_changes(self):
         self.write_queue_shard("p1-001", queue_row("p1-001"))
         self.build()
