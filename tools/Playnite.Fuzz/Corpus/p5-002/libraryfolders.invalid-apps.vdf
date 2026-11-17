@@ -1,0 +1,20 @@
+"libraryfolders"
+{
+	"0"
+	{
+		"path"		"${ROOT}"
+		"label"		{}
+		"contentid"		"not-a-number"
+		"totalsize"		"-1"
+		"time_last_update_verified"		"253402300800"
+		"apps"
+		{
+			"42"		"1"
+			"invalid"		"2"
+		}
+		"future"
+		{
+			"nested"		"retained"
+		}
+	}
+}

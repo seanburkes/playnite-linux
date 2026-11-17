@@ -1,2 +1,2 @@
 id	wave	area	unit	depends	status	owner	oracle	test	notes
-p5-002	W5	steam	Steam root/library discovery	p5-001	todo	steam	fixtures	test:steam	
+p5-002	W5	steam	Steam root/library discovery	p5-001	in-progress	fm/p5-002	docs/port/08-STEAM-SPEC.md sections 1-2; tools/Playnite.Fuzz/Corpus/p5-002	SteamDiscoveryTests	Read-only root resolution in spec order (explicit override, both symlinked user paths, Flatpak, realpath dedupe, steamapps-only rule) and libraryfolders discovery reusing the merged p5-001 parser; unavailable and duplicate libraries are kept and reported, escaping steamapps links are not followed, no writes/network/UI; synthetic hash-pinned fixtures with provenance notes; real-host read-only validation recorded in the PR body; no protected oracle or aggregate edits.
