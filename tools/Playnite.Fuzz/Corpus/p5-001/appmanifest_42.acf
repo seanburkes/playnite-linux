@@ -1,0 +1,26 @@
+// Synthetic, authored from Steam spec section 4. No host data.
+"AppState"
+{
+    "appid" "42"
+    "Universe" "1"
+    "name" "Synthetic Café™ 🚀"
+    "StateFlags" "4"
+    "installdir" "Synthetic Game"
+    "lastupdated" "1700000000"
+    "LastPlayed" "0"
+    "SizeOnDisk" "66000000001"
+    "StagingSize" "0"
+    "buildid" "100"
+    "DownloadType" "1"
+    "UpdateResult" "0"
+    "BytesToDownload" "0"
+    "AutoUpdateBehavior" "0"
+    "AllowOtherDownloadsWhileRunning" "0"
+    "ScheduledAutoUpdate" "0"
+    "InstalledDepots" { "51" { "manifest" "9000000000000000001" "size" "66000000001" "dlcappid" "52" } }
+    "SharedDepots" { "53" "54" }
+    "InstallScripts" { "51" "addins\\synthetic\\installScript.vdf" }
+    "UserConfig" { "language" "english" }
+    "MountedConfig" { }
+    "future" { "value" "kept" }
+}

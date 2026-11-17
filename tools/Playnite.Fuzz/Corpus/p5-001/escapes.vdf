@@ -1,0 +1,1 @@
+compatibilitytools { compat_tools { synthetic { display_name "Synthetic\nTool\tLabel\r\"quoted\"" install_path "." from_oslist windows to_oslist linux } } }
