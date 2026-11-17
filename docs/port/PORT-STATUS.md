@@ -58,15 +58,15 @@
 | Status | Units |
 | --- | ---: |
 | deferred | 1 |
-| done | 63 |
+| done | 64 |
 | todo | 32 |
 
 ## Ledger
 
 | Metric | Value |
 | --- | ---: |
-| Ledger rows | 227 |
-| Ledger fragments | 0 |
+| Ledger rows | 228 |
+| Ledger fragments | 1 |
 
 ## Units
 
@@ -101,6 +101,7 @@
 | p2-ci-cost | W2 | scaffold | Advisory CI filtering and reproducible formal checks | done | `units/p2-ci-cost.*`; 4 ledger rows |
 | p2-ci-guard | W2 | scaffold | CI policy review hardening | done | `units/p2-ci-guard.*`; 5 ledger rows |
 | p2-ci-harden | W2 | scaffold | Linux CI policy hardening | done | `units/p2-ci-harden.*`; 2 ledger rows |
+| p2-ci-mergeability | W2 | repo | Merge queue limitation and strict-off policy | done | `units/p2-ci-mergeability.*`; 1 ledger rows |
 | p2-exit | W2 | repo | Phase 2 exit gate and merged-board reconciliation | done | `units/p2-exit.*`; 3 ledger rows |
 | p2-guard-paths | W2 | repo | Protect all workflows and harden aggregate SSH push | done | `units/p2-guard-paths.*`; 2 ledger rows |
 | p2-guard-wording2 | W2 | repo | Protected-path gate wording correction | done | `units/p2-guard-wording2.*`; 2 ledger rows |
