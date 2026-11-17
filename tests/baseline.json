@@ -318,6 +318,36 @@
         }
       },
       "notes": "Counts parsed from this merged-main linux-ci run's downloaded JUnit artifacts (test-counts.json plus the three JUnit XML files and MTP exit-code files) on 6e263c1: Core 1781/1781/1781, Architecture 173/173/173, Smoke 4/4/4, all with 0 failed and 0 skipped and MTP exit 0. This raises the stale p4_exit_capture floor of Core 1779 to the measured merged-main 1781; that earlier row and its provenance text are retained unchanged as history, and no floor is lowered. The baseline is bot-owned from this PR onward: a pull request never edits it."
+    },
+    {
+      "run_id": 44114420720,
+      "run_url": "https://github.com/seanburkes/playnite-linux/actions/runs/44114420720",
+      "commit": "138112e2c9fa6d8a68b40bfa6329d455cb69ac0d",
+      "captured_at": "2026-11-17T15:31:04Z",
+      "counts": {
+        "Playnite.Architecture.Tests": {
+          "total": 173,
+          "executed": 173,
+          "passed": 173,
+          "failed": 0,
+          "skipped": 0
+        },
+        "Playnite.Core.Tests": {
+          "total": 1781,
+          "executed": 1781,
+          "passed": 1781,
+          "failed": 0,
+          "skipped": 0
+        },
+        "Playnite.Smoke.Tests": {
+          "total": 4,
+          "executed": 4,
+          "passed": 4,
+          "failed": 0,
+          "skipped": 0
+        }
+      },
+      "notes": "Counts parsed from this merged-main linux-ci run's downloaded JUnit and MTP exit artifacts; they equal the current floor. The run is recorded as provenance without changing the number."
     }
   ]
 }
