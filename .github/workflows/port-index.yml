@@ -2,8 +2,9 @@ name: port-index
 
 # Parent-owned single writer for the generated port aggregates. Pull requests
 # validate shards only; this workflow regenerates docs/port/queue.tsv and
-# docs/port/ledger.tsv on main and commits the result. It runs only for a push
-# to refs/heads/main and never edits a unit shard. There is deliberately no
+# docs/port/ledger.tsv and PORT-STATUS.md on main and commits the result. Successful
+# main-push linux-ci completions also ratchet baseline.json from their artifacts.
+# It never edits a unit shard. There is deliberately no
 # manual-dispatch path: a dispatched run has no "previous main" history to
 # validate against and must never be able to write main.
 #
@@ -14,9 +15,14 @@ name: port-index
 on:
   push:
     branches: [main]
+  workflow_run:
+    workflows: [linux-ci]
+    types: [completed]
+    branches: [main]
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
   group: port-index-main
@@ -24,19 +30,33 @@ concurrency:
 
 jobs:
   regenerate:
-    # Parent-only: the push event is the only trigger. A manually dispatched run
-    # does not exist, and this guard makes the invariant explicit if a trigger is
-    # ever added by mistake.
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    # Parent-only: a push to main or a successful linux-ci completion for a main
+    # push. A manually dispatched run does not exist, and this guard makes the
+    # invariant explicit if a trigger is ever added by mistake.
+    if: >-
+      (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
+      (github.event_name == 'workflow_run' && github.event.workflow_run.event == 'push' &&
+       github.event.workflow_run.head_branch == 'main' && github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.head_repository.full_name == github.repository)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
 
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+
+      - name: Download the completed merged-main CI evidence
+        if: github.event_name == 'workflow_run'
+        uses: actions/download-artifact@v4
+        with:
+          name: linux-test-results
+          path: ${{ runner.temp }}/floor-results
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
 
       # The ruleset's sole bypass actor is this deploy key. Authenticate the
       # remote with it before any fetch or push, and pin GitHub's published
@@ -64,9 +84,15 @@ jobs:
         run: |
           set -euo pipefail
 
-          if [ "${GITHUB_EVENT_NAME:-}" != "push" ] || [ "${GITHUB_REF:-}" != "refs/heads/main" ]; then
-            echo "::error::the aggregate writer only runs from a push to refs/heads/main"
+          if [ "${GITHUB_EVENT_NAME:-}" != "push" ] && [ "${GITHUB_EVENT_NAME:-}" != "workflow_run" ]; then
+            echo "::error::the aggregate writer only runs from a push to refs/heads/main or that push's completed linux-ci run"
             exit 1
+          fi
+          capture_args=()
+          if [ "$GITHUB_EVENT_NAME" = "workflow_run" ]; then
+            jq '.workflow_run' "$GITHUB_EVENT_PATH" > "$RUNNER_TEMP/floor-run.json"
+            BASE_SHA=$(git rev-parse HEAD^)
+            capture_args=(--capture-results "$RUNNER_TEMP/floor-results" --capture-run "$RUNNER_TEMP/floor-run.json")
           fi
           if [ -z "${BASE_SHA:-}" ] || printf '%s' "$BASE_SHA" | grep -Eq '^0+$'; then
             echo "::error::refusing to regenerate without a previous main commit to validate against"
@@ -77,6 +103,10 @@ jobs:
           while [ "$attempt" -le 2 ]; do
             git fetch --quiet origin main
             if [ "$(git rev-parse HEAD)" != "$(git rev-parse origin/main)" ]; then
+              if [ "$GITHUB_EVENT_NAME" = "workflow_run" ]; then
+                echo "Main advanced; refusing to apply a different head's floor artifact. Its own linux-ci completion will capture the union."
+                exit 0
+              fi
               echo "::warning::main advanced during regeneration; retrying against the new main"
               git checkout -q -B port-index-regen origin/main
             fi
@@ -85,17 +115,17 @@ jobs:
             # committed by the bot and thereby launder a deletion through main.
             python3 scripts/port/build_port_index.py check --shards-only --against "$BASE_SHA"
 
-            python3 scripts/port/build_port_index.py build
+            python3 scripts/port/build_port_index.py build "${capture_args[@]}"
             python3 scripts/port/build_port_index.py check
 
-            if git diff --quiet -- docs/port/queue.tsv docs/port/ledger.tsv; then
+            if git diff --quiet -- docs/port/queue.tsv docs/port/ledger.tsv docs/port/PORT-STATUS.md tests/baseline.json; then
               echo "Aggregates already current; nothing to commit."
               exit 0
             fi
 
             git config user.name "github-actions[bot]"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add docs/port/queue.tsv docs/port/ledger.tsv
+            git add docs/port/queue.tsv docs/port/ledger.tsv docs/port/PORT-STATUS.md tests/baseline.json
             git commit -m "chore(port-index): regenerate aggregates from unit shards"
 
             # No force. A rejected push means main moved; retry once from the

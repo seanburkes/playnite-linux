@@ -1,4 +1,5 @@
 import io
+import json
 import subprocess
 import sys
 import tempfile
@@ -44,6 +45,169 @@ def ledger_row(
 
 
 class PortIndexTests(unittest.TestCase):
+    def write_fragment(self, unit, name, *rows):
+        directory = self.units / f"{unit}.ledger.d"
+        directory.mkdir(exist_ok=True)
+        path = directory / name
+        path.write_text(LEDGER_HEADER + "\n" + "".join(row + "\n" for row in rows))
+        return path
+
+    def test_fragments_follow_history_then_numeric_pr_then_filename_not_timestamp(self):
+        self.write_queue_shard("p1-001", queue_row("p1-001"))
+        history = ledger_row("2026-11-15T00:00:00Z", "p1-001", evidence="history")
+        self.write_ledger_shard("p1-001", history)
+        rows = [ledger_row(f"2026-11-{day}T00:00:00Z", "p1-001", evidence=name)
+                for day, name in (("14", "10-last"), ("13", "2-z"), ("12", "2-a"))]
+        for name, row in zip(("10-last.tsv", "2-z.tsv", "2-a.tsv"), rows):
+            self.write_fragment("p1-001", name, row)
+        before = self.render()
+        self.assertEqual(before[1].decode().splitlines(), [LEDGER_HEADER, history, rows[2], rows[1], rows[0]])
+        self.assertEqual(self.render(), before)
+        snapshot = port_index.snapshot_from_dir(self.units, self.queue, self.ledger)
+        self.assertEqual(len(snapshot.ledger_shards["p1-001"]), 4)
+
+    def test_fragment_only_pr_passes_without_oracle_change_and_is_immutable_after_merge(self):
+        self.write_queue_shard("p1-001", queue_row("p1-001"))
+        self.build()
+        base = self.start_git_history()
+        path = self.write_fragment("p1-001", "123-proof.tsv", ledger_row("2026-11-15T00:00:00Z", "p1-001"))
+        merged = self.commit("fragment only")
+        status, output = self.check_with_git("--shards-only", "--against", base,
+                                             "--forbid-aggregate-changes", "--pr", "123")
+        self.assertEqual(0, status, output)
+        self.assertEqual([], port_index.shard_ownership_errors(self.root, base, pr="123"))
+        self.assertTrue(port_index.shard_ownership_errors(self.root, base, pr="124"))
+        path.write_text(path.read_text().replace("evidence", "rewritten"))
+        self.commit("rewrite fragment")
+        self.assertTrue(port_index.shard_ownership_errors(self.root, merged))
+
+    def test_cross_unit_queue_or_fragments_fail_ownership(self):
+        self.write_queue_shard("p1-001", queue_row("p1-001"))
+        base = self.start_git_history()
+        self.write_queue_shard("p1-001", queue_row("p1-001", status="done"))
+        self.write_queue_shard("p1-002", queue_row("p1-002"))
+        self.commit("two units")
+        self.assertIn("exactly one unit", " ".join(port_index.shard_ownership_errors(self.root, base)))
+
+    def test_legacy_append_is_rejected_by_pr_ownership(self):
+        self.write_queue_shard("p1-001", queue_row("p1-001"))
+        self.write_ledger_shard("p1-001")
+        base = self.start_git_history()
+        self.write_ledger_shard("p1-001", ledger_row("2026-11-15T00:00:00Z", "p1-001"))
+        self.commit("legacy append")
+        self.assertIn("legacy history is frozen", " ".join(port_index.shard_ownership_errors(self.root, base)))
+
+    def test_baseline_edit_fails_pr_guard_even_if_counts_rise(self):
+        self.write_queue_shard("p1-001", queue_row("p1-001"))
+        baseline = self.root / "tests/baseline.json"
+        baseline.parent.mkdir()
+        baseline.write_text('{"new": {}}\n')
+        self.build()
+        base = self.start_git_history()
+        self.git("add", "tests")
+        self.git("commit", "-q", "-m", "record baseline")
+        base = self.git("rev-parse", "HEAD")
+        baseline.write_text('{"new": {"Core": {"executed": 999}}}\n')
+        self.git("add", "tests")
+        self.commit("baseline edit")
+        status, output = self.check_with_git("--shards-only", "--against", base, "--forbid-aggregate-changes")
+        self.assertEqual(1, status)
+        self.assertIn("changed: tests/baseline.json", output)
+
+    def test_status_narrative_is_editable_but_generated_content_is_not(self):
+        self.write_queue_shard("p1-001", queue_row("p1-001"))
+        path = self.root / "docs/port/PORT-STATUS.md"
+        path.write_text(f"# Port status\n{port_index.NARRATIVE_START}\nprose\n{port_index.NARRATIVE_END}\n")
+        self.build()
+        base = self.start_git_history()
+        path.write_text(path.read_text().replace("prose", "revised prose"))
+        self.commit("narrative only")
+        self.assertEqual([], port_index.changed_aggregates(self.root, base, self.queue, self.ledger))
+        path.write_text(path.read_text().replace("## Units", "## Made up"))
+        self.commit("generated status edit")
+        self.assertIn("docs/port/PORT-STATUS.md", port_index.changed_aggregates(self.root, base, self.queue, self.ledger))
+
+    def test_status_fragment_regeneration_is_idempotent(self):
+        self.write_queue_shard("p1-001", queue_row("p1-001", status="done"))
+        self.write_fragment("p1-001", "123-proof.tsv", ledger_row("2026-11-15T00:00:00Z", "p1-001"))
+        status = self.root / "docs/port/PORT-STATUS.md"
+        status.write_text(f"{port_index.NARRATIVE_START}\nretained\n{port_index.NARRATIVE_END}\n")
+        self.build()
+        first = [path.read_bytes() for path in (self.queue, self.ledger, status)]
+        self.build()
+        self.assertEqual(first, [path.read_bytes() for path in (self.queue, self.ledger, status)])
+        self.assertIn("| done | 1 |", status.read_text())
+        self.assertIn("retained", status.read_text())
+
+    def floor_fixture(self, floor=1):
+        baseline = self.root / "tests/baseline.json"
+        baseline.parent.mkdir()
+        project = baseline.parent / "Core.csproj"
+        project.write_text("<Project><IsTestProject>true</IsTestProject></Project>")
+        old = {"new": {"Core": {"total": floor, "executed": floor, "passed": floor, "failed": 0, "skipped": 0}},
+               "old_capture": {"notes": "historical provenance unchanged", "run_id": 1}, "empty_projects": {}}
+        baseline.write_text(json.dumps(old))
+        self.write_queue_shard("p1-001", queue_row("p1-001"))
+        head = self.start_git_history()
+        self.git("add", "tests")
+        self.git("commit", "-q", "-m", "record project and floor")
+        head = self.git("rev-parse", "HEAD")
+        results = self.root / "results"
+        directory = results / "Core"
+        directory.mkdir(parents=True)
+        (directory / "Core.xml").write_text('<testsuite tests="2"><testcase name="a"/><testcase name="b"/></testsuite>')
+        (directory / "exit-code.txt").write_text("0\n")
+        counts = {"total": 2, "executed": 2, "passed": 2, "failed": 0, "skipped": 0}
+        (results / "test-counts.json").write_text(json.dumps({"failures": [], "projects": {
+            "Core": {"counts": counts, "exit_code": 0, "outcome": "pass"}}}))
+        run = {"id": 123, "event": "push", "head_branch": "main", "conclusion": "success", "name": "linux-ci",
+               "head_sha": head, "html_url": "https://example.invalid/actions/runs/123", "updated_at": "2026-11-17T00:00:00Z"}
+        return baseline, results, run, old
+
+    def test_floor_capture_uses_actual_cases_preserves_history_and_deduplicates(self):
+        baseline, results, run, old = self.floor_fixture()
+        first = port_index.capture_baseline(baseline, results, run, self.root)
+        document = json.loads(first)
+        self.assertEqual(document["old_capture"], old["old_capture"])
+        self.assertEqual(2, document["new"]["Core"]["executed"])
+        self.assertEqual(1, len(document["main_captures"]))
+        baseline.write_bytes(first)
+        self.assertEqual(first, port_index.capture_baseline(baseline, results, run, self.root))
+        # The provenance note is editable history: re-capturing the same run must
+        # not rewrite a hand-annotated record, and a same-count later run is a no-op.
+        document["main_captures"][0]["notes"] += " Annotated after the fact."
+        annotated = (json.dumps(document, indent=2) + "\n").encode()
+        baseline.write_bytes(annotated)
+        self.assertEqual(annotated, port_index.capture_baseline(baseline, results, run, self.root))
+        run["id"] += 1
+        self.assertEqual(annotated, port_index.capture_baseline(baseline, results, run, self.root))
+
+    def test_floor_lowering_refuses_before_any_file_is_written(self):
+        baseline, results, run, _ = self.floor_fixture(floor=3)
+        before = baseline.read_bytes()
+        with self.assertRaisesRegex(port_index.PortIndexError, "refusing to lower"):
+            port_index.capture_baseline(baseline, results, run, self.root)
+        self.assertEqual(before, baseline.read_bytes())
+
+    def test_floor_capture_refuses_other_heads_pr_runs_and_fabricated_summary(self):
+        baseline, results, run, _ = self.floor_fixture()
+        for field, value in (("head_sha", "f" * 40), ("head_branch", "feature"), ("event", "pull_request"), ("conclusion", "failure")):
+            with self.subTest(field=field), self.assertRaises(port_index.PortIndexError):
+                port_index.capture_baseline(baseline, results, dict(run, **{field: value}), self.root)
+        (results / "Core/exit-code.txt").write_text("8")
+        with self.assertRaisesRegex(port_index.PortIndexError, "invalid or unsuccessful"):
+            port_index.capture_baseline(baseline, results, run, self.root)
+
+    def test_floor_capture_refuses_a_missing_recorded_project_without_retirement(self):
+        baseline, results, run, _ = self.floor_fixture()
+        document = json.loads(baseline.read_text())
+        document["new"]["Gone.Tests"] = {
+            "total": 5, "executed": 5, "passed": 5, "failed": 0, "skipped": 0,
+        }
+        baseline.write_text(json.dumps(document))
+        with self.assertRaisesRegex(port_index.PortIndexError, "without a retirement record"):
+            port_index.capture_baseline(baseline, results, run, self.root)
+
     def test_local_path_categories_name_the_offending_document_row(self):
         paths = ("$HOME/task-proof", "${HOME}/task-proof", "~/task-proof", r"C:\Users\alice\proof.log",
                  r"C:\Home\alice\proof.log", "C:/Home/alice/proof.log",
@@ -181,8 +345,7 @@ class PortIndexTests(unittest.TestCase):
                 stderr = io.StringIO()
                 with redirect_stderr(stderr):
                     status = port_index.main([mode, "--shards-only"],
-                                             root=self.root, units=self.units,
-                                             queue=self.queue, ledger=self.ledger)
+                                             units=self.units)
                 self.assertEqual(1, status)
                 self.assertIn("docs/proof.md:2:", stderr.getvalue())
                 self.assertFalse(self.queue.exists())
@@ -222,8 +385,6 @@ class PortIndexTests(unittest.TestCase):
             status = port_index.main(
                 ["check"],
                 units=self.units,
-                queue=self.queue,
-                ledger=self.ledger,
             )
         return status, stdout.getvalue() + stderr.getvalue()
 
@@ -234,8 +395,6 @@ class PortIndexTests(unittest.TestCase):
             status = port_index.main(
                 ["build"],
                 units=self.units,
-                queue=self.queue,
-                ledger=self.ledger,
             )
         return status, stdout.getvalue() + stderr.getvalue()
 
@@ -296,8 +455,6 @@ class PortIndexTests(unittest.TestCase):
             status = port_index.main(
                 argv,
                 units=self.units,
-                queue=self.queue,
-                ledger=self.ledger,
                 base_loader=lambda _: base,
                 ancestor_guard=lambda _: ancestor_ok,
             )
@@ -332,9 +489,6 @@ class PortIndexTests(unittest.TestCase):
             status = port_index.main(
                 ["check", *args],
                 units=self.units,
-                queue=self.queue,
-                ledger=self.ledger,
-                root=self.root,
             )
         return status, stdout.getvalue() + stderr.getvalue()
 
@@ -620,6 +774,57 @@ class PortIndexTests(unittest.TestCase):
 
         self.assertEqual(status, 0, output)
         self.assertIn("history matches BASE", output)
+
+    def test_migrating_a_legacy_ledger_into_history_loses_no_rows(self):
+        row1 = ledger_row("2026-11-14T17:00:00Z", "p1-001", evidence="first")
+        row2 = ledger_row("2026-11-15T17:00:00Z", "p1-001", evidence="second")
+        base = self.write_base(
+            {"p1-001": queue_row("p1-001")}, {"p1-001": [row1, row2]}
+        )
+        self.write_queue_shard("p1-001", queue_row("p1-001"))
+        directory = self.units / "p1-001.ledger.d"
+        directory.mkdir()
+        (directory / port_index.HISTORY_NAME).write_text(
+            LEDGER_HEADER + "\n" + row1 + "\n" + row2 + "\n"
+        )
+
+        _, ledger_bytes = self.render()
+        self.assertEqual([LEDGER_HEADER, row1, row2],
+                         ledger_bytes.decode().splitlines())
+        self.build()
+        status, output = self.check_against(base)
+
+        self.assertEqual(status, 0, output)
+
+    def test_history_file_is_first_and_fragments_keep_their_pr_order(self):
+        self.write_queue_shard("p1-001", queue_row("p1-001"))
+        history = ledger_row("2026-11-15T00:00:00Z", "p1-001", evidence="history")
+        early = ledger_row("2026-11-01T00:00:00Z", "p1-001", evidence="2-early")
+        late = ledger_row("2026-11-20T00:00:00Z", "p1-001", evidence="10-late")
+        directory = self.units / "p1-001.ledger.d"
+        directory.mkdir()
+        (directory / port_index.HISTORY_NAME).write_text(
+            LEDGER_HEADER + "\n" + history + "\n")
+        self.write_fragment("p1-001", "10-late.tsv", late)
+        self.write_fragment("p1-001", "2-early.tsv", early)
+
+        _, ledger_bytes = self.render()
+
+        self.assertEqual([LEDGER_HEADER, history, early, late],
+                         ledger_bytes.decode().splitlines())
+        snapshot = port_index.snapshot_from_dir(self.units, self.queue, self.ledger)
+        self.assertEqual(3, len(snapshot.ledger_shards["p1-001"]))
+
+    def test_history_migration_must_not_keep_the_legacy_row_too(self):
+        row = ledger_row("2026-11-15T00:00:00Z", "p1-001")
+        self.write_queue_shard("p1-001", queue_row("p1-001"))
+        self.write_ledger_shard("p1-001", row)
+        directory = self.units / "p1-001.ledger.d"
+        directory.mkdir()
+        (directory / port_index.HISTORY_NAME).write_text(LEDGER_HEADER + "\n" + row + "\n")
+
+        with self.assertRaisesRegex(port_index.PortIndexError, "duplicate ledger row"):
+            self.render()
 
     def test_check_against_base_rejects_a_deleted_queue_shard(self):
         base = self.write_base(
@@ -1597,7 +1802,7 @@ class PortIndexTests(unittest.TestCase):
         )
 
         self.assertEqual(status, 1)
-        self.assertIn("must not modify the generated aggregates", output)
+        self.assertIn("must not modify generated or bot-owned files", output)
         self.assertIn("changed: docs/port/queue.tsv", output)
 
     def test_pull_request_that_regenerates_aggregates_still_fails_the_ownership_gate(self):
@@ -1616,7 +1821,7 @@ class PortIndexTests(unittest.TestCase):
         )
 
         self.assertEqual(status, 1)
-        self.assertIn("must not modify the generated aggregates", output)
+        self.assertIn("must not modify generated or bot-owned files", output)
         self.assertIn("changed: docs/port/queue.tsv", output)
 
     def test_shards_only_still_rejects_an_invalid_shard(self):
@@ -1676,7 +1881,7 @@ class PortIndexTests(unittest.TestCase):
 
         self.assertEqual(changed, [])
 
-    def test_port_index_workflow_is_push_main_only_and_validates_before_build(self):
+    def test_port_index_workflow_is_main_only_and_validates_before_build(self):
         workflow = (
             port_index.ROOT / ".github" / "workflows" / "port-index.yml"
         ).read_text(encoding="utf-8")
@@ -1686,6 +1891,11 @@ class PortIndexTests(unittest.TestCase):
         self.assertNotIn("--force", workflow)
         self.assertIn("refs/heads/main", workflow)
         self.assertIn("GITHUB_EVENT_NAME", workflow)
+        self.assertIn("workflow_run:", workflow)
+        self.assertIn("actions/download-artifact@v4", workflow)
+        self.assertIn("--capture-results", workflow)
+        self.assertIn("tests/baseline.json", workflow)
+        self.assertIn("docs/port/PORT-STATUS.md", workflow)
         self.assertLess(
             workflow.index("check --shards-only --against \"$BASE_SHA\""),
             workflow.index("build_port_index.py build"),
