@@ -23,9 +23,9 @@
       "skipped": 0
     },
     "Playnite.Core.Tests": {
-      "total": 1779,
-      "executed": 1779,
-      "passed": 1779,
+      "total": 1781,
+      "executed": 1781,
+      "passed": 1781,
       "failed": 0,
       "skipped": 0
     },
@@ -287,5 +287,37 @@
       }
     },
     "notes": "Post-merge Phase 4 floor capture for the gate document. This is the main-branch push linux-ci run 43998974769 on merged main 0ecee2607cb6539e6fbbd479d349f04ce795fb68 (event push, head_branch main, conclusion success; the run's own test tree is the merged tree). Counts were parsed from the downloaded linux-test-results artifact (test-counts.json plus the three JUnit XML files and MTP exit-code files), not from a local run, memory or another commit: Core 1779 total/executed/passed with 0 failed/0 skipped and MTP exit 0, Architecture 173/173/173 with 0 failed/0 skipped and exit 0, Smoke 4/4/4 with 0 failed/0 skipped and exit 0. These equal the recorded new-suite floors in this file, so no floor is raised or lowered and no capture object is edited. This record is added by the p4-exit documentation PR, which deliberately does not cite that PR head's own run; it cites the merged-main run that measured the tree the gate describes. The same main head's plan-guards run 43998974777 (inventory-and-parity and formal both success, including the pinned TLC 1.7.4 LibraryImport/SettingsMigration/GameSession models and the 11-invariant mutation artifact) and packaging run 43998974804 also passed; port-index 43998974860 is the parent-owned aggregate regeneration."
-  }
+  },
+  "main_captures": [
+    {
+      "run_id": 44005557177,
+      "run_url": "https://github.com/seanburkes/playnite-linux/actions/runs/44005557177",
+      "commit": "6e263c1e5cfe7d99c66f7fb9e7f06b7515cfc462",
+      "captured_at": "2026-11-17T02:51:34Z",
+      "counts": {
+        "Playnite.Architecture.Tests": {
+          "total": 173,
+          "executed": 173,
+          "passed": 173,
+          "failed": 0,
+          "skipped": 0
+        },
+        "Playnite.Core.Tests": {
+          "total": 1781,
+          "executed": 1781,
+          "passed": 1781,
+          "failed": 0,
+          "skipped": 0
+        },
+        "Playnite.Smoke.Tests": {
+          "total": 4,
+          "executed": 4,
+          "passed": 4,
+          "failed": 0,
+          "skipped": 0
+        }
+      },
+      "notes": "Counts parsed from this merged-main linux-ci run's downloaded JUnit artifacts (test-counts.json plus the three JUnit XML files and MTP exit-code files) on 6e263c1: Core 1781/1781/1781, Architecture 173/173/173, Smoke 4/4/4, all with 0 failed and 0 skipped and MTP exit 0. This raises the stale p4_exit_capture floor of Core 1779 to the measured merged-main 1781; that earlier row and its provenance text are retained unchanged as history, and no floor is lowered. The baseline is bot-owned from this PR onward: a pull request never edits it."
+    }
+  ]
 }
