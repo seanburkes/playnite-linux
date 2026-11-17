@@ -70,6 +70,23 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
+def _migration_unit(changes) -> str | None:
+    """Return the single unit with a paired legacy delete and history add."""
+    deletes = {
+        change.path[: -len(".ledger.tsv")].rsplit("/", 1)[-1]
+        for change in changes
+        if change.status == "D" and change.path.endswith(".ledger.tsv")
+    }
+    adds = {
+        change.path.split(".ledger.d/", 1)[0].rsplit("/", 1)[-1]
+        for change in changes
+        if (change.status == "A" and change.path.endswith("/0000-history.tsv")
+            and ".ledger.d/" in change.path)
+    }
+    common = deletes & adds
+    return common.pop() if len(common) == 1 else None
+
+
 def _claim_lines(rows_by_path) -> list[str]:
     lines: list[str] = []
     for path, rows in sorted(rows_by_path.items()):
@@ -158,6 +175,15 @@ def main(argv: list[str]) -> int:
         owned = ownership_hits(changes, ownership)
 
         if declared is None:
+            migration = _migration_unit(changes)
+            if migration and set(touched) <= {migration} and not product:
+                print(f"unit: {migration}")
+                print(
+                    "migration: docs/port/units/"
+                    f"{migration}.ledger.tsv -> docs/port/units/"
+                    f"{migration}.ledger.d/0000-history.tsv (verbatim)"
+                )
+                return 0
             if touched or owned or product:
                 if product and not ownership.available:
                     raise GuardError(

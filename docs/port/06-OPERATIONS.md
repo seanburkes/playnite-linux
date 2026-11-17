@@ -283,14 +283,19 @@ then run from the base copy. The aggregate and shard-history steps materialise
 script but it cannot be materialised, the job fails instead of falling back. Only while the
 base genuinely lacks a script (including the materialiser itself) does the head copy run, with
 a named `BOOTSTRAP` warning; once `main` contains the script, every later run uses the base
-copy. The base SHA and the recorded event base come directly from the event fields in the
-workflow, not from a PR-controlled helper; `policy_base.sha` is their fork point and
-`policy_base.recorded` is the event base. The protected gate, results checker, capture, and
-lister all consume `policy_base.sha` (the fork point), not the recorded base; only aggregate
-ownership consumes `policy_base.recorded`. A policy change that adds a new tool capability is
-therefore bootstrapped by design: the introducing PR runs the previous base materialiser and
-scripts, and the new capability is live from the first merge that carries it. This applies to
-the aggregate tool and to the gate/checker/capture/lister policy scripts alike. This keeps a pull request from weakening the gate,
+copy. This applies to the protected gate/checker/capture/lister policy scripts. The base SHA
+and the recorded event base come directly from the event fields in the workflow, not from a
+PR-controlled helper; `policy_base.sha` is their fork point and `policy_base.recorded` is the
+event base. Those policy scripts consume `policy_base.sha` (the fork point). Generated-path
+ownership does not use the event base: the `Select the port guard tool` step fetches the
+current `main` tip and selects the generator from it. If the PR head contains current `main`,
+the head tool runs (it carries main's rules plus any reviewed PR change); if the PR is stale
+and does not contain current `main`, the current-main tool is materialised inside the checkout
+and runs instead, so an old PR cannot keep an old tool that predates the baseline and status
+checks. A head tool difference from current `main` on a contained PR requires the
+`oracle-change` label. The baseline/status comparison uses the fetched current-main tip, never
+`policy_base.recorded`.
+This keeps a pull request from weakening the gate,
 the results check, the aggregate tool, or the base project list in its own checkout. The protected-path diff is
 taken from the merge base to `HEAD`, so a PR
 branched before a protected-path change landed on `main` is not charged for that main-side
@@ -301,12 +306,17 @@ re-reads the PR's `oracle-change` label through the API because merge-group even
 carry PR labels. It fails closed on a batched group, which does not identify exactly one PR,
 and reports that single-PR limitation explicitly.
 
-The committed baseline is a ratchet and is bot-owned. A pull request never edits
+The committed baseline is a ratchet and is bot-owned. A pull request does not edit
 `tests/baseline.json`; the post-merge `port-index` workflow reads the completed merged-main
 `linux-ci` run's downloaded JUnit and MTP exit artifacts, validates every project and exit
-code, and refuses to write if any recorded floor would fall. It appends a `main_captures`
-record with the run id, URL, commit and time while preserving every earlier capture and its
-provenance text. A change may add the first non-null `new` object only when
+code, and refuses to write if any recorded floor would fall. The floor is the maximum over
+every structured capture in the document (`new`, each top-level capture with a `counts`
+object, and every `main_captures` entry) and over the previous `main` baseline, not merely the
+current `new` block. It refuses to delete or rewrite a `main_captures` identity, refuses a
+`removed_projects` entry that is not backed by real capture evidence or whose project still
+exists, and records every new run's provenance even when its counts are unchanged; a repeated
+run id is idempotent. It preserves every earlier capture and its provenance text.
+A change may add the first non-null `new` object only when
 its counts meet or exceed the observed run and it names every observed project, so a first
 baseline cannot record zero or omit a project and leave a false floor. It may not delete
 `tests/baseline.json`, reset `new` to null, lower a retained
@@ -316,13 +326,30 @@ protected baseline, carrying a non-empty `reason` and `approved_by`; a project t
 discovered and run cannot be retired. Prior removal records are immutable, and `replaced_by`
 plus `replacement_executed` must be a string and a nonnegative integer. A recorded rename must
 carry the retired project's executed floor to the replacement. Test discovery for the run uses
-the same test-project filter as the base list. `tests/baseline.json`, the entire
+the same test-project filter as the base list. On a pull request, `changed_aggregates` compares
+the baseline and generated status with the current `main` tip fetched at guard time, so a
+stale branch that restores an older floor, deletes a capture, or carries an older generated
+table fails even when the three-dot diff cannot see the restore. A human note edit in the
+baseline is allowed only in a reviewed `oracle-change` PR and only when every floor and capture
+identity is unchanged; floors and captures remain immutable. `tests/baseline.json`, the entire
 `.github/workflows/` directory (including new or renamed workflows), `.github/CODEOWNERS`,
 `packaging/`, and `scripts/ci/`, `scripts/port/`, `scripts/formal/` are in the protected-path
 set, so changing the policy surface requires the declared `oracle-change` route through the
 protected-path gate. Existing policy files remain CODEOWNED. The protected-path step itself
 is asserted to have no `continue-on-error` and to exit nonzero on a violation. An absent base
 commit (a brand-new branch's first push) keeps the first-baseline addition path open.
+
+The shard ownership rules are enforced on both sides of the merge: `plan-guards` runs the
+generator selected from the current `main` tip with `--forbid-aggregate-changes` (which includes
+ownership) against the fork point, and the post-merge writer runs
+`--forbid-shard-ownership` against the previous `main` commit before it writes. The latter rejects an edited legacy ledger, a second fragment, a
+non-verbatim `0000-history.tsv` migration, or a retirement delete that `removed.tsv` does not
+record. `PORT-STATUS.md` keeps only one hand-written narrative window; it must begin with
+`## Hand-written narrative` and may not contain a generated banner or generated heading.
+The negative proofs for these bypasses live in `scripts/port/test_build_port_index.py` and
+`scripts/ci/test_aggregate_ownership.py`, which `plan-guards` and `linux-ci` run; both paths are
+in the protected `scripts/` set, so an unlabelled PR cannot weaken them and an `oracle-change`
+PR is the owner-authorised route.
 
 The Windows oracle remains independent, with its existing triggers and VSTest filters:
 EX-1 `FileSystemTests.CanWriteToFolderTest`, EX-2

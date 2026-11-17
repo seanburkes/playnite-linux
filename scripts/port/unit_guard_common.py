@@ -84,7 +84,7 @@ LEDGER_SHARD = re.compile(r"^([a-z0-9]+(?:-[a-z0-9]+)*)\.ledger\.tsv$")
 LEDGER_FRAGMENT = re.compile(
     r"^([a-z0-9]+(?:-[a-z0-9]+)*)\.ledger\.d/(?:.+)$"
 )
-FRAGMENT_NAME = re.compile(r"^(\d+)-([a-z0-9][a-z0-9-]*)\.tsv$")
+FRAGMENT_NAME = re.compile(r"^([1-9]\d*)-([a-z0-9][a-z0-9-]*)\.tsv$")
 
 UNITS_DIR = "docs/port/units/"
 UNITS_NON_EVIDENCE = frozenset(

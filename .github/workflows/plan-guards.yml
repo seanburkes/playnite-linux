@@ -209,6 +209,21 @@ jobs:
         run: |
           bash "$MATERIALISER" "$BASE_SHA" "$RUNNER_TEMP" "$GITHUB_OUTPUT"
 
+      - name: Select the port guard tool from current main
+        if: >-
+          github.event_name == 'pull_request' ||
+          github.event_name == 'merge_group'
+        shell: bash
+        env:
+          PORT_TOOL_CHANGE_AUTHORIZED: ${{ github.event_name == 'merge_group' || contains(github.event.pull_request.labels.*.name, 'oracle-change') }}
+        run: |
+          set -euo pipefail
+          eval "$(bash scripts/port/select_guard_tool.sh)"
+          {
+            printf 'PORT_GUARD_TOOL=%s\n' "$PORT_GUARD_TOOL"
+            printf 'PORT_GUARD_MAIN_TIP=%s\n' "$PORT_GUARD_MAIN_TIP"
+          } >> "$GITHUB_ENV"
+
       - name: Frozen snapshot and dependency pin are unconditionally immutable
         if: >-
           github.event_name == 'pull_request' ||
@@ -275,13 +290,12 @@ jobs:
         shell: bash
         env:
           BASE_SHA: ${{ steps.policy_base.outputs.sha }}
-          RECORDED_BASE: ${{ steps.policy_base.outputs.recorded }}
           PORT_INDEX_PR: ${{ github.event.pull_request.number }}
+          PORT_BASELINE_NOTE_EDITS: ${{ github.event_name == 'merge_group' || contains(github.event.pull_request.labels.*.name, 'oracle-change') }}
         run: |
           set -euo pipefail
           # Compare against the fork point, not a stale recorded base. Main's
-          # post-merge aggregate regeneration is not this PR's change. The
-          # recorded event base is the other legitimate base-side snapshot.
+          # post-merge aggregate regeneration is not this PR's change.
           if [ -z "${BASE_SHA:-}" ] || printf '%s' "$BASE_SHA" | grep -Eq '^0+$'; then
             echo "::error::No comparison base SHA is available for aggregate ownership"
             exit 1
@@ -298,26 +312,24 @@ jobs:
           # port-index workflow regenerates and commits them on main. A pull
           # request owns only its unit shards, so even a correctly regenerated
           # aggregate change fails here.
-          head_tool="$PWD/scripts/port/build_port_index.py"
-          map_bootstrap=false
-          if ! git cat-file -e "$BASE_SHA:docs/port/units/ownership.paths" 2>/dev/null \
-             && git cat-file -e "HEAD:docs/port/units/ownership.paths" 2>/dev/null; then
-            map_bootstrap=true
-            echo "::warning::BOOTSTRAP: base has no ownership.paths; using the head tool for this first map"
+          #
+          # The tool is selected against the current main tip, never the PR
+          # event base. A stale PR that does not contain current main is judged
+          # by current-main rules, so it cannot keep an old tool that predates
+          # the baseline and status checks.
+          tool="${PORT_GUARD_TOOL:-}"
+          main_tip="${PORT_GUARD_MAIN_TIP:-}"
+          if [ -z "$tool" ] || [ ! -f "$tool" ]; then
+            echo "::error::No port guard tool was selected from current main; refusing the PR event-base fallback"
+            exit 1
           fi
-          if [ "$map_bootstrap" = false ] \
-             && git cat-file -e "$BASE_SHA:scripts/port/build_port_index.py" 2>/dev/null; then
-            base_tool="$RUNNER_TEMP/base-port/build_port_index.py"
-            mkdir -p "$(dirname "$base_tool")"
-            git show "$BASE_SHA:scripts/port/build_port_index.py" > "$base_tool"
-            cp "$head_tool" "$RUNNER_TEMP/build_port_index.head.py"
-            cp "$base_tool" "$head_tool"
-            trap 'cp "$RUNNER_TEMP/build_port_index.head.py" "$head_tool"' EXIT
-          else
-            echo "::warning::BOOTSTRAP: base commit has no scripts/port/build_port_index.py or no ownership map; using the head tool"
+          if [ -z "$main_tip" ] || ! printf '%s' "$main_tip" | grep -Eq '^[0-9a-f]{40}$'; then
+            echo "::error::No current main tip was selected; generated-path ownership cannot fall back to the PR event base"
+            exit 1
           fi
-          python3 "$head_tool" check --shards-only \
-            --against "$merge_base" --forbid-aggregate-changes
+          python3 "$tool" check --shards-only \
+            --against "$merge_base" --forbid-aggregate-changes \
+            --recorded-base "$main_tip"
 
       - name: Port shards are valid and history is preserved
         shell: bash
@@ -344,24 +356,10 @@ jobs:
               args+=(--against "$ref" --allow-pre-migration-base)
             fi
           fi
-          head_tool="$PWD/scripts/port/build_port_index.py"
-          map_bootstrap=false
-          if [ -n "$ref" ] \
-             && ! git cat-file -e "$BASE_SHA:docs/port/units/ownership.paths" 2>/dev/null \
-             && git cat-file -e "HEAD:docs/port/units/ownership.paths" 2>/dev/null; then
-            map_bootstrap=true
-            echo "::warning::BOOTSTRAP: base has no ownership.paths; using the head tool for this first map"
-          fi
-          if [ "$map_bootstrap" = false ] && [ -n "$ref" ] && \
-             git cat-file -e "$BASE_SHA:scripts/port/build_port_index.py" 2>/dev/null; then
-            base_tool="$RUNNER_TEMP/base-port/build_port_index.py"
-            mkdir -p "$(dirname "$base_tool")"
-            git show "$BASE_SHA:scripts/port/build_port_index.py" > "$base_tool"
-            cp "$head_tool" "$RUNNER_TEMP/build_port_index.head.py"
-            cp "$base_tool" "$head_tool"
-            trap 'cp "$RUNNER_TEMP/build_port_index.head.py" "$head_tool"' EXIT
-          else
-            echo "::warning::BOOTSTRAP: base commit has no scripts/port/build_port_index.py or no ownership map; using the head tool"
+          head_tool="${PORT_GUARD_TOOL:-$PWD/scripts/port/build_port_index.py}"
+          if [ ! -f "$head_tool" ]; then
+            echo "::error::$head_tool is missing at head; the shard gate cannot run head rules"
+            exit 1
           fi
           python3 "$head_tool" check "${args[@]}"
 

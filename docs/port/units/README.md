@@ -138,6 +138,34 @@ Limits: the workflow file itself and the base-materialisation step are protected
 predates the checker runs an inline file-set check for that transition only. A head checker that
 differs from the base checker is rejected; changing the checker requires a base-side transition.
 
+## Generator selection and generated-file ownership
+
+The aggregate and shard generator is selected from the current `main` tip fetched at guard
+time. A PR head that contains current `main` runs its head tool; a stale head that does not
+contain current `main` runs the current-main tool, so an old PR cannot keep an old tool that
+predates the baseline, status or ownership rules. The aggregate step passes the fetched
+current-main tip as the baseline/status comparison side, never the PR event base. A head tool
+that differs from current `main` on a contained PR requires `oracle-change`.
+
+`--forbid-aggregate-changes` is the pull request gate and implies shard ownership. The
+post-merge `port-index` writer passes `--forbid-shard-ownership` against the previous `main`
+commit before it writes, so a merge cannot launder an edited legacy ledger, a second fragment,
+a non-verbatim migration, or a retirement delete that `removed.tsv` does not record.
+
+`docs/port/units/<unit>.queue.tsv` is a single file per unit. Two open PRs for the same unit
+both change it, so the second must rebase and re-run CI; the guard cannot predict a concurrent
+branch, and git's normal merge conflict is the lock. The shared
+`README.md`/`removed.tsv`/`ledger-corrections.tsv` files remain process material; a unit PR may
+change a shared retirement or correction record only for its own unit, and `check --against`
+validates the record itself.
+
+`docs/port/PORT-STATUS.md` is regenerated from the queue and ledger shards. Its only
+hand-written part is the prose between the `port-status:narrative:start` and
+`port-status:narrative:end` markers; every table outside those markers is generated. The
+narrative must begin with `## Hand-written narrative` and may not contain the generated banner
+or a generated heading (`# Port status`, `## Unit summary`, `## Ledger`, `## Units`), so a
+hand-written block cannot impersonate a generated table.
+
 ## Ledger history is append-only in content
 
 Ledger history is append-only in content. The legacy `<unit>.ledger.tsv` shard is frozen: it
@@ -148,7 +176,14 @@ and `+00:00`) are compared as instants.
 
 A unit may migrate its legacy shard once: move the rows verbatim into
 `<unit>.ledger.d/0000-history.tsv` and delete the legacy file in the same change. History rows
-keep the aggregate's historical ordering; fragments always follow them.
+keep the aggregate's historical ordering; fragments always follow them. The ownership gate
+accepts that migration only as this exact paired move: the history bytes must equal the deleted
+legacy bytes, the history file may only be added, and deleting the legacy file without either
+the migration or a recorded retirement is rejected. A retirement that deletes the legacy file
+must also delete the queue shard and add the unit to `removed.tsv` in the same change. A pure
+verbatim migration is a process change: the unit-evidence guard accepts the paired delete/add
+without a queue transition or a new PR fragment, but it still fails if the bytes differ or if
+the change also touches the queue shard.
 
 `check --against <ref>` enforces this against a base commit that must be a strict ancestor of
 HEAD, per unit, as a multiset: every base ledger row must still exist at head with identical
@@ -170,10 +205,6 @@ unit. That ordering is derived output: `build` produces it, and the post-merge
 `port-index` workflow on `main` is the only writer that commits it. Contributors never
 hand-order or hand-edit an aggregate. The parent job's regeneration normalises order after
 every merge.
-
-`docs/port/PORT-STATUS.md` is regenerated from the queue and ledger shards. Its only
-hand-written part is the prose between the `port-status:narrative:start` and
-`port-status:narrative:end` markers; every table outside those markers is generated.
 
 ### One-off timestamp corrections
 
