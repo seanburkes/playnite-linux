@@ -686,6 +686,23 @@ class CiPolicyTests(unittest.TestCase):
         self.assertIn("--previous-baseline ", checker)
         self.assertIn("--previous-projects ", checker)
 
+    def test_merge_queue_limitation_and_strict_off_are_documented(self):
+        def normalized(relative):
+            return " ".join((ROOT / relative).read_text().split())
+
+        operations = normalized("docs/port/06-OPERATIONS.md")
+        verification = normalized("docs/port/04-VERIFICATION.md")
+        decisions = normalized("docs/port/00-DECISIONS.md")
+        self.assertIn("GitHub merge queue is unavailable for this repository", operations)
+        self.assertIn("strict_required_status_checks_policy=false", operations)
+        self.assertIn("The post-merge `linux-ci` run on `main` is the backstop", operations)
+        self.assertIn("no longer makes a pull request unmergeable", operations)
+        for text in (verification, decisions):
+            self.assertIn(
+                "merge queue is unavailable for this user-owned repository", text
+            )
+        self.assertIn("Strict/up-to-date is intentionally off", verification)
+
     def test_pull_request_with_no_base_sha_fails_closed(self):
         for workflow in (LINUX_CI, PLAN_GUARDS):
             result, _ = resolve_base(workflow, "pull_request", pull_request_base="")

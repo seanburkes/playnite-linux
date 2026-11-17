@@ -613,9 +613,10 @@ and every review is made on their behalf: when an agent or model produces the re
 model is working for the owner, not acting as a second person. Several documents described
 a "second reviewer" or "independent review" as a merge gate, and some described CODEOWNERS as
 an approval requirement. Neither is true. Branch protection on the default branch requires a
-pull request, the five required status checks (`inventory-and-parity`, `formal`,
-`linux-build-and-test`, `AppImage packaging smoke`, `Flatpak packaging smoke`) and an
-up-to-date branch, and it blocks force pushes and branch deletion; it has no approval
+pull request and the five required status checks (`inventory-and-parity`, `formal`,
+`linux-build-and-test`, `AppImage packaging smoke`, `Flatpak packaging smoke`), with
+strict/up-to-date intentionally off because a GitHub merge queue is unavailable for this
+user-owned repository, and it blocks force pushes and branch deletion; it has no approval
 requirement. The path-filtered `legacy-oracle`, `settings-library-oracle` and
 `windows-fixture-validation` jobs run in addition when their paths change; they are not
 required contexts. A rule that cannot be satisfied is not a gate, and a checklist that names a
@@ -637,9 +638,10 @@ reviewer who does not exist teaches readers to accept a false claim.
   and the path-filtered oracle jobs that run on their paths, and the TLA+ models run by the
   `formal` job. Cite those mechanisms rather than asserting independence in prose.
 - A protected oracle change is declared, not seconded: the task says `oracle-change`, the PR
-  carries the label, and the protected-path gate checks the diff, re-reading the label in the
-  merge queue. `legacy/` and `oracle-lock/` remain unconditionally immutable; no label
-  overrides them.
+  carries the label, and the protected-path gate checks the diff, re-reading the label through
+  the API on pull-request label events. The `merge_group` variant is retained but dormant
+  because no merge queue exists here. `legacy/` and `oracle-lock/` remain unconditionally
+  immutable; no label overrides them.
 - An external review is preferred where one can exist: for an oracle change, prefer a reviewer
   outside this repository (an external human, or a different machine or owner). When that is
   not used, the owner's merge decision is the accepted exception, and the gate artifact
@@ -667,6 +669,9 @@ reviewer who does not exist teaches readers to accept a false claim.
   owner action can weaken the gate itself;
 - the structural checks catch tampering and regression (changed bytes, lowered counts, broken
   hashes), not a semantically wrong port that happens to pass its tests;
+- strict/up-to-date is off, so a PR whose head was tested against an older `main` can merge;
+  the post-merge `linux-ci` run on `main` is the backstop, and the post-merge `port-index`
+  aggregate commit is not a mergeability gate;
 - the `formal` job fetches `tla2tools.jar` from the latest release without a hash pin, and the
   oracle jobs are path-filtered, so they only run when their paths change.
 

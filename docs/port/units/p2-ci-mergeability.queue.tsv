@@ -1,0 +1,2 @@
+id	wave	area	unit	depends	status	owner	oracle	test	notes
+p2-ci-mergeability	W2	repo	Merge queue limitation and strict-off policy	p2-ci-guard	done	fm/port-u3	ruleset 27326579	scripts/ci/test_ci_policy.py	Documented that GitHub merge queue is unavailable on this user-owned repository, that strict/up-to-date is intentionally off, and the residual risk with post-merge main CI as the backstop; corrected dormant merge_group wording and added a policy regression test; PR https://github.com/seanburkes/playnite-linux/pull/105; aggregates parent-owned

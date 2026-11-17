@@ -206,28 +206,52 @@ flock state/build.lock -c 'dotnet build Playnite.slnx -c Release'
 ### CI matrix and required checks
 
 The Linux build and the existing plan/oracle workflows form one CI matrix. The two Linux
-workflows both run on **every pull request**, every merge-queue entry (`merge_group`), and
-every push to `main`, without path filters. Plan checks remain in `plan-guards.yml`; they are
-not duplicated in the build workflow.
+workflows both run on **every pull request** and every push to `main`, without path filters.
+The `merge_group` triggers in `linux-ci.yml`, `packaging.yml` and `plan-guards.yml` are
+retained but dormant: GitHub does not offer a merge queue for this user-owned repository (see
+[Merge queue and up-to-date policy](#merge-queue-and-up-to-date-policy) below). Plan checks
+remain in `plan-guards.yml`; they are not duplicated in the build workflow.
 
 | Workflow / check | Runner | Trigger and guarantee |
 | --- | --- | --- |
-| `linux-ci` / `linux-build-and-test` | `ubuntu-24.04`, Python 3.12 | Test the result policy, restore `Playnite.slnx` in locked mode, build Release, and run every project under `tests/` on PR, merge-queue, and `main` push events. Restore/build warnings and xUnit skipped/warned tests fail; the bounded empty-scaffold policy below applies before the new-suite baseline is recorded, then the committed baseline is a ratchet. |
-| `plan-guards` / `inventory-and-parity` | `ubuntu-latest` | Reproduce inventory, validate parity, run port-index generator tests, validate shard history, and reject aggregate edits on PRs and merge-queue entries. Also enforce immutable `legacy/`/`oracle-lock/` and the protected-path `oracle-change` gate. |
+| `linux-ci` / `linux-build-and-test` | `ubuntu-24.04`, Python 3.12 | Test the result policy, restore `Playnite.slnx` in locked mode, build Release, and run every project under `tests/` on PR and `main` push events. Restore/build warnings and xUnit skipped/warned tests fail; the bounded empty-scaffold policy below applies before the new-suite baseline is recorded, then the committed baseline is a ratchet. The dormant `merge_group` trigger would run the same job if a queue exists. |
+| `plan-guards` / `inventory-and-parity` | `ubuntu-latest` | Reproduce inventory, validate parity, run port-index generator tests, validate shard history, and reject aggregate edits on PRs. Also enforce immutable `legacy/`/`oracle-lock/` and the protected-path `oracle-change` gate. The dormant `merge_group` trigger is retained for a future organization-owned repository. |
 | `plan-guards` / `formal` | `ubuntu-latest`, Temurin 21 | Run `scripts/formal/run_tlc.sh` for the existing formal models. |
 | `legacy-oracle` / `windows-oracle` | `windows-latest`, x86 Release | Existing oracle-path PR filters, `oracle-*` tags, or manual dispatch. Verify pinned Playnite.Deps, build frozen v10, byte-compare manifest goldens with a negative probe, run NUnit via VSTest, and retain TRX/counts. |
 | `settings-library-oracle` / `build and generate scratch artifacts`, `validate when approved corpus exists` | `windows-latest` | Existing corpus/tool-path PR filters or manual dispatch; generate scratch output and validate the approved settings/library corpus. |
 | `windows-fixture-validation` / `fixture` | `windows-latest` | Existing fixture/tool-path filters or manual dispatch; validate regeneration, mutations, source preservation, and the committed fixture. |
 | `port-index` / `regenerate` | `ubuntu-latest` | Push to `main` only; validate history, regenerate aggregates, and commit them on `main` with no force-push. |
 
-Require exactly these five contexts on every PR and merge-queue entry: `inventory-and-parity`,
-`formal`, `linux-build-and-test`, `AppImage packaging smoke` and `Flatpak packaging smoke`,
-with a strict up-to-date branch and no required reviews. The `legacy-oracle`,
+Require exactly these five contexts on every PR: `inventory-and-parity`, `formal`,
+`linux-build-and-test`, `AppImage packaging smoke` and `Flatpak packaging smoke`, with
+strict/up-to-date intentionally **off** and no required reviews. The `legacy-oracle`,
 `settings-library-oracle` and `windows-fixture-validation` jobs are path-filtered additional
 checks: they run when their paths change, so they are not required contexts (an untriggered
 workflow would stay pending). The aggregate writer is a post-merge check, not a PR check.
 These are the required-check names for repository configuration; this document does not change
 branch protection.
+
+#### Merge queue and up-to-date policy
+
+GitHub merge queue is unavailable for this repository: the owner is a user account, not an
+organization, and ruleset 27326579 has no `merge_queue` rule. The `merge_group` triggers are
+retained so the workflows are ready if the repository ever moves to an organization, but they
+cannot fire here. There is no queue entry, and no queue-related check is part of the merge
+contract.
+
+The owner's decision is to leave strict/up-to-date off
+(`strict_required_status_checks_policy=false`) rather than require a branch update that a
+queue cannot automate. The five required contexts and the deploy-key bypass are unchanged, and
+force pushes and deletion remain blocked.
+
+Residual risk: a pull request whose head was tested against an older `main` can merge even when
+`main` has advanced. The post-merge `linux-ci` run on `main` is the backstop; it catches a
+regression only after merge, not before. Reviewers should re-run or locally check a change that
+depends on newer `main`, and the owner may still ask for an update. The post-merge `port-index`
+aggregate commit no longer makes a pull request unmergeable: it advances `main`, but it is not
+a required check and strict up-to-date is off. An operator who sees `BEHIND` or an
+out-of-date branch should treat it as informational; it does not block merge. The bot can still
+create main churn, which is a throughput and cost issue, not a mergeability gate.
 
 `linux-ci.yml` installs the exact SDK version from `global.json` (currently `11.0.100`) with
 `actions/setup-dotnet`'s `global-json-file` input and checks `dotnet --version` for equality.
@@ -251,8 +275,9 @@ discovered project, records each exit code, then calls
 `scripts/ci/check_linux_test_results.py`. It checks out full history, resolves one comparison
 base in the workflow from the event fields, and materialises that commit's
 `tests/baseline.json` plus its test-project list (`list_test_projects.py`, not every
-`tests/**/*.csproj`) for that call. A pull-request or merge-queue event with no usable base SHA
-fails closed; only a push before the branch's first commit may report an absent baseline.
+`tests/**/*.csproj`) for that call. A pull-request event with no usable base SHA fails closed;
+the dormant `merge_group` branch keeps the same rule, and only a push before the branch's first
+commit may report an absent baseline.
 When the base commit exists, `tests/baseline.json` must exist and be readable; a missing or
 empty base baseline is a hard failure, not an absent state. A supplied-but-missing or
 unreadable previous baseline or project list is a hard failure, not a silent return to
@@ -301,10 +326,11 @@ taken from the merge base to `HEAD`, so a PR
 branched before a protected-path change landed on `main` is not charged for that main-side
 change; failure to compute the merge base fails closed. The frozen `legacy/`/`oracle-lock/`
 step uses the same merge-base diff through the shared gate and has no label override. The
-merge-queue protected-path step
+dormant `merge_group` protected-path step
 re-reads the PR's `oracle-change` label through the API because merge-group events do not
-carry PR labels. It fails closed on a batched group, which does not identify exactly one PR,
-and reports that single-PR limitation explicitly.
+carry PR labels. It is unreachable while no queue exists; if a queue is ever enabled, it fails
+closed on a batched group, which does not identify exactly one PR, and reports that single-PR
+limitation explicitly.
 
 The committed baseline is a ratchet and is bot-owned. A pull request does not edit
 `tests/baseline.json`; the post-merge `port-index` workflow reads the completed merged-main
@@ -442,10 +468,11 @@ For every unit:
 
 Both reviews are adversarial agent assistance, not independent human approval: this repository
 has one human owner, who reads the findings and decides the merge (ADR-024). Branch protection
-requires the pull request, the five required checks (`inventory-and-parity`, `formal`,
-`linux-build-and-test`, `AppImage packaging smoke`, `Flatpak packaging smoke`) and an up-to-date
-branch; it has no approval requirement, and CODEOWNERS is audit metadata rather than an
-approval gate. The path-filtered oracle jobs run in addition when their paths change.
+requires the pull request and the five required checks (`inventory-and-parity`, `formal`,
+`linux-build-and-test`, `AppImage packaging smoke`, `Flatpak packaging smoke`); strict/up-to-date
+is intentionally off (see §5), and it has no approval requirement. CODEOWNERS is audit metadata
+rather than an approval gate. The path-filtered oracle jobs run in addition when their paths
+change.
 
 Reviewer prompt skeleton:
 
