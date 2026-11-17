@@ -288,8 +288,11 @@ class CiPolicyTests(unittest.TestCase):
         self.assertIn("guard-inventory:", workflow)
         self.assertIn("needs: guard-inventory", workflow)
         self.assertIn('git show "$BASE_SHA:scripts/port/check_guard_tests.py"', workflow)
-        self.assertIn('python3 "$trusted" --repo "$PWD" --base "$BASE_SHA" --head HEAD',
-                      workflow)
+        self.assertIn('--fork "$FORK_SHA" --checker-base "$BASE_SHA"', workflow)
+        self.assertIn("steps.guard_base.outputs.base", workflow)
+        self.assertIn("steps.guard_base.outputs.fork", workflow)
+        self.assertNotIn("python3 scripts/port/check_guard_tests.py", workflow)
+        self.assertNotIn("Port guard test files cannot be deleted or weakened", workflow)
         self.assertLess(
             workflow.index("guard-inventory:"),
             workflow.index("inventory-and-parity:"),

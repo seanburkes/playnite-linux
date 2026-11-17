@@ -37,7 +37,7 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Resolve the guard inventory base commit
+      - name: Resolve the guard inventory event base and fork point
         id: guard_base
         shell: bash
         env:
@@ -55,7 +55,9 @@ jobs:
           esac
           if [ -z "${event_base:-}" ] || printf '%s' "$event_base" | grep -Eq '^0+$'; then
             if [ "$EVENT_NAME" = "push" ]; then
-              printf 'sha=%s\n' "$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+              event_base=$(git rev-parse HEAD)
+              fork=$(git rev-parse HEAD)
+              printf 'base=%s\nfork=%s\n' "$event_base" "$fork" >> "$GITHUB_OUTPUT"
               exit 0
             fi
             echo "::error::$EVENT_NAME event has no usable base SHA for guard inventory"
@@ -65,11 +67,12 @@ jobs:
             echo "::error::Cannot compute the guard inventory fork point"
             exit 1
           fi
-          printf 'sha=%s\n' "$fork" >> "$GITHUB_OUTPUT"
+          printf 'base=%s\nfork=%s\n' "$event_base" "$fork" >> "$GITHUB_OUTPUT"
 
       - name: Run the base-materialised guard test inventory
         env:
-          BASE_SHA: ${{ steps.guard_base.outputs.sha }}
+          BASE_SHA: ${{ steps.guard_base.outputs.base }}
+          FORK_SHA: ${{ steps.guard_base.outputs.fork }}
         shell: bash
         run: |
           set -euo pipefail
@@ -83,17 +86,18 @@ jobs:
               exit 1
             fi
             sha256sum "$trusted"
-            python3 "$trusted" --repo "$PWD" --base "$BASE_SHA" --head HEAD
+            python3 "$trusted" --repo "$PWD" --base "$BASE_SHA" \
+              --fork "$FORK_SHA" --checker-base "$BASE_SHA" --head HEAD
             exit 0
           fi
 
-          echo "::warning::BOOTSTRAP: base has no scripts/port/check_guard_tests.py; this introduction PR runs an inline file-set check only. The base-materialised checker is the trust root after merge."
-          python3 - "$BASE_SHA" <<'PY'
+          echo "::warning::BOOTSTRAP: event base has no scripts/port/check_guard_tests.py; this introduction PR runs an inline file-set check only. The event-base checker is the trust root after merge."
+          python3 - "$BASE_SHA" "$FORK_SHA" <<'PY'
           import re
           import subprocess
           import sys
 
-          base = sys.argv[1]
+          base, fork = sys.argv[1], sys.argv[2]
           path_re = re.compile(r"^scripts/port/test_[^/]*\.py$")
 
           def files(revision):
@@ -105,10 +109,17 @@ jobs:
               ).stdout.decode("utf-8", "replace")
               return {item for item in out.split("\0") if path_re.fullmatch(item)}
 
-          missing = sorted(files(base) - files("HEAD"))
+          missing = sorted((files(base) | files(fork)) - files("HEAD"))
           if missing:
               for path in missing:
-                  print(f"::error::{path} is present at the base and missing at head")
+                  print(f"::error::{path} is present at the base or fork and missing at head")
+              sys.exit(1)
+          head_checker = subprocess.run(
+              ["git", "show", "HEAD:scripts/port/check_guard_tests.py"],
+              capture_output=True,
+          )
+          if head_checker.returncode != 0 or not head_checker.stdout.strip():
+              print("::error::the head guard checker is missing or empty")
               sys.exit(1)
           print("bootstrap guard file-set inventory passed")
           PY
@@ -256,17 +267,6 @@ jobs:
         env:
           BASE_SHA: ${{ steps.policy_base.outputs.sha }}
         run: python3 -m unittest discover -s scripts/port -p 'test_*.py'
-
-      - name: Port guard test files cannot be deleted or weakened
-        env:
-          BASE_SHA: ${{ steps.policy_base.outputs.sha }}
-        run: |
-          set -euo pipefail
-          if [ -z "${BASE_SHA:-}" ] || printf '%s' "$BASE_SHA" | grep -Eq '^0+$'; then
-            echo "::error::No comparison base SHA is available for guard-test integrity"
-            exit 1
-          fi
-          python3 scripts/port/check_guard_tests.py --base "$BASE_SHA" --head HEAD
 
       - name: Port aggregates are generated on main
         if: >-

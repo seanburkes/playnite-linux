@@ -165,7 +165,7 @@ class GuardIntegrityTests(unittest.TestCase):
     def _run_runner(runner: Path, repo: Path, base: str) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
             [sys.executable, str(runner), "--repo", str(repo),
-             "--base", base, "--head", "HEAD"],
+             "--base", base, "--checker-base", base, "--head", "HEAD"],
             capture_output=True, text=True, check=False,
         )
 
@@ -227,6 +227,100 @@ class GuardIntegrityTests(unittest.TestCase):
 
         self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
         self.assertIn("test_unit_guard.py", result.stderr)
+
+    def test_emptied_head_checker_alone_fails(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="guard-trust-") as temporary:
+            root = Path(temporary)
+            repo, base = self._trust_repo(root)
+            (repo / "scripts/port/check_guard_tests.py").write_text("")
+            self._commit(repo, "empty the checker only")
+            runner = self._base_runner(repo, base, root / "trusted.py")
+
+            result = self._run_runner(runner, repo, base)
+
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn("head checker is missing or empty", result.stderr)
+
+    def test_head_checker_different_from_base_fails(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="guard-trust-") as temporary:
+            root = Path(temporary)
+            repo, base = self._trust_repo(root)
+            (repo / "scripts/port/check_guard_tests.py").write_text(
+                "# a different checker would be a trust-root substitution\n"
+            )
+            self._commit(repo, "replace the checker")
+            runner = self._base_runner(repo, base, root / "trusted.py")
+
+            result = self._run_runner(runner, repo, base)
+
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn("differs from the trusted base checker", result.stderr)
+
+    def test_fork_predating_the_checker_still_runs_the_full_inventory(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="guard-trust-") as temporary:
+            root = Path(temporary)
+            repo = root / "repo"
+            repo.mkdir()
+            self._init(repo)
+            (repo / "scripts/port/test_unit_guard.py").parent.mkdir(parents=True)
+            (repo / "scripts/port/test_unit_guard.py").write_text(
+                "def test_one(self):\n    self.assertTrue(1)\n"
+            )
+            fork = self._commit(repo, "fork before the checker")
+            shutil.copyfile(
+                ROOT / "scripts/port/check_guard_tests.py",
+                repo / "scripts/port/check_guard_tests.py",
+            )
+            (repo / "scripts/port/test_guard_integrity.py").write_text(
+                "def test_policy(self):\n    self.assertTrue(1)\n"
+            )
+            base = self._commit(repo, "event base adds the checker and a test")
+            (repo / "scripts/port/test_guard_integrity.py").unlink()
+            self._commit(repo, "delete a test added after the fork")
+            runner = self._base_runner(repo, base, root / "trusted.py")
+
+            result = subprocess.run(
+                [sys.executable, str(runner), "--repo", str(repo),
+                 "--base", base, "--fork", fork, "--checker-base", base,
+                 "--head", "HEAD"],
+                capture_output=True, text=True, check=False,
+            )
+
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn("test_guard_integrity.py", result.stderr)
+
+    def test_deleting_a_test_added_after_the_fork_fails(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="guard-trust-") as temporary:
+            root = Path(temporary)
+            repo = root / "repo"
+            repo.mkdir()
+            self._init(repo)
+            (repo / "scripts/port").mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(
+                ROOT / "scripts/port/check_guard_tests.py",
+                repo / "scripts/port/check_guard_tests.py",
+            )
+            (repo / "scripts/port/test_unit_guard.py").write_text(
+                "def test_one(self):\n    self.assertTrue(1)\n"
+            )
+            fork = self._commit(repo, "fork")
+            (repo / "scripts/port/test_after_fork.py").write_text(
+                "def test_new(self):\n    self.assertTrue(1)\n"
+            )
+            base = self._commit(repo, "main adds a test after the fork")
+            (repo / "scripts/port/test_after_fork.py").unlink()
+            self._commit(repo, "delete the post-fork test")
+            runner = self._base_runner(repo, base, root / "trusted.py")
+
+            result = subprocess.run(
+                [sys.executable, str(runner), "--repo", str(repo),
+                 "--base", base, "--fork", fork, "--checker-base", base,
+                 "--head", "HEAD"],
+                capture_output=True, text=True, check=False,
+            )
+
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn("test_after_fork.py", result.stderr)
 
     def test_honest_case_passes_from_the_base_runner(self) -> None:
         with tempfile.TemporaryDirectory(prefix="guard-trust-") as temporary:

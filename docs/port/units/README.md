@@ -122,17 +122,21 @@ fast-forwarded branch cannot borrow a main commit's CI.
 
 The negative proofs themselves are protected by `scripts/port/check_guard_tests.py`, run by
 plan-guards' dedicated `guard-inventory` job. That job materialises the checker from the pull
-request **base** into `$RUNNER_TEMP` and runs that copy before `inventory-and-parity`, which
-declares `needs: guard-inventory`; the head copy is never executed for enforcement. The base
-copy is the trust root: emptying or renaming the head checker cannot hide a deleted or renamed
-guard test. It enumerates the `scripts/port/test_*.py` files at the base and head and fails when
-a base test file is deleted or renamed away, the head set shrinks, a base test case disappears,
-or the assertion count drops. `scripts/port/test_guard_integrity.py` keeps the negative proofs,
-including real delete, rename, emptied-head-checker, removed-integrity-test and honest cases.
+request's **event base** into `$RUNNER_TEMP` and runs that copy before `inventory-and-parity`,
+which declares `needs: guard-inventory`; there is no head-side enforcement step and the head
+copy is never executed. The event-base copy is the trust root: emptying, renaming or changing
+the head checker fails a byte-identity check, so it cannot hide a deleted or renamed guard test.
+It enumerates `scripts/port/test_*.py` at the event base, the optional fork point and head, and
+fails when a base/fork test file is deleted or renamed away, a test added after the fork and then
+deleted is detected through head history, a base test case disappears, or the assertion count
+drops. `scripts/port/test_guard_integrity.py` keeps the negative proofs, including emptied-head-
+checker-only, changed-head-checker, fork-predating-checker, post-fork deletion, removed-
+integrity-test, delete, rename and honest cases.
 
 Limits: the workflow file itself and the base-materialisation step are protected by the
-`oracle-change` protected-path gate, not cryptographically; a bootstrap PR whose base predates
-the checker runs an inline file-set check for that transition only.
+`oracle-change` protected-path gate, not cryptographically; a bootstrap PR whose **event base**
+predates the checker runs an inline file-set check for that transition only. A head checker that
+differs from the base checker is rejected; changing the checker requires a base-side transition.
 
 ## Ledger history is append-only in content
 
