@@ -255,7 +255,7 @@ unchanged.
 ### Launch synchronization with merged main
 
 Steering008/009 requires synchronization with `origin/main` at `cf43d46`, which
-contains the merged final p4-005 unit and p4-006 packaging repair. All p4-005-owned
+contains the merged final p4-005 unit and packaging repair. All p4-005-owned
 source, tests, tools, fixtures, documentation and shards are taken verbatim from
 main. The semantic union preserves this unit's marker guard, publication leases,
 replacement consent, identity fingerprints and full asset-report receipt. The
