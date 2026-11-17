@@ -58,16 +58,15 @@
 | Status | Units |
 | --- | ---: |
 | deferred | 1 |
-| done | 64 |
-| in-progress | 1 |
+| done | 65 |
 | todo | 32 |
 
 ## Ledger
 
 | Metric | Value |
 | --- | ---: |
-| Ledger rows | 229 |
-| Ledger fragments | 2 |
+| Ledger rows | 230 |
+| Ledger fragments | 3 |
 
 ## Units
 
@@ -137,7 +136,7 @@
 | p4-004 | W4 | data | Settings migration | done | `units/p4-004.*`; 5 ledger rows |
 | p4-005 | W4 | data | Asset copy/hash | done | `units/p4-005.*`; 11 ledger rows |
 | p4-006 | W4 | data | Skip report (non-Steam) | done | `units/p4-006.*`; 1 ledger rows |
-| p4-exit | W4 | repo | Phase 4 exit gate and corrected-head evidence | in-progress | `units/p4-exit.*`; 1 ledger rows |
+| p4-exit | W4 | repo | Phase 4 exit gate and corrected-head evidence | done | `units/p4-exit.*`; 2 ledger rows |
 | p4-tla | W4 | data | Library import crash-safety formal model | done | `units/p4-tla.*`; 4 ledger rows |
 | p5-001 | W5 | steam | VDF/ACF parsers | todo | `units/p5-001.*`; 0 ledger rows |
 | p5-002 | W5 | steam | Steam root/library discovery | todo | `units/p5-002.*`; 0 ledger rows |
