@@ -20,12 +20,13 @@
   ADR-024 single-owner exception applies; no external-human review is claimed. Unit evidence
   was produced with two firstmate-arranged adversarial reviews per product unit where the
   unit shard records them; this exit artifact carries worker diff-only self-review.
-- Result: **READY FOR OWNER ACCEPTANCE** — all six Phase 4 exit criteria have evidence on
-  merged main `c0e5c9c`, including the two corrected crash boundaries measured by the
-  downloaded artifact of linux-ci run 44130503180, with packaging run 44130503039 green on
-  the same commit. Acceptance and the residual-risk
-  dispositions are the owner's; this document does not assert owner acceptance, approval or
-  a merge decision, and the deferrals and uncovered items below remain gaps, not passes.
+- Result: **ACCEPTED — owner acceptance 2026-11-17** — all six Phase 4 exit criteria have
+  evidence on merged main `c0e5c9c`, including the two corrected crash boundaries measured by
+  the downloaded artifact of linux-ci run 44130503180, with packaging run 44130503039 green on
+  the same commit, and the owner accepted the Phase 4 exit on that date. The deferrals,
+  uncovered items and residual-risk dispositions below remain explicit gaps, not passes. The
+  evidence lines, run ids and measurements in this document are unchanged by the acceptance.
+- Acceptance record: the owner's decision recorded here, not an agent claim.
 
 ## Evidence
 
@@ -326,11 +327,10 @@ then this is a reviewed exception, not a security pass.
 | 5 | Settings round-trip golden is byte-identical for stable fields; unmapped Windows paths are reported, not silently dropped. | PASS for the three frozen settings goldens and the explicit path rules; the destination `settings` object is a normalized projection, not a byte copy. | `SettingsMigrationTests.FrozenV10SettingsRoundTripByteForByte`, `FrozenV10ConfigWithWindowsPathsChangesOnlyExplicitlyMappedStringBytes`, `UnmappedPathsAreNeverDroppedOrGuessed` and `NativeSettingsRewriteOnlyMappedPathsAndPreserveUnknownAndUnmappedInBag`, passing in run 44130503180. |
 | 6 | Desktop has no reference to LiteDB or the importer assembly. | PASS, with the marker-only `Playnite.LegacyImport.Contracts` edge stated above. | `src/Playnite.Desktop/Playnite.Desktop.csproj`; `DependencyTests.Product_dependency_closures_exclude_Windows_and_importer_leaks`; `RawImportTests.LiteDB_and_importer_types_cannot_escape_the_raw_reader_and_reader_cannot_load_SQLite_or_Core`, passing in run 44130503180. |
 
-**Verdict: READY FOR OWNER ACCEPTANCE.** All six criteria above have concrete evidence on
-merged main `c0e5c9c`: the downloaded artifact of linux-ci run 44130503180 reports Core
-1781/1781, Architecture 173/173 and Smoke 4/4, zero failed, zero skipped and every MTP exit
-0, and packaging run 44130503039 is green on the same commit. This is not an acceptance,
-approval, sign-off or merge decision; the owner decides whether the evidence closes Phase 4,
-and every deferral, uncovered item and residual risk above remains explicit. No claim in
-this document had to be marked unproven on `c0e5c9c`; the deferred and NOT MEASURED items
-remain explicitly unproven.
+**Verdict: ACCEPTED — owner accepted the Phase 4 exit on 2026-11-17.** All six criteria above
+have concrete evidence on merged main `c0e5c9c`: the downloaded artifact of linux-ci run
+44130503180 reports Core 1781/1781, Architecture 173/173 and Smoke 4/4, zero failed, zero
+skipped and every MTP exit 0, and packaging run 44130503039 is green on the same commit. Every
+deferral, uncovered item and residual risk above remains explicit, and acceptance records
+those gaps; it does not convert them into passes. No claim in this document had to be marked
+unproven on `c0e5c9c`; the deferred and NOT MEASURED items remain explicitly unproven.
