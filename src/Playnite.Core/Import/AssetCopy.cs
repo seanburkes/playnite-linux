@@ -111,6 +111,7 @@ public static class AssetCopy
                         {
                             await output.FlushAsync(cancellationToken).ConfigureAwait(false);
                             output.Flush(flushToDisk: true);
+                            checkpoint?.Invoke("AssetFlushed");
                         }
                     }
                     ImageDimensions.Result dimensions;

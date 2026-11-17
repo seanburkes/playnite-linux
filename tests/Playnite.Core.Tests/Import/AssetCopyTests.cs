@@ -180,6 +180,53 @@ public sealed class AssetCopyTests : IDisposable
         Assert.Equal(reference.Sha256, Convert.ToHexStringLower(SHA256.HashData(File.ReadAllBytes(blob))));
     }
 
+    [Fact]
+    [Trait("Invariant", "LibraryImport.SourceUnchanged")]
+    [Trait("Invariant", "LibraryImport.CrashSafe")]
+    [Trait("Invariant", "LibraryImport.CleanResumable")]
+    [Trait("Invariant", "LibraryImport.ReaderNeverPartial")]
+    public async Task SIGKILL_after_asset_flush_before_rename_leaves_only_complete_temporary_bytes_and_retry_publishes_verified_blob()
+    {
+        var reference = Write("large.png", new byte[1024 * 1024]);
+        var before = Snapshot(Source);
+        var envelope = JObject.Parse(await Envelope());
+        var game = ((JArray)envelope["records"]!).First(r => (string?)r["collection"] == "Game");
+        game["data"]!["Icon"] = "large.png";
+        var plan = Path.Combine(temporary, "intermediate.json"); File.WriteAllText(plan, envelope.ToString());
+        var start = Start(Path.Combine(AppContext.BaseDirectory, "AssetCopy.CrashHost.dll"));
+        foreach (var arg in new[] { plan, Source, Destination, "AssetFlushed" }) start.ArgumentList.Add(arg);
+        using var process = Process.Start(start)!;
+        try
+        {
+            Assert.Equal("AssetFlushed", await process.StandardOutput.ReadLineAsync().WaitAsync(TimeSpan.FromSeconds(30)));
+            Assert.False(File.Exists(Destination));
+            Assert.False(File.Exists(Destination + ".import-report.json"));
+        }
+        finally
+        {
+            if (!process.HasExited) process.Kill(entireProcessTree: true);
+            await process.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(10));
+        }
+        Assert.NotEqual(0, process.ExitCode);
+        var orphan = Assert.Single(Directory.GetFiles(Store, "*", SearchOption.AllDirectories));
+        Assert.False(File.Exists(Destination));
+        Assert.False(File.Exists(Destination + ".import-report.json"));
+        Assert.EndsWith(".tmp", orphan);
+        Assert.Equal(reference.Size, new FileInfo(orphan).Length);
+        Assert.Equal(reference.Sha256, Convert.ToHexStringLower(SHA256.HashData(File.ReadAllBytes(orphan))));
+        var blob = Path.Combine(Store, "sha256", reference.Sha256![..2], reference.Sha256);
+        Assert.False(File.Exists(blob));
+        var report = await LibraryMigration.RunAsync(envelope.ToString(), Source, Destination);
+        var asset = Assert.Single(report.Assets.Where(a => a.Reference.Path == "large.png"));
+        Assert.Equal("copied", asset.Outcome);
+        Assert.Equal(reference.Sha256, Convert.ToHexStringLower(SHA256.HashData(File.ReadAllBytes(blob))));
+        Assert.DoesNotContain(report.Assets, a => a.Destination?.EndsWith(".tmp", StringComparison.Ordinal) == true);
+        var database = await LibraryDatabase.OpenAsync(Destination);
+        var saved = await database.ReadAsync(s => s.Games.GetAsync(Guid.Parse(asset.Reference.Identity)));
+        Assert.Equal(asset.Destination, saved!.Value.Icon);
+        Assert.Equal(before, Snapshot(Source));
+    }
+
     [Theory]
     [InlineData("AssetPartialCopy")]
     [InlineData("before")]

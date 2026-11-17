@@ -42,7 +42,7 @@ public sealed partial class LibraryMigrationTests : IDisposable
         var skip = Assert.Single(report.Decisions.Where(d => d.Outcome == "skipped"));
         Assert.Equal("10000000-0000-0000-0000-000000000004", skip.Identity);
         Assert.Contains("Non-Steam", skip.Reason);
-        Assert.Equal(["Read", "Transformed", "Copied", "PartialWrite", "PartialWrite", "PartialWrite", "Written", "Verified", "BeforeSwap", "Publishing", "Swapped", "ReceiptConfirmed", "Committed"], states);
+        Assert.Equal(["Read", "Transformed", "Copied", "PartialWrite", "PartialWrite", "PartialWrite", "Written", "Verified", "BeforeSwap", "Publishing", "Swapped", "ReceiptConfirmed", "Committed", "BeforeReportMove"], states);
         var database = await LibraryDatabase.OpenAsync(Destination);
         var games = await database.ReadAsync(s => s.Games.GetAllAsync());
         Assert.Equal(new[] { "220", "570", "400" }, games.Select(g => g.Value.GameId));

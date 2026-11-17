@@ -103,6 +103,22 @@ one-game library, not just a fresh path:
 | Swapped (after rename, before confirmation) | Entire new database **and receipt** | Refuses even without external report |
 | ReceiptConfirmed (before lease release) | Entire new database **and receipt** | Refuses even without external report |
 | Committed (completed, before external audit publication) | Entire new database **and receipt**, no success audit | Refuses from artifact alone |
+| BeforeReportMove (after Committed, immediately before external audit rename) | Entire new database **and receipt**, no success audit | Refuses from artifact alone |
+
+The original eleven-row golden and its eleven-state SIGKILL test are retained
+unchanged. The additional `BeforeReportMove` checkpoint is observation-only and
+does nothing without the existing optional checkpoint callback. It runs after
+`Committed`, immediately before `File.Move(stagedReport, reportPath, overwrite: true)`,
+outside the rollback window. The separate real-child test
+`SIGKILL_at_report_move_after_Committed_leaves_no_success_report_and_repeat_refuses_from_receipt_alone`
+starts with a stale success report, pauses at that seam, reads all three new games,
+kills the child, and proves no published success report survives. It compares the
+staged report with the complete in-artifact receipt, removes staging, then proves
+repeat refusal explicitly cites the durable receipt and preserves published bytes.
+Traits cite `LibraryImport.SourceUnchanged`, `AtomicLive`, `ReaderNeverPartial`,
+`CrashSafe`, `DurableReceipt` and `RepeatRunSafe`. This supplements the managed
+`Committed` fault test; it is process-death evidence, not power-loss durability or
+a proof that the C# implementation conforms to every model transition.
 
 The Windows-produced `tests/fixtures/v10/library` is reused without modification:
 3 expected/imported Steam games, 1 custom game reported, all 9 documents accounted
