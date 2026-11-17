@@ -9,23 +9,32 @@
   artifact), with the original local rerun recorded separately. No historical capture
   object is rewritten. The follow-up evidence below binds the additional crash tests to
   their actual tested head, never to the capture commit's own run.
+- Corrected-head snapshot: `c0e5c9cb0b5e379949bc52defb9bd9a07e50f494` (`main`, after the
+  crash-boundary correction). Its counts are the downloaded artifacts of the main-push
+  linux-ci [44130503180](https://github.com/seanburkes/playnite-linux/actions/runs/44130503180)
+  and packaging [44130503039](https://github.com/seanburkes/playnite-linux/actions/runs/44130503039)
+  runs, which measured that commit. This documentation change cites those runs; it does
+  not claim, borrow or substitute a run of its own head.
 - Owner: p4-exit
 - Review model: adversarial assistance on the owner's behalf, not independent approval. The
   ADR-024 single-owner exception applies; no external-human review is claimed. Unit evidence
   was produced with two firstmate-arranged adversarial reviews per product unit where the
   unit shard records them; this exit artifact carries worker diff-only self-review.
-- Result: **PENDING CORRECTED-HEAD CI CAPTURE** — the two missing crash points are now
-  implemented; the corrected verdict requires fresh linux-ci and packaging evidence.
-  Acceptance and the residual-risk
-  dispositions are the owner's; this document does not assert owner acceptance, and the
-  deferrals and uncovered items below remain gaps, not passes.
+- Result: **READY FOR OWNER ACCEPTANCE** — all six Phase 4 exit criteria have evidence on
+  merged main `c0e5c9c`, including the two corrected crash boundaries measured by the
+  downloaded artifact of linux-ci run 44130503180, with packaging run 44130503039 green on
+  the same commit. Acceptance and the residual-risk
+  dispositions are the owner's; this document does not assert owner acceptance, approval or
+  a merge decision, and the deferrals and uncovered items below remain gaps, not passes.
 
 ## Evidence
 
 | Item | State | Commit / run | Evidence and boundary |
 | --- | --- | --- | --- |
 | Post-merge floor capture | pass | `0ecee2607cb6539e6fbbd479d349f04ce795fb68`; [43998974769](https://github.com/seanburkes/playnite-linux/actions/runs/43998974769) | Main-branch push linux-ci on the gate commit, conclusion success. Downloaded `linux-test-results/test-counts.json`, the three JUnit XML files and the three MTP exit files agree: **Core 1779 executed / 1779 passed / 0 failed / 0 skipped**, **Architecture 173 / 173 / 0 / 0**, **Smoke 4 / 4 / 0 / 0**; every MTP exit code is 0 and each project's `testsuite` element has `skipped="0"`. The capture entry in `tests/baseline.json` cites this run and this commit. |
+| Corrected-head capture | pass | `c0e5c9cb0b5e379949bc52defb9bd9a07e50f494`; [44130503180](https://github.com/seanburkes/playnite-linux/actions/runs/44130503180) and [44130503039](https://github.com/seanburkes/playnite-linux/actions/runs/44130503039) | Main-branch push linux-ci and packaging runs on the corrected head, both conclusion success. The downloaded `linux-test-results` artifact of run 44130503180 — `test-counts.json`, the three JUnit XML files and the three MTP exit files — measures **Core 1781 total / 1781 executed / 1781 passed**, **Architecture 173 / 173 / 173**, **Smoke 4 / 4 / 4**, every suite **0 failed / 0 skipped**, every MTP `exit_code` 0, and `failures: []`; each JUnit `testsuites` element reports failures 0, errors 0 and disabled 0, with no `<skipped>` element. Both corrected crash-boundary cases are present and passing in that artifact. Packaging run 44130503039 passed its AppImage and Flatpak smoke jobs on the same commit. These counts come from the downloaded artifact of run 44130503180 on `c0e5c9c`; they are not the earlier capture commit's own run (43998974769 on `0ecee26`), and this documentation change cites no run of its own head. |
 | Executed-case ratchet | pass | same main run; `tests/baseline.json` | Core **1779 ≥ 1779**, Architecture **173 ≥ 173**, Smoke **4 ≥ 4**; the legacy oracle remains **281 executed / 281 passed / 0 failed / 0 skipped** with its three documented exclusions. This gate lowers no floor and changes no existing capture object. |
+| Corrected-head ratchet | pass | `c0e5c9c`; [44130503180](https://github.com/seanburkes/playnite-linux/actions/runs/44130503180); `tests/baseline.json` | Core **1781 ≥ 1781**, Architecture **173 ≥ 173**, Smoke **4 ≥ 4** against the recorded floors, which the merged `main` tree already carries at 1781/173/4. The `0ecee26` capture and its 1779 floor remain history; no floor is lowered and no capture object is edited. The merged `main_captures` entry records run 44130503180 and commit `c0e5c9c`. |
 | Zero skips | pass | same main run | `skipped: 0` for all three projects in `test-counts.json`; `skipped="0"` and zero `<skipped>` elements in every JUnit file. No `[Skip]`, `[Ignore]`, filter exclusion or re-accepted snapshot is used to obtain the counts. |
 | Plan guards and formal models | pass | same commit; [43998974777](https://github.com/seanburkes/playnite-linux/actions/runs/43998974777) | `inventory-and-parity` and `formal` both succeeded. The formal job used the pinned TLC 1.7.4 jar (`sha256 936a262061c914694dfd669a543be24573c45d5aa0ff20a8b96b23d01e050e88`). **Artifact-backed:** `library-import-mutation-tlc` contains the passing LibraryImport baseline (328 generated / 117 distinct / depth 20) and 11 intended invariant-violation mutant logs. **Log-backed, not uploaded in that artifact:** the same formal job reports SettingsMigration 16/11/depth 6 and GameSession 1401/400/depth 27. The original gate also recorded a separate local `scripts/formal/run_tlc.sh` rerun on `0ecee26` reproducing all three; that rerun is not downloaded-artifact evidence. |
 | Packaging | pass | same commit; [43998974804](https://github.com/seanburkes/playnite-linux/actions/runs/43998974804) | Packaging workflow succeeded on the gate commit. It is supporting platform evidence, not one of the six Phase 4 criteria. |
@@ -53,7 +62,8 @@ Every merge commit below was read from the forge and verified with
 ### Per-unit evidence
 
 Historical unit runs are observations on the unit's own head, not the gate floor. The
-authoritative final-tree counts are the main run above.
+authoritative final-tree counts are the corrected-head run above (44130503180 on
+`c0e5c9c`); the `0ecee26` rows are retained as history.
 
 | Unit | Delivery | Tested-head evidence (downloaded test artifacts unless stated) | Contract and oracle |
 | --- | --- | --- | --- |
@@ -134,7 +144,9 @@ bytes (`LibraryImport.AtomicLive`, `ReaderNeverPartial`, `CrashSafe`,
 implementation checks associated with the model invariants, not formal
 asset/report-state conformance proofs. The original gate snapshot lacked these
 two kill points; its unqualified crash-coverage verdict was not supported by
-that tree. The later tested-head evidence below is required for this corrected verdict.
+that tree. This corrected verdict rests on the corrected-head run 44130503180,
+whose downloaded artifact includes both cases as passing on `c0e5c9c`; that is the only
+later tested-head evidence claimed.
 
 Supporting boundaries: settings migration kills a real child at `BeforeWrite`, `Written`,
 `Flushed`, `Verified` and `Committed` (`ProcessDeathAtEveryWriteBoundaryIsRestartableWithoutManagedCleanup`),
@@ -286,7 +298,9 @@ then this is a reviewed exception, not a security pass.
 - [x] A fixture v10 library migrates with 3/3 expected Steam rows, one explicitly reported
       non-Steam skip and 9/9 documents accounted for; no silent-drop path exists.
 - [x] Crash injection at every fresh-path and replacement state leaves a resumable or clean
-      state, including rollback with sidecar cleanup and the concurrent-reader window.
+      state, including rollback with sidecar cleanup and the concurrent-reader window, plus
+      the two corrected kill points (asset flush before rename, report move after
+      `Committed`) measured green on the corrected head.
 - [x] The source directory is byte-identical after migration in tests, including the whole
       frozen fixture library.
 - [x] A second run is an idempotent dry-run plan or a clear refusal; refusal works from the
@@ -295,13 +309,28 @@ then this is a reviewed exception, not a security pass.
       lossless compatibility export, with unmapped Windows paths reported, not dropped.
 - [x] Desktop has no LiteDB or importer reference; the only edge is the marker-only
       `Playnite.LegacyImport.Contracts` assembly.
-- [x] Main linux-ci executed cases are non-decreasing with zero skips: Core **1779/1779**,
-      Architecture **173/173**, Smoke **4/4**, no floor lowered.
+- [x] Main linux-ci executed cases on corrected head `c0e5c9c` are non-decreasing with zero
+      skips: Core **1781/1781**, Architecture **173/173**, Smoke **4/4**, every MTP exit 0,
+      no floor lowered.
 - [x] The LiteDB advisory exception is scoped, reviewable and carries an explicit removal
       condition.
 
-**Verdict: PENDING CORRECTED-HEAD CI CAPTURE.** The historical merged-main artifacts
-cannot evidence tests absent from `0ecee26`. A fresh tested-head capture is required
-for the two new process-death boundaries; the deferrals, uncovered items and residual
-risks remain explicit. Acceptance is not asserted here; it does not convert any
-deferral or unmeasured item into a pass.
+## Six-criterion summary
+
+| # | Phase 4 exit criterion (plan wording) | Verdict | Concrete artifact on merged main `c0e5c9c` |
+| --- | --- | --- | --- |
+| 1 | A fixture v10 library migrates with 100% of expected Steam rows, 0 silent drops. | PASS for the frozen fixture; not claimed for a real user library. | `tests/fixtures/v10/library` with 3/3 expected Steam rows, one explicitly reported non-Steam skip and 9/9 documents accounted for; `LibraryMigrationTests.Frozen_Windows_fixture_imports_every_Steam_row_and_reports_every_document`, `Unknown_collection_is_reported_by_identity_instead_of_dropped` and `Before_publication_the_main_file_alone_has_every_game_and_WAL_is_empty`, passing in run 44130503180. |
+| 2 | Crash-injection tests at every migration state leave a resumable or clean state. | PASS within the process-death boundary stated above. | Eight fresh-path and eleven replacement SIGKILL checkpoints plus the two corrected boundaries, `SIGKILL_after_asset_flush_before_rename_leaves_only_complete_temporary_bytes_and_retry_publishes_verified_blob` and `SIGKILL_at_report_move_after_Committed_leaves_no_success_report_and_repeat_refuses_from_receipt_alone`; both are present and passing in the downloaded JUnit of run 44130503180; eleven-state matrix `tests/golden/p4-003-replacement/crash-matrix.json`. |
+| 3 | The source directory is byte-identical after migration. | PASS in tests. | Source snapshots in the fixture and replacement tests carrying `LibraryImport.SourceUnchanged`, `SettingsMigrationTests.EntireV10FixtureLibraryRemainsByteIdentical`, and `LibraryMigrationTests.Fixture_file_set_and_every_byte_match_the_recorded_SHA256SUMS`, passing in run 44130503180. |
+| 4 | A second run is idempotent or refuses with a clear message. | PASS. | `Repeated_dry_run_is_an_idempotent_plan_and_writes_nothing`, `Second_real_run_refuses_clearly_and_preserves_existing_database`, `Replacement_embeds_source_receipt_and_refuses_without_external_audit_artifacts`, `Post_completion_failure_leaves_no_success_audit_never_rolls_back_and_refuses_from_artifact_alone` and `Unreceipted_earlier_import_requires_explicit_replacement_consent_in_Core_and_CLI`, passing in run 44130503180. |
+| 5 | Settings round-trip golden is byte-identical for stable fields; unmapped Windows paths are reported, not silently dropped. | PASS for the three frozen settings goldens and the explicit path rules; the destination `settings` object is a normalized projection, not a byte copy. | `SettingsMigrationTests.FrozenV10SettingsRoundTripByteForByte`, `FrozenV10ConfigWithWindowsPathsChangesOnlyExplicitlyMappedStringBytes`, `UnmappedPathsAreNeverDroppedOrGuessed` and `NativeSettingsRewriteOnlyMappedPathsAndPreserveUnknownAndUnmappedInBag`, passing in run 44130503180. |
+| 6 | Desktop has no reference to LiteDB or the importer assembly. | PASS, with the marker-only `Playnite.LegacyImport.Contracts` edge stated above. | `src/Playnite.Desktop/Playnite.Desktop.csproj`; `DependencyTests.Product_dependency_closures_exclude_Windows_and_importer_leaks`; `RawImportTests.LiteDB_and_importer_types_cannot_escape_the_raw_reader_and_reader_cannot_load_SQLite_or_Core`, passing in run 44130503180. |
+
+**Verdict: READY FOR OWNER ACCEPTANCE.** All six criteria above have concrete evidence on
+merged main `c0e5c9c`: the downloaded artifact of linux-ci run 44130503180 reports Core
+1781/1781, Architecture 173/173 and Smoke 4/4, zero failed, zero skipped and every MTP exit
+0, and packaging run 44130503039 is green on the same commit. This is not an acceptance,
+approval, sign-off or merge decision; the owner decides whether the evidence closes Phase 4,
+and every deferral, uncovered item and residual risk above remains explicit. No claim in
+this document had to be marked unproven on `c0e5c9c`; the deferred and NOT MEASURED items
+remain explicitly unproven.
