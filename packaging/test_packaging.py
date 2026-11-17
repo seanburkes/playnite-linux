@@ -96,6 +96,83 @@ class PackagingTests(unittest.TestCase):
                 self.assertEqual(result.returncode == 0, not (broad_manifest or broad_effective),
                                  result.stdout + result.stderr)
 
+    def test_flatpak_runtime_lock_reports_all_refs_before_failing(self):
+        locks = json.loads((PACKAGING / "flatpak-runtime-lock.json").read_text())
+        flatpak = self.root / "flatpak"
+        cases = [(mode, None) for mode in ("match", "missing", "unlisted", "inventory-failure")]
+        cases.extend(("mismatch", ref) for ref in locks)
+        for mode, mismatch_ref in cases:
+            with self.subTest(mode=mode, ref=mismatch_ref):
+                commits = dict(locks)
+                if mode == "mismatch":
+                    commits[mismatch_ref] = "f" * 64
+                if mode == "unlisted":
+                    commits["org.example.Unlocked/x86_64/1"] = "e" * 64
+                flatpak.write_text("#!/usr/bin/env python3\nimport sys\n"
+                                   f"commits = {commits!r}\n"
+                                   "if sys.argv[1] == 'list':\n"
+                                   + ("    print('inventory failed', file=sys.stderr)\n    sys.exit(1)\n"
+                                      if mode == "inventory-failure" else
+                                      "    print('\\n'.join(commits))\n    sys.exit(0)\n")
+                                   + "assert sys.argv[1:4] == ['info', '--user', '--show-commit']\n"
+                                   + ("print('runtime not installed', file=sys.stderr)\nsys.exit(1)\n"
+                                      if mode == "missing" else "print(commits[sys.argv[4]])\n"))
+                flatpak.chmod(0o755)
+                result = subprocess.run(
+                    ["python3", "-O", str(PACKAGING / "verify-flatpak-runtime.py"),
+                     str(PACKAGING / "flatpak-runtime-lock.json"), "Test stage"],
+                    env={**os.environ, "PATH": f"{self.root}:{os.environ['PATH']}"},
+                    capture_output=True, text=True)
+                self.assertEqual(result.returncode == 0, mode == "match", result.stderr)
+                if mode == "inventory-failure":
+                    self.assertIn("Cannot enumerate installed Flatpak runtime refs", result.stderr)
+                    self.assertIn("inventory failed", result.stderr)
+                    continue
+                for ref, expected in locks.items():
+                    actual = "<unavailable>" if mode == "missing" else commits[ref]
+                    self.assertIn(f"Test stage: {ref} expected={expected} actual={actual}",
+                                  result.stdout)
+                if mode != "match":
+                    self.assertIn("Flatpak runtime lock mismatch", result.stderr)
+                if mode == "missing":
+                    self.assertIn("runtime not installed", result.stderr)
+                if mode == "unlisted":
+                    self.assertIn("org.example.Unlocked/x86_64/1 expected=<unlisted> actual="
+                                  + "e" * 64, result.stdout)
+
+    def test_flatpak_workflow_preserves_locked_runtime_boundaries(self):
+        workflow = (PACKAGING.parent / ".github/workflows/packaging.yml").read_text()
+        setup = workflow.split("- name: Install pinned Flatpak tooling and runtime branch", 1)[1]
+        setup_lines = [line.strip() for line in setup.splitlines()]
+        self.assertIn('flatpak install --user --noninteractive --no-related --no-deps flathub "$ref"',
+                      setup_lines)
+        self.assertIn('flatpak update --user --noninteractive --no-related --no-deps '
+                      '--commit="$commit" "$ref"', setup_lines)
+        self.assertIn("python3 packaging/verify-flatpak-runtime.py "
+                      "packaging/flatpak-runtime-lock.json 'After setup'", setup_lines)
+        smoke = setup.split("- name: Build, install bundle and smoke the sandboxed Flatpak", 1)[1]
+        smoke_lines = [line.strip() for line in smoke.splitlines()]
+        self.assertIn("set -euo pipefail", smoke_lines)
+        self.assertIn('python3 "$GITHUB_WORKSPACE/packaging/verify-flatpak-runtime.py" \\', smoke_lines)
+        self.assertIn('"$GITHUB_WORKSPACE/packaging/flatpak-runtime-lock.json" "$1"', smoke_lines)
+        boundaries = [
+            "verify_runtime 'Before builder'",
+            'flatpak-builder --user --disable-rofiles-fuse --repo=repo build "$id.json"',
+            "verify_runtime 'After builder'",
+            'flatpak build-bundle repo "artifacts/Playnite-Linux-x86_64.flatpak" "$id"',
+            "verify_runtime 'After build-bundle'",
+            'flatpak install --user --noninteractive --no-deps artifacts/Playnite-Linux-x86_64.flatpak',
+            "verify_runtime 'After bundle install'",
+            'version=$(timeout 30s flatpak run --user "$id" --version)',
+            'timeout 30s flatpak run --user "$id" --headless --smoke',
+            "verify_runtime 'After sandbox smoke'",
+            "echo '## Flatpak: PASS'",
+        ]
+        offset = 0
+        for command in boundaries:
+            with self.subTest(command=command):
+                offset = smoke_lines.index(command, offset) + 1
+
     def test_assembly_rejects_dirty_input_before_publishing(self):
         repo = self.root / "repo"
         repo.mkdir()

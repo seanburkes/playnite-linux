@@ -87,7 +87,7 @@ public sealed partial class LibraryMigrationTests
         }
         await output;
         Assert.NotEqual(0, process.ExitCode);
-        using var matrix = System.Text.Json.JsonDocument.Parse(await File.ReadAllTextAsync(Path.Combine(Root, "tests", "golden", "import-replacement", "crash-matrix.json")));
+        using var matrix = System.Text.Json.JsonDocument.Parse(await File.ReadAllTextAsync(Path.Combine(Root, "tests", "golden", "p4-003-replacement", "crash-matrix.json")));
         Assert.Equal(11, matrix.RootElement.EnumerateObject().Count());
         var isNew = matrix.RootElement.GetProperty(state).GetString() == "new";
         if (!isNew) Assert.Equal(old, await File.ReadAllBytesAsync(Destination));

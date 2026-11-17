@@ -149,3 +149,19 @@ to this real final post-main/post-residual-fix implementation, retaining all pri
 captures. This floor/evidence-only commit is inside the PR before readiness and
 does not cite its own run; final evidence-head linux-ci and both firstmate-arranged
 review closures remain pending.
+
+After both reviews closed with no P1 and no blocking P2, the branch was synced to
+main `dfd53f9cff6ed60033b78e7a26693f898017f47d` by a normal merge at
+`6f1d19979793b7c972e6ca776604e167cd6edcb0`. That merge brought in only the already
+merged #98 packaging repair (packaging workflow, Flatpak runtime lock, verifier and
+its packaging tests); the PR's implementation, project tests, fixtures and tools are
+unchanged from `c401b27`. On that synced head, linux-ci
+[43969396300](https://github.com/seanburkes/playnite-linux/actions/runs/43969396300)
+and packaging
+[43969396391](https://github.com/seanburkes/playnite-linux/actions/runs/43969396391)
+both passed, including the repaired Flatpak gate. Downloaded JUnit cases/suite
+totals, `test-counts.json` and exit files from linux-ci independently confirm
+**1737 Core / 173 Architecture / 4 Smoke**, zero failures/skips, all exits 0.
+`p4_005_launch_capture` binds the retained floor to this actual post-main-sync run
+without lowering any count. This evidence-only commit does not cite its own run;
+its own pushed-head linux-ci is the final readiness gate.

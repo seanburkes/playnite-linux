@@ -90,7 +90,7 @@ copy separately protects the publication window.
 
 ## Crash matrix and evidence
 
-The additive `tests/golden/import-replacement/crash-matrix.json` has explicit
+The additive `tests/golden/p4-003-replacement/crash-matrix.json` has explicit
 provenance and is consumed by real child-process SIGKILL tests over an existing
 one-game library, not just a fresh path:
 
@@ -251,3 +251,22 @@ root names cannot coexist in a real directory, so duplicate capture is exercised
 directly through the existing isolated-reader reflection test boundary. Successful
 reader behavior, marker-version/key validation and raw-only dependency policy are
 unchanged.
+
+### Launch synchronization with merged main
+
+Steering008/009 requires synchronization with `origin/main` at `cf43d46`, which
+contains the merged final p4-005 unit and p4-006 packaging repair. All p4-005-owned
+source, tests, tools, fixtures, documentation and shards are taken verbatim from
+main. The semantic union preserves this unit's marker guard, publication leases,
+replacement consent, identity fingerprints and full asset-report receipt. The
+resulting product-source bytes are identical to reviewed `2e09983`/`36af471`.
+Both baseline capture histories are retained without lowering the1779 floor; a
+fresh actual synced-head run and evidence-only re-capture are required.
+
+Main has no `tests/golden/import-replacement` files. This unit's protocol matrix
+and provenance are therefore relocated byte-for-byte to the explicitly unit-owned
+`tests/golden/p4-003-replacement` directory, leaving the old path identical to main.
+The sole C# test delta is its matrix lookup path; case data, assertions and counts
+are unchanged. That path-only delta is submitted for re-review rather than claiming
+the earlier closure covers a changed test file. No packaging implementation or
+p4-005 content is changed by this unit.
