@@ -214,7 +214,8 @@
       "playnite.fuzz": {
         "type": "Project",
         "dependencies": {
-          "Playnite.Core": "[1.0.0, )"
+          "Playnite.Core": "[1.0.0, )",
+          "Playnite.Steam": "[1.0.0, )"
         }
       },
       "playnite.legacyimport.contracts": {

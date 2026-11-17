@@ -1,2 +1,2 @@
 id	wave	area	unit	depends	status	owner	oracle	test	notes
-p5-001	W5	steam	VDF/ACF parsers	p3-002	todo	steam	fixtures	vdf	fuzz
+p5-001	W5	steam	VDF/ACF parsers	p3-002	in-progress	fm/p5-001	docs/port/08-STEAM-SPEC.md sections 2-4; ADR-017; synthetic tools/Playnite.Fuzz/Corpus/p5-001	SteamParserTests; SteamFuzzTarget	Pure Playnite.Steam parsing only; approved grammar/required-field decision table in spec section 3.2; synthetic hash-pinned fixtures outside protected oracle paths; no discovery, mount, launch, UI or network behavior. Final-head CI and PR evidence recorded in this unit's ledger fragment.

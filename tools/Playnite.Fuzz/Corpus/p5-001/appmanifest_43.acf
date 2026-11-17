@@ -1,0 +1,15 @@
+AppState
+{
+    appid 43
+    name "Synthetic update \"pending\""
+    installdir "Synthetic Update"
+    StateFlags 6
+    buildid 100
+    TargetBuildID 101
+    BytesToDownload 4096
+    BytesDownloaded 128
+    BytesToStage 4096
+    BytesStaged 0
+    UserConfig {}
+    MountedConfig { language english }
+}

@@ -119,8 +119,8 @@ canonical "library on an unmounted path" case; see §9.
   `lastupdated`, `buildid` are lowercase; `StateFlags`, `LastPlayed`, `LastOwner`,
   `SizeOnDisk`, `InstalledDepots`, `SharedDepots`, `InstallScripts`, `UserConfig`,
   `MountedConfig` are mixed case. **[host]**
-- Duplicate keys inside one object were not observed. **[unknown]** — choose one rule
-  (reject-and-report is preferred over silent last-wins) and test it. **[decision]**
+- Duplicate keys inside one object were not observed. **[decision]** — exact-case duplicates
+  reject the file; case-distinct keys remain distinct. See the p5-001 contract below.
 - Manifests were mode `0755` on the capture host; file mode carries no meaning. **[host]**
 
 ### 3.2 Error handling [decision]
@@ -128,6 +128,46 @@ canonical "library on an unmounted path" case; see §9.
 Parsing is all-or-nothing per file: on a syntax error, report the file, line/offset, and a
 stable reason code; the caller skips that app or library. Never return a partial object as if
 it were complete. Never crash on malformed input from disk.
+
+#### p5-001 approved parser contract [decision]
+
+This table resolves the parser-policy unknowns, not Steam's undocumented behaviour. The
+required-field/mismatch policy here supersedes the earlier mismatch-only reporting rule.
+
+| Surface | Accepted / retained | Rejected / reported |
+| --- | --- | --- |
+| Document | Exactly one named root **object**; nested objects including empty objects; quoted or unquoted keys and scalar values. | Missing root/object, incomplete key/value, unbalanced braces, or any non-comment/non-whitespace content after the root. No partial tree. |
+| Bare tokens | UTF-8 bytes until space, tab, LF, CRLF, quote, brace, or `//`; `/` alone is ordinary text. Quotes/braces delimit without requiring whitespace. | Empty bare tokens; a missing value before `}`/EOF. |
+| Encoding | Strict UTF-8, without Unicode/case normalization; optionally **one** leading UTF-8 BOM; LF and CRLF. U+FEFF inside a quoted value is text, not another file BOM. | Malformed/overlong UTF-8, surrogate encodings, out-of-range scalars, truncated sequences; a repeated leading BOM; lone CR; NUL, C0/C1 controls and DEL except tab/LF/paired CRLF. Raw LF/CR in quoted strings rejects. |
+| Escapes | In either token form: `\\`, `\"`, `\n`, `\t`, `\r` decode exactly once. Backslash is never a POSIX separator. | Any other escape, or EOF immediately after a backslash. No undecoded passthrough. |
+| Comments | `//` through LF/CRLF/EOF outside quoted strings, including after the root. | Block comments are not a comment dialect; text after the root rejects as trailing garbage. Controls/invalid UTF-8 reject even inside comments. |
+| Keys | Exact ordinal lookup, casing and file order preserved; case-distinct keys coexist. | Exact-case duplicate keys in the same object reject with key name and byte offset; never first/last-wins inside an object. |
+| Bounds | Default 65,536 input bytes, configurable positive byte limit; at most 64 object levels including the root. | Oversized input before decoding/allocation; level 65 before recursion. Stable `size-limit`/`depth-limit` reasons. |
+| Error locations | Original filename, zero-based UTF-8 byte offset (including BOM/CRLF), one-based line, stable reason; duplicate diagnostics include the key, never scalar data. | A model syntax skip retains filename appid or `libraryfolders` identity and byte offset; raw values are never placed in skip reports. |
+| ACF root / identity | Root exactly `AppState`; filename `appmanifest_<uint decimal>.acf` supplies skip identity. Required scalar `appid` is strict uint decimal **and must match** the filename. Leading zeroes are decimal, not octal. | Missing/wrong/multiple roots; malformed filename; missing/invalid/mismatched appid skip the app. A mismatch does not import either identity. |
+| Required ACF fields | `name` nonempty after decoding; `installdir` nonempty relative POSIX path; `StateFlags` strict uint decimal. Internal `a/../b` is allowed; normalization stays `Path.GetFullPath` only. | Missing, object-valued, empty or invalid required field skips with filename identity and field/reason. Absolute installdir or any `..` traversal above the install root rejects; `.`/paths resolving to the root itself reject. No synthetic defaults. |
+| Optional numbers | `SizeOnDisk`, `StagingSize`, `Universe`, `LastPlayed`, `buildid`, update/progress fields, update settings; strict ulong decimal. `lastupdated`, `LastPlayed`, `ScheduledAutoUpdate` must also fit nonnegative Unix seconds in DateTimeOffset. | Missing stays absent. Invalid/overflowing values stay absent and report field/reason without value. `LastUpdated` is unknown, not an alias for `lastupdated`. `LastPlayed = 0` stays the never-played sentinel, not an inferred play session. |
+| Optional objects | `InstalledDepots` (uint depot id; ulong manifest/size; optional uint dlcappid), `SharedDepots` (uint depot/owner appid), scalar `InstallScripts`, `UserConfig`, `MountedConfig`; empty objects are distinct from missing. | Wrong object shape reports and stays absent/empty. Bad depot/shared/script entries report and are omitted; invalid optional dlcappid is absent. Script paths are decoded metadata, **never executed**. |
+| Privacy / unknown fields | Unknown fields/objects retained recursively in an ordered bag. | `LastOwner` is validated, then discarded; it never enters typed or unknown model fields, display, record formatting or diagnostics. Diagnostics never contain play timestamps. |
+| Libraries | Root exactly `libraryfolders`; numeric entries in file order; modern object or legacy scalar path. Each path must be nonempty absolute; `Path.GetFullPath` only, with no filesystem access. Optional label/contentid/totalsize/bookkeeping/apps. | Bad path skips only that library with index identity. Invalid optional label/numbers report without guessing. Malformed apps map reports and becomes **entirely empty**, keeping the library. Unknown library/root fields retained. |
+| Library app ids | Strict uint appid → ulong byte size. Across valid libraries, first in file order wins and each duplicate is reported with later library index and appid. | Bad map keys/values or numerically duplicate ids (e.g. `42` and `042`) invalidate the map. Exact textual duplicates already reject the whole syntax file. |
+| Pure app projection | Caller supplies library/install availability and Proton observation. Priority: unavailable library → `Unavailable`; installed bit + missing directory → `Broken`; unknown flag bits → `Unknown`; installed + bit 2 → `UpdatePending`; installed only → `Installed`; otherwise `Unknown`. Raw flags always retained. | No filesystem probes, root discovery, mounting, launch, network, Proton guess, or unknown flag names in this unit. `MountedConfig` is retained; mount options/drive ids/filesystem hints remain UNKNOWN. |
+| Writing / fixtures | Canonical quoted UTF-8 writing preserves tree semantics/casing/order and supported escapes. Synthetic seeds in `tools/Playnite.Fuzz/Corpus/p5-001/` are authored from this spec, hash-pinned, structurally round-tripped and fuzzed. | Whitespace/comments/BOM are not byte-round-tripped. No real-install corpus, protected fixture changes or oracle re-acceptance. |
+
+`SteamManifest.SizeOnDisk` and the projected app size are nullable `ulong`: this is the explicit
+optional-field refinement of the earlier app sketch, so a missing/invalid size is never fabricated
+as zero. The parser retains decoded `installdir`; `SteamApp.InstallPath` combines it under the
+absolute normalized library path using `Path.GetFullPath`. Availability and Proton evidence are
+the later discovery unit's responsibility. Missing-manifest reports likewise require that unit's
+file enumeration; this layer never invents a manifest for a library app id.
+
+Parser entry points live in the existing **Playnite.Steam** assembly, which already owns VDF/ACF
+in §3.4 of the architecture. The pure types use only BCL (Core/Platform references remain the
+existing assembly graph), not UI/network/process/OS APIs; a new pure assembly adds no isolation
+needed by this unit. The additive fuzz target reuses the existing harness's budget policy,
+mutator and timeout classification and runs from the unfiltered Core suite in `linux-ci`:
+45 seconds or 100,000 cases, whichever is reached first; 2,000 ms/case, 65,536 bytes/input,
+256 MiB retained heap, and transient parser allocation ≤ `2 MiB + 128 × maxInputBytes`.
 
 ## 4. `appmanifest_<appid>.acf`
 
@@ -181,15 +221,15 @@ sealed record SteamApp(
     string LibraryPath,
     SteamAppState State,      // Installed, UpdatePending, Broken, Unavailable, Unknown
     bool IsProton,
-    ulong SizeOnDisk,
+    ulong? SizeOnDisk,
     DateTimeOffset? LastUpdated,
     uint StateFlags);         // raw value retained
 ```
 
 Rules:
 
-- `AppId` comes from the file name and the `appid` field; a mismatch is reported, and the file
-  name is authoritative for identity. **[decision]**
+- `AppId` comes from the file name and the `appid` field; a mismatch skips that app and is
+  reported with the filename's authoritative identity (p5-001 contract in §3.2). **[decision]**
 - Paths are absolute POSIX paths; `Path.GetFullPath` is the only normalisation applied.
 - `StateFlags` installed + missing `installdir` directory → `Broken`, never `Installed`.
 - Missing manifest for a library `apps` entry → report `missing-manifest`; do not invent data.
@@ -511,7 +551,8 @@ empty-achievement `librarycache` JSON.
 
 1. Flatpak directory layout, `flatpak-spawn` behaviour, and host PID visibility.
 2. Legacy `libraryfolders.vdf` index form (accepted by policy, not observed here).
-3. Duplicate-key and `\"`/`\n` escape semantics (parser decisions to test).
+3. Steam's own duplicate-key and escape semantics remain unobserved; the launcher's parser
+   policy is resolved and tested in §3.2, not claimed as host evidence.
 4. Meaning of `StateFlags` bits other than `4` and the update-pending bit.
 5. Per-app compatibility-tool and Proton-version selection storage.
 6. `config_info` field semantics beyond version/paths.

@@ -15,5 +15,6 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../../src/Playnite.Core/Playnite.Core.csproj" />
+    <ProjectReference Include="../../src/Playnite.Steam/Playnite.Steam.csproj" />
   </ItemGroup>
 </Project>
