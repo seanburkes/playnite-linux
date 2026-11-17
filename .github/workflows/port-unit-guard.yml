@@ -1,0 +1,110 @@
+name: port-unit-guard
+
+# Cheap, deterministic required checks for unit evidence ownership. No step
+# filters on labels, paths, actors, or draft state: a label cannot skip or
+# weaken either check. Both jobs are read-only and use the pull request's own
+# base and head commits, never a merge commit or a moving branch tip.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  unit-ownership:
+    name: unit-ownership
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Require one unit evidence namespace per pull request
+        shell: bash
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+        run: |
+          set -euo pipefail
+          if [ "${#BASE_SHA}" -ne 40 ] || [ "${#HEAD_SHA}" -ne 40 ]; then
+            echo "::error::pull request event did not provide full base and head commit ids"
+            exit 1
+          fi
+          case "$BASE_SHA$HEAD_SHA" in
+            *[!0-9a-f]*)
+              echo "::error::pull request base/head contains a non-hex character"
+              exit 1
+              ;;
+          esac
+          for rev in "$BASE_SHA" "$HEAD_SHA"; do
+            if ! git cat-file -e "$rev^{commit}" 2>/dev/null; then
+              echo "::error::commit $rev is not present in the checkout; refusing an ambiguous diff"
+              exit 1
+            fi
+          done
+          python3 scripts/port/check_unit_ownership.py \
+            --base "$BASE_SHA" \
+            --head "$HEAD_SHA" \
+            --branch "$HEAD_REF"
+
+  unit-evidence:
+    name: unit-evidence
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Require the owning unit's queue transition and ledger fragment
+        shell: bash
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if [ "${#BASE_SHA}" -ne 40 ] || [ "${#HEAD_SHA}" -ne 40 ]; then
+            echo "::error::pull request event did not provide full base and head commit ids"
+            exit 1
+          fi
+          case "$BASE_SHA$HEAD_SHA" in
+            *[!0-9a-f]*)
+              echo "::error::pull request base/head contains a non-hex character"
+              exit 1
+              ;;
+          esac
+          case "$PR_NUMBER" in
+            ""|*[!0-9]*)
+              echo "::error::pull request event did not provide a numeric pull request number"
+              exit 1
+              ;;
+          esac
+          for rev in "$BASE_SHA" "$HEAD_SHA"; do
+            if ! git cat-file -e "$rev^{commit}" 2>/dev/null; then
+              echo "::error::commit $rev is not present in the checkout; refusing an ambiguous diff"
+              exit 1
+            fi
+          done
+          python3 scripts/port/check_unit_evidence.py \
+            --base "$BASE_SHA" \
+            --head "$HEAD_SHA" \
+            --pr "$PR_NUMBER" \
+            --branch "$HEAD_REF" \
+            --repo-slug "$GITHUB_REPOSITORY" \
+            --verify-ci
