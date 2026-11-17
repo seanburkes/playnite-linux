@@ -33,18 +33,21 @@ from unit_guard_common import (  # noqa: E402
     FRAGMENT_NAME,
     QUEUE_COLUMNS,
     REAL_QUEUE_STATES,
+    OwnershipMap,
     GuardError,
     bot_owned_errors,
     changed_paths,
+    claim_is_allowed,
     declared_unit,
     known_units,
-    load_ownership_map,
     merge_base,
     ownership_hits,
     ownership_map_exists,
     parse_ledger_fragment,
     parse_queue_shard,
+    product_paths,
     read_at,
+    read_ownership_map,
     repo_root,
     repository_slug,
     resolve_commit,
@@ -122,7 +125,6 @@ def _check_queue(
 
 def _check_fragment(
     repo: Path,
-    base: str,
     head: str,
     merge: str,
     unit: str,
@@ -174,7 +176,6 @@ def _check_fragment(
         unit=unit,
         pr_number=pr_number,
         repo=repo,
-        base=base,
         head=head,
         merge_base=merge,
         repo_slug=repo_slug,
@@ -200,57 +201,88 @@ def main(argv: list[str]) -> int:
         changes = changed_paths(repo, merge, head)
         units = known_units(repo, [base, head, merge])
 
-        map_errors = bot_owned_errors(changes)
+        product = product_paths(changes, units)
+        map_errors = bot_owned_errors(
+            changes,
+            base_has_map=ownership_map_exists(repo, base),
+            product_changed=bool(product),
+        )
         if map_errors:
             raise GuardError("\n".join(map_errors))
 
         expected = declared_unit(
             repo, head=head, units=units, branch=args.branch, explicit=args.unit
         )
-        claims = (
-            load_ownership_map(repo, base)
+        ownership = (
+            read_ownership_map(repo, base, units)
             if ownership_map_exists(repo, base)
-            else load_ownership_map(repo, merge)
+            else read_ownership_map(repo, merge, units)
+            if ownership_map_exists(repo, merge)
+            else None
         )
+        if ownership is None:
+            ownership = OwnershipMap(
+                {}, False, "ownership.paths is missing at the base and merge base"
+            )
         merge_commit = (
             resolve_commit(repo, args.merge_commit, "merge commit")
             if args.merge_commit
             else None
         )
-        link_errors = symlink_errors(repo, base, head, changes, claims, expected)
+        link_errors = symlink_errors(repo, base, head, changes, ownership, expected)
         if link_errors:
             raise GuardError("\n".join(link_errors))
 
         touched = touched_units(changes, units, expected)
-        owned = ownership_hits(changes, claims)
+        owned = ownership_hits(changes, ownership)
         if expected is None:
-            if touched or owned:
+            if touched or owned or product:
                 details = "\n".join(
-                    f"  {path} (owned by {claim.unit}; {claim.evidence})"
-                    for path, claim in sorted(owned.items())
+                    f"  {path} (unit {claim.unit}; {claim.evidence})"
+                    for path, rows in sorted(owned.items())
+                    for claim in rows
                 )
+                if product and not ownership.available:
+                    message = (
+                        "ownership map unavailable ("
+                        + (ownership.reason or "no validated base map")
+                        + ") and the pull request changes product/test/tool paths; "
+                        "declare the owning unit with fm/<unit>, a 'Port-Unit: "
+                        "<unit>' head-commit trailer, or --unit and carry its "
+                        "queue transition and ledger fragment"
+                    )
+                else:
+                    message = (
+                        "the pull request changes unit-owned or product/test/tool "
+                        "paths but declares no unit; name the branch fm/<unit>, "
+                        "add a 'Port-Unit: <unit>' head-commit trailer, or pass "
+                        "--unit"
+                    )
                 raise GuardError(
-                    "the pull request changes unit-owned material but declares no "
-                    "unit; name the branch fm/<unit>, add a 'Port-Unit: <unit>' "
-                    "head-commit trailer, or pass --unit"
+                    message
                     + (f":\n{details}" if details else
-                       f"; touched unit evidence: {', '.join(sorted(touched))}")
+                       "; offending paths:\n" + "\n".join(
+                           f"  {path}" for path in (product or sorted(touched))))
                 )
             print("unit: (none)")
-            print("process PR: no unit-owned or unit evidence path is touched")
+            print("process PR: no unit-owned or product/test/tool path is touched")
             return 0
 
         if not touched:
             details = "\n".join(
-                f"  {path} (owned by {claim.unit}; {claim.evidence})"
-                for path, claim in sorted(owned.items())
+                f"  {path} (unit {claim.unit}; {claim.evidence})"
+                for path, rows in sorted(owned.items())
+                for claim in rows
             )
             raise GuardError(
                 f"unit PR {expected} carries no unit evidence: "
                 f"missing required queue transition {_queue_path(expected)} and "
                 f"missing required ledger fragment "
                 f"docs/port/units/{expected}{FRAGMENT_DIR}{args.pr}-<slug>.tsv"
-                + (f"; unit-owned paths changed:\n{details}" if details else "")
+                + (f"; unit-owned or product paths changed:\n{details}"
+                   if details else
+                   "; product paths changed:\n" + "\n".join(
+                       f"  {path}" for path in product))
             )
         foreign = sorted(unit for unit in touched if unit != expected)
         if foreign:
@@ -263,16 +295,18 @@ def main(argv: list[str]) -> int:
                 f"unit PR {expected} touches foreign unit evidence:\n{details}"
             )
         foreign_owned = {
-            path: claim for path, claim in owned.items() if claim.unit != expected
+            path: rows for path, rows in owned.items()
+            if not claim_is_allowed(rows, expected)
         }
         if foreign_owned:
             details = "\n".join(
-                f"  {path} (owned by {claim.unit}; {claim.evidence})"
-                for path, claim in sorted(foreign_owned.items())
+                f"  {path} (unit {claim.unit}; {claim.evidence})"
+                for path, rows in sorted(foreign_owned.items())
+                for claim in rows
             )
             raise GuardError(
-                f"unit PR {expected} touches unit-owned paths owned by another "
-                f"unit:\n{details}"
+                f"unit PR {expected} touches unit-owned paths owned only by "
+                f"another unit:\n{details}"
             )
 
         errors: list[str] = []
@@ -285,7 +319,6 @@ def main(argv: list[str]) -> int:
         try:
             fragment_detail = _check_fragment(
                 repo,
-                base,
                 head,
                 merge,
                 expected,

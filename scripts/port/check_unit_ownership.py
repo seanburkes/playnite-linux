@@ -4,21 +4,24 @@
 Usage:
     python3 scripts/port/check_unit_ownership.py --base <sha> --head <sha>
         [--branch <head-ref>] [--unit <unit>] [--merge-base <sha>]
-    python3 scripts/port/check_unit_ownership.py --head <sha> --diff-file <path>
+    python3 scripts/port/check_unit_ownership.py [--base <sha>] --head <sha>
+        --diff-file <path>
 
 The diff is computed as ``git diff <merge-base(base, head)> <head>``.  Rename
 detection is disabled so both the old and new namespaces are charged; an
 explicit rename record is still expanded to a delete plus an add.  The base
 commit's bot-generated ``docs/port/units/ownership.paths`` map attributes
-product source, shared tests, fixtures and tools to the unit whose merged
-commit introduced or last changed them.
+product source, shared tests, fixtures and tools to every unit whose merged
+commit introduced or changed them.  A ``*`` row means explicitly shared.
 
-Exactly zero unit-owned or unit-evidence paths is a process PR and is allowed.
-Exactly one is allowed only when the pull request declares that unit through
+Exactly zero unit-owned, unit-evidence, or product/test/tool paths is a process
+PR and is allowed.  Otherwise the pull request must declare one unit through
 ``fm/<unit>-...``, a ``Port-Unit: <unit>`` head-commit trailer, or ``--unit``.
-A path owned by another unit, or any unit-owned path with no declaration, fails
-with the path, the owning unit and its map evidence.  A path owned by no unit
-stays shared.  Ambiguous input fails closed.
+A path owned only by other units fails with the path, the owning units and the
+map evidence.  New or unowned product paths still require a declaration and,
+via the evidence guard, a fragment.  If the base map is missing, empty or
+invalid, product changes fail closed with ``ownership map unavailable`` unless
+the PR is a unit PR with its own evidence.
 
 This script is read-only: it never fetches, checks out, resets, or writes.
 Exit codes: 0 allowed, 1 policy failure including ambiguous or invalid input.
@@ -33,17 +36,20 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from unit_guard_common import (  # noqa: E402
+    OwnershipMap,
     GuardError,
     bot_owned_errors,
     changed_paths,
+    claim_is_allowed,
     declared_unit,
     format_paths,
     known_units,
-    load_ownership_map,
     merge_base,
     ownership_hits,
     ownership_map_exists,
     paths_from_diff_file,
+    product_paths,
+    read_ownership_map,
     repo_root,
     resolve_commit,
     symlink_errors,
@@ -63,11 +69,16 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
-def _claim_lines(claims) -> list[str]:
-    return [
-        f"  {claim.path} (unit {claim.unit}; {claim.evidence})"
-        for claim in sorted(claims.values(), key=lambda item: item.path)
-    ]
+def _claim_lines(rows_by_path) -> list[str]:
+    lines: list[str] = []
+    for path, rows in sorted(rows_by_path.items()):
+        for claim in rows:
+            lines.append(f"  {path} (unit {claim.unit}; {claim.evidence})")
+    return lines
+
+
+def _owners_text(rows) -> str:
+    return ", ".join(f"{claim.unit} ({claim.evidence})" for claim in rows)
 
 
 def main(argv: list[str]) -> int:
@@ -84,7 +95,11 @@ def main(argv: list[str]) -> int:
             # Offline mode still takes ownership from a base commit, never from
             # the head tree the caller is asking about.
             base = resolve_commit(repo, args.base, "base") if args.base else None
-            claims = load_ownership_map(repo, base) if base else {}
+            ownership = (
+                read_ownership_map(repo, base, units)
+                if base and ownership_map_exists(repo, base)
+                else OwnershipMap({}, False, "no readable base ownership map")
+            )
             merge = None
         else:
             if not args.base:
@@ -97,13 +112,21 @@ def main(argv: list[str]) -> int:
             )
             changes = changed_paths(repo, merge, head)
             units = known_units(repo, [base, head, merge])
-            claims = (
-                load_ownership_map(repo, base)
-                if ownership_map_exists(repo, base)
-                else load_ownership_map(repo, merge)
-            )
+            if ownership_map_exists(repo, base):
+                ownership = read_ownership_map(repo, base, units)
+            elif ownership_map_exists(repo, merge):
+                ownership = read_ownership_map(repo, merge, units)
+            else:
+                ownership = OwnershipMap(
+                    {}, False, "ownership.paths is missing at the base and merge base"
+                )
 
-        map_errors = bot_owned_errors(changes)
+        product = product_paths(changes, units)
+        map_errors = bot_owned_errors(
+            changes,
+            base_has_map=ownership_map_exists(repo, base) if base else None,
+            product_changed=bool(product),
+        )
         if map_errors:
             raise GuardError("\n".join(map_errors))
 
@@ -112,28 +135,37 @@ def main(argv: list[str]) -> int:
         )
 
         if base is not None and merge is not None:
-            link_errors = symlink_errors(repo, base, head, changes, claims, declared)
+            link_errors = symlink_errors(repo, base, head, changes, ownership, declared)
             if link_errors:
                 raise GuardError("\n".join(link_errors))
 
         touched = touched_units(changes, units, declared)
-        owned = ownership_hits(changes, claims)
+        owned = ownership_hits(changes, ownership)
 
         if declared is None:
-            if touched or owned:
-                details = _claim_lines(owned)
-                if not details:
-                    details = [
-                        "  unit evidence touched: " + ", ".join(sorted(touched))
-                    ]
+            if touched or owned or product:
+                if product and not ownership.available:
+                    raise GuardError(
+                        "ownership map unavailable ("
+                        + (ownership.reason or "no validated base map")
+                        + ") and the pull request changes product/test/tool paths; "
+                        "declare the owning unit with fm/<unit>, a 'Port-Unit: "
+                        "<unit>' head-commit trailer, or --unit and carry its "
+                        "queue transition and ledger fragment. Offending paths:\n"
+                        + "\n".join(_claim_lines(owned) or [f"  {path}" for path in product])
+                    )
                 raise GuardError(
-                    "the pull request changes unit-owned paths but declares no unit; "
-                    "name the branch fm/<unit>, add a 'Port-Unit: <unit>' head-commit "
-                    "trailer, or pass --unit. Offending paths:\n"
-                    + "\n".join(details)
+                    "the pull request changes unit-owned or product/test/tool paths "
+                    "but declares no unit; name the branch fm/<unit>, add a "
+                    "'Port-Unit: <unit>' head-commit trailer, or pass --unit. "
+                    "Offending paths:\n"
+                    + "\n".join(
+                        _claim_lines(owned)
+                        or [f"  {path}" for path in (product or sorted(touched))]
+                    )
                 )
             print("unit: (none)")
-            print("process PR: no unit-owned or unit evidence path is touched")
+            print("process PR: no unit-owned or product/test/tool path is touched")
             return 0
 
         if len(touched) > 1:
@@ -153,14 +185,17 @@ def main(argv: list[str]) -> int:
             )
 
         foreign_owned = {
-            path: claim for path, claim in owned.items() if claim.unit != declared
+            path: rows
+            for path, rows in owned.items()
+            if not claim_is_allowed(rows, declared)
         }
         foreign_evidence = sorted(unit for unit in touched if unit != declared)
         if foreign_owned or foreign_evidence:
             print(f"unit: {declared}")
             print("allowed paths touched:")
             own_paths = list(touched.get(declared, [])) + [
-                path for path, claim in owned.items() if claim.unit == declared
+                path for path, rows in owned.items()
+                if claim_is_allowed(rows, declared)
             ]
             print(format_paths(sorted(set(own_paths))))
             print("offending paths:")
@@ -173,32 +208,35 @@ def main(argv: list[str]) -> int:
                     f"foreign unit evidence: PR owns {declared} but touches unit "
                     f"{foreign_evidence[0]}"
                 )
-            owners = sorted({claim.unit for claim in foreign_owned.values()})
+            owners = sorted({
+                claim.unit
+                for rows in foreign_owned.values()
+                for claim in rows
+            })
             raise GuardError(
                 f"foreign unit ownership: PR owns {declared} but touches paths "
                 f"owned by {', '.join(owners)}"
             )
 
-        if not touched and not owned:
+        if not touched and not owned and not product:
             raise GuardError(
-                f"unit PR {declared} touches no unit-owned path and no unit evidence; "
-                "a pull request that changes no unit material is a process PR and "
-                "must not declare a unit"
+                f"unit PR {declared} touches no unit-owned path and no "
+                "product/test/tool material; a pull request that changes no unit "
+                "material is a process PR and must not declare a unit"
             )
 
         print(f"unit: {declared}")
         print("allowed paths touched:")
         own_paths = list(touched.get(declared, [])) + [
-            path for path, claim in owned.items() if claim.unit == declared
+            path for path, rows in owned.items()
+            if claim_is_allowed(rows, declared)
         ]
         print(format_paths(sorted(set(own_paths))))
         print("offending paths:")
         print("  (none)")
-        for claim in sorted(
-            (claim for claim in owned.values() if claim.unit == declared),
-            key=lambda item: item.path,
-        ):
-            print(f"ownership: {claim.path} ({claim.unit}; {claim.evidence})")
+        for path, rows in sorted(owned.items()):
+            if claim_is_allowed(rows, declared):
+                print(f"ownership: {path} ({_owners_text(rows)})")
         return 0
     except GuardError as exc:
         print(f"error: {exc}", file=sys.stderr)

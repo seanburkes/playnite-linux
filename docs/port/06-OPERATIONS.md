@@ -85,8 +85,13 @@ single writer on `main`; workers edit unit shards and never the aggregates thems
 - `docs/port/units/removed.tsv` holds one `unit`/`reason`/`approved-by` row per deliberately
   retired unit.
 - `docs/port/units/ownership.paths` is the bot-generated map of the product source, shared
-  tests, non-prefixed fixtures and tools each unit introduced or last changed. The unit guard
-  reads it from the pull request base and rejects a change to a path another unit owns.
+  tests, non-prefixed fixtures and tools each unit introduced or changed. A path may list
+  several owners; `*` marks explicitly shared material and any declared unit may change it. The
+  unit guard reads the map from the pull request base, rejects a change to a path owned only by
+  other units, and fails closed with `ownership map unavailable` when the map is missing, empty
+  or fails validation. New and unowned product paths still require a unit declaration and a
+  ledger fragment. The one bootstrap change that adds the first map may do so only when it
+  touches no product/test/tool path.
 - `docs/port/queue.tsv` and `docs/port/ledger.tsv` are generated from those shards by the
   parent-owned `port-index` workflow after merge. A pull request must not include either file
   in its diff, even with freshly generated content; CI rejects that change.

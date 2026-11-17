@@ -50,13 +50,15 @@ the prose between the narrative markers, and, when `--capture-results` and
 `tests/baseline.json`. The baseline writer refuses to lower any recorded floor and
 preserves every earlier capture and its provenance.
 
-`build` also writes `docs/port/units/ownership.paths`, derived from merged first-parent
+`build` also writes `docs/port/units/ownership.paths`, derived from reachable merged
 commits recorded in the unit ledgers. The exact header is
 `path<TAB>unit<TAB>commit<TAB>pull`; candidate paths are product source, shared tests and
-tools, and the last unit-mapped commit that introduced or changed a path owns it. Unit
-evidence namespaces, generated aggregates, the baseline and shared build metadata stay
-outside the map, and a path no unit-mapped commit touched stays shared. The map is
-deterministic and bot-owned: a pull request may not add, edit, rename or delete it.
+tools. A path may list every unit that touched it, so any listed owner may change it;
+where attribution is uncertain the path is recorded with the explicit shared owner `*`
+rather than left unowned. Unit evidence namespaces, generated aggregates, the baseline and
+shared build metadata stay outside the map. Rows are sorted by path then unit and the result
+is deterministic. The map is bot-owned; only the first bootstrap map may be added by a
+non-product pull request when the base has none.
 
 The migration PR that first adds `docs/port/units` is the one legitimate
 pre-migration base: `--allow-pre-migration-base` acknowledges the history skip
@@ -729,34 +731,20 @@ def render(units: Path) -> tuple[bytes, bytes]:
     return render_index(build_index(units))
 
 
+# Kept local so the generator remains a single self-contained script (the
+# aggregate-ownership tests copy only this file).  tests/port/test_build_port_index.py
+# compares this rule with unit_guard_common.ownership_candidate.
 OWNERSHIP_ROOTS = ("src/", "tests/", "tools/")
 OWNERSHIP_EXACT_EXCLUDES = frozenset({BASELINE_GENERATED_PATH})
 OWNERSHIP_SUFFIX_EXCLUDES = (
-    ".csproj",
-    ".slnx",
-    ".sln",
-    ".props",
-    ".targets",
-    ".lock.json",
-    ".editorconfig",
-    ".gitignore",
-    ".gitattributes",
+    ".csproj", ".slnx", ".sln", ".props", ".targets", ".lock.json",
+    ".editorconfig", ".gitignore", ".gitattributes",
 )
 OWNERSHIP_NAME_EXCLUDES = frozenset({"global.json", "nuget.config", "NuGet.config"})
-_PR_SUBJECT = re.compile(r"\(#([1-9][0-9]*)\)")
-_PR_EVIDENCE = re.compile(r"(?:pull/|PR\s*#\s*)([1-9][0-9]*)", re.IGNORECASE)
+SHARED_OWNER = "*"
 
 
 def _ownership_candidate(path: str, units: set[str]) -> bool:
-    """True when a path is product/test/tool material a unit can own.
-
-    Unit evidence namespaces (``tests/golden/<unit>-*`` etc.) stay in the
-    existing attribution check, generated/bot-owned files stay bot-owned, and
-    shared build metadata such as project and lock files stays shared.  Nothing
-    here infers ownership from a file name; the name only selects the roots the
-    ownership map covers.
-    """
-
     if not path.startswith(OWNERSHIP_ROOTS):
         return False
     if path in OWNERSHIP_EXACT_EXCLUDES:
@@ -770,7 +758,13 @@ def _ownership_candidate(path: str, units: set[str]) -> bool:
     for prefix in ("tests/golden/", "tests/fixtures/"):
         if path.startswith(prefix):
             relative = path[len(prefix):]
-            if any(relative.startswith(f"{unit}-") for unit in units):
+            first = relative.split("/", 1)[0]
+            if any(
+                relative.startswith(f"{unit}-")
+                or first == unit
+                or first.startswith(f"{unit}-")
+                for unit in units
+            ):
                 return False
     if path.startswith("tools/"):
         relative = path[len("tools/"):]
@@ -782,12 +776,16 @@ def _ownership_candidate(path: str, units: set[str]) -> bool:
     return True
 
 
+_PR_SUBJECT = re.compile(r"\(#([1-9][0-9]*)\)")
+_PR_EVIDENCE = re.compile(r"(?:pull/|PR\s*#\s*)([1-9][0-9]*)", re.IGNORECASE)
+
+
 def _unit_claims(index: ShardIndex, units: Path) -> dict[int, set[str]]:
     """Which units' ledger evidence records each pull request.
 
     Fragment file names are exact.  Legacy rows may mention another unit in
-    prose, so their references are only claims; the merged commit's queue-shard
-    change is the stronger signal used first by ``_commit_unit``.
+    prose, so their references are only claims; a commit that changes a queue
+    shard is the stronger signal used first by ``_commit_attribution``.
     """
 
     claims: dict[int, set[str]] = {}
@@ -805,10 +803,9 @@ def _unit_claims(index: ShardIndex, units: Path) -> dict[int, set[str]]:
     return claims
 
 
-def _first_parent_commits(root: Path) -> list[tuple[str, str]]:
+def _reachable_commits(root: Path) -> list[tuple[str, str]]:
     try:
-        output = _git(root, "log", "--first-parent", "--reverse",
-                      "--format=%H%x09%s", "HEAD")
+        output = _git(root, "log", "--reverse", "--format=%H%x09%s", "HEAD")
     except PortIndexError:
         return []
     commits: list[tuple[str, str]] = []
@@ -827,7 +824,7 @@ def _commit_paths(root: Path, sha: str) -> list[str]:
         capture_output=True,
     )
     if parent.returncode != 0:
-        # The first-parent root commit has no parent: every path is introduced.
+        # The root commit has no parent: every path is introduced.
         listing = _git(root, "ls-tree", "-r", "--name-only", "-z", sha)
     else:
         listing = _git(root, "diff", "--no-ext-diff", "--no-textconv", "--no-renames",
@@ -835,22 +832,23 @@ def _commit_paths(root: Path, sha: str) -> list[str]:
     return [item.decode("utf-8", "replace") for item in listing.split(b"\0") if item]
 
 
-def _commit_unit(
-    sha: str,
+def _commit_attribution(
     subject: str,
     paths: list[str],
     units: set[str],
     claims: dict[int, set[str]],
-) -> tuple[str, str] | None:
-    """Resolve one merged commit to one unit, or ``None`` when shared/ambiguous.
+) -> tuple[str, str | None, str]:
+    """Return ``(kind, unit, pull)`` for one merged commit.
 
-    The queue shard changed by the commit is the pull request's recorded unit
-    declaration, but only when that pull request is itself recorded in a ledger.
-    When a commit changes no queue shard (a pure product/test commit), fall back
-    to an unambiguous ledger claim.  Two units, or a commit no ledger records,
-    is not owned: it cannot transfer ownership and it cannot erase a claim.
+    ``kind`` is ``unit`` when the commit changes exactly one unit's queue shard
+    (the PR's recorded unit declaration), ``shared`` when several units are
+    involved, and ``none`` when no unit is recorded.  A product-only commit may
+    fall back to an unambiguous ledger claim.  Ambiguity is never guessed.
     """
 
+    subject_match = _PR_SUBJECT.search(subject)
+    pr = int(subject_match.group(1)) if subject_match else None
+    pull = f"pull/{pr}" if pr is not None else "-"
     queue_units = {
         match.group(1)
         for path in paths
@@ -858,46 +856,68 @@ def _commit_unit(
             r"docs/port/units/([a-z0-9]+(?:-[a-z0-9]+)*)\.queue\.tsv", path))
         and match.group(1) in units
     }
-    subject_match = _PR_SUBJECT.search(subject)
-    pr = int(subject_match.group(1)) if subject_match else None
     if len(queue_units) == 1:
-        if pr is None or pr not in claims:
-            return None
-        return next(iter(queue_units)), "queue"
+        return "unit", next(iter(queue_units)), pull
+    if len(queue_units) > 1:
+        return "shared", None, pull
     if pr is not None:
         referenced = claims.get(pr, set()) & units
         if len(referenced) == 1:
-            return next(iter(referenced)), "ledger"
-    return None
+            return "unit", next(iter(referenced)), pull
+        if len(referenced) > 1:
+            return "shared", None, pull
+    return "none", None, pull
 
 
 def render_ownership_map(root: Path, units: Path, index: ShardIndex) -> bytes:
     """Derive the bot-owned path map from merged commits recorded in ledgers.
 
-    Ownership is the last unit-mapped commit that introduced or changed a path.
-    Later commits that belong to no single unit (merge/process/maintenance
-    commits that touch several units) neither transfer nor erase an existing
-    claim, so maintenance noise cannot silently make a product file shared.
+    Every reachable unit-mapped commit adds its unit as an owner of the product,
+    test and tool paths it touched, so a genuinely shared file can list several
+    owners and any of them may change it.  When a commit cannot be attributed to
+    one unit (a cross-unit merge, a first-parent split, or an unrecorded product
+    change), the path is recorded as explicitly shared with ``*`` rather than
+    silently left unowned.  A path with a concrete owner does not also get ``*``.
+    Evidence for each row is selected by greatest commit id, so the result does
+    not depend on log order.
     """
 
     unit_ids = set(index.queue)
     claims = _unit_claims(index, units)
-    owners: dict[str, tuple[str, str, str]] = {}
-    for sha, subject in _first_parent_commits(root):
+    owners: dict[tuple[str, str], tuple[str, str]] = {}
+    shared: dict[str, tuple[str, str]] = {}
+    for sha, subject in _reachable_commits(root):
         paths = _commit_paths(root, sha)
-        resolved = _commit_unit(sha, subject, paths, unit_ids, claims)
-        if resolved is None:
+        candidates = [
+            path for path in paths if _ownership_candidate(path, unit_ids)
+        ]
+        if not candidates:
             continue
-        unit, _source = resolved
-        subject_match = _PR_SUBJECT.search(subject)
-        pull = f"pull/{subject_match.group(1)}" if subject_match else "-"
-        for path in paths:
-            if _ownership_candidate(path, unit_ids):
-                owners[path] = (unit, sha, pull)
+        kind, unit, pull = _commit_attribution(subject, paths, unit_ids, claims)
+        evidence = (sha, pull)
+        if kind == "unit" and unit is not None:
+            for path in candidates:
+                key = (path, unit)
+                if key not in owners or evidence > owners[key]:
+                    owners[key] = evidence
+        else:
+            # Ambiguous or unrecorded product material is explicitly shared.
+            for path in candidates:
+                if path not in shared or evidence > shared[path]:
+                    shared[path] = evidence
+    rows = [
+        (path, unit, sha, pull)
+        for (path, unit), (sha, pull) in owners.items()
+    ]
+    owned_paths = {path for path, _unit in owners}
+    rows.extend(
+        (path, SHARED_OWNER, sha, pull)
+        for path, (sha, pull) in shared.items()
+        if path not in owned_paths
+    )
+    rows.sort(key=lambda row: (row[0], row[1]))
     lines = [OWNERSHIP_HEADER]
-    for path in sorted(owners):
-        unit, sha, pull = owners[path]
-        lines.append(f"{path}\t{unit}\t{sha}\t{pull}")
+    lines.extend("\t".join(row) for row in rows)
     return ("\n".join(lines) + "\n").encode("utf-8")
 
 
@@ -976,6 +996,18 @@ def _git_bytes(root: Path, *args: str) -> bytes | None:
     return completed.stdout if completed.returncode == 0 else None
 
 
+def _map_bootstrap_allowed(root: Path, ref: str) -> bool:
+    """The first map may arrive only from a PR that touches no product material."""
+
+    if _git_bytes(root, "cat-file", "-e", f"{ref}:{OWNERSHIP_GENERATED_PATH}") is not None:
+        return False
+    if _git_bytes(root, "cat-file", "-e", f"HEAD:{OWNERSHIP_GENERATED_PATH}") is None:
+        return False
+    listing = _git_bytes(root, "diff", "--name-only", "-z", ref, "HEAD",
+                         "--", "src", "tests", "tools")
+    return not (listing and [name for name in listing.decode("utf-8", "replace").split("\0") if name])
+
+
 def changed_aggregates(root: Path, ref: str, queue: Path, ledger: Path,
                        recorded_base: str | None = None) -> list[str]:
     """Paths of generated aggregates changed outside both base sides.
@@ -1005,6 +1037,8 @@ def changed_aggregates(root: Path, ref: str, queue: Path, ledger: Path,
         recorded = resolved_recorded
     paths = (_repo_relative(queue, root), _repo_relative(ledger, root),
              BASELINE_GENERATED_PATH, STATUS_GENERATED_PATH, OWNERSHIP_GENERATED_PATH)
+    if _map_bootstrap_allowed(root, merge_base):
+        paths = tuple(path for path in paths if path != OWNERSHIP_GENERATED_PATH)
     listing = _git(
         root, "diff", "--name-only", "-z", merge_base, "HEAD", "--", *paths
     )
@@ -1110,10 +1144,11 @@ def shard_ownership_errors(root: Path, ref: str, unit: str | None = None,
         status, name = fields
         path = Path(name)
         if path.name == "ownership.paths":
-            errors.append(
-                f"{name}: the path ownership map is generated on main; a pull "
-                "request must not add, edit, rename or delete it"
-            )
+            if not (status == "A" and _map_bootstrap_allowed(root, ref)):
+                errors.append(
+                    f"{name}: the path ownership map is generated on main; a pull "
+                    "request must not add, edit, rename or delete it"
+                )
         elif path.name.endswith(QUEUE_SUFFIX):
             owned.add(path.name[:-len(QUEUE_SUFFIX)])
         elif path.parent.name.endswith(FRAGMENT_SUFFIX):

@@ -22,12 +22,16 @@ PR-editable.
 Path ownership map
 ------------------
 ``docs/port/units/ownership.paths`` is a bot-generated TSV with the exact header
-``path<TAB>unit<TAB>commit<TAB>pull``.  It extends ownership beyond evidence to
-product source, shared tests, non-prefixed fixtures and tools: a path is owned by
-the unit whose merged commit most recently introduced or changed it.  The guard
-reads the map from the pull request's base commit, never its head, and fails a
-change to a path owned by another unit or any unit-owned path in a PR that
-declares no unit.  A path the map does not list stays shared.
+``path<TAB>unit<TAB>commit<TAB>pull`` and one row per ``(path, owner)``.  It
+extends ownership beyond evidence to product source, shared tests, non-prefixed
+fixtures and tools.  A path may have several owners; any listed owner may change
+it and a non-owner fails.  ``*`` marks explicitly shared material when a commit's
+attribution is uncertain.  The guard reads the map from the pull request's base
+commit, never its head, validates header, units, ordering, commit ancestry and
+pull agreement, and fails with ``ownership map unavailable`` when the map is
+missing, empty, forged or stale.  Missing/unowned product paths still require a
+unit declaration and evidence; a path the map does not list stays shared only for
+the purpose of ownership, not for the declaration requirement.
 
 Ledger fragments
 ----------------
@@ -36,14 +40,15 @@ normal ledger header followed by one or more rows whose ``unit`` column is the
 owning unit.  Its evidence column must name the pull request, a head commit
 produced by this pull request and the real linux-ci run whose result it relies
 on.  The guard accepts the historical free-text forms (``PR #97``, ``pull/97``,
-``head 2e09983...`` and ``actions/runs/43964833995``).  The cited head must be
-on the pull request side of the merge base (or the merge commit, when supplied);
-an unrelated base-branch ancestor is rejected rather than treated as evidence.
+``head 2e09983...`` and ``actions/runs/43964833995``).  The cited head must be on
+the pull request's own first-parent spine after the merge base (or the merge
+commit, when supplied); an unrelated ancestor or a main commit merged after the
+branch point is rejected rather than treated as evidence.
 
 Diff paths are repository-relative with no traversal component.  Renames are
 expanded to an explicit delete plus add, deletions are checked like any other
-change, and added or modified symlinks must resolve inside the repository and
-must not borrow another unit's owned bytes.
+change, and every intermediate component of a changed path or symlink target is
+resolved; an escape, loop, symlinked ancestor or foreign-owned target fails.
 
 This module deliberately knows nothing about the aggregate generator.  It uses
 git plumbing only: no checkout, fetch, reset, or write occurs in the worktree.
@@ -106,6 +111,7 @@ OWNERSHIP_SUFFIX_EXCLUDES = (
 )
 OWNERSHIP_NAME_EXCLUDES = frozenset({"global.json", "nuget.config", "NuGet.config"})
 OWNERSHIP_PULL = re.compile(r"^pull/([1-9][0-9]*)$")
+SHARED_OWNER = "*"
 
 
 class GuardError(Exception):
@@ -130,6 +136,22 @@ class OwnershipClaim:
         if self.pull == "-":
             return f"commit {self.commit}"
         return f"{self.pull} at commit {self.commit}"
+
+    @property
+    def shared(self) -> bool:
+        return self.unit == SHARED_OWNER
+
+
+@dataclass(frozen=True)
+class OwnershipMap:
+    """The validated base map plus why protection may be unavailable."""
+
+    claims: dict[str, tuple[OwnershipClaim, ...]]
+    available: bool
+    reason: str | None
+
+    def owners(self, path: str) -> tuple[OwnershipClaim, ...]:
+        return self.claims.get(path, ())
 
 
 def git(repo: Path, *args: str) -> bytes:
@@ -412,20 +434,37 @@ def attribute_path(path: str, units: set[str]) -> tuple[frozenset[str], str | No
         return frozenset(), (
             f"unrecognised path under {UNITS_DIR}: {path}; "
             "the units directory accepts only README.md, removed.tsv, "
-            "ledger-corrections.tsv, <unit>.queue.tsv, <unit>.ledger.tsv and "
-            "<unit>.ledger.d/<pr>-<slug>.tsv"
+            "ledger-corrections.tsv, ownership.paths, <unit>.queue.tsv, "
+            "<unit>.ledger.tsv and <unit>.ledger.d/<pr>-<slug>.tsv"
         )
 
     if path.startswith("docs/port/"):
         relative = path[len("docs/port/"):]
+        first = relative.split("/", 1)[0]
         if "/" not in relative and relative.endswith(".md"):
-            return _one_unit(path, [unit for unit in units if relative.startswith(f"{unit}-")])
-        return frozenset(), None
+            return _one_unit(
+                path,
+                [unit for unit in units
+                 if relative.startswith(f"{unit}-")
+                 or first == unit],
+            )
+        matches = [
+            unit for unit in units
+            if first == unit or first.startswith(f"{unit}-")
+        ]
+        return _one_unit(path, matches)
 
     for prefix in ("tests/golden/", "tests/fixtures/"):
         if path.startswith(prefix):
             relative = path[len(prefix):]
-            return _one_unit(path, [unit for unit in units if relative.startswith(f"{unit}-")])
+            first = relative.split("/", 1)[0]
+            return _one_unit(
+                path,
+                [unit for unit in units
+                 if relative.startswith(f"{unit}-")
+                 or first == unit
+                 or first.startswith(f"{unit}-")],
+            )
 
     if path.startswith("tools/"):
         relative = path[len("tools/"):]
@@ -462,14 +501,80 @@ def touched_units(
     return {unit: sorted(paths) for unit, paths in sorted(touched.items())}
 
 
-def bot_owned_errors(changes: list[Change]) -> list[str]:
-    """Reject PR edits to the generated ownership map, even to identical bytes."""
+def bot_owned_errors(
+    changes: list[Change],
+    *,
+    base_has_map: bool | None = None,
+    product_changed: bool = False,
+) -> list[str]:
+    """Reject PR edits to the generated ownership map, even to identical bytes.
 
+    The one bootstrap exception is the first change that adds the map when the
+    base does not have it and the PR touches no product/test/tool path.  That
+    lets the seeding tooling PR commit the generated map; a product PR cannot
+    use it to forge ownership, and every later edit is bot-owned.
+    """
+
+    errors: list[str] = []
+    for change in changes:
+        if change.path != OWNERSHIP_MAP:
+            continue
+        adding_first_map = (
+            change.status == "A" and base_has_map is False and not product_changed
+        )
+        if adding_first_map:
+            continue
+        errors.append(
+            f"{change.path} is bot-owned and generated on main; a pull request "
+            "must not add, edit, rename or delete the ownership map"
+        )
+    return errors
+
+
+def ownership_candidate(path: str, units: set[str]) -> bool:
+    """True when a path is product/test/tool material that needs an owner.
+
+    Unit evidence namespaces stay in the existing attribution check; generated
+    files and shared build metadata stay outside.  The file name only selects
+    the roots the ownership map covers; it never decides an owner.
+    """
+
+    if not path.startswith(OWNERSHIP_ROOTS):
+        return False
+    if path in OWNERSHIP_EXACT_EXCLUDES:
+        return False
+    if any(path.endswith(suffix) for suffix in OWNERSHIP_SUFFIX_EXCLUDES):
+        return False
+    if Path(path).name in OWNERSHIP_NAME_EXCLUDES:
+        return False
+    if "/bin/" in path or "/obj/" in path:
+        return False
+    for prefix in ("tests/golden/", "tests/fixtures/"):
+        if path.startswith(prefix):
+            relative = path[len(prefix):]
+            first = relative.split("/", 1)[0]
+            if any(
+                relative.startswith(f"{unit}-")
+                or first == unit
+                or first.startswith(f"{unit}-")
+                for unit in units
+            ):
+                return False
+    if path.startswith("tools/"):
+        relative = path[len("tools/"):]
+        for unit in units:
+            if relative == unit or (
+                relative.startswith(unit) and relative[len(unit)] in "-._/"
+            ):
+                return False
+    return True
+
+
+def product_paths(changes: list[Change], units: set[str]) -> list[str]:
     return [
-        f"{change.path} is bot-owned and generated on main; a pull request must "
-        "not add, edit, rename or delete the ownership map"
+        change.path
         for change in changes
-        if change.path == OWNERSHIP_MAP
+        if ownership_candidate(change.path, units)
     ]
 
 
@@ -477,86 +582,142 @@ def ownership_map_exists(repo: Path, revision: str) -> bool:
     return read_at(repo, revision, OWNERSHIP_MAP) is not None
 
 
-def load_ownership_map(repo: Path, revision: str) -> dict[str, OwnershipClaim]:
+def read_ownership_map(
+    repo: Path, revision: str, units: set[str] | None = None
+) -> OwnershipMap:
     """Read and validate the bot-generated map at a base revision.
 
     The map is deliberately read from the pull request's base, never from its
-    head: a branch cannot manufacture ownership for itself.  A missing map is
-    the bootstrap state before the post-merge generator first writes it.
+    head: a branch cannot manufacture ownership for itself.  A missing or empty
+    map is reported as unavailable rather than treated as permission, so product
+    changes in that state still require an explicit unit declaration and
+    evidence.  A malformed row fails closed with ``ownership map unavailable``.
     """
 
     data = read_at(repo, revision, OWNERSHIP_MAP)
     if data is None:
-        return {}
+        return OwnershipMap({}, False, f"{OWNERSHIP_MAP} is missing at {revision}")
     try:
         text = data.decode("utf-8", "strict")
     except UnicodeDecodeError as exc:
-        raise GuardError(f"{OWNERSHIP_MAP}: not valid UTF-8") from exc
+        raise GuardError(f"ownership map unavailable: {OWNERSHIP_MAP} is not UTF-8") from exc
     lines = text.split("\n")
     if lines and lines[-1] == "":
         lines.pop()
     if not lines:
-        raise GuardError(f"{OWNERSHIP_MAP}: empty ownership map")
+        raise GuardError(f"ownership map unavailable: {OWNERSHIP_MAP} is empty")
     if lines[0] != OWNERSHIP_HEADER:
-        raise GuardError(f"{OWNERSHIP_MAP}:1: expected the exact ownership header")
-    claims: dict[str, OwnershipClaim] = {}
-    previous = ""
+        raise GuardError(
+            f"ownership map unavailable: {OWNERSHIP_MAP}:1: expected the exact "
+            f"ownership header {OWNERSHIP_HEADER!r}"
+        )
+    claims: dict[str, list[OwnershipClaim]] = {}
+    previous: tuple[str, str] | None = None
+    ancestors = {
+        line.strip()
+        for line in git(repo, "rev-list", revision).decode("ascii", "strict").splitlines()
+        if line.strip()
+    }
+    subjects: dict[str, str] = {}
     for offset, line in enumerate(lines[1:], start=2):
         if not line:
-            raise GuardError(f"{OWNERSHIP_MAP}:{offset}: blank row")
+            raise GuardError(f"ownership map unavailable: {OWNERSHIP_MAP}:{offset}: blank row")
         fields = line.split("\t")
         if len(fields) != 4:
             raise GuardError(
-                f"{OWNERSHIP_MAP}:{offset}: expected 4 tab-separated fields, "
-                f"got {len(fields)}"
+                f"ownership map unavailable: {OWNERSHIP_MAP}:{offset}: expected 4 "
+                f"tab-separated fields, got {len(fields)}"
             )
         path, unit, commit, pull = fields
         error = path_error(path)
         if error:
-            raise GuardError(f"{OWNERSHIP_MAP}:{offset}: {path!r}: {error}")
-        if not UNIT_ID.fullmatch(unit):
-            raise GuardError(f"{OWNERSHIP_MAP}:{offset}: invalid unit id {unit!r}")
+            raise GuardError(
+                f"ownership map unavailable: {OWNERSHIP_MAP}:{offset}: {path!r}: {error}"
+            )
+        if unit != SHARED_OWNER and not UNIT_ID.fullmatch(unit):
+            raise GuardError(
+                f"ownership map unavailable: {OWNERSHIP_MAP}:{offset}: invalid unit "
+                f"id {unit!r}"
+            )
+        if units is not None and unit != SHARED_OWNER and unit not in units:
+            raise GuardError(
+                f"ownership map unavailable: {OWNERSHIP_MAP}:{offset}: unknown unit "
+                f"{unit!r}"
+            )
         if not re.fullmatch(r"[0-9a-f]{40}", commit):
             raise GuardError(
-                f"{OWNERSHIP_MAP}:{offset}: commit must be a full 40-hex id, got {commit!r}"
+                f"ownership map unavailable: {OWNERSHIP_MAP}:{offset}: commit must "
+                f"be a full 40-hex id, got {commit!r}"
+            )
+        if commit not in ancestors:
+            raise GuardError(
+                f"ownership map unavailable: {OWNERSHIP_MAP}:{offset}: commit "
+                f"{commit} is not an ancestor of the map revision {revision}; "
+                "refusing a forged or stale base map"
             )
         if pull != "-" and not OWNERSHIP_PULL.fullmatch(pull):
             raise GuardError(
-                f"{OWNERSHIP_MAP}:{offset}: pull must be 'pull/<number>' or '-', got {pull!r}"
+                f"ownership map unavailable: {OWNERSHIP_MAP}:{offset}: pull must be "
+                f"'pull/<number>' or '-', got {pull!r}"
             )
-        if path in claims:
-            first = claims[path]
+        if pull != "-":
+            wanted = int(pull[len("pull/"):])
+            if commit not in subjects:
+                subjects[commit] = git(
+                    repo, "log", "-1", "--format=%s", commit
+                ).decode("utf-8", "replace")
+            subject = subjects[commit]
+            recorded = re.search(r"\(#([1-9][0-9]*)\)", subject)
+            if recorded is None or int(recorded.group(1)) != wanted:
+                raise GuardError(
+                    f"ownership map unavailable: {OWNERSHIP_MAP}:{offset}: commit "
+                    f"{commit} does not agree with recorded {pull} ({subject!r})"
+                )
+        key = (path, unit)
+        if previous is not None and key < previous:
             raise GuardError(
-                f"{OWNERSHIP_MAP}:{offset}: ambiguous ownership for {path}: "
-                f"already claimed by {first.unit} ({first.evidence}), now {unit} "
-                f"({pull if pull != '-' else commit}); refusing to guess"
+                f"ownership map unavailable: {OWNERSHIP_MAP}:{offset}: rows must be "
+                f"sorted by path then unit; {key!r} follows {previous!r}"
             )
-        if previous and path < previous:
+        previous = key
+        if any(existing.unit == unit for existing in claims.get(path, ())):
             raise GuardError(
-                f"{OWNERSHIP_MAP}:{offset}: rows must be sorted by path; "
-                f"{path!r} follows {previous!r}"
+                f"ownership map unavailable: {OWNERSHIP_MAP}:{offset}: duplicate "
+                f"owner {unit!r} for {path}; refusing an ambiguous base map"
             )
-        previous = path
-        claims[path] = OwnershipClaim(path, unit, commit, pull)
-    return claims
-
-
-def ownership_claim_for(
-    path: str, claims: dict[str, OwnershipClaim]
-) -> OwnershipClaim | None:
-    return claims.get(path)
+        claims.setdefault(path, []).append(OwnershipClaim(path, unit, commit, pull))
+    if not claims:
+        return OwnershipMap({}, False, f"{OWNERSHIP_MAP} has no rows at {revision}")
+    return OwnershipMap(
+        {path: tuple(sorted(rows, key=lambda claim: claim.unit))
+         for path, rows in claims.items()},
+        True,
+        None,
+    )
 
 
 def ownership_hits(
-    changes: list[Change], claims: dict[str, OwnershipClaim]
-) -> dict[str, OwnershipClaim]:
-    """Map each changed path that the base map attributes to its owner."""
+    changes: list[Change], ownership: OwnershipMap
+) -> dict[str, tuple[OwnershipClaim, ...]]:
+    """Map each changed path that the base map attributes to all of its owners."""
 
     return {
-        change.path: claims[change.path]
+        change.path: ownership.claims[change.path]
         for change in changes
-        if change.path in claims
+        if change.path in ownership.claims
     }
+
+
+def claim_is_allowed(claims: tuple[OwnershipClaim, ...], unit: str | None) -> bool:
+    if not claims:
+        return True
+    if unit is None:
+        return False
+    return any(claim.shared or claim.unit == unit for claim in claims)
+
+
+def claim_owners(claims: tuple[OwnershipClaim, ...]) -> str:
+    return ", ".join(claim.unit for claim in claims)
 
 
 def _tree_entry(repo: Path, revision: str, path: str) -> tuple[str, str] | None:
@@ -577,42 +738,74 @@ def _tree_entry(repo: Path, revision: str, path: str) -> tuple[str, str] | None:
     return mode, sha
 
 
-def _resolve_symlink(path: str, target: str) -> str:
+def _read_link(repo: Path, revision: str, path: str) -> str | None:
+    entry = _tree_entry(repo, revision, path)
+    if entry is None or entry[0] != "120000":
+        return None
+    data = git(repo, "cat-file", "blob", entry[1])
+    try:
+        target = data.decode("utf-8", "strict")
+    except UnicodeDecodeError as exc:
+        raise GuardError(f"symlink {path} has a non-UTF-8 target") from exc
     if not target:
         raise GuardError(f"symlink {path} has an empty target")
+    if "\0" in target or "\n" in target or "\r" in target:
+        raise GuardError(f"symlink {path} has a control character in its target")
     if target.startswith("/") or target.startswith("\\") or re.match(r"^[A-Za-z]:", target):
-        raise GuardError(
-            f"symlink {path} points outside the repository: {target!r}"
-        )
-    joined = posixpath.normpath(posixpath.join(posixpath.dirname(path), target))
-    if joined in {"", ".", ".."} or joined.startswith("../") or joined.startswith("/"):
-        raise GuardError(
-            f"symlink {path} escapes the repository root: {target!r}"
-        )
-    return joined
+        raise GuardError(f"symlink {path} points outside the repository: {target!r}")
+    return target
 
 
-def _resolve_symlink_chain(repo: Path, head: str, path: str, target: str) -> str:
-    """Follow in-repository symlink targets and reject chains that escape or loop."""
+def resolve_path(repo: Path, revision: str, path: str) -> str:
+    """Resolve every symlink component of a path and reject escapes or loops.
 
-    resolved = _resolve_symlink(path, target)
-    seen = {path}
-    for _depth in range(16):
-        if resolved in seen:
-            raise GuardError(f"symlink {path} resolves through a loop at {resolved}")
-        seen.add(resolved)
-        entry = _tree_entry(repo, head, resolved)
-        if entry is None or entry[0] != "120000":
-            return resolved
-        data = git(repo, "cat-file", "blob", entry[1])
-        try:
-            next_target = data.decode("utf-8", "strict")
-        except UnicodeDecodeError as exc:
-            raise GuardError(f"symlink {resolved} has a non-UTF-8 target") from exc
-        if "\0" in next_target or "\n" in next_target or "\r" in next_target:
-            raise GuardError(f"symlink {resolved} has a control character in its target")
-        resolved = _resolve_symlink(resolved, next_target)
-    raise GuardError(f"symlink {path} has too many chained targets to resolve safely")
+    The returned path is repository-relative.  A component that does not exist
+    at ``revision`` is kept as written, so a new path can be checked before it is
+    committed.  Intermediate components are resolved even when the final
+    component is an ordinary file.
+    """
+
+    error = path_error(path)
+    if error:
+        raise GuardError(f"{path!r}: {error}")
+    parts = path.split("/")
+    resolved: list[str] = []
+    visited: set[str] = set()
+    steps = 0
+    while parts:
+        part = parts.pop(0)
+        if part in {"", "."}:
+            continue
+        if part == "..":
+            if not resolved:
+                raise GuardError(f"{path} escapes the repository root")
+            resolved.pop()
+            continue
+        candidate = "/".join(resolved + [part])
+        target = _read_link(repo, revision, candidate)
+        if target is None:
+            resolved.append(part)
+            continue
+        steps += 1
+        if steps > 64:
+            raise GuardError(f"{path} has too many chained symlinks to resolve safely")
+        if candidate in visited:
+            raise GuardError(f"{path} resolves through a symlink loop at {candidate}")
+        visited.add(candidate)
+        parts = target.split("/") + parts
+    return "/".join(resolved)
+
+
+def resolve_symlink_chain(repo: Path, revision: str, path: str) -> str:
+    """Resolve the link at ``path`` through all of its components."""
+
+    target = _read_link(repo, revision, path)
+    if target is None:
+        return resolve_path(repo, revision, path)
+    combined = posixpath.normpath(posixpath.join(posixpath.dirname(path), target))
+    if combined in {"", ".", ".."} or combined.startswith("../") or combined.startswith("/"):
+        raise GuardError(f"symlink {path} escapes the repository root: {target!r}")
+    return resolve_path(repo, revision, combined)
 
 
 def symlink_errors(
@@ -620,43 +813,68 @@ def symlink_errors(
     base: str,
     head: str,
     changes: list[Change],
-    claims: dict[str, OwnershipClaim],
+    ownership: OwnershipMap,
     declared: str | None,
 ) -> list[str]:
-    """Reject symlinks in added or modified paths that escape or borrow bytes.
+    """Reject symlinks that escape or borrow bytes through any component.
 
-    Deletions are allowed: removing a previously unsafe link is a repair.  A
-    link that stays inside the repository is still checked against the ownership
-    map, so a unit's own namespace cannot point at another unit's bytes.
+    Deletions are allowed: removing a previously unsafe link is a repair.  Every
+    proper prefix of a changed path is resolved, so a symlinked intermediate
+    component cannot hide an escape.  A link that stays inside the repository is
+    still checked against every owner in the map.
     """
 
     errors: list[str] = []
+    for change in changes:
+        revision = base if change.status == "D" else head
+        parts = change.path.split("/")
+        for index in range(1, len(parts)):
+            prefix = "/".join(parts[:index])
+            try:
+                resolved = resolve_path(repo, revision, prefix)
+            except GuardError as exc:
+                errors.append(str(exc))
+                continue
+            if resolved != prefix:
+                errors.append(
+                    f"changed path {change.path} traverses symlink {prefix} -> "
+                    f"{resolved}; a symlinked intermediate component is ambiguous "
+                    "and must be removed before the change can be reviewed"
+                )
+
     for change in changes:
         if change.status == "D":
             continue
         entry = _tree_entry(repo, head, change.path)
         if entry is None:
             raise GuardError(f"{change.path}: changed path is absent at head")
-        mode, sha = entry
+        mode, _sha = entry
         if mode != "120000":
             continue
-        data = git(repo, "cat-file", "blob", sha)
         try:
-            target = data.decode("utf-8", "strict")
-        except UnicodeDecodeError as exc:
-            raise GuardError(f"symlink {change.path} has a non-UTF-8 target") from exc
-        if "\0" in target or "\n" in target or "\r" in target:
-            raise GuardError(f"symlink {change.path} has a control character in its target")
-        try:
-            resolved = _resolve_symlink_chain(repo, head, change.path, target)
+            resolved = resolve_symlink_chain(repo, head, change.path)
         except GuardError as exc:
             errors.append(str(exc))
             continue
-        claim = claims.get(resolved)
-        if claim is not None and claim.unit != declared:
+        claims = ownership.claims.get(resolved, ())
+        if not claims:
+            # A directory target can expose files owned by another unit even when
+            # the directory itself has no row in the map.
+            prefix = resolved.rstrip("/") + "/"
+            subtree = [
+                claim
+                for path, rows in ownership.claims.items()
+                if path.startswith(prefix)
+                for claim in rows
+            ]
+            claims = tuple(subtree)
+        if claims and not claim_is_allowed(claims, declared):
+            owners = ", ".join(
+                f"{claim.unit} ({claim.evidence})" for claim in claims
+            )
             errors.append(
-                f"symlink {change.path} points at {resolved}, owned by unit "
-                f"{claim.unit} ({claim.evidence}); the PR declares {declared or '(none)'}"
+                f"symlink {change.path} points at {resolved}, owned by {owners}; "
+                f"the PR declares {declared or '(none)'}"
             )
     return errors
 
@@ -887,13 +1105,27 @@ def _is_ancestor(repo: Path, ancestor: str, descendant: str) -> bool:
     return True
 
 
+def _pr_commits(repo: Path, merge_base: str, head: str) -> set[str]:
+    """Commits on the pull request's own first-parent spine after the fork.
+
+    Main commits merged into the branch sit on a second-parent chain and are
+    deliberately excluded, as is every commit reachable from the merge base.
+    """
+
+    output = git(repo, "rev-list", "--first-parent", head, f"^{merge_base}")
+    return {
+        line.strip()
+        for line in output.decode("ascii", "strict").splitlines()
+        if re.fullmatch(r"[0-9a-f]{40}", line.strip())
+    }
+
+
 def validate_fragment_evidence(
     evidence: list[str],
     *,
     unit: str,
     pr_number: int,
     repo: Path,
-    base: str,
     head: str,
     merge_base: str,
     repo_slug: str | None,
@@ -929,6 +1161,7 @@ def validate_fragment_evidence(
         )
     valid_heads: list[str] = []
     saw_merge_base = False
+    pr_commits = _pr_commits(repo, merge_base, head)
     for candidate in head_candidates:
         try:
             resolved = resolve_commit(repo, candidate, "fragment head")
@@ -937,17 +1170,9 @@ def validate_fragment_evidence(
         if resolved == merge_base:
             saw_merge_base = True
             continue
-        produced = resolved == head
+        produced = resolved in pr_commits
         if not produced and merge_commit is not None and resolved == merge_commit:
             produced = True
-        if not produced:
-            # A PR-side commit is reachable from the head but not from the base
-            # tip.  Reachability from the merge base alone would accept a
-            # base-branch commit merely merged into the branch.
-            produced = (
-                _is_ancestor(repo, resolved, head)
-                and not _is_ancestor(repo, resolved, base)
-            )
         if produced:
             valid_heads.append(resolved)
     if not valid_heads:
