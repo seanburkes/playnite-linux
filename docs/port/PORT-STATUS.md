@@ -66,8 +66,8 @@
 
 | Metric | Value |
 | --- | ---: |
-| Ledger rows | 233 |
-| Ledger fragments | 6 |
+| Ledger rows | 234 |
+| Ledger fragments | 7 |
 
 ## Units
 
@@ -140,7 +140,7 @@
 | p4-exit | W4 | repo | Phase 4 exit gate and corrected-head evidence | done | `units/p4-exit.*`; 2 ledger rows |
 | p4-tla | W4 | data | Library import crash-safety formal model | done | `units/p4-tla.*`; 4 ledger rows |
 | p5-001 | W5 | steam | VDF/ACF parsers | in-progress | `units/p5-001.*`; 2 ledger rows |
-| p5-002 | W5 | steam | Steam root/library discovery | in-progress | `units/p5-002.*`; 1 ledger rows |
+| p5-002 | W5 | steam | Steam root/library discovery | in-progress | `units/p5-002.*`; 2 ledger rows |
 | p5-003 | W5 | steam | Artwork/metadata cache | todo | `units/p5-003.*`; 0 ledger rows |
 | p5-004 | W5 | platform | Process launcher/session tracker | todo | `units/p5-004.*`; 0 ledger rows |
 | p5-005 | W5 | platform | XDG/single-instance/protocol | todo | `units/p5-005.*`; 0 ledger rows |
