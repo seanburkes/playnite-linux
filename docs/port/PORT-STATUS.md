@@ -59,14 +59,15 @@
 | --- | ---: |
 | deferred | 1 |
 | done | 65 |
-| todo | 32 |
+| in-progress | 1 |
+| todo | 31 |
 
 ## Ledger
 
 | Metric | Value |
 | --- | ---: |
-| Ledger rows | 230 |
-| Ledger fragments | 3 |
+| Ledger rows | 231 |
+| Ledger fragments | 4 |
 
 ## Units
 
@@ -138,7 +139,7 @@
 | p4-006 | W4 | data | Skip report (non-Steam) | done | `units/p4-006.*`; 1 ledger rows |
 | p4-exit | W4 | repo | Phase 4 exit gate and corrected-head evidence | done | `units/p4-exit.*`; 2 ledger rows |
 | p4-tla | W4 | data | Library import crash-safety formal model | done | `units/p4-tla.*`; 4 ledger rows |
-| p5-001 | W5 | steam | VDF/ACF parsers | todo | `units/p5-001.*`; 0 ledger rows |
+| p5-001 | W5 | steam | VDF/ACF parsers | in-progress | `units/p5-001.*`; 1 ledger rows |
 | p5-002 | W5 | steam | Steam root/library discovery | todo | `units/p5-002.*`; 0 ledger rows |
 | p5-003 | W5 | steam | Artwork/metadata cache | todo | `units/p5-003.*`; 0 ledger rows |
 | p5-004 | W5 | platform | Process launcher/session tracker | todo | `units/p5-004.*`; 0 ledger rows |
