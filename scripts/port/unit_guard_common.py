@@ -15,19 +15,40 @@ A unit owns exactly these paths (the contract enforced by
 
 Everything else is shared product, process, generated, or oracle material and
 is outside the unit evidence namespace.  Aggregates (``docs/port/queue.tsv``,
-``docs/port/ledger.tsv``), ``tests/baseline.json`` and generated status content
-are never unit evidence and are never PR-editable.
+``docs/port/ledger.tsv``), ``tests/baseline.json``, generated status content and
+``docs/port/units/ownership.paths`` are never unit evidence and are never
+PR-editable.
+
+Path ownership map
+------------------
+``docs/port/units/ownership.paths`` is a bot-generated TSV with the exact header
+``path<TAB>unit<TAB>commit<TAB>pull`` and one row per ``(path, owner)``.  It
+extends ownership beyond evidence to product source, shared tests, non-prefixed
+fixtures and tools.  A path may have several owners; any listed owner may change
+it and a non-owner fails.  ``*`` marks explicitly shared material when a commit's
+attribution is uncertain.  The guard reads the map from the pull request's base
+commit, never its head, validates header, units, ordering, commit ancestry and
+pull agreement, and fails with ``ownership map unavailable`` when the map is
+missing, empty, forged or stale.  Missing/unowned product paths still require a
+unit declaration and evidence; a path the map does not list stays shared only for
+the purpose of ownership, not for the declaration requirement.
 
 Ledger fragments
 ----------------
 ``docs/port/units/<unit>.ledger.d/<pr>-<slug>.tsv`` is a ledger shard: the
 normal ledger header followed by one or more rows whose ``unit`` column is the
-owning unit.  Its evidence column must name the pull request, the validated
-head commit and the real linux-ci run whose result it relies on.  The guard
-accepts the historical free-text forms (``PR #97``, ``pull/97``,
-``head 2e09983...`` and ``actions/runs/43964833995``); the head may be an
-ancestor of the pull-request head because a fragment cannot name its own commit
-before that commit exists.
+owning unit.  Its evidence column must name the pull request, a head commit
+produced by this pull request and the real linux-ci run whose result it relies
+on.  The guard accepts the historical free-text forms (``PR #97``, ``pull/97``,
+``head 2e09983...`` and ``actions/runs/43964833995``).  The cited head must be on
+the pull request's own first-parent spine after the merge base (or the merge
+commit, when supplied); an unrelated ancestor or a main commit merged after the
+branch point is rejected rather than treated as evidence.
+
+Diff paths are repository-relative with no traversal component.  Renames are
+expanded to an explicit delete plus add, deletions are checked like any other
+change, and every intermediate component of a changed path or symlink target is
+resolved; an escape, loop, symlinked ancestor or foreign-owned target fails.
 
 This module deliberately knows nothing about the aggregate generator.  It uses
 git plumbing only: no checkout, fetch, reset, or write occurs in the worktree.
@@ -37,6 +58,7 @@ from __future__ import annotations
 
 import json
 import os
+import posixpath
 import re
 import subprocess
 import urllib.error
@@ -65,17 +87,31 @@ LEDGER_FRAGMENT = re.compile(
 FRAGMENT_NAME = re.compile(r"^([1-9]\d*)-([a-z0-9][a-z0-9-]*)\.tsv$")
 
 UNITS_DIR = "docs/port/units/"
-UNITS_NON_EVIDENCE = frozenset({"README.md", "removed.tsv", "ledger-corrections.tsv"})
-QUEUE_SUFFIX = ".queue.tsv"
-# Non-prefixed paths can still be owned by a unit when its queue row names them
-# in the oracle/test columns. Only these roots are considered: docs/ and legacy/
-# are shared or frozen, and a token there would over-claim sibling files.
-DECLARED_OWNERSHIP_ROOTS = ("tests/golden/", "tests/fixtures/", "tools/")
-FILE_SUFFIXES = (
-    ".cs", ".csproj", ".json", ".md", ".props", ".txt", ".yaml", ".yml",
-    ".sh", ".py", ".ini", ".toml", ".xml",
+UNITS_NON_EVIDENCE = frozenset(
+    {"README.md", "removed.tsv", "ledger-corrections.tsv", "ownership.paths"}
 )
 
+# Bot-generated path ownership map.  It lives beside the unit shards so a
+# reviewer sees it with the evidence, but it is never PR-editable and is read
+# from the pull request's base commit, never from its head.
+OWNERSHIP_MAP = "docs/port/units/ownership.paths"
+OWNERSHIP_HEADER = "path\tunit\tcommit\tpull"
+OWNERSHIP_ROOTS = ("src/", "tests/", "tools/")
+OWNERSHIP_EXACT_EXCLUDES = frozenset({"tests/baseline.json"})
+OWNERSHIP_SUFFIX_EXCLUDES = (
+    ".csproj",
+    ".slnx",
+    ".sln",
+    ".props",
+    ".targets",
+    ".lock.json",
+    ".editorconfig",
+    ".gitignore",
+    ".gitattributes",
+)
+OWNERSHIP_NAME_EXCLUDES = frozenset({"global.json", "nuget.config", "NuGet.config"})
+OWNERSHIP_PULL = re.compile(r"^pull/([1-9][0-9]*)$")
+SHARED_OWNER = "*"
 
 
 class GuardError(Exception):
@@ -86,6 +122,36 @@ class GuardError(Exception):
 class Change:
     status: str
     path: str
+
+
+@dataclass(frozen=True)
+class OwnershipClaim:
+    path: str
+    unit: str
+    commit: str
+    pull: str
+
+    @property
+    def evidence(self) -> str:
+        if self.pull == "-":
+            return f"commit {self.commit}"
+        return f"{self.pull} at commit {self.commit}"
+
+    @property
+    def shared(self) -> bool:
+        return self.unit == SHARED_OWNER
+
+
+@dataclass(frozen=True)
+class OwnershipMap:
+    """The validated base map plus why protection may be unavailable."""
+
+    claims: dict[str, tuple[OwnershipClaim, ...]]
+    available: bool
+    reason: str | None
+
+    def owners(self, path: str) -> tuple[OwnershipClaim, ...]:
+        return self.claims.get(path, ())
 
 
 def git(repo: Path, *args: str) -> bytes:
@@ -151,13 +217,42 @@ def merge_base(repo: Path, base: str, head: str) -> str:
     return shas[0]
 
 
+def path_error(path: str) -> str | None:
+    """Return why a diff path is unsafe, or ``None`` when it is a plain path.
+
+    A path is repository-relative, has no traversal or empty component, and is
+    not absolute in POSIX, Windows-drive, or UNC spelling.  Rejecting ``..``
+    explicitly matters most for the offline diff-file mode, where the entries
+    are caller-supplied rather than produced by git.
+    """
+
+    if not path:
+        return "the path is empty"
+    if "\0" in path or "\n" in path or "\r" in path:
+        return "the path contains a control character"
+    if path.startswith("/") or path.startswith("\\") or re.match(r"^[A-Za-z]:", path):
+        return "the path is absolute"
+    parts = path.split("/")
+    if any(part in {"", ".", ".."} for part in parts):
+        return "the path contains an empty, '.', or '..' component (path traversal)"
+    return None
+
+
+def _checked_path(path: str, source: str) -> str:
+    error = path_error(path)
+    if error:
+        raise GuardError(f"invalid path in {source}: {path!r}: {error}")
+    return path
+
+
 def changed_paths(repo: Path, base: str, head: str) -> list[Change]:
     """Return name-status changes between two commits.
 
-    Rename detection is deliberately disabled: a rename is a delete plus an add,
-    so both the old and new unit namespaces are charged.  A rename status in the
-    output therefore means git was not asked as expected and the diff is
-    ambiguous.
+    Rename detection is deliberately disabled: a rename is an explicit delete
+    of the old path plus an add of the new path, so both the old and new unit
+    namespaces are charged instead of a path-only text match.  The parser still
+    understands a scored ``R``/``C`` record and turns it into the same delete
+    plus add, so a git configuration change cannot hide half a rename.
     """
 
     output = git(
@@ -175,26 +270,42 @@ def changed_paths(repo: Path, base: str, head: str) -> list[Change]:
     parts = output.split(b"\0")
     if parts and parts[-1] == b"":
         parts.pop()
-    if len(parts) % 2 != 0:
-        raise GuardError("git diff returned an incomplete NUL-separated name-status record")
     changes: list[Change] = []
-    for index in range(0, len(parts), 2):
+    index = 0
+    while index < len(parts):
         try:
             status = parts[index].decode("ascii", "strict")
-            path = parts[index + 1].decode("utf-8", "strict")
         except UnicodeDecodeError as exc:
-            raise GuardError("git diff contains a non-UTF-8 path; refusing an ambiguous diff") from exc
-        if status not in {"A", "C", "D", "M", "R", "T", "U", "X", "B"} or status in {"R", "C"}:
-            raise GuardError(f"unsupported or ambiguous git diff status {status!r} for {path!r}")
-        if (
-            not path
-            or path.startswith("/")
-            or "\0" in path
-            or "\n" in path
-            or "\r" in path
-        ):
-            raise GuardError(f"invalid path in git diff: {path!r}")
-        changes.append(Change(status, path))
+            raise GuardError("git diff contains a non-ASCII status; refusing an ambiguous diff") from exc
+        index += 1
+        if status[0] in {"R", "C"} and re.fullmatch(r"[RC][0-9]*", status):
+            pass
+        elif status not in {"A", "D", "M", "T", "U", "X", "B"}:
+            raise GuardError(f"unsupported or ambiguous git diff status {status!r}")
+        if status[0] in {"R", "C"}:
+            if index + 2 > len(parts):
+                raise GuardError("git diff returned an incomplete rename record")
+            try:
+                old = parts[index].decode("utf-8", "strict")
+                new = parts[index + 1].decode("utf-8", "strict")
+            except UnicodeDecodeError as exc:
+                raise GuardError(
+                    "git diff contains a non-UTF-8 path; refusing an ambiguous diff"
+                ) from exc
+            index += 2
+            changes.append(Change("D", _checked_path(old, "git diff")))
+            changes.append(Change("A", _checked_path(new, "git diff")))
+            continue
+        if index >= len(parts):
+            raise GuardError("git diff returned an incomplete name-status record")
+        try:
+            path = parts[index].decode("utf-8", "strict")
+        except UnicodeDecodeError as exc:
+            raise GuardError(
+                "git diff contains a non-UTF-8 path; refusing an ambiguous diff"
+            ) from exc
+        index += 1
+        changes.append(Change(status, _checked_path(path, "git diff")))
     changes.sort(key=lambda item: item.path)
     if len({item.path for item in changes}) != len(changes):
         raise GuardError("git diff lists the same path more than once; refusing an ambiguous diff")
@@ -202,22 +313,44 @@ def changed_paths(repo: Path, base: str, head: str) -> list[Change]:
 
 
 def paths_from_diff_file(path: Path) -> list[Change]:
-    """Read a simple one-path-per-line diff for offline ownership checks."""
+    """Read a name-status or one-path-per-line diff for offline checks.
+
+    Accepted records are ``<path>`` (treated as modified), ``<status><TAB><path>``
+    and ``Rnnn<TAB><old><TAB><new>``.  Renames are expanded to an explicit delete
+    plus add, exactly as the git path does.
+    """
 
     try:
         text = path.read_text(encoding="utf-8")
     except (OSError, UnicodeDecodeError) as exc:
         raise GuardError(f"cannot read diff file {path}: {exc}") from exc
-    paths = text.splitlines()
-    if not paths:
+    lines = text.splitlines()
+    if not lines:
         raise GuardError(f"diff file {path} contains no paths")
-    if any(not item.strip() for item in paths):
-        raise GuardError(f"diff file {path} contains a blank path; refusing an ambiguous diff")
     result: list[Change] = []
-    for item in paths:
-        if item.startswith("/") or "\0" in item or "\n" in item or "\r" in item:
-            raise GuardError(f"invalid path in diff file {path}: {item!r}")
-        result.append(Change("M", item))
+    for line in lines:
+        if not line.strip():
+            raise GuardError(f"diff file {path} contains a blank path; refusing an ambiguous diff")
+        fields = line.split("\t")
+        if len(fields) == 1:
+            result.append(Change("M", _checked_path(fields[0], f"diff file {path}")))
+            continue
+        status = fields[0]
+        if status[0] in {"R", "C"} and re.fullmatch(r"[RC][0-9]*", status):
+            pass
+        elif status not in {"A", "D", "M", "T", "U", "X", "B"}:
+            raise GuardError(f"diff file {path} has an unsupported status {status!r}")
+        if status[0] in {"R", "C"}:
+            if len(fields) != 3:
+                raise GuardError(
+                    f"diff file {path} rename record needs status, old and new path"
+                )
+            result.append(Change("D", _checked_path(fields[1], f"diff file {path}")))
+            result.append(Change("A", _checked_path(fields[2], f"diff file {path}")))
+            continue
+        if len(fields) != 2:
+            raise GuardError(f"diff file {path} has a malformed record: {line!r}")
+        result.append(Change(status, _checked_path(fields[1], f"diff file {path}")))
     result.sort(key=lambda entry: entry.path)
     if len({entry.path for entry in result}) != len(result):
         raise GuardError(f"diff file {path} repeats a path; refusing an ambiguous diff")
@@ -280,88 +413,12 @@ def _one_unit(path: str, matches: list[str]) -> tuple[frozenset[str], str | None
     return frozenset(unique), None
 
 
-def _declared_prefix(token: str) -> str | None:
-    """Turn one oracle/test token into a path prefix under a unit-owned root."""
-    token = token.strip().strip("`'\"")
-    if not token:
-        return None
-    lowered = token.lower()
-    for prefix in ("golden:", "test:", "oracle:", "fixture:", "legacy:"):
-        if lowered.startswith(prefix):
-            token = token[len(prefix):].strip()
-            break
-    if not token.startswith(DECLARED_OWNERSHIP_ROOTS):
-        return None
-    token = token.rstrip(".,;")
-    if "{" in token:
-        token = token[: token.index("{")]
-    if "*" in token:
-        token = token[: token.index("*")]
-    token = token.rstrip("/")
-    if not token or token + "/" in DECLARED_OWNERSHIP_ROOTS:
-        return None
-    last = token.rsplit("/", 1)[-1]
-    if "." in last and last.lower().endswith(FILE_SUFFIXES):
-        parent = token.rsplit("/", 1)[0] if "/" in token else ""
-        return parent + "/" if parent else None
-    return token + "/"
-
-
-def declared_path_prefixes(repo: Path, revisions: list[str | None]) -> dict[str, set[str]]:
-    """Collect non-prefixed unit assets declared by each unit's queue row.
-
-    The queue row's ``oracle`` and ``test`` columns are the contract that names
-    unit-owned fixtures and tools whose paths do not carry the unit prefix. A
-    path that two units declare is left to ``_one_unit`` to fail as ambiguous.
-    """
-    declared: dict[str, set[str]] = {}
-    for revision in revisions:
-        if revision is None:
-            continue
-        try:
-            names = _tree_paths(repo, revision, "docs/port/units")
-        except GuardError:
-            continue
-        for name in names:
-            if not name.startswith(UNITS_DIR) or not name.endswith(QUEUE_SUFFIX):
-                continue
-            relative = name[len(UNITS_DIR):]
-            if "/" in relative:
-                continue
-            unit = relative[: -len(QUEUE_SUFFIX)]
-            if not UNIT_ID.fullmatch(unit):
-                continue
-            data = read_at(repo, revision, name)
-            if data is None:
-                continue
-            fields = parse_queue_shard(data, unit, name)
-            for column in ("oracle", "test"):
-                value = fields[QUEUE_COLUMNS.index(column)]
-                for token in re.split(r"[;\s]+", value):
-                    prefix = _declared_prefix(token)
-                    if prefix:
-                        declared.setdefault(unit, set()).add(prefix)
-    # A prefix two units claim is not an exclusive owner. Keep it shared rather
-    # than failing every unrelated PR that touches the tool or golden root.
-    owners: dict[str, set[str]] = {}
-    for unit, prefixes in declared.items():
-        for prefix in prefixes:
-            owners.setdefault(prefix, set()).add(unit)
-    return {
-        unit: {prefix for prefix in prefixes if len(owners[prefix]) == 1}
-        for unit, prefixes in declared.items()
-    }
-
-
-def attribute_path(path: str, units: set[str],
-                   declared: dict[str, set[str]] | None = None
-                   ) -> tuple[frozenset[str], str | None]:
+def attribute_path(path: str, units: set[str]) -> tuple[frozenset[str], str | None]:
     """Map one changed path to the unit namespace it belongs to.
 
     An unmatched path is shared/process material.  A path that could belong to
     more than one unit, or is an unrecognised entry under ``docs/port/units``,
-    is ambiguous and fails closed. A non-prefixed path named by exactly one
-    unit's queue oracle/test columns is attributed to that unit.
+    is ambiguous and fails closed.
     """
 
     if path.startswith(UNITS_DIR):
@@ -377,41 +434,53 @@ def attribute_path(path: str, units: set[str],
         return frozenset(), (
             f"unrecognised path under {UNITS_DIR}: {path}; "
             "the units directory accepts only README.md, removed.tsv, "
-            "ledger-corrections.tsv, <unit>.queue.tsv, <unit>.ledger.tsv and "
-            "<unit>.ledger.d/<pr>-<slug>.tsv"
+            "ledger-corrections.tsv, ownership.paths, <unit>.queue.tsv, "
+            "<unit>.ledger.tsv and <unit>.ledger.d/<pr>-<slug>.tsv"
         )
 
     if path.startswith("docs/port/"):
         relative = path[len("docs/port/"):]
+        first = relative.split("/", 1)[0]
         if "/" not in relative and relative.endswith(".md"):
-            return _one_unit(path, [unit for unit in units if relative.startswith(f"{unit}-")])
-        return frozenset(), None
+            return _one_unit(
+                path,
+                [unit for unit in units
+                 if relative.startswith(f"{unit}-")
+                 or first == unit],
+            )
+        matches = [
+            unit for unit in units
+            if first == unit or first.startswith(f"{unit}-")
+        ]
+        return _one_unit(path, matches)
 
-    matches: list[str] = []
     for prefix in ("tests/golden/", "tests/fixtures/"):
         if path.startswith(prefix):
             relative = path[len(prefix):]
-            matches.extend(unit for unit in units if relative.startswith(f"{unit}-"))
+            first = relative.split("/", 1)[0]
+            return _one_unit(
+                path,
+                [unit for unit in units
+                 if relative.startswith(f"{unit}-")
+                 or first == unit
+                 or first.startswith(f"{unit}-")],
+            )
+
     if path.startswith("tools/"):
         relative = path[len("tools/"):]
+        matches = []
         for unit in units:
             if relative == unit:
                 matches.append(unit)
             elif relative.startswith(unit) and relative[len(unit)] in "-._/":
                 matches.append(unit)
-    if not matches and declared:
-        for unit, prefixes in declared.items():
-            if any(path.startswith(prefix) for prefix in prefixes):
-                matches.append(unit)
-    if path.startswith(DECLARED_OWNERSHIP_ROOTS):
         return _one_unit(path, matches)
 
     return frozenset(), None
 
 
 def touched_units(
-    changes: list[Change], units: set[str], expected: str | None,
-    declared: dict[str, set[str]] | None = None,
+    changes: list[Change], units: set[str], expected: str | None
 ) -> dict[str, list[str]]:
     """Group changed paths by unit namespace, rejecting ambiguous paths."""
 
@@ -421,7 +490,7 @@ def touched_units(
     touched: dict[str, list[str]] = {}
     errors: list[str] = []
     for change in changes:
-        attributed, error = attribute_path(change.path, known, declared)
+        attributed, error = attribute_path(change.path, known)
         if error:
             errors.append(error)
             continue
@@ -430,6 +499,482 @@ def touched_units(
     if errors:
         raise GuardError("\n".join(errors))
     return {unit: sorted(paths) for unit, paths in sorted(touched.items())}
+
+
+def bot_owned_errors(
+    changes: list[Change],
+    *,
+    base_has_map: bool | None = None,
+    product_changed: bool = False,
+) -> list[str]:
+    """Reject PR edits to the generated ownership map, even to identical bytes.
+
+    The one bootstrap exception is the first change that adds the map when the
+    base does not have it and the PR touches no product/test/tool path.  That
+    lets the seeding tooling PR commit the generated map; a product PR cannot
+    use it to forge ownership, and every later edit is bot-owned.
+    """
+
+    errors: list[str] = []
+    for change in changes:
+        if change.path != OWNERSHIP_MAP:
+            continue
+        adding_first_map = (
+            change.status == "A" and base_has_map is False and not product_changed
+        )
+        if adding_first_map:
+            continue
+        errors.append(
+            f"{change.path} is bot-owned and generated on main; a pull request "
+            "must not add, edit, rename or delete the ownership map"
+        )
+    return errors
+
+
+def ownership_candidate(path: str, units: set[str]) -> bool:
+    """True when a path is product/test/tool material that needs an owner.
+
+    Unit evidence namespaces stay in the existing attribution check; generated
+    files and shared build metadata stay outside.  The file name only selects
+    the roots the ownership map covers; it never decides an owner.
+    """
+
+    if not path.startswith(OWNERSHIP_ROOTS):
+        return False
+    if path in OWNERSHIP_EXACT_EXCLUDES:
+        return False
+    if any(path.endswith(suffix) for suffix in OWNERSHIP_SUFFIX_EXCLUDES):
+        return False
+    if Path(path).name in OWNERSHIP_NAME_EXCLUDES:
+        return False
+    if "/bin/" in path or "/obj/" in path:
+        return False
+    for prefix in ("tests/golden/", "tests/fixtures/"):
+        if path.startswith(prefix):
+            relative = path[len(prefix):]
+            first = relative.split("/", 1)[0]
+            if any(
+                relative.startswith(f"{unit}-")
+                or first == unit
+                or first.startswith(f"{unit}-")
+                for unit in units
+            ):
+                return False
+    if path.startswith("tools/"):
+        relative = path[len("tools/"):]
+        for unit in units:
+            if relative == unit or (
+                relative.startswith(unit) and relative[len(unit)] in "-._/"
+            ):
+                return False
+    return True
+
+
+def product_paths(changes: list[Change], units: set[str]) -> list[str]:
+    return [
+        change.path
+        for change in changes
+        if ownership_candidate(change.path, units)
+    ]
+
+
+def ownership_map_exists(repo: Path, revision: str) -> bool:
+    return read_at(repo, revision, OWNERSHIP_MAP) is not None
+
+
+def read_ownership_map(
+    repo: Path, revision: str, units: set[str] | None = None
+) -> OwnershipMap:
+    """Read and validate the bot-generated map at a base revision.
+
+    The map is deliberately read from the pull request's base, never from its
+    head: a branch cannot manufacture ownership for itself.  A missing or empty
+    map is reported as unavailable rather than treated as permission, so product
+    changes in that state still require an explicit unit declaration and
+    evidence.  A malformed row fails closed with ``ownership map unavailable``.
+    """
+
+    data = read_at(repo, revision, OWNERSHIP_MAP)
+    if data is None:
+        return OwnershipMap({}, False, f"{OWNERSHIP_MAP} is missing at {revision}")
+    try:
+        text = data.decode("utf-8", "strict")
+    except UnicodeDecodeError as exc:
+        raise GuardError(f"ownership map unavailable: {OWNERSHIP_MAP} is not UTF-8") from exc
+    lines = text.split("\n")
+    if lines and lines[-1] == "":
+        lines.pop()
+    if not lines:
+        raise GuardError(f"ownership map unavailable: {OWNERSHIP_MAP} is empty")
+    if lines[0] != OWNERSHIP_HEADER:
+        raise GuardError(
+            f"ownership map unavailable: {OWNERSHIP_MAP}:1: expected the exact "
+            f"ownership header {OWNERSHIP_HEADER!r}"
+        )
+    claims: dict[str, list[OwnershipClaim]] = {}
+    previous: tuple[str, str] | None = None
+    ancestors = {
+        line.strip()
+        for line in git(repo, "rev-list", revision).decode("ascii", "strict").splitlines()
+        if line.strip()
+    }
+    subjects: dict[str, str] = {}
+    for offset, line in enumerate(lines[1:], start=2):
+        if not line:
+            raise GuardError(f"ownership map unavailable: {OWNERSHIP_MAP}:{offset}: blank row")
+        fields = line.split("\t")
+        if len(fields) != 4:
+            raise GuardError(
+                f"ownership map unavailable: {OWNERSHIP_MAP}:{offset}: expected 4 "
+                f"tab-separated fields, got {len(fields)}"
+            )
+        path, unit, commit, pull = fields
+        error = path_error(path)
+        if error:
+            raise GuardError(
+                f"ownership map unavailable: {OWNERSHIP_MAP}:{offset}: {path!r}: {error}"
+            )
+        if unit != SHARED_OWNER and not UNIT_ID.fullmatch(unit):
+            raise GuardError(
+                f"ownership map unavailable: {OWNERSHIP_MAP}:{offset}: invalid unit "
+                f"id {unit!r}"
+            )
+        if units is not None and unit != SHARED_OWNER and unit not in units:
+            raise GuardError(
+                f"ownership map unavailable: {OWNERSHIP_MAP}:{offset}: unknown unit "
+                f"{unit!r}"
+            )
+        if not re.fullmatch(r"[0-9a-f]{40}", commit):
+            raise GuardError(
+                f"ownership map unavailable: {OWNERSHIP_MAP}:{offset}: commit must "
+                f"be a full 40-hex id, got {commit!r}"
+            )
+        if commit not in ancestors:
+            raise GuardError(
+                f"ownership map unavailable: {OWNERSHIP_MAP}:{offset}: commit "
+                f"{commit} is not an ancestor of the map revision {revision}; "
+                "refusing a forged or stale base map"
+            )
+        if pull != "-" and not OWNERSHIP_PULL.fullmatch(pull):
+            raise GuardError(
+                f"ownership map unavailable: {OWNERSHIP_MAP}:{offset}: pull must be "
+                f"'pull/<number>' or '-', got {pull!r}"
+            )
+        if pull != "-":
+            wanted = int(pull[len("pull/"):])
+            if commit not in subjects:
+                subjects[commit] = git(
+                    repo, "log", "-1", "--format=%s", commit
+                ).decode("utf-8", "replace")
+            subject = subjects[commit]
+            recorded = re.search(r"\(#([1-9][0-9]*)\)", subject)
+            if recorded is None or int(recorded.group(1)) != wanted:
+                raise GuardError(
+                    f"ownership map unavailable: {OWNERSHIP_MAP}:{offset}: commit "
+                    f"{commit} does not agree with recorded {pull} ({subject!r})"
+                )
+        key = (path, unit)
+        if previous is not None and key < previous:
+            raise GuardError(
+                f"ownership map unavailable: {OWNERSHIP_MAP}:{offset}: rows must be "
+                f"sorted by path then unit; {key!r} follows {previous!r}"
+            )
+        previous = key
+        if any(existing.unit == unit for existing in claims.get(path, ())):
+            raise GuardError(
+                f"ownership map unavailable: {OWNERSHIP_MAP}:{offset}: duplicate "
+                f"owner {unit!r} for {path}; refusing an ambiguous base map"
+            )
+        claims.setdefault(path, []).append(OwnershipClaim(path, unit, commit, pull))
+    if not claims:
+        return OwnershipMap({}, False, f"{OWNERSHIP_MAP} has no rows at {revision}")
+    return OwnershipMap(
+        {path: tuple(sorted(rows, key=lambda claim: claim.unit))
+         for path, rows in claims.items()},
+        True,
+        None,
+    )
+
+
+def first_map_errors(
+    repo: Path, head: str, changes: list[Change], base_has_map: bool | None
+) -> list[str]:
+    """A first map must equal a deterministic regeneration of the head history."""
+
+    adding = [
+        change for change in changes
+        if change.path == OWNERSHIP_MAP and change.status == "A"
+    ]
+    if base_has_map is not False or not adding:
+        return []
+    try:
+        import build_port_index  # local import avoids a cycle at module load
+
+        units = repo / "docs" / "port" / "units"
+        index = build_port_index.build_index(units)
+        expected = build_port_index.render_ownership_map(repo, units, index)
+    except Exception as exc:  # fail closed on any generator error
+        raise GuardError(
+            f"ownership map unavailable: cannot regenerate the first map: {exc}"
+        ) from exc
+    actual = read_at(repo, head, OWNERSHIP_MAP)
+    if actual != expected:
+        raise GuardError(
+            "ownership map unavailable: the first map does not match a "
+            "deterministic regeneration of the head history; a process PR may "
+            "seed only the generated map, not arbitrary ownership"
+        )
+    return []
+
+
+def ownership_hits(
+    changes: list[Change], ownership: OwnershipMap
+) -> dict[str, tuple[OwnershipClaim, ...]]:
+    """Map each changed path that the base map attributes to all of its owners."""
+
+    return {
+        change.path: ownership.claims[change.path]
+        for change in changes
+        if change.path in ownership.claims
+    }
+
+
+def claim_is_allowed(claims: tuple[OwnershipClaim, ...], unit: str | None) -> bool:
+    if not claims:
+        return True
+    if unit is None:
+        return False
+    return any(claim.shared or claim.unit == unit for claim in claims)
+
+
+def claim_owners(claims: tuple[OwnershipClaim, ...]) -> str:
+    return ", ".join(claim.unit for claim in claims)
+
+
+def _tree_entry(repo: Path, revision: str, path: str) -> tuple[str, str] | None:
+    output = git(repo, "--literal-pathspecs", "ls-tree", "-z", revision, "--", path)
+    entries = [item for item in output.split(b"\0") if item]
+    if not entries:
+        return None
+    if len(entries) != 1:
+        raise GuardError(f"{revision}:{path}: git returned more than one tree entry")
+    try:
+        header, name = entries[0].split(b"\t", 1)
+        mode, kind, sha = header.decode("ascii", "strict").split(" ")
+        decoded = name.decode("utf-8", "strict")
+    except (ValueError, UnicodeDecodeError) as exc:
+        raise GuardError(f"{revision}:{path}: malformed git tree entry") from exc
+    if decoded != path:
+        raise GuardError(f"{revision}:{path}: git returned tree entry {decoded!r}")
+    return mode, sha
+
+
+def _read_link(repo: Path, revision: str, path: str) -> str | None:
+    entry = _tree_entry(repo, revision, path)
+    if entry is None or entry[0] != "120000":
+        return None
+    data = git(repo, "cat-file", "blob", entry[1])
+    try:
+        target = data.decode("utf-8", "strict")
+    except UnicodeDecodeError as exc:
+        raise GuardError(f"symlink {path} has a non-UTF-8 target") from exc
+    if not target:
+        raise GuardError(f"symlink {path} has an empty target")
+    if "\0" in target or "\n" in target or "\r" in target:
+        raise GuardError(f"symlink {path} has a control character in its target")
+    if target.startswith("/") or target.startswith("\\") or re.match(r"^[A-Za-z]:", target):
+        raise GuardError(f"symlink {path} points outside the repository: {target!r}")
+    return target
+
+
+def resolve_path(repo: Path, revision: str, path: str) -> str:
+    """Resolve every symlink component of a path and reject escapes or loops.
+
+    The returned path is repository-relative.  A component that does not exist
+    at ``revision`` is kept as written, so a new path can be checked before it is
+    committed.  Intermediate components are resolved even when the final
+    component is an ordinary file.
+    """
+
+    error = path_error(path)
+    if error:
+        raise GuardError(f"{path!r}: {error}")
+    parts = path.split("/")
+    resolved: list[str] = []
+    visited: set[str] = set()
+    steps = 0
+    while parts:
+        part = parts.pop(0)
+        if part in {"", "."}:
+            continue
+        if part == "..":
+            if not resolved:
+                raise GuardError(f"{path} escapes the repository root")
+            resolved.pop()
+            continue
+        candidate = "/".join(resolved + [part])
+        target = _read_link(repo, revision, candidate)
+        if target is None:
+            resolved.append(part)
+            continue
+        steps += 1
+        if steps > 64:
+            raise GuardError(f"{path} has too many chained symlinks to resolve safely")
+        if candidate in visited:
+            raise GuardError(f"{path} resolves through a symlink loop at {candidate}")
+        visited.add(candidate)
+        parts = target.split("/") + parts
+    return "/".join(resolved)
+
+
+def resolve_symlink_chain(repo: Path, revision: str, path: str) -> str:
+    """Resolve the link at ``path`` through all of its components."""
+
+    target = _read_link(repo, revision, path)
+    if target is None:
+        return resolve_path(repo, revision, path)
+    combined = posixpath.normpath(posixpath.join(posixpath.dirname(path), target))
+    if combined in {"", ".", ".."} or combined.startswith("../") or combined.startswith("/"):
+        raise GuardError(f"symlink {path} escapes the repository root: {target!r}")
+    return resolve_path(repo, revision, combined)
+
+
+def symlink_errors(
+    repo: Path,
+    base: str,
+    head: str,
+    changes: list[Change],
+    ownership: OwnershipMap,
+    declared: str | None,
+) -> list[str]:
+    """Reject symlinks that escape or borrow bytes through any component.
+
+    Deletions are allowed: removing a previously unsafe link is a repair.  Every
+    proper prefix of a changed path is resolved, so a symlinked intermediate
+    component cannot hide an escape.  A link that stays inside the repository is
+    still checked against every owner in the map.
+    """
+
+    errors: list[str] = []
+    for change in changes:
+        revision = base if change.status == "D" else head
+        parts = change.path.split("/")
+        for index in range(1, len(parts)):
+            prefix = "/".join(parts[:index])
+            try:
+                resolved = resolve_path(repo, revision, prefix)
+            except GuardError as exc:
+                errors.append(str(exc))
+                continue
+            if resolved != prefix:
+                errors.append(
+                    f"changed path {change.path} traverses symlink {prefix} -> "
+                    f"{resolved}; a symlinked intermediate component is ambiguous "
+                    "and must be removed before the change can be reviewed"
+                )
+
+    for change in changes:
+        if change.status == "D":
+            continue
+        entry = _tree_entry(repo, head, change.path)
+        if entry is None:
+            raise GuardError(f"{change.path}: changed path is absent at head")
+        mode, _sha = entry
+        if mode != "120000":
+            continue
+        try:
+            resolved = resolve_symlink_chain(repo, head, change.path)
+        except GuardError as exc:
+            errors.append(str(exc))
+            continue
+        claims = ownership.claims.get(resolved, ())
+        if claims:
+            allowed = claim_is_allowed(claims, declared)
+        else:
+            # A directory target can expose files owned by another unit even when
+            # the directory itself has no row in the map.  Every claim in the
+            # subtree must allow the declaration; mixed ownership is refused.
+            prefix = resolved.rstrip("/") + "/"
+            subtree = [
+                claim
+                for path, rows in ownership.claims.items()
+                if path.startswith(prefix)
+                for claim in rows
+            ]
+            allowed = all(
+                claim_is_allowed((claim,), declared) for claim in subtree
+            ) if subtree else True
+            claims = tuple(subtree)
+        if not allowed:
+            owners = ", ".join(
+                f"{claim.unit} ({claim.evidence})" for claim in claims
+            )
+            errors.append(
+                f"symlink {change.path} points at {resolved}, owned by {owners}; "
+                f"the PR declares {declared or '(none)'}"
+            )
+    return errors
+
+
+def derive_marker_unit(repo: Path, head: str, units: set[str]) -> str | None:
+    """Return a ``Port-Unit: <unit>`` trailer from the pull request head commit."""
+
+    try:
+        message = git(repo, "log", "-1", "--format=%B", head).decode("utf-8", "strict")
+    except UnicodeDecodeError as exc:
+        raise GuardError("the pull request head commit message is not valid UTF-8") from exc
+    found: set[str] = set()
+    for line in message.splitlines():
+        match = re.fullmatch(r"(?i)port-unit\s*:\s*(\S+)\s*", line)
+        if not match:
+            continue
+        candidate = match.group(1)
+        if not UNIT_ID.fullmatch(candidate):
+            raise GuardError(
+                f"Port-Unit marker names invalid unit id {candidate!r}; "
+                "use lowercase letters, digits and hyphens"
+            )
+        if candidate not in units:
+            raise GuardError(
+                f"Port-Unit marker names unknown unit {candidate!r}; "
+                "add its queue shard or correct the marker"
+            )
+        found.add(candidate)
+    if len(found) > 1:
+        raise GuardError(
+            "the pull request names more than one unit in its Port-Unit markers: "
+            + ", ".join(sorted(found))
+        )
+    return next(iter(found), None)
+
+
+def declared_unit(
+    repo: Path,
+    *,
+    head: str,
+    units: set[str],
+    branch: str | None,
+    explicit: str | None,
+) -> str | None:
+    """Resolve the unit a pull request declares, failing on disagreement."""
+
+    if explicit is not None and not explicit:
+        raise GuardError("--unit must not be empty")
+    if explicit is not None and not UNIT_ID.fullmatch(explicit):
+        raise GuardError(f"--unit {explicit!r} is not a valid unit id")
+    branch_unit = derive_branch_unit(branch, units)
+    marker_unit = derive_marker_unit(repo, head, units)
+    named = [value for value in (explicit, branch_unit, marker_unit) if value is not None]
+    if len(set(named)) > 1:
+        raise GuardError(
+            "the pull request declares conflicting units: "
+            + ", ".join(sorted(set(named)))
+        )
+    if explicit and explicit not in units:
+        raise GuardError(
+            f"--unit {explicit!r} is not a known unit; add its queue shard first"
+        )
+    return named[0] if named else None
 
 
 def derive_branch_unit(branch: str | None, units: set[str]) -> str | None:
@@ -589,18 +1134,50 @@ def _run_references(text: str) -> list[tuple[str, str | None]]:
     return references
 
 
+def _is_ancestor(repo: Path, ancestor: str, descendant: str) -> bool:
+    try:
+        git(repo, "merge-base", "--is-ancestor", ancestor, descendant)
+    except GuardError:
+        return False
+    return True
+
+
+def _pr_commits(repo: Path, merge_base: str, base: str, head: str) -> set[str]:
+    """Commits on the pull request's own first-parent spine after the fork.
+
+    Main commits merged into the branch sit on a second-parent chain, and every
+    commit reachable from the merge base or the event base is excluded, so a
+    rebased or fast-forwarded branch cannot cite a main commit's real run.
+    """
+
+    output = git(repo, "rev-list", "--first-parent", head, f"^{merge_base}", f"^{base}")
+    return {
+        line.strip()
+        for line in output.decode("ascii", "strict").splitlines()
+        if re.fullmatch(r"[0-9a-f]{40}", line.strip())
+    }
+
+
 def validate_fragment_evidence(
     evidence: list[str],
     *,
     unit: str,
     pr_number: int,
     repo: Path,
+    base: str,
     head: str,
     merge_base: str,
     repo_slug: str | None,
     verify_ci: bool,
+    merge_commit: str | None = None,
 ) -> str:
-    """Check the fragment names this PR, a produced head commit, and its CI run."""
+    """Check the fragment names this PR, a commit it produced, and its CI run.
+
+    A cited head must be the pull request head, a commit on the pull request
+    side of the merge base, or the merge commit the fragment describes.  Any
+    other ancestor -- including an older commit from the base branch -- is an
+    unrelated run and cannot certify this change.
+    """
 
     text = "\n".join(evidence)
     prs = _pr_references(text)
@@ -622,27 +1199,34 @@ def validate_fragment_evidence(
             "expected a 40-hex commit id or 'head <sha>'"
         )
     valid_heads: list[str] = []
+    saw_merge_base = False
+    pr_commits = _pr_commits(repo, merge_base, base, head)
     for candidate in head_candidates:
         try:
             resolved = resolve_commit(repo, candidate, "fragment head")
         except GuardError:
             continue
-        try:
-            git(repo, "merge-base", "--is-ancestor", resolved, head)
-        except GuardError:
+        if resolved == merge_base:
+            saw_merge_base = True
             continue
-        valid_heads.append(resolved)
+        produced = resolved in pr_commits
+        if not produced and merge_commit is not None and resolved == merge_commit:
+            produced = True
+        if produced:
+            valid_heads.append(resolved)
     if not valid_heads:
+        if saw_merge_base:
+            raise GuardError(
+                f"fragment for {unit} names the merge base {merge_base} as its head; "
+                "the evidence must name a commit produced by this pull request"
+            )
         raise GuardError(
             f"fragment for {unit} names head {', '.join(head_candidates)}, "
-            f"which is not an ancestor of PR head {head}"
+            f"which is not the pull request head or a commit produced by this pull "
+            f"request (merge base {merge_base}); an unrelated ancestor's run cannot "
+            "certify this change"
         )
     claimed_head = valid_heads[0]
-    if claimed_head == merge_base:
-        raise GuardError(
-            f"fragment for {unit} names the merge base {merge_base} as its head; "
-            "the evidence must name a commit produced by this pull request"
-        )
 
     runs = _run_references(text)
     if not runs:

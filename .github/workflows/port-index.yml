@@ -121,14 +121,14 @@ jobs:
             python3 scripts/port/build_port_index.py build "${capture_args[@]}"
             python3 scripts/port/build_port_index.py check
 
-            if git diff --quiet -- docs/port/queue.tsv docs/port/ledger.tsv docs/port/PORT-STATUS.md tests/baseline.json; then
+            if git diff --quiet -- docs/port/queue.tsv docs/port/ledger.tsv docs/port/PORT-STATUS.md docs/port/units/ownership.paths tests/baseline.json; then
               echo "Aggregates already current; nothing to commit."
               exit 0
             fi
 
             git config user.name "github-actions[bot]"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add docs/port/queue.tsv docs/port/ledger.tsv docs/port/PORT-STATUS.md tests/baseline.json
+            git add docs/port/queue.tsv docs/port/ledger.tsv docs/port/PORT-STATUS.md docs/port/units/ownership.paths tests/baseline.json
             git commit -m "chore(port-index): regenerate aggregates from unit shards"
 
             # No force. A rejected push means main moved; retry once from the

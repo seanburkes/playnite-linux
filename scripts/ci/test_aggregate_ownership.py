@@ -278,6 +278,28 @@ def pre_baseline_repo(root):
 
 
 
+def map_bootstrap_repo(root):
+    """A fork point without ownership.paths and a newer main that has one."""
+    git(root, "init", "-q")
+    git(root, "config", "user.email", "aggregate-test@example.invalid")
+    git(root, "config", "user.name", "Aggregate Test")
+    (root / "scripts" / "port").mkdir(parents=True)
+    (root / "scripts" / "port" / "build_port_index.py").write_text(
+        base_port_tool())
+    write_shard(root, "p1-001")
+    build(root)
+    (root / "docs" / "port" / "units" / "ownership.paths").unlink()
+    base = commit(root, "base without the ownership map")
+    git(root, "branch", "-M", "main")
+    write_shard(root, "p-main")
+    build(root)
+    main_tip = commit(root, "main regenerates with the ownership map")
+    git(root, "checkout", "-q", "-b", "pr", base)
+    git(root, "checkout", main_tip, "--", "docs/port/PORT-STATUS.md")
+    commit(root, "carry current main status")
+    return base, main_tip
+
+
 class AggregateOwnershipTests(unittest.TestCase):
     def test_stale_pr_passes_after_unrelated_main_aggregate_regeneration(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -599,6 +621,34 @@ class AggregateOwnershipTests(unittest.TestCase):
             self.assertEqual(1, result.returncode)
             self.assertIn(f"::error::Cannot compute the aggregate merge base for {missing}",
                           result.stdout)
+
+    def test_first_map_may_be_seeded_by_a_non_product_pr(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary)
+            base, main_tip = map_bootstrap_repo(repo)
+            (repo / "docs" / "port" / "units" / "ownership.paths").write_text(
+                "path\tunit\tcommit\tpull\n")
+            commit(repo, "seed the first ownership map")
+            result = run_step(run_block(PLAN_GUARDS, "Port aggregates are generated on main"),
+                              repo, base, main_tip)
+            self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+            self.assertIn("shards are valid", result.stdout)
+
+    def test_first_map_seeding_with_a_product_change_fails(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary)
+            base, main_tip = map_bootstrap_repo(repo)
+            (repo / "docs" / "port" / "units" / "ownership.paths").write_text(
+                "path\tunit\tcommit\tpull\n")
+            product = repo / "src" / "App" / "Thing.cs"
+            product.parent.mkdir(parents=True)
+            product.write_text("// product\n")
+            commit(repo, "seed a map with a product change")
+            result = run_step(run_block(PLAN_GUARDS, "Port aggregates are generated on main"),
+                              repo, base, main_tip)
+            self.assertEqual(1, result.returncode)
+            self.assertIn("docs/port/units/ownership.paths", result.stderr)
+            self.assertIn("ownership map is generated on main", result.stderr)
 
     def test_stale_pr_shard_history_uses_merge_base(self):
         with tempfile.TemporaryDirectory() as temporary:

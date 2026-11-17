@@ -84,12 +84,23 @@ single writer on `main`; workers edit unit shards and never the aggregates thems
   when there are none).
 - `docs/port/units/removed.tsv` holds one `unit`/`reason`/`approved-by` row per deliberately
   retired unit.
+- `docs/port/units/ownership.paths` is the bot-generated map of the product source, shared
+  tests, non-prefixed fixtures and tools each unit introduced or changed. A path may list
+  several owners; `*` marks explicitly shared material and any declared unit may change it. The
+  unit guard reads the map from the pull request base, rejects a change to a path owned only by
+  other units, and fails closed with `ownership map unavailable` when the map is missing, empty
+  or fails validation. In that state any product/test/tool change fails, even for a declared
+  unit, because foreign ownership cannot be checked. New and unowned product paths still require
+  a unit declaration and a ledger fragment, and a queue or fragment change never infers a unit
+  from the queue. The one bootstrap change that adds the first map may do so only when it touches
+  no product/test/tool path, and the map must match a deterministic regeneration of head.
 - `docs/port/queue.tsv` and `docs/port/ledger.tsv` are generated from those shards by the
   parent-owned `port-index` workflow after merge. A pull request must not include either file
   in its diff, even with freshly generated content; CI rejects that change.
 
 A unit id is lowercase letters, digits, and single hyphens. The units directory is enumerated
-strictly: `README.md`, `removed.tsv`, and correctly named shards are the only accepted entries.
+strictly: `README.md`, `removed.tsv`, `ownership.paths`, and correctly named shards are the only
+accepted entries.
 A subdirectory, wrong-case suffix, backup suffix, trailing space, or other unexpected file is an
 error rather than a silently ignored shard. Ledger history is append-only in content: never
 edit, delete, or duplicate an existing row. Order is not part of the contract; a new row may
