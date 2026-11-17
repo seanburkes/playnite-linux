@@ -51,16 +51,23 @@ not verified. The path above is the planned v1 probe, not observed fact.
 
 ### 1.3 Discovery decisions [decision]
 
-- Candidates are probed in the order above. Every candidate is still reported after one is
-  accepted: a later candidate that resolves to the accepted realpath is `duplicate-realpath`
-  (the usual home `.steam/steam` link), and a different usable root is `shadowed`. Only the first
-  accepted root produces libraries.
-- A non-absolute `$STEAM_ROOT` is ignored rather than resolved against the working directory
-  (`invalid-path`); an existing non-directory is `not-directory`; a failed probe such as a
-  symlink loop is `unreadable` and never escapes as an exception.
+- Candidates are probed in the order above, then the home `.steam/root` alias, and
+  `$XDG_DATA_HOME/Steam` when that variable is absolute and not the default data location.
+  Every candidate is still reported after one is accepted: a later candidate that resolves to
+  the accepted realpath is `duplicate-realpath` (the usual home `.steam/steam` and `.steam/root`
+  links), and a different usable root is `shadowed`. Only the first accepted root produces
+  libraries.
+- A non-absolute `$STEAM_ROOT` is reported as `invalid-path` and never resolved against the
+  working directory; a missing candidate is `missing`, an existing non-directory
+  `not-directory`, a symlink loop `unreadable`. A permission failure is `unreadable`, not
+  `missing`.
+- Realpath resolution follows `realpath(3)`: components are resolved left to right, and `..`
+  applies after a link has been followed. `Path.GetFullPath`-style lexical collapse before link
+  resolution is wrong.
 - A candidate counts only when its realpath directory contains `steamapps`, and that
   `steamapps` must itself resolve inside the candidate realpath. A link that leaves the root is
-  `steamapps-outside-root` and is not followed.
+  `steamapps-outside-root` and is not followed; a `steamapps` link back to `.` resolves inside
+  the root and is accepted.
 - Discovery only reads: it never creates, modifies or repairs anything under a Steam tree, and
   uses no network, process or UI surface.
 
@@ -112,18 +119,31 @@ canonical "library on an unmounted path" case; see §9.
 ### 2.3 Discovery decisions [decision]
 
 - `<root>/steamapps/libraryfolders.vdf` is read first; `<root>/config/libraryfolders.vdf` is the
-  fallback only when the first copy is absent. A library file that is missing, unreadable,
-  oversized or syntactically invalid is skipped and the root library is kept; the reason and
-  byte offset are reported. A file that resolves outside the root realpath is not read.
+  fallback when the first copy is absent **or rejected**. A library file that is missing,
+  unreadable, zero-length (FIFO/socket/device or an empty file), oversized or syntactically
+  invalid is skipped and the root library is kept; the reason is reported. `LibraryFilePath`
+  names the file selected even when it could not be read. A file that resolves outside the root
+  realpath is not read.
+- The read uses the canonical realpath. A missing or zero-length path is rejected before it is
+  opened, so a FIFO or device cannot block the caller, and the allocated buffer is exactly the
+  stat length within the byte bound. A symlink swapped after the containment check therefore
+  cannot turn the read into an outside-root read, and a growing file cannot over-allocate.
+  Native file-type calls are unavailable under the architecture policy, so an empty regular
+  file shares the zero-length `not-a-regular-file` skip.
 - The root is always a library. When no valid file entry resolves to the root realpath, a
-  synthetic `root` entry is added first with an empty apps map; app manifests are a later unit.
-- Libraries are deduplicated by realpath in file order. The first entry is the library; a later
-  entry resolving to the same realpath keeps its declared apps but is marked `Unavailable` with
-  reason `duplicate-library` and reported.
+  synthetic `root` entry is added first with a present-but-empty apps map; app manifests are a
+  later unit. Unknown root fields are discarded and never surface as discovery state.
+- Libraries are deduplicated by canonical realpath only, in file order. Distinct paths on the
+  same disk stay distinct. The first entry is the library; a later entry resolving to the same
+  realpath keeps its declared apps but is marked `Unavailable` with reason `duplicate-library`
+  and reported.
 - A library is available only when its realpath exists, is a directory, and contains a
   `steamapps` directory whose realpath stays inside the library root. A `steamapps` link that
-  escapes is not followed. Unavailable entries keep their apps map visible, and the next
-  discovery call re-probes them; nothing is deleted or repaired.
+  escapes is not followed. An existing mount point without `steamapps` is `stale-mountpoint`
+  (an unmounted drive). Unavailable entries keep their apps map visible, and the next discovery
+  call re-probes them; nothing is deleted or repaired.
+- Skip diagnostics carry the bare filename, never the host layout. `Apps` follows the p5-001
+  presence model: null when the file omitted the object, non-null (possibly empty) when present.
 
 ## 3. Valve KeyValues text grammar
 
@@ -191,39 +211,6 @@ as zero. The parser retains decoded `installdir`; `SteamApp.InstallPath` combine
 absolute normalized library path using `Path.GetFullPath`. Availability and Proton evidence are
 the later discovery unit's responsibility. Missing-manifest reports likewise require that unit's
 file enumeration; this layer never invents a manifest for a library app id.
-
-### Follow-up boundary clarifications (p5-001)
-
-- `InstalledDepots`, `SharedDepots`, and `InstallScripts` use nullable read-only dictionaries:
-  missing or wrong-shaped objects are `null`, with a diagnostic for the latter; a present empty
-  object has count 0. `UserConfig` and `MountedConfig` use the same distinction with nullable
-  lists. Invalid members are omitted from present objects rather than erasing their presence.
-- `SteamLibrary.Apps` is also nullable: missing is `null`, present empty is count 0. A malformed
-  present apps map reports and becomes a non-null empty map, preserving the existing all-or-nothing
-  map policy. Numerically ambiguous library indexes (such as `0` and `00`) reject the whole file
-  with `duplicate-library-index`, both raw indexes, and the later index's byte offset; discovery's
-  implicit default Steam library is unaffected by this parser rejection.
-- Diagnostic `File` and syntax-exception `File` contain only the basename, never caller directory
-  prefixes. Caller filename arguments have trailing POSIX slashes removed before taking the
-  basename; empty/root-only names and embedded null bytes are rejected as invalid arguments with
-  value-free messages. Parser issue offsets identify offending keys/members rather than containers.
-- Empty quoted roots and object keys reject. Numbers use ASCII decimal digits only and app ids
-  must fit `uint`, without wrapping. A name is nonempty after decoding, not trimmed: whitespace
-  is preserved, including a nonempty whitespace-only name.
-- Install directories retain POSIX spelling, including literal backslashes and colons. Traversal
-  above the install root is checked with both slash and backslash separators and with POSIX-only
-  separators; the actual POSIX path may not resolve to the root itself. This does not impose
-  Windows drive-name rules on legitimate POSIX names. Public `ToApp` and `InstallPath` projections
-  enforce the same checks and normalized containment, even for programmatically constructed records.
-- Owner-field exclusion is ordinal case-insensitive at every nesting level of model bags and
-  scripts. No diagnostic identifies that field or its contents, including duplicate keys inside
-  an owner-named root/subtree. Raw KeyValues intentionally preserves owner metadata for round trips;
-  default raw-entry formatting emits neither keys nor values. `KeyValues.Write` is serialization,
-  **not redaction**, and raw trees/written bytes must never be logged. The writer rejects empty keys
-  and bounds object depth to the reader's 64 levels, including programmatically assembled trees.
-- The Steam fuzz target exercises model-level syntax/semantic rejects and public path projection;
-  non-syntax failures are not converted into expected syntax rejections. Oversized-probe budgets
-  must fit a byte array, preventing `MaxInputBytes + 1` overflow before allocation.
 
 Parser entry points live in the existing **Playnite.Steam** assembly, which already owns VDF/ACF
 in §3.4 of the architecture. The pure types use only BCL (Core/Platform references remain the
