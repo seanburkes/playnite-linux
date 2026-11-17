@@ -498,6 +498,36 @@
         }
       },
       "notes": "Counts parsed from this merged-main linux-ci run's downloaded JUnit and MTP exit artifacts; they equal the current floor. The run is recorded as provenance without changing the number."
+    },
+    {
+      "run_id": 44119612479,
+      "run_url": "https://github.com/seanburkes/playnite-linux/actions/runs/44119612479",
+      "commit": "42a8f1fcbb02677334c259681a2c7858f10f592d",
+      "captured_at": "2026-11-17T15:58:22Z",
+      "counts": {
+        "Playnite.Architecture.Tests": {
+          "total": 173,
+          "executed": 173,
+          "passed": 173,
+          "failed": 0,
+          "skipped": 0
+        },
+        "Playnite.Core.Tests": {
+          "total": 1781,
+          "executed": 1781,
+          "passed": 1781,
+          "failed": 0,
+          "skipped": 0
+        },
+        "Playnite.Smoke.Tests": {
+          "total": 4,
+          "executed": 4,
+          "passed": 4,
+          "failed": 0,
+          "skipped": 0
+        }
+      },
+      "notes": "Counts parsed from this merged-main linux-ci run's downloaded JUnit and MTP exit artifacts; they equal the current floor. The run is recorded as provenance without changing the number."
     }
   ]
 }
