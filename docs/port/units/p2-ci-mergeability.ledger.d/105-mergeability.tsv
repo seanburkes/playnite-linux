@@ -1,0 +1,2 @@
+timestamp	unit	from	to	actor	evidence
+2026-11-17T16:10:51Z	p2-ci-mergeability	todo	done	fm/port-u3	PR https://github.com/seanburkes/playnite-linux/pull/105; head 5fc8642484bd2d8385ca9dc0b4b9d07e6a61ada6; linux-ci run 44121517979 and the five required checks pass on that head; local scripts/ci 134 tests, scripts/port 218 tests and check_parity 109 rows pass; shard-only check and the process-to-unit guard are re-run on the new head; no aggregate authored
