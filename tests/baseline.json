@@ -23,9 +23,9 @@
       "skipped": 0
     },
     "Playnite.Core.Tests": {
-      "total": 1737,
-      "executed": 1737,
-      "passed": 1737,
+      "total": 1779,
+      "executed": 1779,
+      "passed": 1779,
       "failed": 0,
       "skipped": 0
     },
@@ -238,6 +238,13 @@
     "run_url": "https://github.com/seanburkes/playnite-linux/actions/runs/43957589425",
     "commit": "c401b2727047b77bc9347b5ef1d8a416c633276d",
     "notes": "Fresh actual linux-ci on the final merged implementation head of https://github.com/seanburkes/playnite-linux/pull/96 after normally merging origin/main 17f3e98 (no rebase or force-push) and fixing every reported review A/B finding including residual unreadability asymmetry. Downloaded JUnit testcase elements, suite totals, test-counts.json and MTP exit files independently confirm Core 1737 total/executed/passed, Architecture 173 total/executed/passed, Smoke 4 total/executed/passed, every suite zero failures/skips and exit 0. Warning-as-error locked restore/build, all 125 CI-policy tests, bounded fuzz and native smoke passed. The existing 1737 Core floor is now evidenced on the real post-merge/post-review implementation rather than relying on the earlier 723cf8e pre-main capture, which is retained as history. Review B dispositions: unavailable/external references are explicit playnite-asset scheme markers in SQLite image fields with direct database-field assertions; readable captured files that vanish, become locked/unreadable, fail during source reading or are replaced by present-on-disk directories refuse loudly with record/path rather than publishing a new missing/unreadable marker; reader-unreadable snapshots retain their marker after lock release; docs honestly describe temporary names as filesystem-addressable but never published final hash names/database references. Existing cases were strengthened without reducing their 1737 count. The preceding merged run 43956420719 at 5e95044 independently confirmed the same 1737/173/4 counts before the final residual fix. Source/aggregate/parity invariants and all prior captures/other suite floors are preserved. This fresh floor/evidence commit is inside the PR before readiness, does not cite its own run and changes no implementation/test cases. Its final pushed-head linux-ci and firstmate-arranged A/B re-review closure remain readiness gates. No worker merge."
+  },
+  "p4_003_capture": {
+    "captured_at": "2026-11-16T21:58:06Z",
+    "run_id": 43964833995,
+    "run_url": "https://github.com/seanburkes/playnite-linux/actions/runs/43964833995",
+    "commit": "2e09983dd2270bc3c64a0390b4cced3808aa1ad7",
+    "notes": "Actual final-source linux-ci on https://github.com/seanburkes/playnite-linux/pull/97 after directly merging reviewed p4-005 asset head 6c38c22, explicitly reconciling Assets/SourceManifestHash/full receipt construction and resolving both adversarial reviews plus the inherited database.json marker diagnostic requested by steering007. Downloaded linux-test-results JUnit testcase elements, suite totals and MTP exit files independently confirm Core1779 total/executed/passed, Architecture173 total/executed/passed, Smoke4 total/executed/passed, every suite zero failures/skips and exit0. Warning-as-error locked restore/build, bounded fuzz and native Xvfb smoke passed. This records the actually measured combined asset/replacement/marker tree, not a sum or stale subset. Core rises from the inherited actual-CI1737 asset floor to1779; Architecture/Smoke/legacy/empty_projects and every historical capture remain unchanged. Cases cover eleven existing-live SIGKILL boundaries, byte-identical rollback before readers resume with discarded-generation sidecar cleanup, explicit consent for unreceipted prior imports, artifact-only repeat refusal, exact full asset-report/identity receipt verification, actual OS-lock barrier reader opens/drain/cancellation (no timing guesses), no success audit or rollback at a post-completion fault, and clear absent/duplicate marker refusal. The earlier combined run43961824329 at602e977 measured1776/173/4 before the three marker controls and is not used as this floor's evidence. This additive oracle-change floor commit changes only baseline and unit evidence/shards, never implementation or test cases; its own pushed-head linux-ci must revalidate the same1779/173/4 before readiness. Both reviews and all P3 accept-or-fix dispositions are documented; final closure/readiness remains firstmate-managed while the unrelated shared Flatpak/main blocker is fixed separately. No worker merge."
   },
   "p4_005_launch_capture": {
     "captured_at": "2026-11-16T22:27:42Z",

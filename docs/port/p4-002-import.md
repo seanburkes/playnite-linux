@@ -23,9 +23,11 @@ not just by the CLI; the directly invoked reader checks source ancestors too. Ex
 prints a JSON report; exit 1 prints an explicit diagnostic on stderr. Dry-run reads
 and transforms, validates references and reports its plan but creates no files,
 locks, SQLite database or directories. Repeated dry-runs are identical no-ops.
-Any existing live destination, including a successful previous import, is refused;
-it is never overwritten. This unit publishes a fresh destination atomically; it
-does not replace an already-open user library (the broader p4-003 rollback contract).
+This unit originally refused any existing live destination. The subsequent
+[p4-003 replacement contract](p4-003-publication.md) supersedes that restriction:
+unreceipted live libraries can be atomically replaced behind publication leases
+with explicit `--replace-existing` consent. An in-artifact receipt always refuses
+a repeat; earlier unreceipted imports require consent too, never silent overwrite.
 
 ## Intermediate v1 (stdout, one JSON object)
 
@@ -79,6 +81,10 @@ The additive `v10-malicious` derivative records its generator and provenance and
 does not pretend Linux mutation is independent Windows oracle evidence.
 
 ## Publication and recovery
+
+This section records the original fresh-publication implementation. The current
+[p4-003 contract](p4-003-publication.md) supersedes its destination-refusal and
+report/receipt publication rules and adds connection-lifetime publication leases.
 
 An exclusive retained `<destination>.import.lock` serializes writers. Staging is
 `<destination>.import/`; a matching destination/source fingerprint in `manifest.json`

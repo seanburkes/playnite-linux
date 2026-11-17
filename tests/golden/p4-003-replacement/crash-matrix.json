@@ -1,0 +1,13 @@
+{
+  "Read": "old",
+  "Transformed": "old",
+  "Copied": "old",
+  "PartialWrite": "old",
+  "Written": "old",
+  "Verified": "old",
+  "BeforeSwap": "old",
+  "Publishing": "old",
+  "Swapped": "new",
+  "ReceiptConfirmed": "new",
+  "Committed": "new"
+}

@@ -10,7 +10,7 @@ using Xunit;
 
 namespace Playnite.Core.Tests.Import;
 
-public sealed class LibraryMigrationTests : IDisposable
+public sealed partial class LibraryMigrationTests : IDisposable
 {
     private readonly string temporary = Path.Combine(Path.GetTempPath(), "playnite-import-" + Guid.NewGuid().ToString("N"));
     private string Destination => Path.Combine(temporary, "library.sqlite");
@@ -42,7 +42,7 @@ public sealed class LibraryMigrationTests : IDisposable
         var skip = Assert.Single(report.Decisions.Where(d => d.Outcome == "skipped"));
         Assert.Equal("10000000-0000-0000-0000-000000000004", skip.Identity);
         Assert.Contains("Non-Steam", skip.Reason);
-        Assert.Equal(["Read", "Transformed", "Copied", "PartialWrite", "PartialWrite", "PartialWrite", "Written", "Verified", "BeforeSwap", "Committed"], states);
+        Assert.Equal(["Read", "Transformed", "Copied", "PartialWrite", "PartialWrite", "PartialWrite", "Written", "Verified", "BeforeSwap", "Publishing", "Swapped", "ReceiptConfirmed", "Committed"], states);
         var database = await LibraryDatabase.OpenAsync(Destination);
         var games = await database.ReadAsync(s => s.Games.GetAllAsync());
         Assert.Equal(new[] { "220", "570", "400" }, games.Select(g => g.Value.GameId));
@@ -418,6 +418,47 @@ public sealed class LibraryMigrationTests : IDisposable
         Assert.NotEqual(0, process.ExitCode); Assert.Empty(await output);
         Assert.Contains("Duplicate database.json", await error);
         Assert.Equal(before, Snapshot(source));
+    }
+
+    [Fact]
+    [Trait("Invariant", "LibraryImport.SourceUnchanged")]
+    public async Task Missing_database_json_refuses_with_expected_filename_and_found_count_without_mutating_source()
+    {
+        var source = Path.Combine(temporary, "missing-marker");
+        Directory.CreateDirectory(source);
+        foreach (var file in Directory.GetFiles(Fixture()).Where(p => Path.GetFileName(p) != "database.json"))
+            File.Copy(file, Path.Combine(source, Path.GetFileName(file)));
+        var before = Snapshot(source);
+        var start = Start(Product("Playnite.LegacyImport"));
+        start.ArgumentList.Add(source);
+        using var process = Process.Start(start)!;
+        var output = process.StandardOutput.ReadToEndAsync();
+        var error = process.StandardError.ReadToEndAsync();
+        await process.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(30));
+        Assert.NotEqual(0, process.ExitCode);
+        Assert.Contains("Expected exactly one database.json at the source root; found 0.", await error);
+        Assert.Empty(await output);
+        Assert.Equal(before, Snapshot(source));
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(2)]
+    public void Missing_or_duplicate_captured_markers_refuse_explicitly_with_a_working_single_marker_control(int count)
+    {
+        var context = new ReaderContext(Product("Playnite.LegacyImport"));
+        try
+        {
+            var assembly = context.LoadFromAssemblyPath(Product("Playnite.LegacyImport"));
+            var method = assembly.GetType("Playnite.LegacyImport.LibraryReader", true)!.GetMethod("ReadMarker", BindingFlags.NonPublic | BindingFlags.Static)!;
+            var bytes = File.ReadAllBytes(Path.Combine(Fixture(), "database.json"));
+            using var control = Assert.IsType<JsonDocument>(method.Invoke(null, [new byte[]?[] { bytes }]));
+            Assert.Equal(4, control.RootElement.GetProperty("Version").GetInt32());
+            // A real directory cannot contain two identical root names; exercise duplicate capture directly.
+            var error = Assert.Throws<TargetInvocationException>(() => method.Invoke(null, [Enumerable.Repeat<byte[]?>(bytes, count).ToArray()]));
+            Assert.Equal($"Expected exactly one database.json at the source root; found {count}.", Assert.IsType<InvalidDataException>(error.InnerException).Message);
+        }
+        finally { context.Unload(); }
     }
 
     private sealed class ReaderContext(string reader) : AssemblyLoadContext(isCollectible: true)
