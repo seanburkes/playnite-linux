@@ -130,13 +130,13 @@ count. A normal merge of origin/main `17f3e98` preserves its gate-audit note and
 all sibling fields, with aggregate bytes taken unchanged from main. Fresh merged-head
 linux-ci evidence and review closure are still required before readiness.
 
-The fresh merged final-implementation run
+The fresh PR integration-head run (after main synchronization, not a merged-main run)
 [43956420719](https://github.com/seanburkes/playnite-linux/actions/runs/43956420719)
 on `5e95044b91df5d4ba2309c5bea8022838f7d76d0` passed warning-as-error locked
 restore/build, all 125 CI-policy tests, full suites, bounded fuzz and native smoke.
 Downloaded JUnit cases/suite totals, test-counts.json and exits independently
 confirm **1737 Core / 173 Architecture / 4 Smoke**, zero failures/skips, all exits 0.
-This is retained as the pre-residual-fix merged evidence, not the final floor citation.
+This is retained as pre-residual-fix PR evidence, not the final floor citation.
 
 Residual B's captured-readable-to-unreadable asymmetry was fixed at
 `c401b2727047b77bc9347b5ef1d8a416c633276d`. Fresh actual linux-ci
@@ -150,7 +150,7 @@ captures. This floor/evidence-only commit is inside the PR before readiness and
 does not cite its own run; final evidence-head linux-ci and both firstmate-arranged
 review closures remain pending.
 
-After both reviews closed with no P1 and no blocking P2, the branch was synced to
+The branch was synced to
 main `dfd53f9cff6ed60033b78e7a26693f898017f47d` by a normal merge at
 `6f1d19979793b7c972e6ca776604e167cd6edcb0`. That merge brought in only the already
 merged #98 packaging repair (packaging workflow, Flatpak runtime lock, verifier and
@@ -165,3 +165,32 @@ totals, `test-counts.json` and exit files from linux-ci independently confirm
 `p4_005_launch_capture` binds the retained floor to this actual post-main-sync run
 without lowering any count. This evidence-only commit does not cite its own run;
 its own pushed-head linux-ci is the final readiness gate.
+
+### Evidence correction and additional crash boundary
+
+The previous claim that both reviews closed with no P1 and no blocking P2 before
+the asset delivery was false. The merged asset tree at `f12a4325c58cf66d47b93c5768e46861696d3052`
+still used `copies.Single` in `LibraryReader` and lacked the missing/duplicate
+captured-marker controls. The explicit `ReadMarker` refusal and its tests shipped
+with https://github.com/seanburkes/playnite-linux/pull/97, not
+https://github.com/seanburkes/playnite-linux/pull/96. Merged-main linux-ci
+[43998974769](https://github.com/seanburkes/playnite-linux/actions/runs/43998974769)
+on `0ecee2607cb6539e6fbbd479d349f04ce795fb68` measured Core **1779**, Architecture
+**173**, Smoke **4**, all passed, zero failures/skips, all MTP exits 0. Its downloaded
+JUnit artifact includes `Missing_database_json_refuses_with_expected_filename_and_found_count_without_mutating_source`
+and both cases of
+`Missing_or_duplicate_captured_markers_refuse_explicitly_with_a_working_single_marker_control`.
+This later merged-tree evidence, not the asset review-closure claim, supports the
+reader diagnostic. Historical ledger/capture entries are retained and superseded
+by additive correction records rather than rewritten.
+
+`AssetFlushed` is an additive observation-only checkpoint immediately after
+`Flush(flushToDisk: true)` and before the temporary file is renamed. It is a no-op
+without the existing optional checkpoint callback; `AssetPartialCopy` is unchanged.
+`SIGKILL_after_asset_flush_before_rename_leaves_only_complete_temporary_bytes_and_retry_publishes_verified_blob`
+kills the real child there, checks the sole file is a complete hash-matching `.tmp`
+and no final blob/database/report exists, then retries and checks the final hash
+and stored image reference. It preserves the source snapshot and cites
+`LibraryImport.SourceUnchanged`, `CrashSafe`, `CleanResumable` and `ReaderNeverPartial`.
+These are implementation checks inspired by the model invariants, not a formal
+asset-state conformance or power-loss proof; the orphan may remain unreferenced.
