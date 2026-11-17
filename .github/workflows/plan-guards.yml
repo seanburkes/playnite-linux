@@ -25,7 +25,96 @@ env:
     docs/port/LOCAL-PATH-EXCEPTIONS.md
 
 jobs:
+  guard-inventory:
+    name: guard-inventory
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Resolve the guard inventory base commit
+        id: guard_base
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PULL_REQUEST_BASE: ${{ github.event.pull_request.base.sha }}
+          MERGE_GROUP_BASE: ${{ github.event.merge_group.base_sha }}
+          PUSH_BEFORE: ${{ github.event.before }}
+        run: |
+          set -euo pipefail
+          case "$EVENT_NAME" in
+            pull_request) event_base="$PULL_REQUEST_BASE" ;;
+            merge_group) event_base="$MERGE_GROUP_BASE" ;;
+            push) event_base="$PUSH_BEFORE" ;;
+            *) echo "::error::Unsupported event $EVENT_NAME"; exit 1 ;;
+          esac
+          if [ -z "${event_base:-}" ] || printf '%s' "$event_base" | grep -Eq '^0+$'; then
+            if [ "$EVENT_NAME" = "push" ]; then
+              printf 'sha=%s\n' "$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            echo "::error::$EVENT_NAME event has no usable base SHA for guard inventory"
+            exit 1
+          fi
+          if ! fork=$(git merge-base "$event_base" HEAD); then
+            echo "::error::Cannot compute the guard inventory fork point"
+            exit 1
+          fi
+          printf 'sha=%s\n' "$fork" >> "$GITHUB_OUTPUT"
+
+      - name: Run the base-materialised guard test inventory
+        env:
+          BASE_SHA: ${{ steps.guard_base.outputs.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          trusted="$RUNNER_TEMP/base-guard/check_guard_tests.py"
+          mkdir -p "$(dirname "$trusted")"
+          if git cat-file -e "$BASE_SHA:scripts/port/check_guard_tests.py" 2>/dev/null; then
+            git show "$BASE_SHA:scripts/port/check_guard_tests.py" > "$trusted"
+            test -f "$trusted"
+            if [ -L "$trusted" ]; then
+              echo "::error::materialised guard checker is a symlink"
+              exit 1
+            fi
+            sha256sum "$trusted"
+            python3 "$trusted" --repo "$PWD" --base "$BASE_SHA" --head HEAD
+            exit 0
+          fi
+
+          echo "::warning::BOOTSTRAP: base has no scripts/port/check_guard_tests.py; this introduction PR runs an inline file-set check only. The base-materialised checker is the trust root after merge."
+          python3 - "$BASE_SHA" <<'PY'
+          import re
+          import subprocess
+          import sys
+
+          base = sys.argv[1]
+          path_re = re.compile(r"^scripts/port/test_[^/]*\.py$")
+
+          def files(revision):
+              if not revision:
+                  return set()
+              out = subprocess.run(
+                  ["git", "ls-tree", "-r", "--name-only", "-z", revision, "--", "scripts/port"],
+                  capture_output=True, check=True,
+              ).stdout.decode("utf-8", "replace")
+              return {item for item in out.split("\0") if path_re.fullmatch(item)}
+
+          missing = sorted(files(base) - files("HEAD"))
+          if missing:
+              for path in missing:
+                  print(f"::error::{path} is present at the base and missing at head")
+              sys.exit(1)
+          print("bootstrap guard file-set inventory passed")
+          PY
+
   inventory-and-parity:
+    needs: guard-inventory
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

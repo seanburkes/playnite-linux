@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import os
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -135,6 +136,108 @@ class GuardIntegrityTests(unittest.TestCase):
             errors = inventory.check(repo, base, "HEAD")
 
         self.assertTrue(any("test_unit_guard.py" in error for error in errors))
+
+    def _trust_repo(self, temporary: Path) -> tuple[Path, str]:
+        repo = temporary / "repo"
+        repo.mkdir()
+        self._init(repo)
+        checker = repo / "scripts/port/check_guard_tests.py"
+        checker.parent.mkdir(parents=True)
+        shutil.copyfile(ROOT / "scripts/port/check_guard_tests.py", checker)
+        (repo / "scripts/port/test_unit_guard.py").write_text(
+            "def test_one(self):\n    self.assertTrue(1)\n"
+        )
+        (repo / "scripts/port/test_guard_integrity.py").write_text(
+            "def test_policy(self):\n    self.assertTrue(1)\n"
+        )
+        return repo, self._commit(repo, "base")
+
+    @staticmethod
+    def _base_runner(repo: Path, base: str, destination: Path) -> Path:
+        content = subprocess.run(
+            ["git", "-C", str(repo), "show", f"{base}:scripts/port/check_guard_tests.py"],
+            check=True, capture_output=True, text=True,
+        ).stdout
+        destination.write_text(content)
+        return destination
+
+    @staticmethod
+    def _run_runner(runner: Path, repo: Path, base: str) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            [sys.executable, str(runner), "--repo", str(repo),
+             "--base", base, "--head", "HEAD"],
+            capture_output=True, text=True, check=False,
+        )
+
+    def test_emptied_head_checker_cannot_hide_a_deleted_guard_test(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="guard-trust-") as temporary:
+            root = Path(temporary)
+            repo, base = self._trust_repo(root)
+            (repo / "scripts/port/check_guard_tests.py").write_text("")
+            (repo / "scripts/port/test_unit_guard.py").unlink()
+            self._commit(repo, "empty the checker and delete a test")
+            runner = self._base_runner(repo, base, root / "trusted.py")
+
+            result = self._run_runner(runner, repo, base)
+
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn("test_unit_guard.py", result.stderr)
+
+    def test_renamed_head_checker_cannot_hide_a_deleted_guard_test(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="guard-trust-") as temporary:
+            root = Path(temporary)
+            repo, base = self._trust_repo(root)
+            subprocess.run(
+                ["git", "-C", str(repo), "mv",
+                 "scripts/port/check_guard_tests.py",
+                 "scripts/port/check_guard_tests_renamed.py"],
+                check=True, capture_output=True,
+            )
+            (repo / "scripts/port/test_unit_guard.py").unlink()
+            self._commit(repo, "rename the checker and delete a test")
+            runner = self._base_runner(repo, base, root / "trusted.py")
+
+            result = self._run_runner(runner, repo, base)
+
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn("test_unit_guard.py", result.stderr)
+
+    def test_removing_the_integrity_test_is_detected_from_the_base_runner(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="guard-trust-") as temporary:
+            root = Path(temporary)
+            repo, base = self._trust_repo(root)
+            (repo / "scripts/port/test_guard_integrity.py").unlink()
+            self._commit(repo, "remove the integrity test")
+            runner = self._base_runner(repo, base, root / "trusted.py")
+
+            result = self._run_runner(runner, repo, base)
+
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn("test_guard_integrity.py", result.stderr)
+
+    def test_deleting_a_guard_test_is_detected_from_the_base_runner(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="guard-trust-") as temporary:
+            root = Path(temporary)
+            repo, base = self._trust_repo(root)
+            (repo / "scripts/port/test_unit_guard.py").unlink()
+            self._commit(repo, "delete a guard test")
+            runner = self._base_runner(repo, base, root / "trusted.py")
+
+            result = self._run_runner(runner, repo, base)
+
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn("test_unit_guard.py", result.stderr)
+
+    def test_honest_case_passes_from_the_base_runner(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="guard-trust-") as temporary:
+            root = Path(temporary)
+            repo, base = self._trust_repo(root)
+            self._commit(repo, "honest head")
+            runner = self._base_runner(repo, base, root / "trusted.py")
+
+            result = self._run_runner(runner, repo, base)
+
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
     def test_current_guard_suite_keeps_every_base_file_case_and_assertion(self) -> None:
         base = base_revision()

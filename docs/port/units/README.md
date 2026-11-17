@@ -120,12 +120,19 @@ fragment describes. A run from an unrelated base-branch ancestor, from a main co
 after the branch point, or from the event base itself is rejected, so a rebased or
 fast-forwarded branch cannot borrow a main commit's CI.
 
-The negative proofs themselves are protected by `scripts/port/check_guard_tests.py`, which
-plan-guards runs as a plain script (not a unittest, so deleting a test file cannot disable it).
-It enumerates the `scripts/port/test_*.py` files at the base and head and fails when a base test
-file is deleted or renamed away, the head set shrinks, a base test case disappears, or the
-assertion count drops. `scripts/port/test_guard_integrity.py` keeps the negative proofs for that
-policy, including real delete and rename cases.
+The negative proofs themselves are protected by `scripts/port/check_guard_tests.py`, run by
+plan-guards' dedicated `guard-inventory` job. That job materialises the checker from the pull
+request **base** into `$RUNNER_TEMP` and runs that copy before `inventory-and-parity`, which
+declares `needs: guard-inventory`; the head copy is never executed for enforcement. The base
+copy is the trust root: emptying or renaming the head checker cannot hide a deleted or renamed
+guard test. It enumerates the `scripts/port/test_*.py` files at the base and head and fails when
+a base test file is deleted or renamed away, the head set shrinks, a base test case disappears,
+or the assertion count drops. `scripts/port/test_guard_integrity.py` keeps the negative proofs,
+including real delete, rename, emptied-head-checker, removed-integrity-test and honest cases.
+
+Limits: the workflow file itself and the base-materialisation step are protected by the
+`oracle-change` protected-path gate, not cryptographically; a bootstrap PR whose base predates
+the checker runs an inline file-set check for that transition only.
 
 ## Ledger history is append-only in content
 

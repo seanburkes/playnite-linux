@@ -283,6 +283,18 @@ class CiPolicyTests(unittest.TestCase):
                 key = path if path in owners else path + "/"
                 self.assertIn("@seanburkes", owners.get(key, []))
 
+    def test_guard_inventory_uses_the_base_materialised_checker(self):
+        workflow = PLAN_GUARDS.read_text(encoding="utf-8")
+        self.assertIn("guard-inventory:", workflow)
+        self.assertIn("needs: guard-inventory", workflow)
+        self.assertIn('git show "$BASE_SHA:scripts/port/check_guard_tests.py"', workflow)
+        self.assertIn('python3 "$trusted" --repo "$PWD" --base "$BASE_SHA" --head HEAD',
+                      workflow)
+        self.assertLess(
+            workflow.index("guard-inventory:"),
+            workflow.index("inventory-and-parity:"),
+        )
+
     def test_workflows_directory_is_protected(self):
         self.assertIn(".github/workflows", protected_paths())
         self.assertIn(".github/CODEOWNERS", protected_paths())
