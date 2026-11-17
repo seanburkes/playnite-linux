@@ -25,7 +25,107 @@ env:
     docs/port/LOCAL-PATH-EXCEPTIONS.md
 
 jobs:
+  guard-inventory:
+    name: guard-inventory
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Resolve the guard inventory event base and fork point
+        id: guard_base
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PULL_REQUEST_BASE: ${{ github.event.pull_request.base.sha }}
+          MERGE_GROUP_BASE: ${{ github.event.merge_group.base_sha }}
+          PUSH_BEFORE: ${{ github.event.before }}
+        run: |
+          set -euo pipefail
+          case "$EVENT_NAME" in
+            pull_request) event_base="$PULL_REQUEST_BASE" ;;
+            merge_group) event_base="$MERGE_GROUP_BASE" ;;
+            push) event_base="$PUSH_BEFORE" ;;
+            *) echo "::error::Unsupported event $EVENT_NAME"; exit 1 ;;
+          esac
+          if [ -z "${event_base:-}" ] || printf '%s' "$event_base" | grep -Eq '^0+$'; then
+            if [ "$EVENT_NAME" = "push" ]; then
+              event_base=$(git rev-parse HEAD)
+              fork=$(git rev-parse HEAD)
+              printf 'base=%s\nfork=%s\n' "$event_base" "$fork" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            echo "::error::$EVENT_NAME event has no usable base SHA for guard inventory"
+            exit 1
+          fi
+          if ! fork=$(git merge-base "$event_base" HEAD); then
+            echo "::error::Cannot compute the guard inventory fork point"
+            exit 1
+          fi
+          printf 'base=%s\nfork=%s\n' "$event_base" "$fork" >> "$GITHUB_OUTPUT"
+
+      - name: Run the base-materialised guard test inventory
+        env:
+          BASE_SHA: ${{ steps.guard_base.outputs.base }}
+          FORK_SHA: ${{ steps.guard_base.outputs.fork }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          trusted="$RUNNER_TEMP/base-guard/check_guard_tests.py"
+          mkdir -p "$(dirname "$trusted")"
+          if git cat-file -e "$BASE_SHA:scripts/port/check_guard_tests.py" 2>/dev/null; then
+            git show "$BASE_SHA:scripts/port/check_guard_tests.py" > "$trusted"
+            test -f "$trusted"
+            if [ -L "$trusted" ]; then
+              echo "::error::materialised guard checker is a symlink"
+              exit 1
+            fi
+            sha256sum "$trusted"
+            python3 "$trusted" --repo "$PWD" --base "$BASE_SHA" \
+              --fork "$FORK_SHA" --checker-base "$BASE_SHA" --head HEAD
+            exit 0
+          fi
+
+          echo "::warning::BOOTSTRAP: event base has no scripts/port/check_guard_tests.py; this introduction PR runs an inline file-set check only. The event-base checker is the trust root after merge."
+          python3 - "$BASE_SHA" "$FORK_SHA" <<'PY'
+          import re
+          import subprocess
+          import sys
+
+          base, fork = sys.argv[1], sys.argv[2]
+          path_re = re.compile(r"^scripts/port/test_[^/]*\.py$")
+
+          def files(revision):
+              if not revision:
+                  return set()
+              out = subprocess.run(
+                  ["git", "ls-tree", "-r", "--name-only", "-z", revision, "--", "scripts/port"],
+                  capture_output=True, check=True,
+              ).stdout.decode("utf-8", "replace")
+              return {item for item in out.split("\0") if path_re.fullmatch(item)}
+
+          missing = sorted((files(base) | files(fork)) - files("HEAD"))
+          if missing:
+              for path in missing:
+                  print(f"::error::{path} is present at the base or fork and missing at head")
+              sys.exit(1)
+          head_checker = subprocess.run(
+              ["git", "show", "HEAD:scripts/port/check_guard_tests.py"],
+              capture_output=True,
+          )
+          if head_checker.returncode != 0 or not head_checker.stdout.strip():
+              print("::error::the head guard checker is missing or empty")
+              sys.exit(1)
+          print("bootstrap guard file-set inventory passed")
+          PY
+
   inventory-and-parity:
+    needs: guard-inventory
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -164,6 +264,8 @@ jobs:
         run: python3 scripts/port/check_parity.py
 
       - name: Port index generator tests
+        env:
+          BASE_SHA: ${{ steps.policy_base.outputs.sha }}
         run: python3 -m unittest discover -s scripts/port -p 'test_*.py'
 
       - name: Port aggregates are generated on main
@@ -197,7 +299,14 @@ jobs:
           # request owns only its unit shards, so even a correctly regenerated
           # aggregate change fails here.
           head_tool="$PWD/scripts/port/build_port_index.py"
-          if git cat-file -e "$BASE_SHA:scripts/port/build_port_index.py" 2>/dev/null; then
+          map_bootstrap=false
+          if ! git cat-file -e "$BASE_SHA:docs/port/units/ownership.paths" 2>/dev/null \
+             && git cat-file -e "HEAD:docs/port/units/ownership.paths" 2>/dev/null; then
+            map_bootstrap=true
+            echo "::warning::BOOTSTRAP: base has no ownership.paths; using the head tool for this first map"
+          fi
+          if [ "$map_bootstrap" = false ] \
+             && git cat-file -e "$BASE_SHA:scripts/port/build_port_index.py" 2>/dev/null; then
             base_tool="$RUNNER_TEMP/base-port/build_port_index.py"
             mkdir -p "$(dirname "$base_tool")"
             git show "$BASE_SHA:scripts/port/build_port_index.py" > "$base_tool"
@@ -205,7 +314,7 @@ jobs:
             cp "$base_tool" "$head_tool"
             trap 'cp "$RUNNER_TEMP/build_port_index.head.py" "$head_tool"' EXIT
           else
-            echo "::warning::BOOTSTRAP: base commit has no scripts/port/build_port_index.py; using the head tool"
+            echo "::warning::BOOTSTRAP: base commit has no scripts/port/build_port_index.py or no ownership map; using the head tool"
           fi
           python3 "$head_tool" check --shards-only \
             --against "$merge_base" --forbid-aggregate-changes
@@ -236,7 +345,14 @@ jobs:
             fi
           fi
           head_tool="$PWD/scripts/port/build_port_index.py"
-          if [ -n "$ref" ] && \
+          map_bootstrap=false
+          if [ -n "$ref" ] \
+             && ! git cat-file -e "$BASE_SHA:docs/port/units/ownership.paths" 2>/dev/null \
+             && git cat-file -e "HEAD:docs/port/units/ownership.paths" 2>/dev/null; then
+            map_bootstrap=true
+            echo "::warning::BOOTSTRAP: base has no ownership.paths; using the head tool for this first map"
+          fi
+          if [ "$map_bootstrap" = false ] && [ -n "$ref" ] && \
              git cat-file -e "$BASE_SHA:scripts/port/build_port_index.py" 2>/dev/null; then
             base_tool="$RUNNER_TEMP/base-port/build_port_index.py"
             mkdir -p "$(dirname "$base_tool")"
@@ -245,7 +361,7 @@ jobs:
             cp "$base_tool" "$head_tool"
             trap 'cp "$RUNNER_TEMP/build_port_index.head.py" "$head_tool"' EXIT
           else
-            echo "::warning::BOOTSTRAP: base commit has no scripts/port/build_port_index.py; using the head tool"
+            echo "::warning::BOOTSTRAP: base commit has no scripts/port/build_port_index.py or no ownership map; using the head tool"
           fi
           python3 "$head_tool" check "${args[@]}"
 

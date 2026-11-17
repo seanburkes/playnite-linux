@@ -433,6 +433,35 @@ class AggregateOwnershipTests(unittest.TestCase):
             self.assertIn(f"::error::Cannot compute the aggregate merge base for {missing}",
                           result.stdout)
 
+    def test_first_map_may_be_seeded_by_a_non_product_pr(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary)
+            _, main_tip = stale_pr_repo(repo)
+            use_head_tool(repo)
+            (repo / "docs" / "port" / "units" / "ownership.paths").write_text(
+                "path\tunit\tcommit\tpull\n")
+            commit(repo, "seed the first ownership map")
+            result = run_step(run_block(PLAN_GUARDS, "Port aggregates are generated on main"),
+                              repo, main_tip)
+            self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+            self.assertIn("BOOTSTRAP: base has no ownership.paths", result.stdout)
+
+    def test_first_map_seeding_with_a_product_change_fails(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary)
+            _, main_tip = stale_pr_repo(repo)
+            use_head_tool(repo)
+            (repo / "docs" / "port" / "units" / "ownership.paths").write_text(
+                "path\tunit\tcommit\tpull\n")
+            product = repo / "src" / "App" / "Thing.cs"
+            product.parent.mkdir(parents=True)
+            product.write_text("// product\n")
+            commit(repo, "seed a map with a product change")
+            result = run_step(run_block(PLAN_GUARDS, "Port aggregates are generated on main"),
+                              repo, main_tip)
+            self.assertEqual(1, result.returncode)
+            self.assertIn("changed: docs/port/units/ownership.paths", result.stderr)
+
     def test_stale_pr_shard_history_uses_merge_base(self):
         with tempfile.TemporaryDirectory() as temporary:
             repo = Path(temporary)

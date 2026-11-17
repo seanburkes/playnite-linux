@@ -50,6 +50,16 @@ the prose between the narrative markers, and, when `--capture-results` and
 `tests/baseline.json`. The baseline writer refuses to lower any recorded floor and
 preserves every earlier capture and its provenance.
 
+`build` also writes `docs/port/units/ownership.paths`, derived from reachable merged
+commits recorded in the unit ledgers. The exact header is
+`path<TAB>unit<TAB>commit<TAB>pull`; candidate paths are product source, shared tests and
+tools. A path may list every unit that touched it, so any listed owner may change it;
+where attribution is uncertain the path is recorded with the explicit shared owner `*`
+rather than left unowned. Unit evidence namespaces, generated aggregates, the baseline and
+shared build metadata stay outside the map. Rows are sorted by path then unit and the result
+is deterministic. The map is bot-owned; only the first bootstrap map may be added by a
+non-product pull request when the base has none.
+
 The migration PR that first adds `docs/port/units` is the one legitimate
 pre-migration base: `--allow-pre-migration-base` acknowledges the history skip
 and prints a notice instead of passing silently.
@@ -80,6 +90,8 @@ ROOT = Path(__file__).resolve().parents[2]
 UNITS = ROOT / "docs" / "port" / "units"
 STATUS_GENERATED_PATH = "docs/port/PORT-STATUS.md"
 BASELINE_GENERATED_PATH = "tests/baseline.json"
+OWNERSHIP_GENERATED_PATH = "docs/port/units/ownership.paths"
+OWNERSHIP_HEADER = "path\tunit\tcommit\tpull"
 NARRATIVE_START = "<!-- port-status:narrative:start -->"
 NARRATIVE_END = "<!-- port-status:narrative:end -->"
 FRAGMENT_SUFFIX = ".ledger.d"
@@ -211,7 +223,7 @@ _UNIT_ID = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)*")
 _WAVE = re.compile(r"W(\d+)")
 
 ALLOWED_UNIT_FILES = (
-    f"{README_NAME}, {REMOVED_NAME}, {CORRECTIONS_NAME}, "
+    f"{README_NAME}, {REMOVED_NAME}, {CORRECTIONS_NAME}, ownership.paths, "
     f"<unit-id>{QUEUE_SUFFIX}, <unit-id>{LEDGER_SUFFIX} and "
     f"<unit-id>{FRAGMENT_SUFFIX}/<pr>-<short-slug>.tsv"
 )
@@ -375,6 +387,10 @@ def _discover(
                     )
                 else:
                     ledger_paths.append(fragment)
+            continue
+        if name == "ownership.paths":
+            if not entry.is_file() or entry.is_symlink():
+                errors.append(f"{entry}: ownership.paths must be a regular file")
             continue
         if name == README_NAME:
             if not entry.is_file():
@@ -715,6 +731,196 @@ def render(units: Path) -> tuple[bytes, bytes]:
     return render_index(build_index(units))
 
 
+# Kept local so the generator remains a single self-contained script (the
+# aggregate-ownership tests copy only this file).  tests/port/test_build_port_index.py
+# compares this rule with unit_guard_common.ownership_candidate.
+OWNERSHIP_ROOTS = ("src/", "tests/", "tools/")
+OWNERSHIP_EXACT_EXCLUDES = frozenset({BASELINE_GENERATED_PATH})
+OWNERSHIP_SUFFIX_EXCLUDES = (
+    ".csproj", ".slnx", ".sln", ".props", ".targets", ".lock.json",
+    ".editorconfig", ".gitignore", ".gitattributes",
+)
+OWNERSHIP_NAME_EXCLUDES = frozenset({"global.json", "nuget.config", "NuGet.config"})
+SHARED_OWNER = "*"
+
+
+def _ownership_candidate(path: str, units: set[str]) -> bool:
+    if not path.startswith(OWNERSHIP_ROOTS):
+        return False
+    if path in OWNERSHIP_EXACT_EXCLUDES:
+        return False
+    if any(path.endswith(suffix) for suffix in OWNERSHIP_SUFFIX_EXCLUDES):
+        return False
+    if Path(path).name in OWNERSHIP_NAME_EXCLUDES:
+        return False
+    if "/bin/" in path or "/obj/" in path:
+        return False
+    for prefix in ("tests/golden/", "tests/fixtures/"):
+        if path.startswith(prefix):
+            relative = path[len(prefix):]
+            first = relative.split("/", 1)[0]
+            if any(
+                relative.startswith(f"{unit}-")
+                or first == unit
+                or first.startswith(f"{unit}-")
+                for unit in units
+            ):
+                return False
+    if path.startswith("tools/"):
+        relative = path[len("tools/"):]
+        for unit in units:
+            if relative == unit or (
+                relative.startswith(unit) and relative[len(unit)] in "-._/"
+            ):
+                return False
+    return True
+
+
+_PR_SUBJECT = re.compile(r"\(#([1-9][0-9]*)\)")
+_PR_EVIDENCE = re.compile(r"(?:pull/|PR\s*#\s*)([1-9][0-9]*)", re.IGNORECASE)
+
+
+def _unit_claims(index: ShardIndex, units: Path) -> dict[int, set[str]]:
+    """Which units' ledger evidence records each pull request.
+
+    Fragment file names are exact.  Legacy rows may mention another unit in
+    prose, so their references are only claims; a commit that changes a queue
+    shard is the stronger signal used first by ``_commit_attribution``.
+    """
+
+    claims: dict[int, set[str]] = {}
+    for unit, rows in sorted(index.ledger.items()):
+        for row in rows:
+            for match in _PR_EVIDENCE.finditer(row.fields[5]):
+                claims.setdefault(int(match.group(1)), set()).add(unit)
+    if units.is_dir():
+        for fragment in sorted(units.glob("*.ledger.d/*.tsv")):
+            match = FRAGMENT_NAME.fullmatch(fragment.name)
+            if match is None:
+                continue
+            unit = fragment.parent.name[:-len(FRAGMENT_SUFFIX)]
+            claims.setdefault(int(match.group(1)), set()).add(unit)
+    return claims
+
+
+def _reachable_commits(root: Path) -> list[tuple[str, str]]:
+    try:
+        output = _git(root, "log", "--reverse", "--format=%H%x09%s", "HEAD")
+    except PortIndexError:
+        return []
+    commits: list[tuple[str, str]] = []
+    for line in output.decode("utf-8", "replace").splitlines():
+        if "\t" not in line:
+            continue
+        sha, subject = line.split("\t", 1)
+        if re.fullmatch(r"[0-9a-f]{40}", sha):
+            commits.append((sha, subject))
+    return commits
+
+
+def _commit_paths(root: Path, sha: str) -> list[str]:
+    parent = subprocess.run(
+        ["git", "-C", str(root), "rev-parse", "--verify", "--quiet", f"{sha}^"],
+        capture_output=True,
+    )
+    if parent.returncode != 0:
+        # The root commit has no parent: every path is introduced.
+        listing = _git(root, "ls-tree", "-r", "--name-only", "-z", sha)
+    else:
+        listing = _git(root, "diff", "--no-ext-diff", "--no-textconv", "--no-renames",
+                       "--name-only", "-z", f"{sha}^", sha)
+    return [item.decode("utf-8", "replace") for item in listing.split(b"\0") if item]
+
+
+def _commit_attribution(
+    subject: str,
+    paths: list[str],
+    units: set[str],
+    claims: dict[int, set[str]],
+) -> tuple[str, str | None, str]:
+    """Return ``(kind, unit, pull)`` for one merged commit.
+
+    ``kind`` is ``unit`` when the commit changes exactly one unit's queue shard
+    (the PR's recorded unit declaration), ``shared`` when several units are
+    involved, and ``none`` when no unit is recorded.  A product-only commit may
+    fall back to an unambiguous ledger claim.  Ambiguity is never guessed.
+    """
+
+    subject_match = _PR_SUBJECT.search(subject)
+    pr = int(subject_match.group(1)) if subject_match else None
+    pull = f"pull/{pr}" if pr is not None else "-"
+    queue_units = {
+        match.group(1)
+        for path in paths
+        if (match := re.fullmatch(
+            r"docs/port/units/([a-z0-9]+(?:-[a-z0-9]+)*)\.queue\.tsv", path))
+        and match.group(1) in units
+    }
+    if len(queue_units) == 1:
+        return "unit", next(iter(queue_units)), pull
+    if len(queue_units) > 1:
+        return "shared", None, pull
+    if pr is not None:
+        referenced = claims.get(pr, set()) & units
+        if len(referenced) == 1:
+            return "unit", next(iter(referenced)), pull
+        if len(referenced) > 1:
+            return "shared", None, pull
+    return "none", None, pull
+
+
+def render_ownership_map(root: Path, units: Path, index: ShardIndex) -> bytes:
+    """Derive the bot-owned path map from merged commits recorded in ledgers.
+
+    Every reachable unit-mapped commit adds its unit as an owner of the product,
+    test and tool paths it touched, so a genuinely shared file can list several
+    owners and any of them may change it.  When a commit cannot be attributed to
+    one unit (a cross-unit merge, a first-parent split, or an unrecorded product
+    change), the path is recorded as explicitly shared with ``*`` rather than
+    silently left unowned.  A path with a concrete owner does not also get ``*``.
+    Evidence for each row is selected by greatest commit id, so the result does
+    not depend on log order.
+    """
+
+    unit_ids = set(index.queue)
+    claims = _unit_claims(index, units)
+    owners: dict[tuple[str, str], tuple[str, str]] = {}
+    shared: dict[str, tuple[str, str]] = {}
+    for sha, subject in _reachable_commits(root):
+        paths = _commit_paths(root, sha)
+        candidates = [
+            path for path in paths if _ownership_candidate(path, unit_ids)
+        ]
+        if not candidates:
+            continue
+        kind, unit, pull = _commit_attribution(subject, paths, unit_ids, claims)
+        evidence = (sha, pull)
+        if kind == "unit" and unit is not None:
+            for path in candidates:
+                key = (path, unit)
+                if key not in owners or evidence > owners[key]:
+                    owners[key] = evidence
+        else:
+            # Ambiguous or unrecorded product material is explicitly shared.
+            for path in candidates:
+                if path not in shared or evidence > shared[path]:
+                    shared[path] = evidence
+    rows = [
+        (path, unit, sha, pull)
+        for (path, unit), (sha, pull) in owners.items()
+    ]
+    owned_paths = {path for path, _unit in owners}
+    rows.extend(
+        (path, SHARED_OWNER, sha, pull)
+        for path, (sha, pull) in shared.items()
+        if path not in owned_paths
+    )
+    rows.sort(key=lambda row: (row[0], row[1]))
+    lines = [OWNERSHIP_HEADER]
+    lines.extend("\t".join(row) for row in rows)
+    return ("\n".join(lines) + "\n").encode("utf-8")
+
+
 def snapshot_from_dir(units: Path, queue: Path, ledger: Path) -> BaseSnapshot | None:
     """Read a base checkout of the shards and aggregates for history comparison."""
     if not units.is_dir():
@@ -790,6 +996,18 @@ def _git_bytes(root: Path, *args: str) -> bytes | None:
     return completed.stdout if completed.returncode == 0 else None
 
 
+def _map_bootstrap_allowed(root: Path, ref: str) -> bool:
+    """The first map may arrive only from a PR that touches no product material."""
+
+    if _git_bytes(root, "cat-file", "-e", f"{ref}:{OWNERSHIP_GENERATED_PATH}") is not None:
+        return False
+    if _git_bytes(root, "cat-file", "-e", f"HEAD:{OWNERSHIP_GENERATED_PATH}") is None:
+        return False
+    listing = _git_bytes(root, "diff", "--name-only", "-z", ref, "HEAD",
+                         "--", "src", "tests", "tools")
+    return not (listing and [name for name in listing.decode("utf-8", "replace").split("\0") if name])
+
+
 def changed_aggregates(root: Path, ref: str, queue: Path, ledger: Path,
                        recorded_base: str | None = None) -> list[str]:
     """Paths of generated aggregates changed outside both base sides.
@@ -818,7 +1036,9 @@ def changed_aggregates(root: Path, ref: str, queue: Path, ledger: Path,
             raise PortIndexError(f"cannot resolve recorded base {recorded_base!r}")
         recorded = resolved_recorded
     paths = (_repo_relative(queue, root), _repo_relative(ledger, root),
-             BASELINE_GENERATED_PATH, STATUS_GENERATED_PATH)
+             BASELINE_GENERATED_PATH, STATUS_GENERATED_PATH, OWNERSHIP_GENERATED_PATH)
+    if _map_bootstrap_allowed(root, merge_base):
+        paths = tuple(path for path in paths if path != OWNERSHIP_GENERATED_PATH)
     listing = _git(
         root, "diff", "--name-only", "-z", merge_base, "HEAD", "--", *paths
     )
@@ -923,7 +1143,13 @@ def shard_ownership_errors(root: Path, ref: str, unit: str | None = None,
             continue
         status, name = fields
         path = Path(name)
-        if path.name.endswith(QUEUE_SUFFIX):
+        if path.name == "ownership.paths":
+            if not (status == "A" and _map_bootstrap_allowed(root, ref)):
+                errors.append(
+                    f"{name}: the path ownership map is generated on main; a pull "
+                    "request must not add, edit, rename or delete it"
+                )
+        elif path.name.endswith(QUEUE_SUFFIX):
             owned.add(path.name[:-len(QUEUE_SUFFIX)])
         elif path.parent.name.endswith(FRAGMENT_SUFFIX):
             owned.add(path.parent.name[:-len(FRAGMENT_SUFFIX)])
@@ -1503,15 +1729,17 @@ def main(
                               if args.capture_results else None)
             status_bytes = render_status(
                 index, status.read_text() if status.exists() else "")
+            ownership_bytes = render_ownership_map(root, units, index)
         except (PortIndexError, OSError, ValueError, KeyError, TypeError) as exc:
             print(f"error: {exc}", file=sys.stderr)
             return 1
         queue.write_bytes(queue_bytes)
         ledger.write_bytes(ledger_bytes)
         status.write_bytes(status_bytes)
+        (root / OWNERSHIP_GENERATED_PATH).write_bytes(ownership_bytes)
         if baseline_bytes is not None:
             baseline.write_bytes(baseline_bytes)
-        print(f"wrote {queue}, {ledger} and {status}")
+        print(f"wrote {queue}, {ledger}, {status} and {root / OWNERSHIP_GENERATED_PATH}")
         return 0
 
     if args.forbid_aggregate_changes:
@@ -1527,7 +1755,19 @@ def main(
             changed = changed_aggregates(root, args.against, queue, ledger,
                                          recorded_base)
             ownership = shard_ownership_errors(root, args.against, args.unit, args.pr)
-        except PortIndexError as exc:
+            merge = _git(root, "merge-base", args.against, "HEAD").decode(
+                "ascii", "replace").strip()
+            if merge and _map_bootstrap_allowed(root, merge):
+                actual = (root / OWNERSHIP_GENERATED_PATH).read_bytes()
+                if actual != render_ownership_map(root, units, index):
+                    print(
+                        "error: the first ownership map does not match a "
+                        "deterministic regeneration of HEAD; a process PR may "
+                        "seed only the generated map, not arbitrary ownership",
+                        file=sys.stderr,
+                    )
+                    return 1
+        except (PortIndexError, OSError) as exc:
             print(f"error: {exc}", file=sys.stderr)
             return 1
         if changed or ownership:
@@ -1555,7 +1795,18 @@ def main(
         else:
             print(f"error: {status} is missing; run the generator build", file=sys.stderr)
             status_ok = False
-        if not (queue_ok and ledger_ok and status_ok):
+        ownership = root / OWNERSHIP_GENERATED_PATH
+        if ownership.exists():
+            try:
+                ownership_ok = _check_file(
+                    ownership, render_ownership_map(root, units, index))
+            except PortIndexError as exc:
+                print(f"error: {exc}", file=sys.stderr)
+                ownership_ok = False
+        else:
+            print(f"error: {ownership} is missing; run the generator build", file=sys.stderr)
+            ownership_ok = False
+        if not (queue_ok and ledger_ok and status_ok and ownership_ok):
             return 1
 
     ref = args.against or os.environ.get("PORT_INDEX_BASE_REF", "").strip()
