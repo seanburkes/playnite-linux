@@ -137,9 +137,13 @@ src/Playnite.SDK/AssemblyMarker.cs	p2-002	abdb82bedd0bcadfe93c1fc6f11937c55b116b
 src/Playnite.Steam/AssemblyMarker.cs	p2-001	9afd818ae8a695e921bb98f386bfceb83d0059db	pull/29
 src/Playnite.Steam/AssemblyMarker.cs	p2-002	abdb82bedd0bcadfe93c1fc6f11937c55b116b7c	pull/37
 src/Playnite.Steam/KeyValues.cs	p5-001	777578cc81efb0130b41924c282542f0b346836c	pull/109
+src/Playnite.Steam/SteamDiscovery.cs	p5-002	c7b25dc7fa39238ab8f6fc47b9b21a4237e3ddb0	pull/110
+src/Playnite.Steam/SteamDiscoveryModels.cs	p5-002	c7b25dc7fa39238ab8f6fc47b9b21a4237e3ddb0	pull/110
+src/Playnite.Steam/SteamFileSystem.cs	p5-002	c7b25dc7fa39238ab8f6fc47b9b21a4237e3ddb0	pull/110
 src/Playnite.Steam/SteamLibraryParser.cs	p5-001	777578cc81efb0130b41924c282542f0b346836c	pull/109
 src/Playnite.Steam/SteamManifestParser.cs	p5-001	777578cc81efb0130b41924c282542f0b346836c	pull/109
 src/Playnite.Steam/SteamModels.cs	p5-001	777578cc81efb0130b41924c282542f0b346836c	pull/109
+src/Playnite.Steam/SteamRootResolver.cs	p5-002	c7b25dc7fa39238ab8f6fc47b9b21a4237e3ddb0	pull/110
 src/README.md	*	a9b884f696be6ce48e42a0f2d93b8275891fac8b	-
 tests/Playnite.Architecture.Tests/ApiCompatTests.cs	p2-006	7c31729c5d61d1a45edf5a41fee4c119ae7437d6	pull/45
 tests/Playnite.Architecture.Tests/ApiCompatTests.cs	p2-006-harden	9d27f7a5689dd4c981f3b5695a689aee87a00282	pull/48
@@ -209,6 +213,7 @@ tests/Playnite.Core.Tests/Serialization/TomlSerializationTests.cs	p3-003c	0f1c77
 tests/Playnite.Core.Tests/Serialization/V10GoldenTests.cs	p3-003c	0f1c774400a829cd45e1647245bf0a802e237ebb	pull/69
 tests/Playnite.Core.Tests/Serialization/YamlSerializationTests.cs	p3-003c	0f1c774400a829cd45e1647245bf0a802e237ebb	pull/69
 tests/Playnite.Core.Tests/SettingsMigrationTests.cs	p4-004	a6f8bfc7e3cf94a37c5c043da6f2e90609b2ba6b	pull/91
+tests/Playnite.Core.Tests/Steam/SteamDiscoveryTests.cs	p5-002	c7b25dc7fa39238ab8f6fc47b9b21a4237e3ddb0	pull/110
 tests/Playnite.Core.Tests/Steam/SteamParserTests.cs	p5-001	777578cc81efb0130b41924c282542f0b346836c	pull/109
 tests/Playnite.Core.Tests/TestDoubles/MemoryEnvironment.cs	*	d6401f1f07c69474d0ce395797ab694bedf019e7	pull/68
 tests/Playnite.Core.Tests/TestDoubles/MemoryFileSystem.cs	*	d6401f1f07c69474d0ce395797ab694bedf019e7	pull/68
@@ -421,6 +426,15 @@ tools/Playnite.Fuzz/Corpus/p5-001/broken.vdf	p5-001	777578cc81efb0130b41924c2825
 tools/Playnite.Fuzz/Corpus/p5-001/escapes.vdf	p5-001	777578cc81efb0130b41924c282542f0b346836c	pull/109
 tools/Playnite.Fuzz/Corpus/p5-001/libraryfolders.vdf	p5-001	777578cc81efb0130b41924c282542f0b346836c	pull/109
 tools/Playnite.Fuzz/Corpus/p5-001/manifest.sha256	p5-001	777578cc81efb0130b41924c282542f0b346836c	pull/109
+tools/Playnite.Fuzz/Corpus/p5-002/README.md	p5-002	c7b25dc7fa39238ab8f6fc47b9b21a4237e3ddb0	pull/110
+tools/Playnite.Fuzz/Corpus/p5-002/SHA256SUMS	p5-002	c7b25dc7fa39238ab8f6fc47b9b21a4237e3ddb0	pull/110
+tools/Playnite.Fuzz/Corpus/p5-002/libraryfolders.duplicates.vdf	p5-002	c7b25dc7fa39238ab8f6fc47b9b21a4237e3ddb0	pull/110
+tools/Playnite.Fuzz/Corpus/p5-002/libraryfolders.invalid-apps.vdf	p5-002	c7b25dc7fa39238ab8f6fc47b9b21a4237e3ddb0	pull/110
+tools/Playnite.Fuzz/Corpus/p5-002/libraryfolders.legacy.vdf	p5-002	c7b25dc7fa39238ab8f6fc47b9b21a4237e3ddb0	pull/110
+tools/Playnite.Fuzz/Corpus/p5-002/libraryfolders.malformed.vdf	p5-002	c7b25dc7fa39238ab8f6fc47b9b21a4237e3ddb0	pull/110
+tools/Playnite.Fuzz/Corpus/p5-002/libraryfolders.modern.vdf	p5-002	c7b25dc7fa39238ab8f6fc47b9b21a4237e3ddb0	pull/110
+tools/Playnite.Fuzz/Corpus/p5-002/libraryfolders.no-steamapps.vdf	p5-002	c7b25dc7fa39238ab8f6fc47b9b21a4237e3ddb0	pull/110
+tools/Playnite.Fuzz/Corpus/p5-002/libraryfolders.unavailable.vdf	p5-002	c7b25dc7fa39238ab8f6fc47b9b21a4237e3ddb0	pull/110
 tools/Playnite.Fuzz/FuzzCorpus.cs	p3-fuzz-ds	e7a49d922e5786f72686907f49a8e25ab29f6d75	pull/84
 tools/Playnite.Fuzz/FuzzExecution.cs	p3-fuzz-ds	e7a49d922e5786f72686907f49a8e25ab29f6d75	pull/84
 tools/Playnite.Fuzz/FuzzMutator.cs	p3-fuzz-ds	e7a49d922e5786f72686907f49a8e25ab29f6d75	pull/84
