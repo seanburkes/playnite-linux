@@ -5,7 +5,11 @@ using System.Text;
 namespace Playnite.Steam;
 
 /// <summary>A case-preserving KeyValues scalar or ordered object; offsets are UTF-8 byte offsets.</summary>
-public sealed record KeyValue(string Key, string? Text, KeyValuesObject? Object, int ByteOffset);
+public sealed record KeyValue(string Key, string? Text, KeyValuesObject? Object, int ByteOffset)
+{
+    // Raw trees retain private metadata for round trips, not for display.
+    public override string ToString() => $"KeyValue at byte {ByteOffset}";
+}
 
 /// <summary>Entries in file order, with exact-case lookup. Duplicate keys cannot be parsed.</summary>
 public sealed class KeyValuesObject
@@ -26,9 +30,9 @@ public sealed class KeyValuesObject
 public sealed class KeyValuesException : Exception
 {
     internal KeyValuesException(string file, string reason, int offset, int line, string? key = null)
-        : base($"{file}: {reason} at byte {offset}, line {line}" + (key is null ? string.Empty : $" (key {key})"))
+        : base($"{SteamFields.FileName(file)}: {reason} at byte {offset}, line {line}" + (key is null ? string.Empty : $" (key {key})"))
     {
-        File = file;
+        File = SteamFields.FileName(file);
         Reason = reason;
         ByteOffset = offset;
         Line = line;
@@ -51,7 +55,7 @@ public static class KeyValues
 
     public static KeyValue Parse(ReadOnlySpan<byte> bytes, string file, int maxBytes = DefaultMaxBytes)
     {
-        ArgumentNullException.ThrowIfNull(file);
+        file = SteamFields.FileName(file);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maxBytes);
         if (bytes.Length > maxBytes)
         {
@@ -96,12 +100,22 @@ public static class KeyValues
     {
         ArgumentNullException.ThrowIfNull(root);
         var output = new StringBuilder();
-        WriteEntry(root, output);
+        WriteEntry(root, output, 1);
         return Utf8.GetBytes(output.ToString());
     }
 
-    private static void WriteEntry(KeyValue entry, StringBuilder output)
+    private static void WriteEntry(KeyValue entry, StringBuilder output, int depth)
     {
+        if (entry.Key.Length == 0)
+        {
+            throw new ArgumentException("empty-key", nameof(entry));
+        }
+
+        if (entry.Object is not null && depth > MaxDepth)
+        {
+            throw new ArgumentException("depth-limit", nameof(entry));
+        }
+
         Quote(entry.Key, output);
         output.Append(' ');
         if (entry.Object is { } obj)
@@ -109,7 +123,7 @@ public static class KeyValues
             output.Append("{\n");
             foreach (var child in obj.Entries)
             {
-                WriteEntry(child, output);
+                WriteEntry(child, output, depth + 1);
             }
 
             output.Append("}\n");
@@ -165,13 +179,17 @@ public static class KeyValues
             Skip();
             var offset = position;
             var key = Token();
+            if (key.Length == 0)
+            {
+                Fail("empty-key");
+            }
             Skip();
             if (!Take((byte)'{'))
             {
                 Fail("expected-root-object");
             }
 
-            var root = new KeyValue(key, null, Object(1), offset);
+            var root = new KeyValue(key, null, Object(1, SteamFields.IsOwner(key)), offset);
             Skip();
             if (position != bytes.Length)
             {
@@ -181,7 +199,7 @@ public static class KeyValues
             return root;
         }
 
-        private KeyValuesObject Object(int depth)
+        private KeyValuesObject Object(int depth, bool privateObject = false)
         {
             if (depth > MaxDepth)
             {
@@ -205,14 +223,20 @@ public static class KeyValues
 
                 var offset = position;
                 var key = Token();
+                if (key.Length == 0)
+                {
+                    Fail("empty-key");
+                }
+
                 if (!keys.Add(key))
                 {
-                    throw new KeyValuesException(file, "duplicate-key", offset, LineAt(bytes, offset), key);
+                    throw new KeyValuesException(file, "duplicate-key", offset, LineAt(bytes, offset),
+                        privateObject || SteamFields.IsOwner(key) ? null : key);
                 }
 
                 Skip();
                 entries.Add(Take((byte)'{')
-                    ? new KeyValue(key, null, Object(depth + 1), offset)
+                    ? new KeyValue(key, null, Object(depth + 1, privateObject || SteamFields.IsOwner(key)), offset)
                     : new KeyValue(key, Token(), null, offset));
             }
         }

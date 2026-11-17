@@ -10,6 +10,7 @@ public static class SteamLibraryParser
 
     public static SteamParseResult<SteamLibraries> Parse(ReadOnlySpan<byte> bytes, string file, int maxBytes = KeyValues.DefaultMaxBytes)
     {
+        file = SteamFields.FileName(file);
         var issues = new List<SteamParseIssue>();
         KeyValue root;
         try
@@ -29,6 +30,16 @@ public static class SteamLibraryParser
         var libraries = new List<SteamLibrary>();
         var unknown = new List<KeyValue>();
         var appIds = new HashSet<uint>();
+        var indexes = new Dictionary<uint, KeyValue>();
+        foreach (var entry in root.Object!.Entries)
+        {
+            if (SteamFields.Id(entry.Key, out var index) && !indexes.TryAdd(index, entry))
+            {
+                return new(null, [new(file, "libraryfolders", "duplicate-library-index",
+                    indexes[index].Key + "/" + entry.Key, entry.ByteOffset)]);
+            }
+        }
+
         foreach (var entry in root.Object!.Entries)
         {
             if (!SteamFields.Id(entry.Key, out _))
@@ -39,16 +50,28 @@ public static class SteamLibraryParser
 
             var fields = entry.Object;
             var path = fields is null ? entry.Text : fields.Text("path");
-            if (string.IsNullOrEmpty(path) || !Path.IsPathFullyQualified(path))
+            string fullPath;
+            try
             {
-                issues.Add(new(file, entry.Key, "invalid-library-path", "path", entry.ByteOffset));
+                if (string.IsNullOrEmpty(path) || !Path.IsPathFullyQualified(path))
+                {
+                    throw new ArgumentException("An absolute library path is required.");
+                }
+
+                fullPath = Path.GetFullPath(path);
+            }
+            catch (Exception exception) when (exception is ArgumentException or IOException or NotSupportedException)
+            {
+                issues.Add(new(file, entry.Key, "invalid-library-path", "path", fields?.Find("path")?.ByteOffset ?? entry.ByteOffset));
                 continue;
             }
 
             var apps = new Dictionary<uint, ulong>();
+            var appOffsets = new Dictionary<uint, int>();
             if (fields?.Find("apps") is { } appEntry)
             {
                 var valid = appEntry.Object is not null;
+                var invalidOffset = appEntry.ByteOffset;
                 if (appEntry.Object is { } appObject)
                 {
                     foreach (var app in appObject.Entries)
@@ -56,15 +79,18 @@ public static class SteamLibraryParser
                         if (!SteamFields.Id(app.Key, out var id) || !SteamFields.Decimal(app.Text, out var size) || !apps.TryAdd(id, size))
                         {
                             valid = false;
+                            invalidOffset = app.ByteOffset;
                             break;
                         }
+
+                        appOffsets.Add(id, app.ByteOffset);
                     }
                 }
 
                 if (!valid)
                 {
                     apps.Clear();
-                    issues.Add(new(file, entry.Key, "invalid-apps-map", "apps", appEntry.ByteOffset));
+                    issues.Add(new(file, entry.Key, "invalid-apps-map", "apps", invalidOffset));
                 }
             }
 
@@ -73,7 +99,7 @@ public static class SteamLibraryParser
                 if (!appIds.Add(id))
                 {
                     apps.Remove(id);
-                    issues.Add(new(file, entry.Key, "duplicate-appid", id.ToString(System.Globalization.CultureInfo.InvariantCulture), entry.ByteOffset));
+                    issues.Add(new(file, entry.Key, "duplicate-appid", id.ToString(System.Globalization.CultureInfo.InvariantCulture), appOffsets[id]));
                 }
             }
 
@@ -85,9 +111,9 @@ public static class SteamLibraryParser
                 issues.Add(new(file, entry.Key, "invalid-optional-string", "label", label.ByteOffset));
             }
 
-            libraries.Add(new(entry.Key, Path.GetFullPath(path), fields?.Text("label"), Number("contentid"),
+            libraries.Add(new(entry.Key, fullPath, fields?.Text("label"), Number("contentid"),
                 Number("totalsize"), Number("update_clean_bytes_tally"), verified,
-                new System.Collections.ObjectModel.ReadOnlyDictionary<uint, ulong>(apps),
+                fields?.Find("apps") is null ? null : new System.Collections.ObjectModel.ReadOnlyDictionary<uint, ulong>(apps),
                 fields is null ? [] : SteamFields.Bag(fields.Entries.Where(e => !Known.Contains(e.Key)))));
         }
 

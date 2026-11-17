@@ -47,12 +47,28 @@ public static class SteamFuzzTarget
     /// <summary>Parse the exact mutated bytes; malformed UTF-8 must reach the strict reader unchanged.</summary>
     public static object Parse(byte[] bytes, int maxBytes)
     {
+        // Model parsers must also see syntax rejects; do not short-circuit at the tokenizer.
+        var libraries = SteamLibraryParser.Parse(bytes, "libraryfolders.vdf", maxBytes);
+        foreach (var file in new[] { "appmanifest_42.acf", "appmanifest_43.acf" })
+        {
+            if (SteamManifestParser.Parse(bytes, file, maxBytes).Value is { } manifest)
+            {
+                foreach (var library in libraries.Value?.Libraries.Select(l => l.Path) ?? ["/synthetic/fuzz"])
+                {
+                    var app = manifest.ToApp(library, true, true, false);
+                    var installPath = app.InstallPath;
+                    var installRoot = Path.Combine(app.LibraryPath, "steamapps", "common") + Path.DirectorySeparatorChar;
+                    if (!installPath.StartsWith(installRoot, StringComparison.Ordinal))
+                    {
+                        throw new FuzzFailureException("Steam install path escaped its library root.");
+                    }
+                }
+            }
+        }
+
         try
         {
             var root = KeyValues.Parse(bytes, "fuzz.vdf", maxBytes);
-            _ = SteamLibraryParser.Parse(bytes, "libraryfolders.vdf", maxBytes);
-            _ = SteamManifestParser.Parse(bytes, "appmanifest_42.acf", maxBytes);
-            _ = SteamManifestParser.Parse(bytes, "appmanifest_43.acf", maxBytes);
             return root;
         }
         catch (KeyValuesException exception)
@@ -64,6 +80,11 @@ public static class SteamFuzzTarget
     public static FuzzRunResult Run(FuzzOptions options, TextWriter output)
     {
         options.Validate();
+        if (options.MaxInputBytes >= Array.MaxLength)
+        {
+            throw new ArgumentOutOfRangeException(nameof(options), "The oversized probe must fit in a byte array.");
+        }
+
         var seeds = Load(options.CorpusRoot);
         var digest = FuzzCorpus.Digest(seeds);
         var mutator = new FuzzMutator(options.Seed);

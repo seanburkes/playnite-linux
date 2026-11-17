@@ -192,6 +192,39 @@ absolute normalized library path using `Path.GetFullPath`. Availability and Prot
 the later discovery unit's responsibility. Missing-manifest reports likewise require that unit's
 file enumeration; this layer never invents a manifest for a library app id.
 
+### Follow-up boundary clarifications (p5-001)
+
+- `InstalledDepots`, `SharedDepots`, and `InstallScripts` use nullable read-only dictionaries:
+  missing or wrong-shaped objects are `null`, with a diagnostic for the latter; a present empty
+  object has count 0. `UserConfig` and `MountedConfig` use the same distinction with nullable
+  lists. Invalid members are omitted from present objects rather than erasing their presence.
+- `SteamLibrary.Apps` is also nullable: missing is `null`, present empty is count 0. A malformed
+  present apps map reports and becomes a non-null empty map, preserving the existing all-or-nothing
+  map policy. Numerically ambiguous library indexes (such as `0` and `00`) reject the whole file
+  with `duplicate-library-index`, both raw indexes, and the later index's byte offset; discovery's
+  implicit default Steam library is unaffected by this parser rejection.
+- Diagnostic `File` and syntax-exception `File` contain only the basename, never caller directory
+  prefixes. Caller filename arguments have trailing POSIX slashes removed before taking the
+  basename; empty/root-only names and embedded null bytes are rejected as invalid arguments with
+  value-free messages. Parser issue offsets identify offending keys/members rather than containers.
+- Empty quoted roots and object keys reject. Numbers use ASCII decimal digits only and app ids
+  must fit `uint`, without wrapping. A name is nonempty after decoding, not trimmed: whitespace
+  is preserved, including a nonempty whitespace-only name.
+- Install directories retain POSIX spelling, including literal backslashes and colons. Traversal
+  above the install root is checked with both slash and backslash separators and with POSIX-only
+  separators; the actual POSIX path may not resolve to the root itself. This does not impose
+  Windows drive-name rules on legitimate POSIX names. Public `ToApp` and `InstallPath` projections
+  enforce the same checks and normalized containment, even for programmatically constructed records.
+- Owner-field exclusion is ordinal case-insensitive at every nesting level of model bags and
+  scripts. No diagnostic identifies that field or its contents, including duplicate keys inside
+  an owner-named root/subtree. Raw KeyValues intentionally preserves owner metadata for round trips;
+  default raw-entry formatting emits neither keys nor values. `KeyValues.Write` is serialization,
+  **not redaction**, and raw trees/written bytes must never be logged. The writer rejects empty keys
+  and bounds object depth to the reader's 64 levels, including programmatically assembled trees.
+- The Steam fuzz target exercises model-level syntax/semantic rejects and public path projection;
+  non-syntax failures are not converted into expected syntax rejections. Oversized-probe budgets
+  must fit a byte array, preventing `MaxInputBytes + 1` overflow before allocation.
+
 Parser entry points live in the existing **Playnite.Steam** assembly, which already owns VDF/ACF
 in §3.4 of the architecture. The pure types use only BCL (Core/Platform references remain the
 existing assembly graph), not UI/network/process/OS APIs; a new pure assembly adds no isolation
