@@ -3,7 +3,10 @@ using System.Globalization;
 namespace Playnite.Steam;
 
 /// <summary>A value-free diagnostic. Identity is the filename appid or library index, not a user id.</summary>
-public sealed record SteamParseIssue(string File, string Identity, string Reason, string? Field, int ByteOffset);
+public sealed record SteamParseIssue(string File, string Identity, string Reason, string? Field, int ByteOffset)
+{
+    public string File { get; init; } = Path.GetFileName(File);
+}
 
 /// <summary>A rejected file has a null value; valid library files can contain individually skipped records.</summary>
 public sealed record SteamParseResult<T>(T? Value, IReadOnlyList<SteamParseIssue> Issues) where T : class;
@@ -32,9 +35,9 @@ public sealed record SteamManifest(
     ulong? SizeOnDisk,
     DateTimeOffset? LastUpdated,
     IReadOnlyDictionary<string, ulong> OptionalNumbers,
-    IReadOnlyDictionary<uint, SteamDepot> InstalledDepots,
-    IReadOnlyDictionary<uint, uint> SharedDepots,
-    IReadOnlyDictionary<string, string> InstallScripts,
+    IReadOnlyDictionary<uint, SteamDepot>? InstalledDepots,
+    IReadOnlyDictionary<uint, uint>? SharedDepots,
+    IReadOnlyDictionary<string, string>? InstallScripts,
     IReadOnlyList<KeyValue>? UserConfig,
     IReadOnlyList<KeyValue>? MountedConfig,
     IReadOnlyList<KeyValue> UnknownFields)
@@ -73,11 +76,15 @@ public sealed record SteamApp(uint AppId, string Name, string InstallDir, string
 
 internal static class SteamFields
 {
+    internal static bool IsOwner(string key) => string.Equals(key, "LastOwner", StringComparison.OrdinalIgnoreCase);
+
+    private static bool AsciiDigits(string? text) => !string.IsNullOrEmpty(text) && text.All(c => c is >= '0' and <= '9');
+
     internal static bool Decimal(string? text, out ulong value) =>
-        ulong.TryParse(text, NumberStyles.None, CultureInfo.InvariantCulture, out value);
+        ulong.TryParse(AsciiDigits(text) ? text : null, NumberStyles.None, CultureInfo.InvariantCulture, out value);
 
     internal static bool Id(string? text, out uint value) =>
-        uint.TryParse(text, NumberStyles.None, CultureInfo.InvariantCulture, out value);
+        uint.TryParse(AsciiDigits(text) ? text : null, NumberStyles.None, CultureInfo.InvariantCulture, out value);
 
     internal static ulong? Number(KeyValuesObject obj, string key, List<SteamParseIssue> issues, string file, string identity)
     {
@@ -92,7 +99,7 @@ internal static class SteamFields
             return value;
         }
 
-        issues.Add(new(file, identity, "invalid-optional-number", key, entry.ByteOffset));
+        issues.Add(new(file, identity, "invalid-optional-number", IsOwner(key) ? null : key, entry.ByteOffset));
         return null;
     }
 
@@ -114,7 +121,7 @@ internal static class SteamFields
     }
 
     internal static IReadOnlyList<KeyValue> Bag(IEnumerable<KeyValue> entries) => entries
-        .Where(e => e.Key != "LastOwner")
+        .Where(e => !IsOwner(e.Key))
         .Select(e => e.Object is null ? e : e with { Object = new KeyValuesObject(Bag(e.Object.Entries).ToList()) })
         .ToList().AsReadOnly();
 

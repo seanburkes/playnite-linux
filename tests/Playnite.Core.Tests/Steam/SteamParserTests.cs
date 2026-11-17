@@ -190,10 +190,10 @@ public sealed class SteamParserTests(ITestOutputHelper output)
         Assert.Equal("Synthetic Café™ 🚀", app.Name);
         Assert.Equal(66_000_000_001ul, app.SizeOnDisk);
         Assert.Equal(DateTimeOffset.FromUnixTimeSeconds(1_700_000_000), app.LastUpdated);
-        Assert.Equal(52u, app.InstalledDepots[51].DlcAppId);
+        Assert.Equal(52u, app.InstalledDepots![51].DlcAppId);
         Assert.Equal(9_000_000_000_000_000_001ul, app.InstalledDepots[51].Manifest);
-        Assert.Equal(54u, app.SharedDepots[53]);
-        Assert.Equal("addins\\synthetic\\installScript.vdf", app.InstallScripts["51"]);
+        Assert.Equal(54u, app.SharedDepots![53]);
+        Assert.Equal("addins\\synthetic\\installScript.vdf", app.InstallScripts!["51"]);
         Assert.Equal("english", Assert.Single(app.UserConfig!).Text);
         Assert.Empty(app.MountedConfig!);
         Assert.Single(app.UnknownFields);
@@ -213,6 +213,13 @@ public sealed class SteamParserTests(ITestOutputHelper output)
     [InlineData("installdir", "/absolute")]
     [InlineData("installdir", "../escape")]
     [InlineData("installdir", "nested/../../escape")]
+    [InlineData("installdir", "\"..\\\\..\\\\escape\"")]
+    [InlineData("installdir", "\"nested/..\\\\../escape\"")]
+    [InlineData("installdir", "\"a\\\\b/../../escape\"")]
+    [InlineData("installdir", "\"C:\\\\escape\"")]
+    [InlineData("installdir", "\"\\\\escape\"")]
+    [InlineData("appid", "٤٢")]
+    [InlineData("StateFlags", "４")]
     [InlineData("StateFlags", "")]
     [InlineData("StateFlags", "-4")]
     [InlineData("StateFlags", "4294967296")]
@@ -307,7 +314,7 @@ public sealed class SteamParserTests(ITestOutputHelper output)
     {
         var result = Acf(Manifest(field + " 18446744073709551616"));
         var app = Assert.IsType<SteamManifest>(result.Value);
-        Assert.Equal(field, Assert.Single(result.Issues).Field);
+        Assert.Equal(field == "LastOwner" ? null : field, Assert.Single(result.Issues).Field);
         Assert.Equal("invalid-optional-number", result.Issues[0].Reason);
         Assert.False(app.OptionalNumbers.ContainsKey(field));
         Assert.Null(app.SizeOnDisk);
@@ -347,7 +354,7 @@ public sealed class SteamParserTests(ITestOutputHelper output)
         Assert.Equal(["future", "futureScalar"], libraries.Value!.UnknownFields.Select(e => e.Key));
         Assert.Equal("/elsewhere", Assert.Single(libraries.Value.Libraries).Path);
         var app = Acf(Manifest("InstalledDepots { 51 { manifest 1 size 2 extra { nested yes } } } Future retained"));
-        Assert.Equal("extra", Assert.Single(app.Value!.InstalledDepots[51].UnknownFields).Key);
+        Assert.Equal("extra", Assert.Single(app.Value!.InstalledDepots![51].UnknownFields).Key);
         Assert.Equal("Future", Assert.Single(app.Value.UnknownFields).Key);
     }
 
@@ -443,5 +450,153 @@ public sealed class SteamParserTests(ITestOutputHelper output)
         Assert.True(result.Rejected > 0);
         Assert.True(result.Budget == "iterations" ? result.Cases == 100_000 : result.ElapsedMilliseconds >= 45_000);
         Assert.Contains("STEAM FUZZ COMPLETE", log.ToString(), StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("InstalledDepots", "51 { manifest 1 size 2 }")]
+    [InlineData("SharedDepots", "51 42")]
+    [InlineData("InstallScripts", "51 script.vdf")]
+    [InlineData("UserConfig", "language english")]
+    [InlineData("MountedConfig", "language english")]
+    public void Optional_objects_distinguish_absent_empty_and_populated(string field, string entries)
+    {
+        Assert.Null(Count(Acf(Manifest()).Value!));
+        Assert.Equal(0, Count(Acf(Manifest(field + " {} ")).Value!));
+        Assert.Equal(1, Count(Acf(Manifest(field + " { " + entries + " } ")).Value!));
+        Assert.Null(Count(Acf(Manifest(field + " scalar ")).Value!));
+
+        int? Count(SteamManifest manifest) => field switch
+        {
+            "InstalledDepots" => manifest.InstalledDepots?.Count,
+            "SharedDepots" => manifest.SharedDepots?.Count,
+            "InstallScripts" => manifest.InstallScripts?.Count,
+            "UserConfig" => manifest.UserConfig?.Count,
+            _ => manifest.MountedConfig?.Count,
+        };
+    }
+
+    [Theory]
+    [InlineData("LastOwner")]
+    [InlineData("lastowner")]
+    [InlineData("LASTOWNER")]
+    [InlineData("Lastowner")]
+    [InlineData("lAsToWnEr")]
+    public void Owner_casing_is_private_at_every_model_boundary_but_raw_trees_round_trip(string owner)
+    {
+        const string secret = "76561199999999999";
+        var text = Manifest($"{owner} {secret} future {{ nested {{ {owner} {secret} retained yes }} }} " +
+            $"UserConfig {{ {owner} {secret} }} MountedConfig {{ {owner} {secret} }} " +
+            $"InstallScripts {{ {owner} {secret} }} SharedDepots {{ {owner} {secret} }} " +
+            $"InstalledDepots {{ 51 {{ manifest 1 size 2 {owner} {secret} }} }}");
+        var raw = Parse(text);
+        Assert.Equal(secret, raw.Object!.Text(owner));
+        Assert.Contains(secret, Encoding.UTF8.GetString(KeyValues.Write(raw)), StringComparison.Ordinal);
+        Assert.All(Flatten(raw), entry => Assert.DoesNotContain(secret, entry.ToString(), StringComparison.Ordinal));
+        var result = Acf(text);
+        var app = Assert.IsType<SteamManifest>(result.Value);
+        Assert.Empty(result.Issues);
+        Assert.Empty(app.UserConfig!);
+        Assert.Empty(app.MountedConfig!);
+        Assert.Empty(app.InstallScripts!);
+        Assert.Empty(app.SharedDepots!);
+        Assert.Empty(app.InstalledDepots![51].UnknownFields);
+        Assert.All(app.UnknownFields.SelectMany(Flatten), entry => Assert.False(string.Equals(owner, entry.Key, StringComparison.OrdinalIgnoreCase)));
+        Assert.DoesNotContain(secret, app.ToString(), StringComparison.Ordinal);
+        var library = SteamLibraryParser.Parse(Bytes($"libraryfolders {{ {owner} {secret} 0 {{ path /valid future {{ {owner} {secret} }} {owner} {secret} }} }}"), "libraries.vdf");
+        Assert.Empty(library.Value!.UnknownFields);
+        Assert.Empty(Assert.Single(Assert.Single(library.Value.Libraries).UnknownFields).Object!.Entries);
+        foreach (var invalid in new[] { Manifest($"{owner} not-an-id"), Manifest($"{owner} {secret} {owner} {secret}"), Manifest($"{owner} {{ {secret} a {secret} b }}") })
+        {
+            var rendered = string.Join(";", Acf(invalid).Issues);
+            Assert.DoesNotContain(secret, rendered, StringComparison.Ordinal);
+            Assert.DoesNotContain("owner", rendered, StringComparison.OrdinalIgnoreCase);
+        }
+
+        static IEnumerable<KeyValue> Flatten(KeyValue entry) => new[] { entry }.Concat(entry.Object?.Entries.SelectMany(Flatten) ?? []);
+    }
+
+    [Theory]
+    [InlineData("\"\" {}")]
+    [InlineData("root { \"\" value }")]
+    [InlineData("root { child { \"\" {} } }")]
+    public void Empty_root_and_object_keys_are_rejected(string text) =>
+        Assert.Equal("empty-key", Assert.Throws<KeyValuesException>(() => Parse(text)).Reason);
+
+    [Theory]
+    [InlineData("0", "00")]
+    [InlineData("1", "01")]
+    [InlineData("01", "1")]
+    public void Numerically_ambiguous_library_indexes_reject_the_whole_file(string first, string second)
+    {
+        var text = $"libraryfolders {{ {first} /first {second} /second 2 /other }}";
+        var result = SteamLibraryParser.Parse(Bytes(text), "libraries.vdf");
+        Assert.Null(result.Value);
+        var issue = Assert.Single(result.Issues);
+        Assert.Equal("duplicate-library-index", issue.Reason);
+        Assert.Equal(first + "/" + second, issue.Field);
+        Assert.Equal(text.IndexOf(second + " /second", StringComparison.Ordinal), issue.ByteOffset);
+        Assert.Equal(2, SteamLibraryParser.Parse(Bytes("libraryfolders { 0 /first 01 /second }"), "libraries.vdf").Value!.Libraries.Count);
+    }
+
+    [Theory]
+    [InlineData("InstalledDepots { bad {} }", "bad")]
+    [InlineData("InstalledDepots { 51 { manifest nope size 2 } }", "manifest")]
+    [InlineData("InstalledDepots { 51 { manifest 1 size nope } }", "size")]
+    [InlineData("InstalledDepots { 51 { manifest 1 size 2 dlcappid nope } }", "dlcappid")]
+    [InlineData("SharedDepots { bad 42 }", "bad")]
+    [InlineData("InstallScripts { 51 {} }", "51")]
+    public void Optional_entry_diagnostics_point_at_the_offending_token(string extra, string token)
+    {
+        var text = Manifest(extra);
+        Assert.Equal(Encoding.UTF8.GetByteCount(text[..text.IndexOf(token, StringComparison.Ordinal)]), Assert.Single(Acf(text).Issues).ByteOffset);
+    }
+
+    [Fact]
+    public void Library_path_diagnostics_point_at_path_and_never_disclose_caller_directories()
+    {
+        const string text = "libraryfolders { 0 { path relative } 1 /valid }";
+        var issue = Assert.Single(SteamLibraryParser.Parse(Bytes(text), "/private/home/libraries.vdf").Issues);
+        Assert.Equal(text.IndexOf("path", StringComparison.Ordinal), issue.ByteOffset);
+        Assert.Equal("libraries.vdf", issue.File);
+        Assert.DoesNotContain("/private", issue.ToString(), StringComparison.Ordinal);
+        var syntax = Acf("AppState {", "/private/home/appmanifest_42.acf");
+        Assert.Equal("appmanifest_42.acf", Assert.Single(syntax.Issues).File);
+        Assert.DoesNotContain("/private", Assert.Throws<KeyValuesException>(() => KeyValues.Parse(Bytes("root {"), "/private/home/file.vdf")).ToString(), StringComparison.Ordinal);
+        var malformed = SteamLibraryParser.Parse(Bytes("libraryfolders { 0 { path \"/bad\0path\" } }"), "libraries.vdf");
+        Assert.Null(malformed.Value);
+        Assert.Equal("control-character", Assert.Single(malformed.Issues).Reason);
+    }
+
+    [Theory]
+    [InlineData("٤٢")]
+    [InlineData("４２")]
+    [InlineData("4٢")]
+    public void Numeric_domains_accept_only_ascii_digits(string digits)
+    {
+        Assert.Null(Acf(Manifest(), "appmanifest_" + digits + ".acf").Value);
+        var result = Acf(Manifest("buildid " + digits + " SharedDepots { 51 " + digits + " }"));
+        Assert.Equal(2, result.Issues.Count);
+        Assert.Empty(result.Value!.OptionalNumbers);
+        Assert.Empty(result.Value.SharedDepots!);
+        var library = SteamLibraryParser.Parse(Bytes("libraryfolders { 0 { path /valid apps { 42 " + digits + " } } }"), "libraries.vdf");
+        Assert.Equal("invalid-apps-map", Assert.Single(library.Issues).Reason);
+    }
+
+    [Fact]
+    public void Block_comment_looking_tokens_are_metadata_not_comments()
+    {
+        var root = Parse("root { /* retained */ also-retained }");
+        Assert.Equal("retained", root.Object!.Text("/*"));
+        Assert.Equal("also-retained", root.Object.Text("*/"));
+    }
+
+    [Fact]
+    public void Fuzz_target_covers_model_rejects_projection_and_non_syntax_contract_failures()
+    {
+        Assert.IsType<KeyValue>(SteamFuzzTarget.Parse(Bytes(Manifest()), KeyValues.DefaultMaxBytes));
+        Assert.IsType<KeyValue>(SteamFuzzTarget.Parse(Bytes(Manifest().Replace("Game", "../escape", StringComparison.Ordinal)), KeyValues.DefaultMaxBytes));
+        Assert.IsType<KeyValue>(SteamFuzzTarget.Parse(Bytes("libraryfolders { 0 { path relative } }"), KeyValues.DefaultMaxBytes));
+        Assert.Throws<ArgumentOutOfRangeException>(() => SteamFuzzTarget.Parse(Bytes(Manifest()), 0));
+        Assert.Throws<ArgumentException>(() => Acf(Manifest()).Value!.ToApp("relative", true, true, false));
     }
 }

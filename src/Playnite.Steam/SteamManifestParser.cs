@@ -104,9 +104,10 @@ public static class SteamManifestParser
         }
 
         var depots = new Dictionary<uint, SteamDepot>();
-        if (OptionalObject("InstalledDepots") is { } installed)
+        var installed = OptionalObject("InstalledDepots");
+        if (installed is not null)
         {
-            foreach (var entry in installed.Entries)
+            foreach (var entry in installed.Entries.Where(e => !SteamFields.IsOwner(e.Key)))
             {
                 var depot = entry.Object;
                 if (!SteamFields.Id(entry.Key, out var id) || depot is null
@@ -114,7 +115,9 @@ public static class SteamManifestParser
                     || !SteamFields.Decimal(depot.Text("size"), out var depotSize)
                     || depots.ContainsKey(id))
                 {
-                    Invalid("InstalledDepots", "invalid-depot");
+                    var offending = depot is null || !SteamFields.Id(entry.Key, out _) || depots.ContainsKey(id)
+                        ? entry : !SteamFields.Decimal(depot.Text("manifest"), out _) ? depot.Find("manifest") : depot.Find("size");
+                    issues.Add(new(file, identity, "invalid-depot", "InstalledDepots", (offending ?? entry).ByteOffset));
                     continue;
                 }
 
@@ -127,7 +130,7 @@ public static class SteamManifestParser
                     }
                     else
                     {
-                        Invalid("InstalledDepots", "invalid-optional-number");
+                        issues.Add(new(file, identity, "invalid-optional-number", "InstalledDepots", dlcEntry.ByteOffset));
                     }
                 }
 
@@ -137,21 +140,23 @@ public static class SteamManifestParser
         }
 
         var shared = new Dictionary<uint, uint>();
-        if (OptionalObject("SharedDepots") is { } sharedObject)
+        var sharedObject = OptionalObject("SharedDepots");
+        if (sharedObject is not null)
         {
-            foreach (var entry in sharedObject.Entries)
+            foreach (var entry in sharedObject.Entries.Where(e => !SteamFields.IsOwner(e.Key)))
             {
                 if (!SteamFields.Id(entry.Key, out var id) || !SteamFields.Id(entry.Text, out var owner) || !shared.TryAdd(id, owner))
                 {
-                    Invalid("SharedDepots", "invalid-shared-depot");
+                    issues.Add(new(file, identity, "invalid-shared-depot", "SharedDepots", entry.ByteOffset));
                 }
             }
         }
 
         var scripts = new Dictionary<string, string>(StringComparer.Ordinal);
-        if (OptionalObject("InstallScripts") is { } scriptsObject)
+        var scriptsObject = OptionalObject("InstallScripts");
+        if (scriptsObject is not null)
         {
-            foreach (var entry in scriptsObject.Entries.Where(e => e.Key != "LastOwner"))
+            foreach (var entry in scriptsObject.Entries.Where(e => !SteamFields.IsOwner(e.Key)))
             {
                 if (entry.Text is { } script)
                 {
@@ -159,7 +164,7 @@ public static class SteamManifestParser
                 }
                 else
                 {
-                    Invalid("InstallScripts", "invalid-install-script");
+                    issues.Add(new(file, identity, "invalid-install-script", "InstallScripts", entry.ByteOffset));
                 }
             }
         }
@@ -167,36 +172,45 @@ public static class SteamManifestParser
         var user = OptionalObject("UserConfig");
         var mounted = OptionalObject("MountedConfig");
         return new(new(appId, name!, installDir!, flags, size, updated,
-            new ReadOnlyDictionary<string, ulong>(numbers), new ReadOnlyDictionary<uint, SteamDepot>(depots),
-            new ReadOnlyDictionary<uint, uint>(shared), new ReadOnlyDictionary<string, string>(scripts),
+            new ReadOnlyDictionary<string, ulong>(numbers), installed is null ? null : new ReadOnlyDictionary<uint, SteamDepot>(depots),
+            sharedObject is null ? null : new ReadOnlyDictionary<uint, uint>(shared), scriptsObject is null ? null : new ReadOnlyDictionary<string, string>(scripts),
             user is null ? null : SteamFields.Bag(user.Entries), mounted is null ? null : SteamFields.Bag(mounted.Entries),
             SteamFields.Bag(fields.Entries.Where(e => !Known.Contains(e.Key)))), issues.AsReadOnly());
     }
 
     private static bool SafeInstallDir(string? path)
     {
-        if (string.IsNullOrEmpty(path) || Path.IsPathRooted(path))
+        if (string.IsNullOrEmpty(path) || Path.IsPathRooted(path) || path.StartsWith('\\')
+            || (path.Length >= 2 && char.IsAsciiLetter(path[0]) && path[1] == ':'))
         {
             return false;
         }
 
-        // POSIX only: a backslash in Steam metadata is never a separator.
-        var depth = 0;
-        foreach (var component in path.Split('/'))
+        // Validate both dialects even on POSIX; keep the decoded metadata unchanged.
+        foreach (var candidate in new[] { path, path.Replace('\\', '/') })
         {
-            if (component == "..")
+            var depth = 0;
+            foreach (var component in candidate.Split('/'))
             {
-                if (--depth < 0)
+                if (component == "..")
                 {
-                    return false;
+                    if (--depth < 0)
+                    {
+                        return false;
+                    }
+                }
+                else if (component is not ("" or "."))
+                {
+                    depth++;
                 }
             }
-            else if (component is not ("" or "."))
+
+            if (depth == 0)
             {
-                depth++;
+                return false;
             }
         }
 
-        return depth > 0;
+        return true;
     }
 }
