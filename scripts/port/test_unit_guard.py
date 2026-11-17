@@ -123,6 +123,8 @@ class Fixture:
         )
 
     def evidence(self, head: str, *args: str) -> subprocess.CompletedProcess[str]:
+        # Pin the expected repository slug so the test is hermetic even when
+        # GitHub Actions exports GITHUB_REPOSITORY for the outer checkout.
         return self.run(
             "check_unit_evidence.py",
             "--base",
@@ -131,6 +133,8 @@ class Fixture:
             head,
             "--pr",
             "123",
+            "--repo-slug",
+            "example/repo",
             *args,
         )
 
