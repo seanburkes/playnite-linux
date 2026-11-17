@@ -175,8 +175,25 @@ The floor commit changes only baseline/shards/documentation; source and test cas
 are identical to that tested source head. Its own pushed-head linux-ci must
 revalidate the same counts before readiness. Both firstmate-arranged adversarial
 diff-only reviews filed findings; dispositions and closure follow-ups are below.
-Final closure/readiness and the unrelated shared Flatpak/main fix remain gates.
 No independent human approval or merge authority is claimed.
+
+An earlier packaging-only sync was the normal `main` merge `6d9c904`, bringing in only the
+merged shared packaging fix #98 (`.github/workflows/packaging.yml`,
+`packaging/flatpak-runtime-lock.json`, `packaging/test_packaging.py`,
+`packaging/verify-flatpak-runtime.py`) on top of the reviewed source head
+`2e09983`; `git diff --name-status 36af471 6d9c904` lists exactly those four files
+and no `src/` or `tests/` path. Actual linux-ci
+[43969367590](https://github.com/seanburkes/playnite-linux/actions/runs/43969367590)
+on that merged head passed on the first attempt, and the downloaded JUnit
+testcase/suite totals, MTP exit files and `test-counts.json` independently
+re-measure **Core1779/1779, Architecture173/173, Smoke4/4**, zero
+failures/skips/errors and exit0 - the same floor as the cited source run, so the
+committed floor needed no numeric change. Plan-guards 43969367499, packaging
+43969367554 (repaired Flatpak and AppImage smoke both green) and legacy-oracle
+43969367454 also passed on `6d9c904`. The earlier linux-ci 43964833995 remains the
+floor's cited evidence and is not replaced by a run of an evidence commit.
+Readiness is recorded only after this evidence commit's own full check set is
+green.
 
 ### Review A/B disposition
 
