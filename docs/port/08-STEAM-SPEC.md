@@ -49,6 +49,21 @@ Flatpak candidate: **UNKNOWN**. The capture host has no `flatpak` binary, no `fl
 and no `~/.var/app/com.valvesoftware.Steam`, so the Flatpak layout and host transport were
 not verified. The path above is the planned v1 probe, not observed fact.
 
+### 1.3 Discovery decisions [decision]
+
+- Candidates are probed in the order above. Every candidate is still reported after one is
+  accepted: a later candidate that resolves to the accepted realpath is `duplicate-realpath`
+  (the usual home `.steam/steam` link), and a different usable root is `shadowed`. Only the first
+  accepted root produces libraries.
+- A non-absolute `$STEAM_ROOT` is ignored rather than resolved against the working directory
+  (`invalid-path`); an existing non-directory is `not-directory`; a failed probe such as a
+  symlink loop is `unreadable` and never escapes as an exception.
+- A candidate counts only when its realpath directory contains `steamapps`, and that
+  `steamapps` must itself resolve inside the candidate realpath. A link that leaves the root is
+  `steamapps-outside-root` and is not followed.
+- Discovery only reads: it never creates, modifies or repairs anything under a Steam tree, and
+  uses no network, process or UI surface.
+
 ## 2. Libraries and `libraryfolders.vdf`
 
 ### 2.1 Observed file [host]
@@ -93,6 +108,22 @@ canonical "library on an unmounted path" case; see §9.
   root library. **[decision]**
 - A path that escapes the declared root is not automatically invalid (libraries legitimately
   live elsewhere), but a non-absolute path is reported and skipped. **[decision]**
+
+### 2.3 Discovery decisions [decision]
+
+- `<root>/steamapps/libraryfolders.vdf` is read first; `<root>/config/libraryfolders.vdf` is the
+  fallback only when the first copy is absent. A library file that is missing, unreadable,
+  oversized or syntactically invalid is skipped and the root library is kept; the reason and
+  byte offset are reported. A file that resolves outside the root realpath is not read.
+- The root is always a library. When no valid file entry resolves to the root realpath, a
+  synthetic `root` entry is added first with an empty apps map; app manifests are a later unit.
+- Libraries are deduplicated by realpath in file order. The first entry is the library; a later
+  entry resolving to the same realpath keeps its declared apps but is marked `Unavailable` with
+  reason `duplicate-library` and reported.
+- A library is available only when its realpath exists, is a directory, and contains a
+  `steamapps` directory whose realpath stays inside the library root. A `steamapps` link that
+  escapes is not followed. Unavailable entries keep their apps map visible, and the next
+  discovery call re-probes them; nothing is deleted or repaired.
 
 ## 3. Valve KeyValues text grammar
 

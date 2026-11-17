@@ -1,0 +1,31 @@
+"libraryfolders"
+{
+	"0"
+	{
+		"path"		"${ROOT}"
+		"apps"
+		{
+			"42"		"100"
+		}
+	}
+	"1"
+	{
+		"path"		"${LINK}"
+		"apps"
+		{
+			"45"		"200"
+		}
+	}
+	"2"
+	{
+		"path"		"${MISSING}/SteamLibrary"
+		"apps"
+		{
+			"46"		"300"
+		}
+	}
+	"3"
+	{
+		"path"		"relative/SteamLibrary"
+	}
+}

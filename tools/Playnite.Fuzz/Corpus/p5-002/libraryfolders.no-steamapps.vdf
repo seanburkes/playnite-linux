@@ -1,0 +1,19 @@
+"libraryfolders"
+{
+	"0"
+	{
+		"path"		"${ROOT}"
+		"apps"
+		{
+			"42"		"1"
+		}
+	}
+	"1"
+	{
+		"path"		"${LIBRARY}"
+		"apps"
+		{
+			"44"		"2048"
+		}
+	}
+}

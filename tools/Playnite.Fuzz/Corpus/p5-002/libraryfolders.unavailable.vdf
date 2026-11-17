@@ -1,0 +1,24 @@
+"libraryfolders"
+{
+	"0"
+	{
+		"path"		"${ROOT}"
+		"apps"
+		{
+			"42"		"1"
+		}
+	}
+	"1"
+	{
+		"path"		"${MISSING}/SteamLibrary"
+		"label"		""
+		"contentid"		"202"
+		"totalsize"		"2000364236800"
+		"time_last_update_verified"		"1700000100"
+		"apps"
+		{
+			"1510"		"46107609"
+			"1520"		"65920016"
+		}
+	}
+}

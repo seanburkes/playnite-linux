@@ -1,0 +1,27 @@
+"libraryfolders"
+{
+	"0"
+	{
+		"path"		"${ROOT}"
+		"label"		"Synthetic primary"
+		"contentid"		"101"
+		"totalsize"		"99000000000"
+		"update_clean_bytes_tally"		"0"
+		"time_last_update_verified"		"1700000000"
+		"apps"
+		{
+			"42"		"66000000001"
+			"43"		"1024"
+		}
+	}
+	"1"
+	{
+		"path"		"${SECOND}"
+		"label"		""
+		"apps"
+		{
+			"42"		"1"
+			"44"		"2048"
+		}
+	}
+}
