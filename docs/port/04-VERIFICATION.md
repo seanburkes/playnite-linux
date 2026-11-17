@@ -148,9 +148,10 @@ Independence is structural, not cultural. The mechanisms that carry it are:
   **unconditionally** immutable: CI fails on any change and no label overrides them.
 - `tests/fixtures/`, `tests/golden/`, `tests/baseline.json`, `docs/formal/`, and
   `docs/port/surface-parity.tsv` are protected paths. The `plan-guards` workflow diffs every
-  one of them against the merge base on each PR and merge-queue entry, and fails on a change
-  the `oracle-change` route did not declare. The merge-queue job re-reads the PR label through
-  the API because merge-group events do not carry it.
+  one of them against the merge base on each PR, and fails on a change the `oracle-change`
+  route did not declare. The `merge_group` variant of that step is retained but dormant:
+  GitHub merge queue is unavailable for this user-owned repository, so a PR label change is
+  the live path.
 - The bytes are pinned: `tests/fixtures/v10/SHA256SUMS`, the golden manifests, `oracle-lock/`,
   and the `api-baseline/` SHA files change when a payload changes, even when the diff looks
   small.
@@ -161,6 +162,11 @@ Independence is structural, not cultural. The mechanisms that carry it are:
   `legacy-oracle`, `settings-library-oracle` and `windows-fixture-validation` jobs run the
   frozen Windows code and validate regenerated fixtures as path-filtered additional checks,
   so they only run when their paths change.
+- Strict/up-to-date is intentionally off because a GitHub merge queue is unavailable for this
+  user-owned repository. Residual risk: a PR whose head was tested against an older `main` can
+  merge; the post-merge `linux-ci` run on `main` is the backstop, so the regression is caught
+  after merge rather than before it. The post-merge `port-index` aggregate commit is not a
+  mergeability gate.
 - There is no auto-accept/update-snapshot command in the repo. Regeneration is a separate
   script run by a human, and the resulting diff goes through the protected-path route.
 - Escape hatches (`Skip`, `Explicit`, `[Ignore]`, category filters) are counted; a non-zero
@@ -243,8 +249,9 @@ Property tests (`CsCheck` 5.x):
 
 Fuzzing (`SharpFuzz` + libFuzzer or AFL):
 - VDF, ACF, INI, JSON settings, YAML manifests, ZIP/7z/tar entry names, M3U/CUE.
-- Corpus from real fixtures. `linux-ci` keys the budget on the event: pull-request and
-  merge-queue runs target **45 s** and pushes to `main` target **120 s**, both with a
+- Corpus from real fixtures. `linux-ci` keys the budget on the event: pull-request runs target
+  **45 s** and pushes to `main` target **120 s** (a dormant `merge_group` run would use the
+  same 45 s target), both with a
   **50,000,000-iteration** cap and an outer timeout of the target budget plus 30 s. The
   target rejects a wall-clock budget under **30 s** or an iteration budget under
   **100,000**, so a short run cannot pass vacuously; `FUZZ COMPLETE` is printed only after
@@ -316,7 +323,7 @@ design, not a proof of the C# implementation.
 | Public API | SDK surface removed/changed without an API report update | every PR |
 | Dependency audit | vulnerable/denied package, license change | every PR + nightly |
 | SBOM | missing/unsigned artifact | release |
-| Fuzz smoke | crash in bounded run | every PR/merge queue (45 s), main push (120 s) |
+| Fuzz smoke | crash in bounded run | every PR (45 s), main push (120 s) |
 | Formal | TLC invariant violation | nightly + `docs/formal/**` |
 | Mutation | score drops below ratchet | nightly |
 | Benchmarks | > tolerance regression | nightly |

@@ -188,8 +188,10 @@ jobs:
           EVENT_NAME: ${{ github.event_name }}
         run: |
           set -euo pipefail
-          # Pull-request and merge-queue runs keep the 45 s target so review latency
-          # does not grow; a main push gets 120 s for a longer bounded run. The
+          # Pull-request runs keep the 45 s target so review latency does not grow;
+          # a main push gets 120 s for a longer bounded run. The merge_group case is
+          # dormant here (no merge queue is available for this user-owned repository)
+          # and would use the same 45 s target if a queue is ever enabled. The
           # iteration cap is the same on every event. FuzzOptions rejects anything
           # below 30 s or 100,000 iterations, so no resolved budget can be vacuous.
           case "$EVENT_NAME" in
