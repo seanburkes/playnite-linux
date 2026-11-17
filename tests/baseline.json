@@ -254,5 +254,38 @@
     "packaging_run_id": 43969396391,
     "packaging_run_url": "https://github.com/seanburkes/playnite-linux/actions/runs/43969396391",
     "notes": "Actual linux-ci and packaging runs on the post-main-sync head of https://github.com/seanburkes/playnite-linux/pull/96, after normally merging origin/main dfd53f9cff6ed60033b78e7a26693f898017f47d at 6f1d19979793b7c972e6ca776604e167cd6edcb0 (no rebase or force-push) once both adversarial reviews had closed with no P1 and no blocking P2. The merge brought in only the already merged #98 packaging repair (packaging workflow, Flatpak runtime lock, verifier and its packaging tests); implementation, project tests, fixtures and tools are unchanged from c401b27. Downloaded JUnit testcase elements, suite totals, test-counts.json and MTP exit files independently confirm Core 1737 total/executed/passed, Architecture 173 total/executed/passed, Smoke 4 total/executed/passed, every suite zero failures/skips and exit 0. Packaging run 43969396391 passed both AppImage and the repaired Flatpak smoke jobs. This retains the existing 1737/173/4 floor, preserves every prior capture and changes no implementation or test cases; no count is lowered. This floor/evidence commit is inside the PR before readiness and does not cite its own run; its own pushed-head linux-ci is the final readiness gate. No worker merge."
+  },
+  "p4_exit_capture": {
+    "captured_at": "2026-11-17T02:05:09Z",
+    "run_id": 43998974769,
+    "run_url": "https://github.com/seanburkes/playnite-linux/actions/runs/43998974769",
+    "commit": "0ecee2607cb6539e6fbbd479d349f04ce795fb68",
+    "counts": {
+      "Playnite.Core.Tests": {
+        "total": 1779,
+        "executed": 1779,
+        "passed": 1779,
+        "failed": 0,
+        "skipped": 0,
+        "exit_code": 0
+      },
+      "Playnite.Architecture.Tests": {
+        "total": 173,
+        "executed": 173,
+        "passed": 173,
+        "failed": 0,
+        "skipped": 0,
+        "exit_code": 0
+      },
+      "Playnite.Smoke.Tests": {
+        "total": 4,
+        "executed": 4,
+        "passed": 4,
+        "failed": 0,
+        "skipped": 0,
+        "exit_code": 0
+      }
+    },
+    "notes": "Post-merge Phase 4 floor capture for the gate document. This is the main-branch push linux-ci run 43998974769 on merged main 0ecee2607cb6539e6fbbd479d349f04ce795fb68 (event push, head_branch main, conclusion success; the run's own test tree is the merged tree). Counts were parsed from the downloaded linux-test-results artifact (test-counts.json plus the three JUnit XML files and MTP exit-code files), not from a local run, memory or another commit: Core 1779 total/executed/passed with 0 failed/0 skipped and MTP exit 0, Architecture 173/173/173 with 0 failed/0 skipped and exit 0, Smoke 4/4/4 with 0 failed/0 skipped and exit 0. These equal the recorded new-suite floors in this file, so no floor is raised or lowered and no capture object is edited. This record is added by the p4-exit documentation PR, which deliberately does not cite that PR head's own run; it cites the merged-main run that measured the tree the gate describes. The same main head's plan-guards run 43998974777 (inventory-and-parity and formal both success, including the pinned TLC 1.7.4 LibraryImport/SettingsMigration/GameSession models and the 11-invariant mutation artifact) and packaging run 43998974804 also passed; port-index 43998974860 is the parent-owned aggregate regeneration."
   }
 }
