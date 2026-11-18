@@ -43,7 +43,7 @@ natural path is not the exposed one — the one-shot stop is.)
 **Why this blocks this PR.** The change's stated invariant is "A sample that cannot prove the
 group state is never a terminal fact" and "Unknown coverage, identity discontinuity or
 survivors cannot produce a successful stop report"
-(`docs/port/p5-008-identity-stop.md:48`, `:60`). This sample contains a proven identity
+(`docs/port/p5-008-identity-stop.md:48`, `:65`). This sample contains a proven identity
 discontinuity (same pid/start ticks, different PGID) yet is treated as a complete, empty group,
 and the existing table row "an observed child escaped/reparented into another group →
 UNKNOWN/survivor" is bypassed. The host gap is pre-existing, but the PR edits this same file
