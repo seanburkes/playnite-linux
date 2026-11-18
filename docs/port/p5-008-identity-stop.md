@@ -27,19 +27,37 @@ Linux policy: `08-STEAM-SPEC.md` §§5–7 and firstmate's game-only stop ruling
 | Identity evidence | Result |
 | --- | --- |
 | One or more fresh game executables under the canonical installdir/app prefix sharing one fresh group (Proton commonly runs both `Game.exe` in the prefix and `Game.bin` in the install dir) | Attribute the group's game identities; game-only SIGTERM for each |
-| Fresh group containing `steam-launch-wrapper`, `pv-adverb`, `srt-bwrap`, `reaper`, `wineserver`, a launch shell, or a live member whose `/proc/PID/exe` the host cannot read (Steam runtime helper in another mount namespace) | Helpers tolerated as group evidence, excluded from the allowlist and never signalled; reported as helper survivors |
+| Fresh group containing `steam-launch-wrapper`, `pv-adverb`, `srt-bwrap`, `reaper`, `wineserver`, a launch shell, or a live member whose `/proc/PID/exe` the host cannot read | Tolerated as group evidence, excluded from the allowlist and never signalled. A readable recognised runtime helper is an identified survivor; an unreadable member stays unidentified until parent evidence identifies it |
 | Pre-existing group member, Steam client identity, candidates spanning two fresh groups, readable unrelated member, or incomplete coverage | UNKNOWN/degraded with the rejecting predicate named; zero signals on that sample |
 | Known game identity changed executable, or an observed child escaped/reparented into another group | UNKNOWN/survivor; no speculative cross-group signal |
+| Known game identity is still running but its executable is unreadable (torn `/proc` read) | Unverifiable, never an exit, a changed executable or a survivor: incomplete snapshot while tracking, retry until the stop deadline proves the stop unproven |
 | Game remains after SIGTERM deadline | `ProcessSurvivorException`; no clean stop claim and no SIGKILL escalation |
-| All attributed games gone, Steam helpers remain | Stopped/Cancelled, with `SteamStopReport.IsDegraded`, explicit reason and helper identities; no group-empty claim |
+| All attributed games gone, identified Steam helpers remain | Stopped/Cancelled, with `SteamStopReport.IsDegraded`, explicit reason and helper identities; no group-empty claim |
+| All attributed games gone, a member without Steam/Proton evidence remains | Stopped/Cancelled, with `SteamStopReport.IsDegraded`, `UnidentifiedSurvivors`, and manual inspection required; no group-empty claim and no helper claim |
 | All attributed games and group members gone | Clean stop report; empty-group proof |
 
 The adapter allowlist retains only policy-verified game identities, not arbitrary tracker input.
-Immediately before SIGTERM the Linux host opens a **pidfd**, checks the canonical executable
-against the sampled expected game path, then rechecks PID/start ticks/PGID/running state.
+Immediately before SIGTERM the Linux host opens a **pidfd**, rechecks PID/start ticks/PGID/running
+state, then re-reads the canonical executable against the sampled expected game path. The
+executable read is last because `execve` preserves pid/start/PGID, so an exec during the stat
+read is still caught; a PID recycle after that final read cannot redirect the pinned signal.
 Signals use the existing reviewed pidfd allowlist; no new interop, PID fallback, negative PID,
 group signal, Steam-client signal or helper signal. Exec/group changes after the final check
 remain a non-atomic `/proc` residual; pidfd prevents redirecting the signal to a recycled PID.
+
+A sample that cannot prove the group state is never a terminal fact. `SnapshotAsync` returns an
+incomplete snapshot with a reason when host coverage is incomplete, and also when a tracked game
+identity is still running with an unreadable executable, before any empty-group shortcut. The
+stop loop treats that unreadable executable as unverifiable: it retries instead of raising
+*changed executable*, and fails with `ProcessSurvivorException` only when the stop deadline
+proves the stop unproven. An exit therefore needs complete coverage and a readable game identity
+for every live tracked row.
+
+A survivor is an identified Steam/Proton helper only with evidence: a recognised Steam/Wine/Proton
+runtime executable path, or a parent identity observed as Steam-owned (baseline Steam client,
+attributed game identity, or an already identified helper). `ExternalProcessSnapshot` carries no
+namespace field, so namespace evidence is never assumed. Members without evidence are
+`SteamStopReport.UnidentifiedSurvivors`, keep the report degraded, and require manual inspection.
 
 Each stop/cancel/dispose/shutdown re-scans for game identity exit and observed escaped descendants.
 `StopReport` is adapter-owned degraded metadata, surfaced by the acceptance harness alongside
@@ -57,21 +75,26 @@ contract, identity-scoped SIGTERM to every proven member and complete group-empt
 fresh unreadable members, Proton multi-identity groups, candidates spanning groups, ambiguity,
 identity reuse/escape, helper survivors, failed stop, stop/cancel/launcher and tracker
 disposal, per-snapshot rejection evidence, and a deterministic 140-second Proton appearance
-plus 240-second expiry seam.
+plus 240-second expiry seam. It also covers both torn-evidence triggers (an incomplete sample
+with an empty group, and live members with no readable game identity) and survivor identity:
+null-exe-only survivors stay unidentified, and parent evidence is required to call one a helper.
 `LinuxPidFdSignalTests` retains PID-recycle proofs, adds exec/reuse scoped-signal rejection,
+including an exec that lands after the stat identity check and before the final executable read,
 and stops a real copied short-lived child through `SteamProcessLauncher` using only pidfd SIGTERM.
 The child inherits its group: the launcher never owns/signals that group.
 
-Local full Core validation: **2370 passed, zero failures/skips**. Steam namespace: **309 passed,
+Local full Core validation: **2376 passed, zero failures/skips**. Steam namespace: **318 passed,
 zero failures/skips**. CI and owner-machine evidence belong to this PR's ledger fragment and
-final-head verification comment. Until the real native + selected Proton run passes on that
-head, criterion 2 remains **NOT PROVEN**. No Phase 5 exit or Flatpak proof follows from this task.
+final-head verification comment. The real 105600 flow ran a Linux binary with `Unknown` selection
+evidence, so a Proton/Windows-binary stop shape remains **NOT PROVEN**, and no Phase 5 exit or
+Flatpak proof follows from this task.
 
 The consent-gated `scripts/p5-008/steam-acceptance.sh` retains its read-only default. With both
 explicit consent flags, it reports window progress, runs native/Proton stop and cancellation,
 disposes tracker/launcher, then asserts attributed games and observed descendants gone and
-original client identities retained. It prints helper survivors instead of asserting an empty
-Steam-owned group. No launch options, Steam config or prefixes are changed by the harness.
+original client identities retained. It prints identified and unidentified survivors separately,
+and a degraded stop report prints `DEGRADED` and exits non-zero instead of `PASS`. No launch
+options, Steam config or prefixes are changed by the harness.
 
 ## Owner-machine acceptance
 
@@ -84,3 +107,13 @@ No SIGKILL, group signal, client signal or helper signal occurred. Native `97537
 `427520` were not used: both survive SIGTERM past the 5s stop deadline, so they remain
 manual-Stop cases and are not offered as clean-stop evidence. Real linux-ci run
 `44381409850` succeeded on that exact head.
+
+Rerun after the p5-008c corrections, on code head `17d923a2d0904eb1de211a750524da95169ab388`
+(later PR commits are docs-only), the owner's default Steam library as `--` library argument,
+apps `770100` and `105600`, both consent flags: four flows, all `PASS`, every
+`STOP REPORT degraded=False` with reason `Attributed game identities gone; observed group empty`,
+exit 0. Attribution took 3.6s/2.7s native and 3.3s/3.3s for the second slot; each flow signalled
+only the attributed game executable through pidfd. Selection evidence is `Unknown` for both apps,
+so Steam owned selection: `105600` is the harness's second slot and ran `Terraria.bin.x86_64`,
+which is not a Proton/Windows-binary shape and is not claimed as Proton proof. Local Core
+validation on that head: **2376 passed, zero failures/skips**.
