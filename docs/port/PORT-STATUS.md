@@ -66,8 +66,8 @@
 
 | Metric | Value |
 | --- | ---: |
-| Ledger rows | 255 |
-| Ledger fragments | 28 |
+| Ledger rows | 257 |
+| Ledger fragments | 30 |
 
 ## Units
 
@@ -151,7 +151,7 @@
 | p5-007a | W5 | platform | Tray/notifications/sleep inhibition | in-progress | `units/p5-007a.*`; 1 ledger rows |
 | p5-008 | W5 | steam | Launch native/Proton | todo | `units/p5-008.*`; 0 ledger rows |
 | p5-shards | W5 | repo | Phase 5 shard board reconciliation | done | `units/p5-shards.*`; 2 ledger rows |
-| p5-shards2 | W5 | repo | Phase 5 exit assessment and merged-wave reconciliation | done | `units/p5-shards2.*`; 2 ledger rows |
+| p5-shards2 | W5 | repo | Phase 5 exit assessment and merged-wave reconciliation | done | `units/p5-shards2.*`; 4 ledger rows |
 | p6-001 | W6 | core | Library service | todo | `units/p6-001.*`; 0 ledger rows |
 | p6-002 | W6 | core | Import/sync service | todo | `units/p6-002.*`; 0 ledger rows |
 | p6-003 | W6 | core | Settings/metadata services | todo | `units/p6-003.*`; 0 ledger rows |
