@@ -54,7 +54,15 @@ public sealed class NotifySendBackend : IDesktopNotificationBackend
 
         return result.Succeeded
             ? new NotificationBackendResult(true, "notify-send accepted the notification")
-            : new NotificationBackendResult(false, CommandDiagnostics.Summarize(result));
+            : new NotificationBackendResult(false, DescribeFailure("notify-send", result));
+    }
+
+    internal static string DescribeFailure(string mechanism, ExternalCommandResult result)
+    {
+        var detail = CommandDiagnostics.Summarize(result);
+        return result.Started && result.ExitCode == -1
+            ? $"{mechanism} timed out (exit -1): {detail}"
+            : detail;
     }
 
     private static string UrgencyName(NotificationUrgency urgency) => urgency switch
@@ -87,7 +95,7 @@ public sealed class GdbusNotificationBackend : IDesktopNotificationBackend
         this.timeout = timeout ?? TimeSpan.FromSeconds(10);
     }
 
-    public string Mechanism => "gdbus (org.freedesktop.Notifications)";
+    public string Mechanism => ToolName;
 
     public bool IsAvailable => locator.Exists(ToolName);
 
@@ -122,7 +130,7 @@ public sealed class GdbusNotificationBackend : IDesktopNotificationBackend
 
         return result.Succeeded
             ? new NotificationBackendResult(true, "org.freedesktop.Notifications accepted the notification")
-            : new NotificationBackendResult(false, CommandDiagnostics.Summarize(result));
+            : new NotificationBackendResult(false, NotifySendBackend.DescribeFailure("gdbus", result));
     }
 }
 

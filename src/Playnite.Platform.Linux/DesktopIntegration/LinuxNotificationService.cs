@@ -4,8 +4,9 @@ using Playnite.Platform.DesktopIntegration;
 namespace Playnite.Platform.Linux.DesktopIntegration;
 
 /// <summary>
-/// Delivers through the first available backend and suppresses an identical request inside the
-/// duplicate window. Delivery is asynchronous: no caller thread waits on the external process.
+/// Delivers through the first available backend and coalesces identical concurrent requests onto
+/// one delivery. A request that repeats after a successful delivery inside the duplicate window is
+/// suppressed. Delivery is asynchronous: no caller thread waits on the external process.
 /// </summary>
 public sealed class LinuxNotificationService : INotificationService
 {
@@ -16,6 +17,7 @@ public sealed class LinuxNotificationService : INotificationService
     private readonly TimeSpan duplicateWindow;
     private readonly object gate = new();
     private readonly Dictionary<string, DateTimeOffset> lastDelivered = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, TaskCompletionSource<NotificationDelivery>> inFlight = new(StringComparer.Ordinal);
 
     public LinuxNotificationService(
         IEnumerable<IDesktopNotificationBackend> backends,
@@ -55,11 +57,18 @@ public sealed class LinuxNotificationService : INotificationService
         cancellationToken.ThrowIfCancellationRequested();
 
         var key = DeduplicationKey(request);
-        var now = timeProvider.GetUtcNow();
+        var startedAt = timeProvider.GetUtcNow();
+        TaskCompletionSource<NotificationDelivery>? awaiting = null;
+        TaskCompletionSource<NotificationDelivery> completion;
         lock (gate)
         {
-            Prune(now);
-            if (lastDelivered.TryGetValue(key, out var previous) && now - previous < duplicateWindow)
+            Prune(startedAt);
+            if (inFlight.TryGetValue(key, out var existing))
+            {
+                awaiting = existing;
+                completion = existing;
+            }
+            else if (lastDelivered.TryGetValue(key, out var previous) && startedAt - previous < duplicateWindow)
             {
                 return new NotificationDelivery(
                     NotificationDeliveryState.SuppressedDuplicate,
@@ -68,10 +77,65 @@ public sealed class LinuxNotificationService : INotificationService
                     duplicateWindow.TotalSeconds.ToString("0.###", CultureInfo.InvariantCulture) +
                     "s");
             }
-
-            lastDelivered[key] = now;
+            else
+            {
+                completion = new TaskCompletionSource<NotificationDelivery>(
+                    TaskCreationOptions.RunContinuationsAsynchronously);
+                inFlight[key] = completion;
+            }
         }
 
+        if (awaiting is not null)
+        {
+            // Identical concurrent calls share the first delivery and its result. They are not
+            // silently dropped: both see Delivered, or both see the same Unavailable reason.
+            return await awaiting.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        NotificationDelivery delivery;
+        try
+        {
+            delivery = await DeliverAsync(request, cancellationToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            lock (gate)
+            {
+                inFlight.Remove(key);
+                completion.TrySetCanceled(cancellationToken);
+            }
+
+            throw;
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            lock (gate)
+            {
+                inFlight.Remove(key);
+                completion.TrySetException(exception);
+            }
+
+            throw;
+        }
+
+        lock (gate)
+        {
+            inFlight.Remove(key);
+            if (delivery.State == NotificationDeliveryState.Delivered)
+            {
+                lastDelivered[key] = startedAt;
+            }
+
+            completion.TrySetResult(delivery);
+        }
+
+        return delivery;
+    }
+
+    private async Task<NotificationDelivery> DeliverAsync(
+        NotificationRequest request,
+        CancellationToken cancellationToken)
+    {
         var failures = new List<string>();
         foreach (var backend in backends)
         {
@@ -97,7 +161,6 @@ public sealed class LinuxNotificationService : INotificationService
             }
             catch (OperationCanceledException)
             {
-                Forget(key);
                 throw;
             }
             catch (Exception exception) when (exception is not OperationCanceledException)
@@ -106,21 +169,12 @@ public sealed class LinuxNotificationService : INotificationService
             }
         }
 
-        Forget(key);
         return new NotificationDelivery(
             NotificationDeliveryState.Unavailable,
             "none",
             failures.Count == 0
                 ? "no notification backend is configured"
                 : string.Join("; ", failures));
-    }
-
-    private void Forget(string key)
-    {
-        lock (gate)
-        {
-            lastDelivered.Remove(key);
-        }
     }
 
     private void Prune(DateTimeOffset now)

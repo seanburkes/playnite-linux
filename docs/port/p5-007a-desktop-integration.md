@@ -9,7 +9,7 @@ p5-003/p5-004/p5-005 units cannot collide with these files.
 | Facility | Contract |
 | --- | --- |
 | Tray | `ITrayService.InstallAsync` probes for a StatusNotifierItem host, then presents through the UI-supplied `ITrayIconPresenter`. No host, no presenter, or a presenter failure returns a `TrayInstallation` with `IsHosted == false` and a `DesktopCapability` detail. It never throws for an environment failure. |
-| Notifications | `INotificationService.ShowAsync` delivers through the first available backend, suppresses an identical request inside the duplicate window (default 5 s), and returns `Unavailable` when every backend fails. The method is asynchronous; no caller waits synchronously on `notify-send` or `gdbus`. |
+| Notifications | `INotificationService.ShowAsync` delivers through the first available backend, coalesces identical concurrent requests onto one delivery, suppresses an identical request inside the duplicate window (default 5 s), and returns `Unavailable` when every backend fails. An absent backend, a non-zero exit, or an exit of `-1` (timeout) is a recorded failure that falls through to the next backend; it is never success and never throws. The method is asynchronous; no caller waits synchronously on `notify-send` or `gdbus`. |
 | Sleep inhibition | `ISleepInhibitionService.InhibitAsync` returns a lease even when no inhibitor is available. `SessionSleepInhibition` acquires before `BeginSessionAsync` returns (before the game starts), shares one lease across concurrent sessions, and releases before `EndSessionAsync` returns (after the game stopped). |
 
 All three return a `DesktopCapability`. An unavailable facility is reported to the caller and
@@ -42,11 +42,15 @@ result reports. The tray probe is skipped entirely for a headless session.
 
 ## Notification deduplication
 
-The key is `(id, title, body, urgency, expiry)` joined with U+001F. An identical request inside
-the window returns `SuppressedDuplicate` without calling a backend. Distinct ids or changed text
-are not duplicates. A failed delivery removes the key so a retry is not suppressed. The clock is
-injected as `TimeProvider`; the window is configurable and zero disables deduplication. The
-deduplication dictionary is pruned on each call and never grows without bound.
+The key is `(id, title, body, urgency, expiry)` joined with U+001F. Identical requests that
+overlap in time are coalesced onto one in-flight delivery and both callers receive that
+delivery's result: both `Delivered`, or both the same `Unavailable` reason. A request that
+repeats after a successful delivery inside the window returns `SuppressedDuplicate` without
+calling a backend. Distinct ids or changed text are not duplicates. A failed delivery removes
+the key so a retry is not suppressed. The clock is injected as `TimeProvider`; the window is
+configurable and zero disables post-completion deduplication (concurrent overlap still shares
+one delivery). The deduplication dictionary is pruned on each call and never grows without
+bound.
 
 ## Inhibitor lifetime and the no-leak argument
 
@@ -60,6 +64,9 @@ long as the pipe write end is open:
   already-cancelled stop still removes the session and releases the last lease.
 - **Cancel:** a cancelled acquire kills the started process tree and throws before a lease is
   returned. A cancel after acquisition closes the pipe, removes the session, and rethrows.
+- **Cancelled stop:** `EndSessionAsync` is teardown and is not cancellable. An already-cancelled
+  token still removes the session and releases the last lease; if another session survives, the
+  lease stays held for it.
 - **Crash:** process death closes the pipe in the kernel. `cat` sees EOF with no managed code
   running, so the lock is released even for SIGKILL. This is why the hold command is `cat`
   rather than an inhibitor process whose only owner is the app.
@@ -81,9 +88,9 @@ dispose runs.
 ## Evidence
 
 - `dotnet build tests/Playnite.Core.Tests -c Release -warnaserror`: zero warnings.
-- `dotnet test --filter-namespace Playnite.Core.Tests.DesktopIntegration`: 59 cases pass, zero
+- `dotnet test --filter-namespace Playnite.Core.Tests.DesktopIntegration`: 65 cases pass, zero
   skips.
-- Full `Playnite.Core.Tests`: 2070 cases pass, zero skips.
+- Full `Playnite.Core.Tests`: 2076 cases pass, zero skips.
 - Fakes cover tray host/presenter, notification backends, inhibitor backends, command execution,
   executable lookup, session evidence and the clock. Real-process tests use `/bin/cat`, `/bin/echo`,
   `/bin/sleep` and `/bin/false` for the stdin lifeline and command timeout/cancel paths; no test

@@ -145,6 +145,126 @@ public sealed class LinuxNotificationServiceTests
     }
 
     [Fact]
+    public async Task ConcurrentIdenticalNotificationsAreCoalescedAndBothSeeTheFailure()
+    {
+        var gate = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var backend = new FakeNotificationBackend { Gate = gate, Sent = false };
+        var service = new LinuxNotificationService([backend], new FakeTimeProvider());
+
+        var first = service.ShowAsync(Request());
+        Assert.Single(backend.Requests);
+        var second = service.ShowAsync(Request());
+        Assert.False(second.IsCompleted);
+
+        gate.SetResult(true);
+        var firstResult = await first;
+        var secondResult = await second;
+
+        Assert.Equal(NotificationDeliveryState.Unavailable, firstResult.State);
+        Assert.Equal(NotificationDeliveryState.Unavailable, secondResult.State);
+        Assert.Single(backend.Requests);
+    }
+
+    [Fact]
+    public async Task ConcurrentIdenticalNotificationsShareOneSuccessfulDelivery()
+    {
+        var gate = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var backend = new FakeNotificationBackend { Gate = gate };
+        var service = new LinuxNotificationService([backend], new FakeTimeProvider());
+
+        var first = service.ShowAsync(Request());
+        var second = service.ShowAsync(Request());
+        Assert.False(first.IsCompleted);
+        Assert.False(second.IsCompleted);
+
+        gate.SetResult(true);
+        Assert.True((await first).WasDelivered);
+        Assert.True((await second).WasDelivered);
+        Assert.Single(backend.Requests);
+
+        var repeated = await service.ShowAsync(Request());
+        Assert.Equal(NotificationDeliveryState.SuppressedDuplicate, repeated.State);
+    }
+
+    [Fact]
+    public async Task AbsentNotifySendAndGdbusReportUnavailableWithoutThrowing()
+    {
+        var runner = new FakeExternalCommandRunner();
+        var locator = new FakeExecutableLocator();
+        var service = new LinuxNotificationService(
+            [
+                new NotifySendBackend(runner, locator),
+                new GdbusNotificationBackend(runner, locator)
+            ],
+            new FakeTimeProvider());
+
+        var delivery = await service.ShowAsync(Request());
+
+        Assert.Equal(NotificationDeliveryState.Unavailable, delivery.State);
+        Assert.Contains("notify-send: not available", delivery.Detail, StringComparison.Ordinal);
+        Assert.Contains("gdbus: not available", delivery.Detail, StringComparison.Ordinal);
+        Assert.Empty(runner.Commands);
+    }
+
+    [Fact]
+    public async Task AbsentNotifySendFallsBackToGdbus()
+    {
+        var runner = new FakeExternalCommandRunner();
+        var locator = new FakeExecutableLocator();
+        locator.Names.Add(GdbusNotificationBackend.ToolName);
+        var service = new LinuxNotificationService(
+            [
+                new NotifySendBackend(runner, locator),
+                new GdbusNotificationBackend(runner, locator)
+            ],
+            new FakeTimeProvider());
+
+        var delivery = await service.ShowAsync(Request());
+
+        Assert.True(delivery.WasDelivered);
+        Assert.Equal(GdbusNotificationBackend.ToolName, delivery.Mechanism);
+        Assert.Equal("gdbus", runner.Commands.Single().FileName);
+    }
+
+    [Fact]
+    public async Task GdbusExitMinusOneFallsThroughToAnExplicitUnavailableResult()
+    {
+        var runner = new FakeExternalCommandRunner();
+        var locator = new FakeExecutableLocator();
+        locator.Names.Add(NotifySendBackend.ToolName);
+        locator.Names.Add(GdbusNotificationBackend.ToolName);
+        runner.Results.Enqueue(new ExternalCommandResult(true, 1, "", "daemon unavailable", null));
+        runner.Results.Enqueue(new ExternalCommandResult(true, -1, "", "", "timed out after 10s"));
+        var service = new LinuxNotificationService(
+            [
+                new NotifySendBackend(runner, locator),
+                new GdbusNotificationBackend(runner, locator)
+            ],
+            new FakeTimeProvider());
+
+        var delivery = await service.ShowAsync(Request());
+
+        Assert.Equal(NotificationDeliveryState.Unavailable, delivery.State);
+        Assert.Contains("notify-send", delivery.Detail, StringComparison.Ordinal);
+        Assert.Contains("gdbus timed out (exit -1)", delivery.Detail, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task GdbusMinusOneIsAFailureNotASuccess()
+    {
+        var runner = new FakeExternalCommandRunner();
+        runner.Results.Enqueue(new ExternalCommandResult(true, -1, "", "", "timed out after 10s"));
+        var locator = new FakeExecutableLocator();
+        locator.Names.Add(GdbusNotificationBackend.ToolName);
+        var backend = new GdbusNotificationBackend(runner, locator);
+
+        var result = await backend.SendAsync(Request());
+
+        Assert.False(result.Sent);
+        Assert.Contains("timed out (exit -1)", result.Detail, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task NotifySendUsesAnArgumentListAndTheOptionTerminator()
     {
         var runner = new FakeExternalCommandRunner();
