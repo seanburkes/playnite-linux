@@ -515,13 +515,22 @@ games.
 
 ### 7.3 Attribution [unknown/decision]
 
+**p5-008 implementation ruling:** use a complete pre-launch baseline and accept exactly one
+fresh PID/start-time identity with a canonical executable under that app's installdir or
+Proton prefix, only in a fresh, verified group separate from Steam. Never attribute a Steam
+client/helper/runtime wrapper as the game. Shared, multiple, absent or unverifiable candidates
+are UNKNOWN and require owner Steam Stop/explicit attachment, not guessed automatic control.
+The detailed adapter, executable-override heuristic, group-stop boundary, real acceptance
+script and outstanding Flatpak host-helper/permission plan are in
+[`p5-008-steam-launch.md`](p5-008-steam-launch.md). No real-machine acceptance is implied.
+
 - The `steam -applaunch` process is a request, not the game. Do not use its exit as the
   session end.
 - Steam is expected to set `SteamAppId`/`SteamGameId` in the game environment, but that was
   **not verified** on this host; p1-007 deliberately did not read game environments.
-- Until an attribution probe exists, use the observed process tree plus manifest
-  `installdir`/executable name as a heuristic, and fall back to manual start/stop.
-  Report low-confidence attribution rather than silently claiming a match.
+- The manifest has `installdir`, not an executable identity. The conservative executable-path
+  policy above supersedes a guessed executable-name/tree heuristic; an explicit owner-selected
+  canonical executable override remains labelled heuristic and cannot bypass group safety.
 - Proton adds `wine`/`wineserver` processes; a lingering `wineserver` must not keep a session
   alive after the game process is gone, and must not start a session on its own.
 - **DECISION**: a session starts only when a matching process is observed, ends after a
