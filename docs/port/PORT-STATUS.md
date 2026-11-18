@@ -58,16 +58,16 @@
 | Status | Units |
 | --- | ---: |
 | deferred | 1 |
-| done | 68 |
-| in-progress | 6 |
+| done | 69 |
+| in-progress | 5 |
 | todo | 28 |
 
 ## Ledger
 
 | Metric | Value |
 | --- | ---: |
-| Ledger rows | 263 |
-| Ledger fragments | 36 |
+| Ledger rows | 266 |
+| Ledger fragments | 39 |
 
 ## Units
 
@@ -89,7 +89,7 @@
 | p1-010 | W1 | spike | Flatpak host launch/tracking | done | `units/p1-010.*`; 5 ledger rows |
 | p1-011 | W1 | repo | Port index shards + generator | done | `units/p1-011.*`; 10 ledger rows |
 | p2-001 | W2 | scaffold | Solution/projects/props | done | `units/p2-001.*`; 2 ledger rows |
-| p2-002 | W2 | scaffold | Analyzers + architecture tests | in-progress | `units/p2-002.*`; 6 ledger rows |
+| p2-002 | W2 | scaffold | Analyzers + architecture tests | in-progress | `units/p2-002.*`; 7 ledger rows |
 | p2-003 | W2 | scaffold | Linux CI + Windows oracle CI | done | `units/p2-003.*`; 4 ledger rows |
 | p2-004 | W2 | scaffold | Empty Avalonia app + CLI smoke | done | `units/p2-004.*`; 3 ledger rows |
 | p2-004-baseline2 | W2 | scaffold | Record the new-suite Linux CI baseline | done | `units/p2-004-baseline2.*`; 5 ledger rows |
@@ -143,7 +143,7 @@
 | p5-001 | W5 | steam | VDF/ACF parsers | in-progress | `units/p5-001.*`; 2 ledger rows |
 | p5-002 | W5 | steam | Steam root/library discovery | done | `units/p5-002.*`; 6 ledger rows |
 | p5-003 | W5 | steam | Artwork/metadata cache | done | `units/p5-003.*`; 7 ledger rows |
-| p5-004 | W5 | platform | Process launcher/session tracker | in-progress | `units/p5-004.*`; 5 ledger rows |
+| p5-004 | W5 | platform | Process launcher/session tracker | done | `units/p5-004.*`; 7 ledger rows |
 | p5-005 | W5 | platform | XDG/single-instance/protocol | todo | `units/p5-005.*`; 0 ledger rows |
 | p5-005a | W5 | platform | XDG/single-instance/protocol continuation | in-progress | `units/p5-005a.*`; 3 ledger rows |
 | p5-006 | W5 | platform | WebView service | todo | `units/p5-006.*`; 0 ledger rows |
