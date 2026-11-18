@@ -292,7 +292,8 @@ public sealed class LinuxProcessLauncherTests
             "if pid==0:\n" +
             "    time.sleep(30)\n" +
             "    os._exit(0)\n" +
-            "open(sys.argv[1],'w').write(str(pid))\n" +
+            "with open(sys.argv[1],'w') as handle:\n" +
+            "    handle.write(str(pid))\n" +
             "time.sleep(2)\n" +
             "os._exit(0)\n";
         ProcessIdentity childIdentity = default;
@@ -302,13 +303,21 @@ public sealed class LinuxProcessLauncherTests
             var process = await launcher.StartAsync(
                 new LaunchRequest(python, ["-c", script, pidFile]), CancellationToken.None);
             var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(5);
-            while (!File.Exists(pidFile) && DateTime.UtcNow < deadline)
+            var childPid = 0;
+            while (DateTime.UtcNow < deadline)
             {
+                if (File.Exists(pidFile)
+                    && int.TryParse(File.ReadAllText(pidFile), System.Globalization.NumberStyles.None,
+                        System.Globalization.CultureInfo.InvariantCulture, out childPid)
+                    && childPid > 0)
+                {
+                    break;
+                }
+
                 await Task.Delay(10);
             }
 
-            Assert.True(File.Exists(pidFile), "The child PID file was not written.");
-            var childPid = int.Parse(File.ReadAllText(pidFile), System.Globalization.CultureInfo.InvariantCulture);
+            Assert.True(childPid > 0, "The child PID file was not written.");
             var childStat = await new LinuxProcStatReader().ReadAsync(childPid, CancellationToken.None);
             Assert.NotNull(childStat);
             childIdentity = new ProcessIdentity(childPid, childStat.Value.StartTimeTicks, childStat.Value.ProcessGroupId);
@@ -367,7 +376,8 @@ public sealed class LinuxProcessLauncherTests
             "    os.setsid()\n" +
             "    time.sleep(30)\n" +
             "    os._exit(0)\n" +
-            "open(sys.argv[1],'w').write(str(pid))\n" +
+            "with open(sys.argv[1],'w') as handle:\n" +
+            "    handle.write(str(pid))\n" +
             "time.sleep(2)\n" +
             "os._exit(0)\n";
         ProcessIdentity childIdentity = default;
@@ -377,13 +387,21 @@ public sealed class LinuxProcessLauncherTests
             var process = await launcher.StartAsync(
                 new LaunchRequest(python, ["-c", script, pidFile]), CancellationToken.None);
             var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(5);
-            while (!File.Exists(pidFile) && DateTime.UtcNow < deadline)
+            var childPid = 0;
+            while (DateTime.UtcNow < deadline)
             {
+                if (File.Exists(pidFile)
+                    && int.TryParse(File.ReadAllText(pidFile), System.Globalization.NumberStyles.None,
+                        System.Globalization.CultureInfo.InvariantCulture, out childPid)
+                    && childPid > 0)
+                {
+                    break;
+                }
+
                 await Task.Delay(10);
             }
 
-            Assert.True(File.Exists(pidFile), "The escaping child PID file was not written.");
-            var childPid = int.Parse(File.ReadAllText(pidFile), System.Globalization.CultureInfo.InvariantCulture);
+            Assert.True(childPid > 0, "The escaping child PID file was not written.");
             while (DateTime.UtcNow < deadline)
             {
                 var stat = await new LinuxProcStatReader().ReadAsync(childPid, CancellationToken.None);
