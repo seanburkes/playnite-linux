@@ -147,6 +147,13 @@ public static class SteamProcessAttribution
             return new(candidates, [], "process coverage incomplete");
         }
 
+        // A candidate whose own row changed group mid-read is not stable evidence. Unrelated
+        // moved rows are irrelevant here and must not reject an otherwise fresh group.
+        if (candidates.Any(candidate => after.Moved.Any(moved => SameProcess(moved, candidate.Identity))))
+        {
+            return new(candidates, [], "a candidate changed process group between reads");
+        }
+
         if (candidates.Length == 0)
         {
             return new(candidates, [], "no fresh installdir/prefix game process");

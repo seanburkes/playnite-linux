@@ -112,7 +112,7 @@ public sealed class LinuxPidFdSignalTests
     }
 
     [Fact]
-    public async Task Same_start_ticks_in_a_changed_group_is_retained_and_incomplete()
+    public async Task Same_start_ticks_in_a_changed_group_is_retained_as_an_anomaly_and_complete()
     {
         // The observer read says pgid=20; the host's identity re-read says the same pid and start
         // ticks are now in pgid=30 (setsid). Dropping that row left a complete, empty snapshot.
@@ -121,9 +121,12 @@ public sealed class LinuxPidFdSignalTests
 
         var snapshot = await host.SnapshotAsync(CancellationToken.None);
 
-        Assert.False(snapshot.IsComplete);
+        // A move is reported as an anomaly, not as whole-table incompleteness: unrelated churn
+        // must not abort a launch or a stop.
+        Assert.True(snapshot.IsComplete);
         var row = Assert.Single(snapshot.Processes);
         Assert.Equal(new ProcessIdentity(Environment.ProcessId, 2, 30), row.Process.Identity);
+        Assert.Equal(row.Process.Identity, Assert.Single(snapshot.Moved));
         Assert.True(row.Process.IsRunning);
     }
 
@@ -149,8 +152,9 @@ public sealed class LinuxPidFdSignalTests
         Assert.Contains("left its group", snapshot.IncompleteReason);
 
         // The old shape produced a complete empty snapshot and therefore a clean "group empty"
-        // report with zero signals while the game lived on in pgid=30.
-        await Assert.ThrowsAsync<SteamAttributionUnknownException>(
+        // report with zero signals while the game lived on in pgid=30. A tracked identity that
+        // escaped its group is a survivor, never a terminal report.
+        await Assert.ThrowsAsync<ProcessSurvivorException>(
             () => launcher.StopAsync(game, CancellationToken.None));
         Assert.Null(launcher.StopReport);
         Assert.Empty(seam.Signalled);

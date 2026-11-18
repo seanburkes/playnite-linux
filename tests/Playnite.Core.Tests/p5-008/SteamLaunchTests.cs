@@ -72,6 +72,7 @@ public sealed class SteamLaunchTests
     [InlineData("unrelated-member")]
     [InlineData("no-game")]
     [InlineData("preexisting-game")]
+    [InlineData("moved-candidate")]
     public void Ambiguous_or_unverifiable_samples_are_unknown(string shape)
     {
         var before = Before;
@@ -86,6 +87,7 @@ public sealed class SteamLaunchTests
             case "unrelated-member": after = new([Client, game, Entry(23, 3, 20, "/unrelated/tool")], true); break;
             case "no-game": after = Before; break;
             case "preexisting-game": before = after; break;
+            case "moved-candidate": after = after with { MovedIdentities = [game.Process.Identity] }; break;
         }
 
         Assert.Null(SteamProcessAttribution.Find(Native, before, after));
@@ -637,6 +639,57 @@ public sealed class SteamLaunchTests
     }
 
     [Fact]
+    public async Task Unrelated_group_change_neither_aborts_launch_nor_discards_a_stop()
+    {
+        // A process outside the attributed group changed group between the observer read and the
+        // identity re-read. The sample carries it as an anomaly but stays complete, so neither
+        // the baseline check nor the stop loop treats unrelated churn as unknown coverage.
+        var host = Host(Native);
+        host.Rows.Add(Entry(99, 3, 31, "/unrelated/application"));
+        host.Moved.Add(new ProcessIdentity(99, 3, 31));
+        await using var launcher = Launcher(host, Native);
+
+        var process = await launcher.StartAsync(launcher.CreateRequest(), CancellationToken.None);
+        Assert.Equal(new ProcessIdentity(22, 2, 20), process.Identity);
+
+        await launcher.StopAsync(process, CancellationToken.None);
+        Assert.Equal([22], host.Signalled.Select(identity => identity.ProcessId));
+        Assert.NotNull(launcher.StopReport);
+    }
+
+    [Fact]
+    public async Task Incomplete_stop_retries_to_the_deadline_and_ends_unknown()
+    {
+        var host = Host(Native);
+        var launcher = new SteamProcessLauncher(host, Native, new()
+        {
+            SteamExecutable = "/usr/bin/steam", ProtocolOpener = "/usr/bin/xdg-open",
+            PollInterval = TimeSpan.FromMilliseconds(1), AttributionWindow = TimeSpan.FromSeconds(1),
+            StopTimeout = TimeSpan.FromMilliseconds(50),
+        });
+        try
+        {
+            var game = await launcher.StartAsync(launcher.CreateRequest(), CancellationToken.None);
+            host.Complete = false;
+            var snapshots = host.Snapshots;
+
+            var error = await Assert.ThrowsAsync<SteamAttributionUnknownException>(
+                () => launcher.StopAsync(game, CancellationToken.None));
+
+            Assert.Contains("stayed incomplete", error.Message);
+            Assert.True(host.Snapshots - snapshots > 1, "the stop loop must retry, not throw on the first incomplete sample");
+            Assert.Null(launcher.StopReport);
+            Assert.Empty(host.Signalled);
+        }
+        finally
+        {
+            host.Complete = true;
+            host.Rows.RemoveAll(row => row.Process.Identity.ProcessId == 22); // Owner eventually stops the unknown game.
+            await launcher.DisposeAsync();
+        }
+    }
+
+    [Fact]
     public async Task Group_reuse_does_not_authorize_signals()
     {
         var host = Host(Native);
@@ -828,6 +881,7 @@ public sealed class SteamLaunchTests
     private sealed class FakeHost : IExternalProcessHost
     {
         public List<ExternalProcessEntry> Rows { get; } = [Client];
+        public List<ProcessIdentity> Moved { get; } = [];
         public List<ProcessIdentity> Signalled { get; } = [];
         public LaunchRequest? Request { get; private set; }
         public Action? OnRun { get; set; }
@@ -836,12 +890,14 @@ public sealed class SteamLaunchTests
         public int ExitCode { get; set; }
         public bool WaitInRun { get; set; }
         public bool IgnoreSignal { get; set; }
+        public int Snapshots { get; private set; }
         public TaskCompletionSource RunEntered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public Task<ExternalProcessSnapshot> SnapshotAsync(CancellationToken token)
         {
             token.ThrowIfCancellationRequested();
+            Snapshots++;
             OnSnapshot?.Invoke();
-            return Task.FromResult(new ExternalProcessSnapshot(Rows.ToArray(), Complete));
+            return Task.FromResult(new ExternalProcessSnapshot(Rows.ToArray(), Complete, Moved.ToArray()));
         }
 
         public async Task<int> RunAsync(LaunchRequest request, CancellationToken token)

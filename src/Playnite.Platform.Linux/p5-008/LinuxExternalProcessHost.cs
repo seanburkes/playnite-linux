@@ -25,6 +25,7 @@ public sealed class LinuxExternalProcessHost : IExternalProcessHost
     {
         var sample = await observer.SnapshotAsync(cancellationToken).ConfigureAwait(false);
         var entries = new List<ExternalProcessEntry>();
+        var moved = new List<ProcessIdentity>();
         var complete = sample.IsComplete && sample.Unreadable.Count == 0;
         foreach (var entry in sample.Processes)
         {
@@ -69,23 +70,21 @@ public sealed class LinuxExternalProcessHost : IExternalProcessHost
             if (row.ProcessGroupId != entry.Identity.ProcessGroupId)
             {
                 // Same PID and start ticks in a changed group: the process moved (setsid) between
-                // reads. Retain the re-read identity so a tracked child's escape is visible, and
-                // mark coverage incomplete because the sampled identity is no longer stable.
-                // Dropping the row here made it a silent exit and allowed a clean "group empty"
-                // stop while the game ran in a new group.
-                complete = false;
-                entries.Add(new(entry with
-                {
-                    Identity = new(entry.Identity.ProcessId, row.StartTimeTicks, row.ProcessGroupId),
-                    IsRunning = row.IsRunning,
-                }, executable));
+                // reads. Retain the re-read identity so an attributed identity's escape stays
+                // visible, and report it as an anomaly rather than degrading the whole sample:
+                // an unrelated move must not abort a launch or a stop.
+                var movedIdentity = new ProcessIdentity(entry.Identity.ProcessId, row.StartTimeTicks,
+                    row.ProcessGroupId);
+                moved.Add(movedIdentity);
+                entries.Add(new(entry with { Identity = movedIdentity, IsRunning = row.IsRunning },
+                    executable));
                 continue;
             }
 
             entries.Add(new(entry with { IsRunning = row.IsRunning }, executable));
         }
 
-        return new(entries, complete);
+        return new(entries, complete, moved);
     }
 
     public async Task<int> RunAsync(LaunchRequest request, CancellationToken cancellationToken)

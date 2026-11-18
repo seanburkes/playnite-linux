@@ -56,11 +56,21 @@ for every live tracked row.
 The host also binds every sampled row to a re-read stat identity. Different start ticks mean the
 PID was recycled, so the sampled identity is gone. Equal start ticks in a changed process group
 mean the same live process moved group (`setsid`) between the two reads: the host retains the
-re-read identity, so the launcher's escaped-child check fires, and marks the sample incomplete.
-Dropping that row left a complete, empty snapshot, which read as a natural exit and allowed a
-clean "group empty" stop with zero signals while the game ran in its new group. A launcher that
-sees this shape now returns an incomplete snapshot naming the escape and `StopAsync` refuses a
-terminal report; it never signals the escaped process in its unrelated group.
+re-read identity and reports it in `ExternalProcessSnapshot.MovedIdentities` instead of degrading
+the whole table. The launcher treats such a row as an escape only when it matches a tracked game
+identity or observed descendant, so an unrelated process that changes group during a scan cannot
+abort a launch or throw away a stop. Dropping the row had left a complete, empty snapshot, which
+read as a natural exit and allowed a clean "group empty" stop with zero signals while the game ran
+in its new group. A tracked identity that moved makes `SnapshotAsync` return an incomplete
+snapshot naming the escape and `StopAsync` raise `ProcessSurvivorException`; the escaped process
+is never signalled in its unrelated group, and an attribution candidate that moved between reads
+is rejected rather than owned.
+
+The stop loop retries a genuinely incomplete sample until `StopTimeout`, polling at
+`PollInterval`, because coverage can recover. If it never recovers, the loop ends with an honest
+`SteamAttributionUnknownException` after the deadline; it never emits a terminal report and never
+signals from incomplete coverage. This is distinct from the unreadable-executable retry above,
+which ends in `ProcessSurvivorException` because the unreadable row is the game itself.
 
 A survivor is an identified Steam/Proton helper only with evidence: a recognised Steam/Wine/Proton
 runtime executable path, or a parent identity observed as Steam-owned (baseline Steam client,
@@ -91,10 +101,13 @@ disposal, per-snapshot rejection evidence, and a deterministic 140-second Proton
 plus 240-second expiry seam. It also covers both torn-evidence triggers (an incomplete sample
 with an empty group, and live members with no readable game identity) and survivor identity:
 null-exe-only survivors stay unidentified, and parent evidence is required to call one a helper.
-`LinuxPidFdSignalTests` adds the host-level `Same_start_ticks_in_a_changed_group_is_retained_and_incomplete`
-and the launcher-level `Launcher_seam_a_group_change_between_reads_cannot_produce_a_clean_stop`
-seam tests: equal start ticks in a new group must retain the re-read identity, make the sample
-incomplete, and refuse both a terminal stop report and any signal.
+`LinuxPidFdSignalTests` adds the host-level
+`Same_start_ticks_in_a_changed_group_is_retained_as_an_anomaly_and_complete` and the
+launcher-level `Launcher_seam_a_group_change_between_reads_cannot_produce_a_clean_stop` seam
+tests: equal start ticks in a new group retain the re-read identity as an anomaly, keep unrelated
+coverage complete, and still refuse a terminal stop report and any signal for the tracked
+identity. `SteamLaunchTests` adds `Unrelated_group_change_neither_aborts_launch_nor_discards_a_stop`,
+the moved-candidate ambiguity shape, and `Incomplete_stop_retries_to_the_deadline_and_ends_unknown`.
 `LinuxPidFdSignalTests` retains PID-recycle proofs, adds exec/reuse scoped-signal rejection,
 including an exec that lands after the stat identity check and before the final executable read,
 and stops a real copied short-lived child through `SteamProcessLauncher` using only pidfd SIGTERM.

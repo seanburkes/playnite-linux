@@ -275,7 +275,17 @@ public sealed class SteamProcessLauncher : IProcessLauncher, IProcessObserver
                 var sample = await host.SnapshotAsync(CancellationToken.None).ConfigureAwait(false);
                 if (!sample.IsComplete)
                 {
-                    throw new SteamAttributionUnknownException("UNKNOWN: cannot prove attributed game identities stopped; use Steam manual stop.");
+                    // Torn coverage is not proof of exit, but it is also not a reason to abandon
+                    // the stop before trying. Retry until the deadline so an unrelated churn
+                    // burst can clear; only then report an honest final UNKNOWN.
+                    if (time.GetElapsedTime(deadline) >= options.StopTimeout)
+                    {
+                        throw new SteamAttributionUnknownException(
+                            "UNKNOWN: process coverage stayed incomplete through the stop deadline; cannot prove the attributed game identities stopped; use Steam manual stop.");
+                    }
+
+                    await Task.Delay(options.PollInterval, time, CancellationToken.None).ConfigureAwait(false);
+                    continue;
                 }
 
                 ObserveDescendants(sample);
