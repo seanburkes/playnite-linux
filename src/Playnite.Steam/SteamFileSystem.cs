@@ -19,6 +19,13 @@ public interface ISteamFileSystem
     bool FileExists(string path);
 
     /// <summary>
+    /// True when <paramref name="path"/> names a directory entry, including a symbolic link whose
+    /// target does not exist. <see cref="GetRealPath"/> returns <c>null</c> for an absent entry and
+    /// for a dangling link alike; this separates the two without opening anything.
+    /// </summary>
+    bool EntryExists(string path);
+
+    /// <summary>
     /// Reads at most <paramref name="maxBytes"/> from one handle opened without following links
     /// in any canonical-path component. Type and length checks apply to that same handle.
     /// </summary>
@@ -44,6 +51,29 @@ public sealed class SteamFileSystem(IBoundedFileReader reader) : ISteamFileSyste
     public bool DirectoryExists(string path) => Directory.Exists(path);
 
     public bool FileExists(string path) => File.Exists(path);
+
+    public bool EntryExists(string path) => EntryExistsCore(path);
+
+    private static bool EntryExistsCore(string path)
+    {
+        var parent = Path.GetDirectoryName(path);
+        var name = Path.GetFileName(path);
+        if (parent is null || name.Length == 0)
+        {
+            return false;
+        }
+
+        var comparison = PathComparison;
+        try
+        {
+            return Directory.EnumerateFileSystemEntries(parent)
+                .Any(entry => string.Equals(Path.GetFileName(entry), name, comparison));
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            return false;
+        }
+    }
 
     public SteamFileRead ReadFile(string path, int maxBytes)
     {
@@ -164,7 +194,9 @@ public sealed class SteamFileSystem(IBoundedFileReader reader) : ISteamFileSyste
         }
         catch (IOException)
         {
-            return null;
+            // File.GetAttributes cannot describe every existing entry type (a socket is one), so
+            // fall back to the directory entry itself: realpath(3) succeeds for any existing name.
+            return EntryExistsCore(current) ? current : null;
         }
 
         return current;

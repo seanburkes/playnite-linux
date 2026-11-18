@@ -23,16 +23,26 @@ public sealed class LinuxPaths : PlaynitePaths
     private static string ApplicationRoot(IEnvironment environment, string variable, string fallback) =>
         Path.Combine(BaseDirectory(environment, variable, fallback), ApplicationDirectoryName);
 
+    // Same probes and order as SteamRootResolver.Candidates. The override is kept verbatim so a
+    // relative or whitespace value reaches discovery and is reported invalid rather than dropped.
     private static IEnumerable<string> SteamCandidates(IEnvironment environment)
     {
         var root = environment.GetVariable("STEAM_ROOT");
-        if (Paths.IsFullPath(root))
+        if (!string.IsNullOrEmpty(root))
         {
-            yield return root!;
+            yield return root;
         }
 
         yield return Path.Combine(environment.Home, ".steam", "steam");
-        yield return Path.Combine(environment.Home, ".local", "share", "Steam");
+        yield return Path.Combine(environment.Home, ".steam", "root");
+        var homeLocal = Path.Combine(environment.Home, ".local", "share", "Steam");
+        var xdg = environment.GetVariable("XDG_DATA_HOME");
+        if (Paths.IsFullPath(xdg) && !Paths.AreEqual(Path.Combine(xdg!, "Steam"), homeLocal, "/"))
+        {
+            yield return Path.Combine(xdg!, "Steam");
+        }
+
+        yield return homeLocal;
         yield return Path.Combine(environment.Home, ".var", "app", "com.valvesoftware.Steam", ".local", "share", "Steam");
     }
 

@@ -44,6 +44,17 @@ Resolve, in order, the first root whose realpath exists and contains `steamapps`
 Deduplicate candidates by realpath so `~/.steam/steam` and `~/.local/share/Steam` do not
 produce two libraries. Report every candidate considered and why it was rejected.
 
+The same ordered probes are exposed to callers as `IPaths.SteamRootCandidates`, so the
+interface and discovery cannot describe different candidate sets. That list contains the
+explicit override verbatim whenever `STEAM_ROOT` is nonempty — including a relative or
+whitespace-only value, which discovery must report `invalid-path` rather than drop — and adds
+the `$XDG_DATA_HOME/Steam` probe only when the variable is absolute and different from the
+default data location. Absolute entries are lexically normalized and an exact duplicate appears
+once in the interface list; the resolver itself still probes each documented candidate and
+reports a repeated realpath. The list therefore has up to six entries: six when an override and
+a distinct absolute XDG data directory are both present, five when only one of them is present,
+and four when neither is.
+
 `steam.pid`, `steam.pipe`, and `steam.token` are not proof of a live client; treat a stale
 `steam.pid` as a normal state. **[decision]**
 
@@ -125,17 +136,25 @@ canonical "library on an unmounted path" case; see §9.
   fallback when the first copy is absent **or rejected**. A library file that is missing,
   unreadable, zero-length (FIFO/socket/device or an empty file), oversized or syntactically
   invalid is skipped and the root library is kept; the reason is reported. `LibraryFilePath`
-  names the file selected even when it could not be read. A file that resolves outside the root
-  realpath is not read.
+  names the copy selected for reading even when it could not be read, including an entry that
+  exists but does not resolve (a dangling link): that case is `unreadable-library-file`, not
+  `library-file-missing`. `library-file-missing` is reported only when neither copy exists as a
+  directory entry; a missing primary with a usable config copy is not an error. A file that
+  resolves outside the root realpath is not read. A socket path has no openable file handle, so
+  it is `unreadable-library-file`, while a FIFO, device or empty regular file is
+  `not-a-regular-file`.
 - The Linux read walks the canonical path using directory handles and `openat` with
-  `O_NOFOLLOW` on every component. The leaf opens read-only with `O_NONBLOCK`, then `statx`
-  with `AT_EMPTY_PATH` checks that same handle for regular-file type and the size bound.
-  Only that handle is read; no path is reopened after stat. A leaf/parent symlink swap fails
-  closed; a swap after opening can only leave the original file handle readable. FIFO replacement
-  cannot block the open or read, and growth cannot extend the stat-sized buffer. Empty regular
-  files retain the `not-a-regular-file` skip. The Platform reader is injected; the Linux native
-  implementation explicitly rejects other operating systems rather than falling back to unsafe
-  path reads. Linux libc/kernel support for `statx` is required; failure never falls back.
+  `O_NOFOLLOW` on every component. The leaf opens read-only with `O_NONBLOCK` and `O_NOCTTY`,
+  then `statx` with `AT_EMPTY_PATH` checks that same handle for regular-file type and the size
+  bound. Only that handle is read; no path is reopened after stat. A leaf/parent symlink swap
+  fails closed; a swap after opening can only leave the original file handle readable. FIFO
+  replacement cannot block the open or read, a TTY leaf cannot become the controlling
+  terminal, and growth cannot extend the stat-sized buffer. Empty regular files retain the
+  `not-a-regular-file` skip. The Platform reader is injected; the Linux native implementation
+  explicitly rejects other operating systems rather than falling back to unsafe path reads, and
+  discovery contains that rejection as the same `unreadable-library-file` skip instead of
+  letting it escape. Linux libc/kernel support for `statx` is required; failure never falls
+  back.
 - The root is always a library. When no valid file entry resolves to the root realpath, a
   synthetic `root` entry is added first with a present-but-empty apps map; app manifests are a
   later unit. Unknown root fields are discarded and never surface as discovery state.

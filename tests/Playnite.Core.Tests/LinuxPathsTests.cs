@@ -57,17 +57,60 @@ public sealed class LinuxPathsTests
     }
 
     [Fact]
-    public void SteamRootCandidatesFollowSpecifiedOrderWithoutProbingHost()
+    public void SteamRootCandidatesRepresentTheSixDocumentedProbesInOrder()
     {
         var environment = new MemoryEnvironment();
         environment.Variables["STEAM_ROOT"] = "/custom/Steam/";
-        var paths = new LinuxPaths(environment, new MemoryFileSystem());
-        Assert.Equal(new[] { "/custom/Steam", "/home/test-user/.steam/steam", "/home/test-user/.local/share/Steam",
+        environment.Variables["XDG_DATA_HOME"] = "/custom/../xdg";
+        IPaths paths = new LinuxPaths(environment, new MemoryFileSystem());
+        Assert.Equal(new[] { "/custom/Steam", "/home/test-user/.steam/steam", "/home/test-user/.steam/root",
+            "/xdg/Steam", "/home/test-user/.local/share/Steam",
             "/home/test-user/.var/app/com.valvesoftware.Steam/.local/share/Steam" }, paths.SteamRootCandidates);
-        environment.Variables["STEAM_ROOT"] = "relative";
-        Assert.Equal(3, new LinuxPaths(environment, new MemoryFileSystem()).SteamRootCandidates.Count);
-        environment.Variables["STEAM_ROOT"] = "/home/test-user/.steam/steam";
-        Assert.Equal(3, new LinuxPaths(environment, new MemoryFileSystem()).SteamRootCandidates.Count);
+        Assert.Equal(paths.SteamRootCandidates,
+            new LinuxPaths(environment, new MemoryFileSystem()).SteamRootCandidates);
+    }
+
+    [Fact]
+    public void RelativeOverrideStaysInTheCandidateListForDiscoveryToReportInvalid()
+    {
+        var environment = new MemoryEnvironment();
+        environment.Variables["STEAM_ROOT"] = "relative/steam";
+        IPaths paths = new LinuxPaths(environment, new MemoryFileSystem());
+        Assert.Equal(new[] { "relative/steam", "/home/test-user/.steam/steam", "/home/test-user/.steam/root",
+            "/home/test-user/.local/share/Steam",
+            "/home/test-user/.var/app/com.valvesoftware.Steam/.local/share/Steam" }, paths.SteamRootCandidates);
+    }
+
+    [Fact]
+    public void WhitespaceOverrideStaysInTheCandidateListForDiscoveryToReportInvalid()
+    {
+        var environment = new MemoryEnvironment();
+        environment.Variables["STEAM_ROOT"] = " \t ";
+        var paths = new LinuxPaths(environment, new MemoryFileSystem());
+        Assert.Equal(" \t ", paths.SteamRootCandidates[0]);
+        Assert.Equal(5, paths.SteamRootCandidates.Count);
+    }
+
+    [Fact]
+    public void XdgCandidateIsOmittedWhenItIsTheDefaultDataLocation()
+    {
+        var environment = new MemoryEnvironment();
+        environment.Variables["XDG_DATA_HOME"] = "/home/test-user/.local/share";
+        var paths = new LinuxPaths(environment, new MemoryFileSystem());
+        Assert.Equal(new[] { "/home/test-user/.steam/steam", "/home/test-user/.steam/root",
+            "/home/test-user/.local/share/Steam",
+            "/home/test-user/.var/app/com.valvesoftware.Steam/.local/share/Steam" }, paths.SteamRootCandidates);
+    }
+
+    [Fact]
+    public void RepeatedCandidatePathAppearsOnceInTheInterfaceList()
+    {
+        var environment = new MemoryEnvironment();
+        environment.Variables["STEAM_ROOT"] = "/home/test-user/.steam/steam/";
+        var paths = new LinuxPaths(environment, new MemoryFileSystem());
+        Assert.Equal(new[] { "/home/test-user/.steam/steam", "/home/test-user/.steam/root",
+            "/home/test-user/.local/share/Steam",
+            "/home/test-user/.var/app/com.valvesoftware.Steam/.local/share/Steam" }, paths.SteamRootCandidates);
     }
 
     [Theory]
