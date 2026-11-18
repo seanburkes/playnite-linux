@@ -75,6 +75,10 @@ start ticks to match. Therefore:
   parent was alive;
 - an unreadable row degrades that entry only. It makes the decision unknown only when its PID is
   the root or an already-tracked identity; an unrelated unreadable row is ignored;
+- a row that vanishes between enumeration and the read is absent, not an error: `ENOENT`
+  (`FileNotFoundException`), `ENOTDIR` (`DirectoryNotFoundException`) and `ESRCH` (an
+  `IOException` whose `HResult` is the raw errno `3`) all map to not-found. Any other I/O
+  failure stays unknown coverage;
 - table-level enumeration failure is unknown and never `stopped`.
 
 ## Session state machine
@@ -211,7 +215,7 @@ launcher throws `ProcessOrphanedException` instead of only rethrowing the origin
 
 Local Release, warnings as errors:
 
-- `Playnite.Core.Tests`: 2283 passed, 0 failed, 0 skipped (66 session tests).
+- `Playnite.Core.Tests`: 2287 passed, 0 failed, 0 skipped (70 session tests).
 - `Playnite.Architecture.Tests`: 188 passed, 0 failed, 0 skipped.
 - `build_port_index.py check --shards-only --against origin/main` is run before delivery.
 

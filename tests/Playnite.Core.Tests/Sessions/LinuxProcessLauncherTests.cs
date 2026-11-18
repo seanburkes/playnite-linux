@@ -45,10 +45,11 @@ public sealed class LinuxProcessLauncherTests
                 var process = await launcher.StartAsync(new LaunchRequest("/usr/bin/touch", [literal]), CancellationToken.None);
                 await launcher.StopAsync(process, CancellationToken.None);
             }
-            catch (InvalidOperationException)
+            catch (Exception exception) when (exception is InvalidOperationException or IOException)
             {
-                // touch may exit before /proc can supply its identity; the argument effect below
-                // is still the evidence under test.
+                // touch may exit before /proc can supply its identity (the reader maps a vanished
+                // row to null; an immediately-exiting process can still surface as an I/O
+                // failure); the argument effect below is still the evidence under test.
             }
 
             Assert.True(File.Exists(literal), "The argv element was split or expanded instead of passed literally.");
