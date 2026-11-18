@@ -45,10 +45,11 @@ public sealed class LinuxProcessLauncherTests
                 var process = await launcher.StartAsync(new LaunchRequest("/usr/bin/touch", [literal]), CancellationToken.None);
                 await launcher.StopAsync(process, CancellationToken.None);
             }
-            catch (InvalidOperationException)
+            catch (Exception exception) when (exception is InvalidOperationException or IOException)
             {
-                // touch may exit before /proc can supply its identity; the argument effect below
-                // is still the evidence under test.
+                // touch may exit before /proc can supply its identity (the reader maps a vanished
+                // row to null; an immediately-exiting process can still surface as an I/O
+                // failure); the argument effect below is still the evidence under test.
             }
 
             Assert.True(File.Exists(literal), "The argv element was split or expanded instead of passed literally.");
@@ -359,6 +360,91 @@ public sealed class LinuxProcessLauncherTests
                 {
                     // Already gone.
                 }
+            }
+        }
+    }
+
+    [Fact]
+    public async Task Real_child_reparented_before_the_first_snapshot_is_still_contained()
+    {
+        // The root forks a child, writes its PID, and exits before the tracker exists. The child
+        // is therefore reparented to init (or the nearest subreaper) without the tracker ever
+        // observing it, but it stays in the root's process group. Tracking it only by observed
+        // PIDs would miss it and report a clean Stopped while it still runs; group membership
+        // must keep it contained and the group kill must reap it.
+        const string python = "/usr/bin/python3";
+        Assert.True(File.Exists(python), "The process-group test requires python3.");
+        var pidFile = Path.Combine(Path.GetTempPath(), $"p5-004-reparent-{Path.GetRandomFileName()}");
+        const string script =
+            "import os,sys,time\n" +
+            "pid=os.fork()\n" +
+            "if pid==0:\n" +
+            "    time.sleep(30)\n" +
+            "    os._exit(0)\n" +
+            "with open(sys.argv[1],'w') as handle:\n" +
+            "    handle.write(str(pid))\n" +
+            "time.sleep(0.3)\n" +
+            "os._exit(0)\n";
+        ProcessIdentity childIdentity = default;
+        await using var launcher = new LinuxProcessLauncher();
+        try
+        {
+            var process = await launcher.StartAsync(
+                new LaunchRequest(python, ["-c", script, pidFile]), CancellationToken.None);
+            var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(5);
+            var childPid = 0;
+            while (DateTime.UtcNow < deadline)
+            {
+                if (File.Exists(pidFile)
+                    && int.TryParse(File.ReadAllText(pidFile), System.Globalization.NumberStyles.None,
+                        System.Globalization.CultureInfo.InvariantCulture, out childPid)
+                    && childPid > 0)
+                {
+                    break;
+                }
+
+                await Task.Delay(10);
+            }
+
+            Assert.True(childPid > 0, "The child PID file was not written.");
+            var childStat = await new LinuxProcStatReader().ReadAsync(childPid, CancellationToken.None);
+            Assert.NotNull(childStat);
+            childIdentity = new ProcessIdentity(childPid, childStat.Value.StartTimeTicks, childStat.Value.ProcessGroupId);
+            while (await launcher.IsRunningAsync(process, CancellationToken.None))
+            {
+                await Task.Delay(10);
+            }
+
+            // The root is gone, so the child has been reparented. It must still belong to the
+            // dedicated group created for the launch; that is what keeps the never-observed
+            // child inside the containment boundary.
+            var reparented = await new LinuxProcStatReader().ReadAsync(childPid, CancellationToken.None);
+            Assert.NotNull(reparented);
+            Assert.NotEqual(process.Identity.ProcessId, reparented.Value.ParentProcessId);
+            Assert.Equal(process.Identity.ProcessGroupId, reparented.Value.ProcessGroupId);
+            Assert.True(await IdentityIsRunningAsync(childIdentity), "The reparented group child is not running.");
+
+            await using var tracker = new GameSessionTracker(launcher, new LinuxProcessObserver());
+            using var recorder = new SessionEventRecorder(tracker);
+            var tracking = tracker.TrackAsync(
+                process,
+                new SessionOptions { PollInterval = TimeSpan.FromMilliseconds(10) },
+                CancellationToken.None);
+            await recorder.WaitForAsync(change => change.State == GameSessionState.Running);
+            await Task.Delay(50);
+            Assert.Equal(GameSessionState.Running, tracker.State);
+            Assert.True(await IdentityIsRunningAsync(childIdentity), "The reparented group child is not running.");
+            Assert.True(await tracker.StopAsync(CancellationToken.None));
+            await tracking;
+            Assert.Equal(GameSessionState.Stopped, tracker.State);
+            await AssertProcessGoneAsync(childIdentity);
+        }
+        finally
+        {
+            File.Delete(pidFile);
+            if (childIdentity.ProcessId > 0)
+            {
+                await KillIdentityAsync(childIdentity);
             }
         }
     }

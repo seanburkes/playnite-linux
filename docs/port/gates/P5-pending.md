@@ -6,6 +6,8 @@
 - Result: **PENDING — NOT AN ACCEPTANCE.** Zero of the six exit criteria are proven.
 - Review basis: worker diff-only self-assessment of merged artifacts and unit shards. No
   independent approval, no owner acceptance, and **no real-machine evidence** is claimed.
+- Addendum (follow-up to merged #123): the unit evidence table cites main-push linux-ci runs on
+  the merged heads, not pull-request head runs. No criterion status changed.
 
 This file records the honest state of the Phase 5 exit gate. It is deliberately not an
 acceptance record: a criterion moves to PROVEN only when the named artifact exists and is
@@ -26,16 +28,21 @@ Summary: **0 PROVEN, 3 PARTIAL, 3 NOT PROVEN.** Phase 5 is not accepted.
 
 ## Unit evidence relied on
 
-| Unit | Merged commit | Cited run (PR head, not a main-push run) |
+| Unit | Merged commit | Merged-head linux-ci (main push) |
 | --- | --- | --- |
-| p5-003 | `22f051a92b6b5a82566fd382a04f9848c30ed756` (#118) | [44331399931](https://github.com/seanburkes/playnite-linux/actions/runs/44331399931) on `cfd4305d703acff49d35f4b80bd562e1e783d5e8`: Core 2069 / Architecture 188 / Smoke 4, zero failures and skips. |
-| p5-005a | `785b89200666ab63f07ca2fd1af4e757c3ef1e36` (#119) | [44339045879](https://github.com/seanburkes/playnite-linux/actions/runs/44339045879) on `a11477727d1ecfaa1eb697f39024e10ac4c318cb`: Core 2105 / Architecture 188 / Smoke 4, zero failures and skips. |
-| p5-004 | `064e261b5bffa6c434515b9851160a21fd0e317d` (#120) | [44343258975](https://github.com/seanburkes/playnite-linux/actions/runs/44343258975) on `dc8a601`: Core 2065 / Architecture 188 / Smoke 4, zero failures and skips. |
-| p5-007a | `60e71ca950a21b72a08165e60c0e8066905ffed3` (#121) | [44338884095](https://github.com/seanburkes/playnite-linux/actions/runs/44338884095) on `f0e0344`: DesktopIntegration 65 passed; Core 2076 / Architecture 188 / Smoke 4, zero failures and skips. |
-| p2-evidence2 (tooling) | `7ea3a3752dca413fae3aac8e2e869678d2375c37` (#122) | [44343502238](https://github.com/seanburkes/playnite-linux/actions/runs/44343502238) on `24a298ce95ad52faca876046dfd85e512de16db5`, linux-ci success. |
+| p5-001 | `777578cc81efb0130b41924c282542f0b346836c` (#109) | [44190373018](https://github.com/seanburkes/playnite-linux/actions/runs/44190373018) on `777578c`, success. |
+| p5-002 | `c7b25dc7fa39238ab8f6fc47b9b21a4237e3ddb0` (#110), with follow-ups `f8aed2fe6b29918fbe6bc29dd5f3b54a7af6fcee` (#112), `c057be0f3e548ac31ac515b6da7ad4c606d17916` (#115) and `a37890f33110c70b8411bac4457d16e0aa41822f` (#116) | [44323525396](https://github.com/seanburkes/playnite-linux/actions/runs/44323525396) on the final follow-up merged head `a37890f`, success; earlier merged-head runs 44200516358, 44203797675 and 44244649688 also succeeded. |
+| p5-003 | `22f051a92b6b5a82566fd382a04f9848c30ed756` (#118) | [44344905055](https://github.com/seanburkes/playnite-linux/actions/runs/44344905055) on `22f051a`, success. |
+| p5-005a | `785b89200666ab63f07ca2fd1af4e757c3ef1e36` (#119) | [44344964418](https://github.com/seanburkes/playnite-linux/actions/runs/44344964418) on `785b892`, success. |
+| p5-004 | `064e261b5bffa6c434515b9851160a21fd0e317d` (#120) | [44345002684](https://github.com/seanburkes/playnite-linux/actions/runs/44345002684) on `064e261`, success. |
+| p5-007a | `60e71ca950a21b72a08165e60c0e8066905ffed3` (#121) | [44345049906](https://github.com/seanburkes/playnite-linux/actions/runs/44345049906) on `60e71ca`, success. |
 
-These are unit-level runs on pull-request heads cited by the merged ledger fragments. They do
-not measure this documentation change and are not Phase 5 exit evidence by themselves.
+The tooling row #122 (`p2-evidence2`, merge `7ea3a3752dca413fae3aac8e2e869678d2375c37`) had a
+successful main-push linux-ci run [44345093914](https://github.com/seanburkes/playnite-linux/actions/runs/44345093914);
+it is not a Phase 5 desktop unit and contributes no exit evidence.
+
+These are merged-head main-push runs, not pull-request head runs. They do not measure this
+documentation change and are not Phase 5 exit evidence by themselves.
 
 ## What would close a row
 
