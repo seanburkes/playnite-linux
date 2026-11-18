@@ -148,8 +148,8 @@ so Steam owned selection: `105600` is the harness's second slot and ran `Terrari
 which is not a Proton/Windows-binary shape and is not claimed as Proton proof. Local Core
 validation on that head: **2376 passed, zero failures/skips**.
 
-Rerun on final code head `83f4c146ab7c7b468d16d331f71582b1a1a3a5a9` (later PR commits are
-docs-only), the same library and apps with both consent flags: four flows, all `PASS`, every
+Rerun on earlier code head `83f4c146ab7c7b468d16d331f71582b1a1a3a5a9` (before the P2 anomaly-scoping
+correction), the same library and apps with both consent flags: four flows, all `PASS`, every
 `STOP REPORT degraded=False` with reason `Attributed game identities gone; observed group empty`,
 exit 0. Native `770100` attributed in 3.9s/2.2s and the second slot `105600` in 3.3s/3.0s; each
 flow tolerated one unreadable member as group evidence and never signalled it, sent pidfd SIGTERM
@@ -157,3 +157,9 @@ only to the attributed game executable, retained the original client identities 
 no-orphan assertion. Selection evidence remains `Unknown`, so this is still not Proton/Windows-
 binary stop-shape proof. Local Core validation on that head: **2378 passed, zero
 failures/skips**, including the host and launcher group-change seam tests.
+
+The P2 anomaly-scoping correction changed the host snapshot shape and the stop loop, so the
+`83f4c14` owner-machine run is not evidence for the corrected code head. Real linux-ci run
+`44405068641` on `f9a16ea17f603b4d71d06e929e14fcd183a62c48` completed success; local full Core on
+that head is **2381 passed, zero failures/skips**. No new owner-machine acceptance is claimed for
+the correction.
