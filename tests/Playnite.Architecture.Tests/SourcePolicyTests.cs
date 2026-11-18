@@ -82,6 +82,9 @@ public sealed class SourcePolicyTests
     [InlineData("execve")]
     [InlineData("getpid")]
     [InlineData("fstat")]
+    [InlineData("kill")]
+    [InlineData("tgkill")]
+    [InlineData("pidfd_getfd")]
     public void Rejects_every_native_entry_point_outside_the_reviewed_allowlist(string entryPoint)
     {
         var source = $$"""
@@ -150,10 +153,122 @@ public sealed class SourcePolicyTests
     }
 
     [Fact]
+    public void Permits_pidfd_open_and_a_SIGTERM_only_pidfd_send_signal_call()
+    {
+        // The launcher opens a pidfd for a verified process identity and signals only that
+        // handle. SIGTERM may be written as the literal, a compile-time constant, or a named
+        // argument; all three still prove the signal from source.
+        var source = """
+            class C
+            {
+                const int SigTerm = 15;
+
+                [System.Runtime.InteropServices.DllImport("libc", SetLastError = true)]
+                static extern int pidfd_open(int pid, uint flags);
+
+                [System.Runtime.InteropServices.DllImport("libc", SetLastError = true)]
+                static extern int pidfd_send_signal(int pidfd, int sig, nint info, uint flags);
+
+                int M()
+                {
+                    var pidfd = pidfd_open(42, 0);
+                    _ = pidfd_send_signal(pidfd, 15, 0, 0);
+                    _ = pidfd_send_signal(pidfd, SigTerm, 0, 0);
+                    _ = pidfd_send_signal(pidfd, sig: SigTerm, info: 0, flags: 0);
+                    return pidfd;
+                }
+            }
+            """;
+
+        Assert.Empty(PolicyProbe.Check("Playnite.Platform.Linux", source));
+    }
+
+    [Theory]
+    [InlineData(9)]   // SIGKILL: the reviewed capability is not process termination that cannot be refused
+    [InlineData(2)]   // SIGINT
+    [InlineData(10)]  // SIGUSR1
+    [InlineData(0)]   // no signal
+    public void Rejects_pidfd_send_signal_with_any_signal_other_than_SIGTERM(int signal)
+    {
+        var source = $$"""
+            class C
+            {
+                [System.Runtime.InteropServices.DllImport("libc")]
+                static extern int pidfd_send_signal(int pidfd, int sig, nint info, uint flags);
+
+                void M() { _ = pidfd_send_signal(1, {{signal}}, 0, 0); }
+            }
+            """;
+
+        Assert.Contains(PolicyProbe.Check("Playnite.Platform.Linux", source),
+            v => v.Contains("pidfd_send_signal is restricted to SIGTERM (15)", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Rejects_a_forwarded_or_runtime_pidfd_send_signal_signal()
+    {
+        // A signal chosen at runtime cannot be proven to be SIGTERM, so it is refused rather
+        // than assumed safe.
+        var source = """
+            class C
+            {
+                [System.Runtime.InteropServices.DllImport("libc")]
+                static extern int pidfd_send_signal(int pidfd, int sig, nint info, uint flags);
+
+                void M(int signal) { _ = pidfd_send_signal(1, signal, 0, 0); }
+            }
+            """;
+
+        Assert.Contains(PolicyProbe.Check("Playnite.Platform.Linux", source),
+            v => v.Contains("compile-time constant SIGTERM", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Rejects_pidfd_send_signal_escaping_as_a_method_group_or_function_pointer()
+    {
+        // A direct call is the only reference whose signal argument the policy can prove.
+        var source = """
+            class C
+            {
+                [System.Runtime.InteropServices.DllImport("libc")]
+                static extern int pidfd_send_signal(int pidfd, int sig, nint info, uint flags);
+
+                System.Func<int, int, nint, uint, int> M() => pidfd_send_signal;
+            }
+            """;
+
+        Assert.Contains(PolicyProbe.Check("Playnite.Platform.Linux", source),
+            v => v.Contains("may only be called directly", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Pidfd_send_signal_restriction_follows_the_bound_entry_point_not_the_method_name()
+    {
+        // A method named pidfd_send_signal that binds another entry point stays rejected by
+        // the allow-list, and an allow-listed alias cannot dodge the SIGTERM restriction.
+        var source = """
+            class C
+            {
+                [System.Runtime.InteropServices.DllImport("libc", EntryPoint = "pidfd_send_signal")]
+                static extern int SendAny(int pidfd, int sig, nint info, uint flags);
+
+                void M() { _ = SendAny(1, 9, 0, 0); }
+            }
+            """;
+
+        Assert.Contains(PolicyProbe.Check("Playnite.Platform.Linux", source),
+            v => v.Contains("pidfd_send_signal is restricted to SIGTERM (15)", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void Linux_native_import_allowlist_is_exactly_the_reviewed_set()
     {
         // A later edit that silently widens the capability must fail here, not only in review.
-        Assert.Equal(new[] { "close", "openat", "read", "statx" }, SourcePolicy.LinuxNativeImportAllowlist);
+        Assert.Equal(new[] { "close", "openat", "read", "statx", "pidfd_open", "pidfd_send_signal" },
+            SourcePolicy.LinuxNativeImportAllowlist);
+        // The only signal the pidfd pair may deliver is SIGTERM; re-pointing this constant
+        // would silently widen the reviewed capability.
+        Assert.Equal(15, SourcePolicy.SigTerm);
     }
 
     [Theory]
