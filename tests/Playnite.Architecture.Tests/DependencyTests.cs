@@ -62,10 +62,25 @@ public sealed class DependencyTests
     [Fact]
     public void Product_dependency_closures_exclude_Windows_and_importer_leaks()
     {
+        // System.Diagnostics.Process is the approved argument-list process API (PORTING.md).
+        // Its framework metadata references Microsoft.Win32.Primitives, a shim assembly rather
+        // than a Win32 API use. Real Win32 types stay banned by the compiled-type scan below,
+        // SourcePolicy and BannedSymbols; Registry is the negative control for this rule.
+        const string frameworkShim = "Microsoft.Win32.Primitives";
+        static bool IsBannedWindowsDependency(string dependency, string shim) =>
+            (IsFamily(dependency, "Microsoft.Win32") && !string.Equals(dependency, shim, StringComparison.Ordinal))
+            || IsFamily(dependency, "System.Drawing.Common")
+            || IsFamily(dependency, "System.Management")
+            || IsFamily(dependency, "System.ServiceProcess.ServiceController");
+
+        // The shim allowance must not hide a real Windows API dependency.
+        Assert.True(IsBannedWindowsDependency("Microsoft.Win32.Registry", frameworkShim));
+        Assert.False(IsBannedWindowsDependency(frameworkShim, frameworkShim));
+
         foreach (var project in ProductGraph.Products)
         {
             var dependencies = project.Dependencies();
-            Assert.DoesNotContain(dependencies, d => IsFamily(d, "Microsoft.Win32") || IsFamily(d, "System.Drawing.Common") || IsFamily(d, "System.Management") || IsFamily(d, "System.ServiceProcess.ServiceController"));
+            Assert.DoesNotContain(dependencies, d => IsBannedWindowsDependency(d, frameworkShim));
             if (project.Name is "Playnite.Desktop" or "Playnite.Cli")
             {
                 Assert.DoesNotContain(dependencies, d => IsFamily(d, "LiteDB") || d == "Playnite.LegacyImport");
