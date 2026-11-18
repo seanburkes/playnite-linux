@@ -75,16 +75,21 @@ public sealed class XdgDirectories
         ArgumentNullException.ThrowIfNull(environment);
         var diagnostics = new List<string>();
         var home = ResolveHome(environment, diagnostics);
+        var paths = new LinuxPaths(new FixedHomeEnvironment(environment, home), NoDocumentsFileSystem.Instance);
 
-        var configHome = BaseDirectory(environment, "XDG_CONFIG_HOME", home, ".config", diagnostics);
-        var dataHome = BaseDirectory(environment, "XDG_DATA_HOME", home, ".local/share", diagnostics);
-        var cacheHome = BaseDirectory(environment, "XDG_CACHE_HOME", home, ".cache", diagnostics);
-        var stateHome = BaseDirectory(environment, "XDG_STATE_HOME", home, ".local/state", diagnostics);
+        var configHome = BaseHome(paths.Config);
+        var dataHome = BaseHome(paths.UserData);
+        var cacheHome = BaseHome(paths.Cache);
+        var stateHome = BaseHome(paths.State);
+        RecordRejected(environment, "XDG_CONFIG_HOME", diagnostics);
+        RecordRejected(environment, "XDG_DATA_HOME", diagnostics);
+        RecordRejected(environment, "XDG_CACHE_HOME", diagnostics);
+        RecordRejected(environment, "XDG_STATE_HOME", diagnostics);
 
-        var state = Path.Combine(stateHome, ApplicationDirectoryName);
+        var state = paths.State;
         var runtimeValue = environment.GetVariable("XDG_RUNTIME_DIR");
         string runtime;
-        if (LinuxPaths.IsUsableBase(runtimeValue))
+        if (Paths.IsFullPath(runtimeValue))
         {
             runtime = Path.Combine(Paths.Normalize(runtimeValue!, "/"), ApplicationDirectoryName);
         }
@@ -142,24 +147,42 @@ public sealed class XdgDirectories
         return fallback;
     }
 
-    private static string BaseDirectory(
-        IEnvironment environment,
-        string variable,
-        string home,
-        string fallback,
-        List<string> diagnostics)
+    private static string BaseHome(string applicationRoot) =>
+        Path.GetDirectoryName(applicationRoot) ?? applicationRoot;
+
+    private static void RecordRejected(IEnvironment environment, string variable, List<string> diagnostics)
     {
         var value = environment.GetVariable(variable);
-        if (LinuxPaths.IsUsableBase(value))
+        if (value is not null && !Paths.IsFullPath(value))
         {
-            return Paths.Normalize(value!, "/");
+            diagnostics.Add($"{variable} is not an absolute path ({value}); using the documented fallback.");
+        }
+    }
+
+    private sealed class FixedHomeEnvironment : IEnvironment
+    {
+        private readonly IEnvironment inner;
+
+        internal FixedHomeEnvironment(IEnvironment inner, string home)
+        {
+            this.inner = inner;
+            Home = home;
         }
 
-        if (value is not null)
-        {
-            diagnostics.Add($"{variable} is not an absolute path ({value}); using the fallback under {home}.");
-        }
+        public string Home { get; }
+        public string CurrentDirectory => inner.CurrentDirectory;
+        public string ProgramDirectory => inner.ProgramDirectory;
+        public string? GetVariable(string name) => inner.GetVariable(name);
+    }
 
-        return Path.Combine(home, fallback);
+    /// <summary>The shared resolver only needs to know whether user-dirs.dirs exists.</summary>
+    private sealed class NoDocumentsFileSystem : IFileSystem
+    {
+        internal static readonly NoDocumentsFileSystem Instance = new();
+
+        public bool FileExists(string path) => false;
+        public bool DirectoryExists(string path) => false;
+        public void CreateDirectory(string path) => throw new NotSupportedException();
+        public string ReadAllText(string path) => throw new FileNotFoundException("Not part of XDG base resolution.", path);
     }
 }

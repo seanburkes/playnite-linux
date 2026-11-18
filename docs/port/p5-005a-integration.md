@@ -30,8 +30,8 @@ normalization; it never creates a directory and never consults the host environm
   back and are recorded in `Diagnostics`.
 - A non-absolute `HOME` does not throw at startup: resolution falls back to the captured
   absolute current directory (or `/`) and records a diagnostic naming both values.
-- `LinuxPaths` and `XdgDirectories` share the same base-directory rule; `XdgDirectories` is the
-  runtime leaf and adds only `XDG_RUNTIME_DIR`.
+- `XdgDirectories` delegates config/data/cache/state base resolution to `LinuxPaths` (one
+  authoritative rule) and adds only the runtime leaf from `XDG_RUNTIME_DIR`.
 - The runtime fallback is `$XDG_STATE_HOME/playnite/runtime` (or the HOME fallback under State)
   and appends a diagnostic naming the rejected `XDG_RUNTIME_DIR`. A usable `XDG_RUNTIME_DIR`
   produces `$XDG_RUNTIME_DIR/playnite`.

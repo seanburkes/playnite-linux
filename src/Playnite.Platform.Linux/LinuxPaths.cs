@@ -14,14 +14,11 @@ public sealed class LinuxPaths : PlaynitePaths
     {
     }
 
-    internal static string BaseDirectory(IEnvironment environment, string variable, string fallback)
+    private static string BaseDirectory(IEnvironment environment, string variable, string fallback)
     {
         var value = environment.GetVariable(variable);
-        return IsUsableBase(value) ? Paths.Normalize(value!, "/") : Path.Combine(environment.Home, fallback);
+        return Paths.IsFullPath(value) ? value! : Path.Combine(environment.Home, fallback);
     }
-
-    /// <summary>One XDG base-directory rule shared with the integration services.</summary>
-    internal static bool IsUsableBase(string? value) => Paths.IsFullPath(value);
 
     private static string ApplicationRoot(IEnvironment environment, string variable, string fallback) =>
         Path.Combine(BaseDirectory(environment, variable, fallback), ApplicationDirectoryName);
