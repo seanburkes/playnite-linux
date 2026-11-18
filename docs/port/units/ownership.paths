@@ -108,11 +108,13 @@ src/Playnite.LegacyImport/Program.cs	p2-001	9afd818ae8a695e921bb98f386bfceb83d00
 src/Playnite.LegacyImport/Program.cs	p4-002	9f81d30b3cc4a6beb0e15f39610ecd219ebc19f7	pull/94
 src/Playnite.Platform.Linux/AssemblyMarker.cs	p2-001	9afd818ae8a695e921bb98f386bfceb83d0059db	pull/29
 src/Playnite.Platform.Linux/AssemblyMarker.cs	p2-002	abdb82bedd0bcadfe93c1fc6f11937c55b116b7c	pull/37
+src/Playnite.Platform.Linux/LinuxBoundedFileReader.cs	p5-002	c057be0f3e548ac31ac515b6da7ad4c606d17916	pull/115
 src/Playnite.Platform.Linux/LinuxEnvironment.cs	*	d6401f1f07c69474d0ce395797ab694bedf019e7	pull/68
 src/Playnite.Platform.Linux/LinuxFileSystem.cs	*	d6401f1f07c69474d0ce395797ab694bedf019e7	pull/68
 src/Playnite.Platform.Linux/LinuxPaths.cs	*	d6401f1f07c69474d0ce395797ab694bedf019e7	pull/68
 src/Playnite.Platform/AssemblyMarker.cs	p2-001	9afd818ae8a695e921bb98f386bfceb83d0059db	pull/29
 src/Playnite.Platform/AssemblyMarker.cs	p2-002	abdb82bedd0bcadfe93c1fc6f11937c55b116b7c	pull/37
+src/Playnite.Platform/IBoundedFileReader.cs	p5-002	c057be0f3e548ac31ac515b6da7ad4c606d17916	pull/115
 src/Playnite.SDK.Abstractions/AssemblyMarker.cs	p2-001	9afd818ae8a695e921bb98f386bfceb83d0059db	pull/29
 src/Playnite.SDK.Abstractions/AssemblyMarker.cs	p2-002	abdb82bedd0bcadfe93c1fc6f11937c55b116b7c	pull/37
 src/Playnite.SDK.Abstractions/Data/IDataSerializer.cs	p2-006	7c31729c5d61d1a45edf5a41fee4c119ae7437d6	pull/45
