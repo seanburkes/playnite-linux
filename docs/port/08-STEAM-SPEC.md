@@ -36,10 +36,10 @@ Resolve, in order, the first root whose realpath exists and contains `steamapps`
 
 1. `$STEAM_ROOT` (explicit override; absolute path)
 2. `~/.steam/steam`
-3. `~/.steam/root`
+3. Home-relative `.steam/root`
 4. `$XDG_DATA_HOME/Steam` (absolute and different from the default data location)
 5. `~/.local/share/Steam`
-6. `~/.var/app/com.valvesoftware.Steam/.local/share/Steam` (Flatpak)
+6. Home-relative `.var/app/com.valvesoftware.Steam/.local/share/Steam` (Flatpak)
 
 Deduplicate candidates by realpath so `~/.steam/steam` and `~/.local/share/Steam` do not
 produce two libraries. Report every candidate considered and why it was rejected.
@@ -55,11 +55,12 @@ not verified. The path above is the planned v1 probe, not observed fact.
 
 - Candidates are probed in exactly the order above.
   Every candidate is still reported after one is accepted: a later candidate that resolves to
-  any previously seen realpath is `duplicate-realpath` (even if it was not accepted; the usual home `.steam/steam` and `.steam/root`
-  links), and a different usable root is `shadowed`. Only the first accepted root produces
-  libraries.
-- A nonempty non-absolute `$STEAM_ROOT` (including whitespace-only values) is reported as `invalid-path` and never resolved against the
-  working directory; a missing candidate is `missing`, an existing non-directory
+  any previously seen realpath is `duplicate-realpath` (even if it was not accepted; including
+  the usual home `.steam/steam` and `.steam/root` links), and a different usable root is
+  `shadowed`. Only the first accepted root produces libraries.
+- A nonempty non-absolute `$STEAM_ROOT` (including whitespace-only values) is reported as
+  `invalid-path` and never resolved against the working directory; a missing candidate is
+  `missing`, an existing non-directory
   `not-directory`, a symlink loop `unreadable`. A permission failure is `unreadable`, not
   `missing`.
 - Realpath resolution follows `realpath(3)`: components are resolved left to right, and `..`
