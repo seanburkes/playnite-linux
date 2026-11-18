@@ -61,7 +61,9 @@ the cache key. Each hit verifies the stored bytes against their length/hash-boun
 Every online HTTP acquisition and every local-file acquisition reads the explicit source anew,
 even if its URI, size and mtime are unchanged; a changed payload replaces the prior snapshot.
 Offline HTTP hits explicitly return the latest validated snapshot, not a freshness guarantee.
-An optional expected SHA-256 additionally pins an explicit source version.
+An optional expected SHA-256 additionally pins an explicit source version. Empty/whitespace-only
+expectations report `source-invalid` (never treated as null), and offline HTTP hits check the
+expected source hash before returning the cached path.
 
 The configured positive byte bound covers owned blobs plus the active temporary file. Evict
 oldest `LastWriteTimeUtc` first, then ordinal filename on ties, **before** writing incoming

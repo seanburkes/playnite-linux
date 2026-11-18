@@ -136,6 +136,35 @@ public sealed class ArtworkTests
     }
 
     [Theory]
+    [InlineData("")]
+    [InlineData(" ")]
+    [InlineData("\t\r\n")]
+    public async Task Null_expected_hash_snapshot_cannot_satisfy_empty_expected_hash_offline(string emptyHash)
+    {
+        using var temp = new CacheDirectory();
+        await using var stub = new HttpStub(Jpeg);
+        using (var initial = Fetcher(new Source(stub.Url), temp.Path))
+            Assert.NotNull((await initial.FetchAsync(Header)).Path);
+        using var constrained = Fetcher(new Source(stub.Url, emptyHash), temp.Path);
+        AssertFailure(await constrained.FetchAsync(Header, offline: true), "source-invalid");
+        Assert.Equal(1, stub.Requests);
+    }
+
+    [Fact]
+    public async Task Offline_hit_validates_expected_source_hash_before_returning_path()
+    {
+        using var temp = new CacheDirectory();
+        await using var stub = new HttpStub(Jpeg);
+        string expected = new('0', 64);
+        var cache = new ArtworkCache(temp.Path, 1024, Path.Combine(temp.Path, "steam"));
+        string key = ArtworkCache.SourceKey(Header, new(stub.Url, expected));
+        await cache.StoreAsync(key, Jpeg, default);
+        using var fetcher = Fetcher(new Source(stub.Url, expected), temp.Path);
+        AssertFailure(await fetcher.FetchAsync(Header, offline: true), "source-hash-mismatch");
+        Assert.Equal(0, stub.Requests);
+    }
+
+    [Theory]
     [InlineData("[]", true)]
     [InlineData("[[\"achievements\",{\"data\":{\"nTotal\":0}}]]", true)]
     [InlineData("{}", false)]

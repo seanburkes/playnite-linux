@@ -44,13 +44,23 @@ public sealed class ArtworkFetcher : IDisposable
             entered = true;
             ArtworkSource? source = sources.Resolve(identity);
             if (source == null) return Fail("source-unconfigured-or-title-excluded");
+            if (source.ExpectedSha256 != null && string.IsNullOrWhiteSpace(source.ExpectedSha256)) return Fail("source-invalid");
             if (!source.Location.IsAbsoluteUri || (source.Location.Scheme != "http" && source.Location.Scheme != "https" && !source.Location.IsFile))
                 return Fail("source-invalid");
             string key = ArtworkCache.SourceKey(identity, source);
             string? hit = await cache.FindAsync(key, cancellationToken).ConfigureAwait(false);
             // Offline HTTP hits are validated snapshots. Online and local sources are read anew:
             // URI, length and mtime alone cannot prove content has not changed.
-            if (hit != null && offline && !source.Location.IsFile) return new(hit, issues.AsReadOnly());
+            if (hit != null && offline && !source.Location.IsFile)
+            {
+                if (source.ExpectedSha256 != null)
+                {
+                    await using var cached = File.OpenRead(hit);
+                    string hash = Convert.ToHexString(await SHA256.HashDataAsync(cached, cancellationToken).ConfigureAwait(false));
+                    if (!hash.Equals(source.ExpectedSha256, StringComparison.OrdinalIgnoreCase)) return Fail("source-hash-mismatch");
+                }
+                return new(hit, issues.AsReadOnly());
+            }
             if (offline && !source.Location.IsFile) return Fail("offline-cache-miss");
 
             byte[] body;
