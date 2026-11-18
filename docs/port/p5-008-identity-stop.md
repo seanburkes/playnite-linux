@@ -72,3 +72,15 @@ explicit consent flags, it reports window progress, runs native/Proton stop and 
 disposes tracker/launcher, then asserts attributed games and observed descendants gone and
 original client identities retained. It prints helper survivors instead of asserting an empty
 Steam-owned group. No launch options, Steam config or prefixes are changed by the harness.
+
+## Owner-machine acceptance
+
+Consented run on final code head `ae52afd` (later PR commits are docs-only): native `770100`
+attributed in 4.4s (stop) and 2.5s (cancel); Proton `105600` attributed in 3.8s (stop) and
+3.0s (cancel). Every flow printed a single game identity plus a tolerated unreadable
+`pv-adverb`, sent pidfd SIGTERM only to the game executable, retained the original Steam
+client identities, reported the group empty, and passed the harness's no-orphan assertion.
+No SIGKILL, group signal, client signal or helper signal occurred. Native `975370` and
+`427520` were not used: both survive SIGTERM past the 5s stop deadline, so they remain
+manual-Stop cases and are not offered as clean-stop evidence. Real linux-ci run
+`44381409850` succeeded on that exact head.
