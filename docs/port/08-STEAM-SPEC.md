@@ -36,8 +36,10 @@ Resolve, in order, the first root whose realpath exists and contains `steamapps`
 
 1. `$STEAM_ROOT` (explicit override; absolute path)
 2. `~/.steam/steam`
-3. `~/.local/share/Steam`
-4. `~/.var/app/com.valvesoftware.Steam/.local/share/Steam` (Flatpak)
+3. `~/.steam/root`
+4. `$XDG_DATA_HOME/Steam` (absolute and different from the default data location)
+5. `~/.local/share/Steam`
+6. `~/.var/app/com.valvesoftware.Steam/.local/share/Steam` (Flatpak)
 
 Deduplicate candidates by realpath so `~/.steam/steam` and `~/.local/share/Steam` do not
 produce two libraries. Report every candidate considered and why it was rejected.
@@ -51,19 +53,19 @@ not verified. The path above is the planned v1 probe, not observed fact.
 
 ### 1.3 Discovery decisions [decision]
 
-- Candidates are probed in the order above, then the home `.steam/root` alias, and
-  `$XDG_DATA_HOME/Steam` when that variable is absolute and not the default data location.
+- Candidates are probed in exactly the order above.
   Every candidate is still reported after one is accepted: a later candidate that resolves to
-  the accepted realpath is `duplicate-realpath` (the usual home `.steam/steam` and `.steam/root`
+  any previously seen realpath is `duplicate-realpath` (even if it was not accepted; the usual home `.steam/steam` and `.steam/root`
   links), and a different usable root is `shadowed`. Only the first accepted root produces
   libraries.
-- A non-absolute `$STEAM_ROOT` is reported as `invalid-path` and never resolved against the
+- A nonempty non-absolute `$STEAM_ROOT` (including whitespace-only values) is reported as `invalid-path` and never resolved against the
   working directory; a missing candidate is `missing`, an existing non-directory
   `not-directory`, a symlink loop `unreadable`. A permission failure is `unreadable`, not
   `missing`.
 - Realpath resolution follows `realpath(3)`: components are resolved left to right, and `..`
   applies after a link has been followed. `Path.GetFullPath`-style lexical collapse before link
-  resolution is wrong.
+  resolution is wrong. A component traversed before `..` must exist and be a directory:
+  `missing/../x`, `file/../x`, and a dangling link target followed by `..` do not resolve.
 - A candidate counts only when its realpath directory contains `steamapps`, and that
   `steamapps` must itself resolve inside the candidate realpath. A link that leaves the root is
   `steamapps-outside-root` and is not followed; a `steamapps` link back to `.` resolves inside
@@ -124,12 +126,15 @@ canonical "library on an unmounted path" case; see §9.
   invalid is skipped and the root library is kept; the reason is reported. `LibraryFilePath`
   names the file selected even when it could not be read. A file that resolves outside the root
   realpath is not read.
-- The read uses the canonical realpath. A missing or zero-length path is rejected before it is
-  opened, so a FIFO or device cannot block the caller, and the allocated buffer is exactly the
-  stat length within the byte bound. A symlink swapped after the containment check therefore
-  cannot turn the read into an outside-root read, and a growing file cannot over-allocate.
-  Native file-type calls are unavailable under the architecture policy, so an empty regular
-  file shares the zero-length `not-a-regular-file` skip.
+- The Linux read walks the canonical path using directory handles and `openat` with
+  `O_NOFOLLOW` on every component. The leaf opens read-only with `O_NONBLOCK`, then `statx`
+  with `AT_EMPTY_PATH` checks that same handle for regular-file type and the size bound.
+  Only that handle is read; no path is reopened after stat. A leaf/parent symlink swap fails
+  closed; a swap after opening can only leave the original file handle readable. FIFO replacement
+  cannot block the open or read, and growth cannot extend the stat-sized buffer. Empty regular
+  files retain the `not-a-regular-file` skip. The Platform reader is injected; the Linux native
+  implementation explicitly rejects other operating systems rather than falling back to unsafe
+  path reads. Linux libc/kernel support for `statx` is required; failure never falls back.
 - The root is always a library. When no valid file entry resolves to the root realpath, a
   synthetic `root` entry is added first with a present-but-empty apps map; app manifests are a
   later unit. Unknown root fields are discarded and never surface as discovery state.
@@ -211,6 +216,39 @@ as zero. The parser retains decoded `installdir`; `SteamApp.InstallPath` combine
 absolute normalized library path using `Path.GetFullPath`. Availability and Proton evidence are
 the later discovery unit's responsibility. Missing-manifest reports likewise require that unit's
 file enumeration; this layer never invents a manifest for a library app id.
+
+### Follow-up boundary clarifications (p5-001)
+
+- `InstalledDepots`, `SharedDepots`, and `InstallScripts` use nullable read-only dictionaries:
+  missing or wrong-shaped objects are `null`, with a diagnostic for the latter; a present empty
+  object has count 0. `UserConfig` and `MountedConfig` use the same distinction with nullable
+  lists. Invalid members are omitted from present objects rather than erasing their presence.
+- `SteamLibrary.Apps` is also nullable: missing is `null`, present empty is count 0. A malformed
+  present apps map reports and becomes a non-null empty map, preserving the existing all-or-nothing
+  map policy. Numerically ambiguous library indexes (such as `0` and `00`) reject the whole file
+  with `duplicate-library-index`, both raw indexes, and the later index's byte offset; discovery's
+  implicit default Steam library is unaffected by this parser rejection.
+- Diagnostic `File` and syntax-exception `File` contain only the basename, never caller directory
+  prefixes. Caller filename arguments have trailing POSIX slashes removed before taking the
+  basename; empty/root-only names and embedded null bytes are rejected as invalid arguments with
+  value-free messages. Parser issue offsets identify offending keys/members rather than containers.
+- Empty quoted roots and object keys reject. Numbers use ASCII decimal digits only and app ids
+  must fit `uint`, without wrapping. A name is nonempty after decoding, not trimmed: whitespace
+  is preserved, including a nonempty whitespace-only name.
+- Install directories retain POSIX spelling, including literal backslashes and colons. Traversal
+  above the install root is checked with both slash and backslash separators and with POSIX-only
+  separators; the actual POSIX path may not resolve to the root itself. This does not impose
+  Windows drive-name rules on legitimate POSIX names. Public `ToApp` and `InstallPath` projections
+  enforce the same checks and normalized containment, even for programmatically constructed records.
+- Owner-field exclusion is ordinal case-insensitive at every nesting level of model bags and
+  scripts. No diagnostic identifies that field or its contents, including duplicate keys inside
+  an owner-named root/subtree. Raw KeyValues intentionally preserves owner metadata for round trips;
+  default raw-entry formatting emits neither keys nor values. `KeyValues.Write` is serialization,
+  **not redaction**, and raw trees/written bytes must never be logged. The writer rejects empty keys
+  and bounds object depth to the reader's 64 levels, including programmatically assembled trees.
+- The Steam fuzz target exercises model-level syntax/semantic rejects and public path projection;
+  non-syntax failures are not converted into expected syntax rejections. Oversized-probe budgets
+  must fit a byte array, preventing `MaxInputBytes + 1` overflow before allocation.
 
 Parser entry points live in the existing **Playnite.Steam** assembly, which already owns VDF/ACF
 in §3.4 of the architecture. The pure types use only BCL (Core/Platform references remain the
