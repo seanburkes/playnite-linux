@@ -58,16 +58,16 @@
 | Status | Units |
 | --- | ---: |
 | deferred | 1 |
-| done | 69 |
-| in-progress | 5 |
+| done | 70 |
+| in-progress | 4 |
 | todo | 28 |
 
 ## Ledger
 
 | Metric | Value |
 | --- | ---: |
-| Ledger rows | 266 |
-| Ledger fragments | 39 |
+| Ledger rows | 268 |
+| Ledger fragments | 41 |
 
 ## Units
 
@@ -148,7 +148,7 @@
 | p5-005a | W5 | platform | XDG/single-instance/protocol continuation | in-progress | `units/p5-005a.*`; 3 ledger rows |
 | p5-006 | W5 | platform | WebView service | todo | `units/p5-006.*`; 0 ledger rows |
 | p5-007 | W5 | platform | Tray/notifications/sleep | todo | `units/p5-007.*`; 0 ledger rows |
-| p5-007a | W5 | platform | Tray/notifications/sleep inhibition | in-progress | `units/p5-007a.*`; 1 ledger rows |
+| p5-007a | W5 | platform | Tray/notifications/sleep inhibition | done | `units/p5-007a.*`; 3 ledger rows |
 | p5-008 | W5 | steam | Launch native/Proton | todo | `units/p5-008.*`; 0 ledger rows |
 | p5-shards | W5 | repo | Phase 5 shard board reconciliation | done | `units/p5-shards.*`; 2 ledger rows |
 | p5-shards2 | W5 | repo | Phase 5 exit assessment and merged-wave reconciliation | done | `units/p5-shards2.*`; 4 ledger rows |
