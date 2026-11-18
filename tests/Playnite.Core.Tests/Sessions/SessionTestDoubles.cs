@@ -28,6 +28,10 @@ internal sealed class FakeProcessLauncher : IProcessLauncher, IAsyncDisposable
 
     public bool FailSecondStop { get; set; }
 
+    public bool FailAllStopsAfterFirst { get; set; }
+
+    public bool FailAllStops { get; set; }
+
     public TaskCompletionSource StopEntered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
     public int StopCalls => stopCalls;
@@ -54,8 +58,24 @@ internal sealed class FakeProcessLauncher : IProcessLauncher, IAsyncDisposable
             throw new InvalidOperationException("the cancelled-stop retry failed");
         }
 
+        if (call >= 2 && FailAllStopsAfterFirst)
+        {
+            throw new InvalidOperationException("the stop retry failed");
+        }
+
+        if (FailAllStops)
+        {
+            throw new InvalidOperationException("the stop failed");
+        }
+
         Process.Running = false;
     }
+
+    public Task StopAsync(
+        IGameProcess process,
+        IReadOnlyCollection<Playnite.Platform.Sessions.ProcessIdentity> trackedProcesses,
+        CancellationToken cancellationToken) =>
+        StopAsync(process, cancellationToken);
 
     public ValueTask DisposeAsync()
     {
@@ -76,11 +96,14 @@ internal sealed class ScriptedProcessObserver : IProcessObserver
 
     public TaskCompletionSource SnapshotEntered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
+    public Action<int>? OnCall { get; set; }
+
     public int Calls => calls;
 
     public async Task<ProcessSnapshot> SnapshotAsync(CancellationToken cancellationToken)
     {
         var call = Interlocked.Increment(ref calls);
+        OnCall?.Invoke(call);
         SnapshotEntered.TrySetResult();
         if (BlockSnapshotUntilCancelled)
         {
@@ -117,4 +140,7 @@ internal static class ProcessSnapshots
     public static ProcessSnapshot Stopped() => new([], true);
 
     public static ProcessSnapshot Incomplete(string reason = "unreadable /proc row") => new([], false, reason);
+
+    public static ProcessSnapshot WithUnreadable(int[] unreadable, params ProcessEntry[] entries) =>
+        new(entries, true, null, unreadable);
 }

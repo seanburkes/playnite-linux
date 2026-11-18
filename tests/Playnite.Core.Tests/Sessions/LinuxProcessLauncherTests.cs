@@ -9,6 +9,18 @@ public sealed class LinuxProcessLauncherTests
     private static readonly string SleepPath = File.Exists("/usr/bin/sleep") ? "/usr/bin/sleep" : "/bin/sleep";
 
     [Fact]
+    public void Start_info_is_an_argv_vector_and_never_a_command_string()
+    {
+        var startInfo = new LinuxProcessStartInfoFactory().Create(
+            new LaunchRequest("/usr/bin/printf", ["%s; touch /tmp/p5-004-nope", "a b"]));
+
+        Assert.False(startInfo.UseShellExecute);
+        Assert.Equal(string.Empty, startInfo.Arguments);
+        Assert.Equal(["/usr/bin/printf"], new[] { startInfo.FileName });
+        Assert.Equal(["%s; touch /tmp/p5-004-nope", "a b"], startInfo.ArgumentList);
+    }
+
+    [Fact]
     public void Shell_command_forms_are_rejected()
     {
         Assert.Throws<ArgumentException>(() => new LaunchRequest("/bin/sh", ["-c", "echo hi"]));
@@ -149,7 +161,7 @@ public sealed class LinuxProcessLauncherTests
     public async Task Real_launcher_shutdown_leaves_no_child()
     {
         Assert.True(File.Exists(SleepPath), "The lifecycle tests require a real sleep binary.");
-        var launcher = new LinuxProcessLauncher();
+        IProcessLauncher launcher = new LinuxProcessLauncher();
         var process = await launcher.StartAsync(new LaunchRequest(SleepPath, ["30"]), CancellationToken.None);
 
         await launcher.DisposeAsync();
@@ -239,6 +251,139 @@ public sealed class LinuxProcessLauncherTests
         Assert.NotNull(stat);
         Assert.Contains(snapshot.Processes, entry =>
             entry.Identity == new ProcessIdentity(Environment.ProcessId, stat.Value.StartTimeTicks));
+    }
+
+    [Fact]
+    public async Task Failed_start_reports_the_orphan_when_kill_and_wait_fail()
+    {
+        Assert.True(File.Exists(SleepPath), "The lifecycle tests require a real sleep binary.");
+        var processSystem = new RecordingProcessSystem { FailHandleOperations = true };
+        await using var launcher = new LinuxProcessLauncher(processSystem, new NullProcStatReader());
+
+        var exception = await Assert.ThrowsAsync<ProcessOrphanedException>(() =>
+            launcher.StartAsync(new LaunchRequest(SleepPath, ["30"]), CancellationToken.None));
+
+        Assert.True(exception.ProcessId > 0);
+        Assert.IsType<AggregateException>(exception.InnerException);
+        try
+        {
+            using var orphan = System.Diagnostics.Process.GetProcessById(exception.ProcessId);
+            orphan.Kill(entireProcessTree: true);
+            await orphan.WaitForExitAsync();
+        }
+        catch (ArgumentException)
+        {
+            // The process exited on its own; the reporting assertion is the subject here.
+        }
+    }
+
+    [Fact]
+    public async Task Real_root_exit_keeps_a_tracked_child_and_stop_reaps_it()
+    {
+        const string python = "/usr/bin/python3";
+        Assert.True(File.Exists(python), "The root-exit lifecycle test requires python3.");
+        Assert.True(File.Exists(SleepPath), "The lifecycle tests require a real sleep binary.");
+        var pidFile = Path.Combine(Path.GetTempPath(), $"p5-004-child-{Path.GetRandomFileName()}");
+        const string script =
+            "import os,sys,time\n" +
+            "pid=os.fork()\n" +
+            "if pid==0:\n" +
+            "    time.sleep(30)\n" +
+            "    os._exit(0)\n" +
+            "open(sys.argv[1],'w').write(str(pid))\n" +
+            "time.sleep(2)\n" +
+            "os._exit(0)\n";
+        ProcessIdentity childIdentity = default;
+        await using var launcher = new LinuxProcessLauncher();
+        try
+        {
+            var process = await launcher.StartAsync(
+                new LaunchRequest(python, ["-c", script, pidFile]), CancellationToken.None);
+            var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(5);
+            while (!File.Exists(pidFile) && DateTime.UtcNow < deadline)
+            {
+                await Task.Delay(10);
+            }
+
+            Assert.True(File.Exists(pidFile), "The child PID file was not written.");
+            var childPid = int.Parse(File.ReadAllText(pidFile), System.Globalization.CultureInfo.InvariantCulture);
+            var childStat = await new LinuxProcStatReader().ReadAsync(childPid, CancellationToken.None);
+            Assert.NotNull(childStat);
+            childIdentity = new ProcessIdentity(childPid, childStat.Value.StartTimeTicks);
+
+            await using var tracker = new GameSessionTracker(launcher, new LinuxProcessObserver());
+            using var recorder = new SessionEventRecorder(tracker);
+            var tracking = tracker.TrackAsync(
+                process,
+                new SessionOptions { PollInterval = TimeSpan.FromMilliseconds(10) },
+                CancellationToken.None);
+            await recorder.WaitForAsync(change => change.State == GameSessionState.Running);
+
+            while (await launcher.IsRunningAsync(process, CancellationToken.None))
+            {
+                await Task.Delay(10);
+            }
+
+            await Task.Delay(100);
+            Assert.Equal(GameSessionState.Running, tracker.State);
+            Assert.True(await IdentityIsRunningAsync(childIdentity), "The reparented child did not survive the root exit.");
+            Assert.True(await tracker.StopAsync(CancellationToken.None));
+            await tracking;
+            Assert.Equal(GameSessionState.Stopped, tracker.State);
+            await AssertProcessGoneAsync(process.Identity);
+            await AssertProcessGoneAsync(childIdentity);
+        }
+        finally
+        {
+            File.Delete(pidFile);
+            if (childIdentity.ProcessId > 0 && await IdentityIsRunningAsync(childIdentity))
+            {
+                try
+                {
+                    using var child = System.Diagnostics.Process.GetProcessById(childIdentity.ProcessId);
+                    child.Kill(entireProcessTree: true);
+                    await child.WaitForExitAsync();
+                }
+                catch (ArgumentException)
+                {
+                    // Already gone.
+                }
+            }
+        }
+    }
+
+    [Fact]
+    public async Task Observer_marks_only_the_unreadable_row()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"p5-004-proc-{Path.GetRandomFileName()}");
+        Directory.CreateDirectory(Path.Combine(root, "100"));
+        Directory.CreateDirectory(Path.Combine(root, "101"));
+        await File.WriteAllTextAsync(
+            Path.Combine(root, "100", "stat"),
+            "100 (game) S 1 100 100 0 -1 0 0 0 0 0 0 0 0 0 20 0 1 0 5 0 0");
+        await File.WriteAllTextAsync(Path.Combine(root, "101", "stat"), "not a stat row");
+        try
+        {
+            var observer = new LinuxProcessObserver(new LinuxProcStatReader(root), root);
+            var snapshot = await observer.SnapshotAsync(CancellationToken.None);
+
+            Assert.True(snapshot.IsComplete);
+            Assert.Contains(snapshot.Processes, entry => entry.Identity == new ProcessIdentity(100, 5));
+            Assert.Equal([101], snapshot.Unreadable);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    private static async Task<bool> IdentityIsRunningAsync(ProcessIdentity identity)
+    {
+        var stat = await new LinuxProcStatReader().ReadAsync(identity.ProcessId, CancellationToken.None);
+        return stat is { } row
+            && row.ProcessId == identity.ProcessId
+            && row.StartTimeTicks == identity.StartTimeTicks
+            && row.IsRunning;
     }
 
     private static async Task AssertProcessGoneAsync(ProcessIdentity identity)

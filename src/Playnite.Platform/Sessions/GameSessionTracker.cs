@@ -2,9 +2,10 @@ namespace Playnite.Platform.Sessions;
 
 /// <summary>
 /// Tracks one launched process against the <c>GameSession</c> formal model. The tracker owns
-/// the process for the session's lifetime: every terminal path (stop, natural exit, cancel,
-/// failure, dispose) calls <see cref="IProcessLauncher.StopAsync"/> before reporting the
-/// terminal state, so a terminal session never keeps a process handle alive.
+/// the process for the session's lifetime: every terminal transition is preceded by a stop
+/// call that waits for exit and verifies the tracked identities are gone. A stop that cannot be
+/// proven leaves the session non-terminal and explicitly degraded instead of fabricating a
+/// terminal state.
 /// </summary>
 public sealed class GameSessionTracker : IGameSessionTracker
 {
@@ -16,8 +17,8 @@ public sealed class GameSessionTracker : IGameSessionTracker
     private readonly ISessionDelay sessionDelay;
     private readonly TimeProvider time;
     private readonly object gate = new();
+    private readonly SemaphoreSlim stopGate = new(1, 1);
     private readonly CancellationTokenSource shutdown = new();
-    private readonly SemaphoreSlim terminateGate = new(1, 1);
     private readonly HashSet<ProcessIdentity> known = [];
     private readonly TaskCompletionSource stopSignal = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private readonly TaskCompletionSource trackFinished = new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -27,7 +28,8 @@ public sealed class GameSessionTracker : IGameSessionTracker
     private GameSessionState state = GameSessionState.Idle;
     private TimeSpan playtime = TimeSpan.Zero;
     private long runningSince;
-    private bool observed;
+    private bool observedAny;
+    private int emptySamples;
     private bool degraded;
     private string? degradationReason;
     private bool trackingStarted;
@@ -108,7 +110,8 @@ public sealed class GameSessionTracker : IGameSessionTracker
             this.options = options;
             known.Clear();
             known.Add(process.Identity);
-            observed = false;
+            observedAny = false;
+            emptySamples = 0;
             trackingStarted = true;
         }
 
@@ -119,7 +122,12 @@ public sealed class GameSessionTracker : IGameSessionTracker
             Raise(TryTransition(GameSessionState.Starting, "launch accepted"));
             if (token.IsCancellationRequested)
             {
-                await CancelAsync(cancellationToken.IsCancellationRequested).ConfigureAwait(false);
+                await StopCoreAsync(StopKind.Cancel, CancellationToken.None).ConfigureAwait(false);
+                if (cancellationToken.IsCancellationRequested)
+                {
+                    throw new OperationCanceledException(cancellationToken);
+                }
+
                 return;
             }
 
@@ -151,14 +159,10 @@ public sealed class GameSessionTracker : IGameSessionTracker
                     return;
                 }
 
-                ApplySnapshot(snapshot);
-                if (State == GameSessionState.Stopped)
+                if (ApplySnapshot(snapshot) == SnapshotDecision.Ended)
                 {
-                    await EnsureStoppedAsync().ConfigureAwait(false);
-                }
-
-                if (StoppingOrTerminal())
-                {
+                    await StopCoreAsync(StopKind.Natural, CancellationToken.None).ConfigureAwait(false);
+                    stopSignal.TrySetResult();
                     return;
                 }
 
@@ -167,7 +171,7 @@ public sealed class GameSessionTracker : IGameSessionTracker
         }
         catch (OperationCanceledException) when (token.IsCancellationRequested)
         {
-            await CancelAsync(cancellationToken.IsCancellationRequested).ConfigureAwait(false);
+            await StopCoreAsync(StopKind.Cancel, CancellationToken.None).ConfigureAwait(false);
             if (cancellationToken.IsCancellationRequested)
             {
                 throw;
@@ -175,8 +179,7 @@ public sealed class GameSessionTracker : IGameSessionTracker
         }
         catch (Exception exception)
         {
-            await EnsureStoppedAsync().ConfigureAwait(false);
-            Raise(TryTransition(GameSessionState.Failed, exception.Message));
+            await StopCoreAsync(StopKind.Failure, CancellationToken.None, exception).ConfigureAwait(false);
             stopSignal.TrySetResult();
         }
         finally
@@ -187,54 +190,23 @@ public sealed class GameSessionTracker : IGameSessionTracker
 
     public async Task<bool> StopAsync(CancellationToken cancellationToken)
     {
-        IGameProcess? active;
-        lock (gate)
-        {
-            if (state is not (GameSessionState.Starting or GameSessionState.Running))
-            {
-                return false;
-            }
-
-            active = process;
-        }
-
-        if (active is null)
+        var outcome = await StopCoreAsync(StopKind.Manual, cancellationToken).ConfigureAwait(false);
+        if (!outcome.Attempted)
         {
             return false;
         }
 
-        Raise(TryTransition(GameSessionState.Stopping, "manual stop"));
-        var cancelled = false;
-        try
+        if (!outcome.Reaped)
         {
-            await launcher.StopAsync(active, cancellationToken)
-                .WaitAsync(options.StopTimeout, cancellationToken).ConfigureAwait(false);
-        }
-        catch (OperationCanceledException)
-        {
-            cancelled = true;
-            try
-            {
-                await launcher.StopAsync(active, CancellationToken.None)
-                    .WaitAsync(options.StopTimeout).ConfigureAwait(false);
-            }
-            catch (Exception exception)
-            {
-                await EnsureStoppedAsync().ConfigureAwait(false);
-                Raise(TryTransition(GameSessionState.Failed, exception.Message));
-                throw;
-            }
-        }
-        catch (Exception exception)
-        {
-            await EnsureStoppedAsync().ConfigureAwait(false);
-            Raise(TryTransition(GameSessionState.Failed, exception.Message));
-            throw;
+            throw outcome.Failure ?? new InvalidOperationException("The stop could not be proven complete; the process may still be running.");
         }
 
-        Raise(TryTransition(GameSessionState.Stopped, "manual stop"));
-        stopSignal.TrySetResult();
-        if (cancelled)
+        if (outcome.Final == GameSessionState.Failed && outcome.Failure is not null)
+        {
+            throw outcome.Failure;
+        }
+
+        if (outcome.Cancelled)
         {
             throw new OperationCanceledException("The stop was cancelled after the process was signalled.", cancellationToken);
         }
@@ -257,13 +229,13 @@ public sealed class GameSessionTracker : IGameSessionTracker
         }
 
         shutdown.Cancel();
-        if (State is GameSessionState.Starting or GameSessionState.Running)
+        var outcome = await StopCoreAsync(StopKind.Dispose, CancellationToken.None).ConfigureAwait(false);
+        stopSignal.TrySetResult();
+        if (outcome.Attempted && !outcome.Reaped)
         {
-            Raise(TryTransition(GameSessionState.Cancelled, "tracker disposed"));
+            throw outcome.Failure ?? new InvalidOperationException("Tracker disposal could not prove the process was reaped.");
         }
 
-        await EnsureStoppedAsync().ConfigureAwait(false);
-        stopSignal.TrySetResult();
         if (waitForTrack)
         {
             try
@@ -272,68 +244,197 @@ public sealed class GameSessionTracker : IGameSessionTracker
             }
             catch (TimeoutException exception)
             {
-                // Disposal must not hang the host; the process was already signalled.
+                // Disposal must not hang the host; the stop path already attempted a verified reap.
                 _ = exception;
             }
         }
     }
 
-    private async Task CancelAsync(bool rethrowCancellation)
+    private enum StopKind
     {
-        if (State is GameSessionState.Starting or GameSessionState.Running)
-        {
-            Raise(TryTransition(GameSessionState.Cancelled, "session cancelled"));
-        }
-
-        await EnsureStoppedAsync().ConfigureAwait(false);
-        stopSignal.TrySetResult();
-        if (rethrowCancellation)
-        {
-            // The caller's token caused this; the terminal state and cleanup are already done.
-            throw new OperationCanceledException();
-        }
+        Manual,
+        Natural,
+        Cancel,
+        Dispose,
+        Failure,
     }
 
-    private async Task EnsureStoppedAsync()
+    private enum SnapshotDecision
     {
-        IGameProcess? active;
-        lock (gate)
-        {
-            active = process;
-        }
+        Continue,
+        Ended,
+    }
 
-        if (active is null)
-        {
-            return;
-        }
+    private sealed record ReapResult(bool Reaped, bool Cancelled, Exception? Failure);
 
-        await terminateGate.WaitAsync().ConfigureAwait(false);
+    private sealed record StopOutcome(
+        bool Attempted,
+        bool Reaped,
+        GameSessionState Final,
+        Exception? Failure,
+        bool Cancelled);
+
+    private async Task<StopOutcome> StopCoreAsync(StopKind kind, CancellationToken cancellationToken, Exception? cause = null)
+    {
+        await stopGate.WaitAsync(CancellationToken.None).ConfigureAwait(false);
         try
         {
-            try
+            IGameProcess? active;
+            lock (gate)
             {
-                await launcher.StopAsync(active, CancellationToken.None)
-                    .WaitAsync(options.StopTimeout).ConfigureAwait(false);
+                if (state.IsTerminal() || state == GameSessionState.Stopping)
+                {
+                    return new StopOutcome(false, state.IsTerminal(), state, null, false);
+                }
+
+                if (kind == StopKind.Manual && state is not (GameSessionState.Starting or GameSessionState.Running))
+                {
+                    return new StopOutcome(false, false, state, null, false);
+                }
+
+                active = process;
             }
-            catch (Exception exception)
+
+            if (active is null)
             {
-                // A terminal session is still reported; the launcher's own disposal retries and
-                // the real implementation sends SIGKILL before waiting.
-                _ = exception;
+                return new StopOutcome(false, false, State, null, false);
             }
+
+            var stoppingReason = kind switch
+            {
+                StopKind.Manual => "manual stop",
+                StopKind.Natural => "process tree ended",
+                StopKind.Cancel => "session cancelled",
+                StopKind.Dispose => "tracker disposed",
+                _ => cause?.Message ?? "session failed",
+            };
+            Raise(TryTransition(GameSessionState.Stopping, stoppingReason));
+
+            var reap = kind == StopKind.Manual
+                ? await ReapForManualAsync(active, cancellationToken).ConfigureAwait(false)
+                : await ReapWithRetriesAsync(active, CancellationToken.None).ConfigureAwait(false);
+
+            if (!reap.Reaped)
+            {
+                var reason = reap.Failure?.Message ?? cause?.Message
+                    ?? "the process could not be reaped; the session stays running and degraded";
+                Raise(TryTransition(GameSessionState.Running, reason, true));
+                stopSignal.TrySetResult();
+                return new StopOutcome(true, false, GameSessionState.Running, reap.Failure ?? cause, reap.Cancelled);
+            }
+
+            var final = kind switch
+            {
+                StopKind.Cancel or StopKind.Dispose => GameSessionState.Cancelled,
+                StopKind.Failure => GameSessionState.Failed,
+                _ => reap.Failure is null ? GameSessionState.Stopped : GameSessionState.Failed,
+            };
+            var finalReason = final switch
+            {
+                GameSessionState.Failed => reap.Failure?.Message ?? cause?.Message ?? "session failed",
+                GameSessionState.Cancelled => kind == StopKind.Dispose ? "tracker disposed" : "session cancelled",
+                _ => kind == StopKind.Natural ? "process tree ended" : "manual stop",
+            };
+            Raise(TryTransition(final, finalReason));
+            stopSignal.TrySetResult();
+            return new StopOutcome(true, true, final, reap.Failure ?? cause, reap.Cancelled);
         }
         finally
         {
-            terminateGate.Release();
+            stopGate.Release();
         }
     }
 
-    private void ApplySnapshot(ProcessSnapshot snapshot)
+    private async Task<ReapResult> ReapForManualAsync(IGameProcess active, CancellationToken cancellationToken)
+    {
+        var first = await AttemptStopAsync(active, cancellationToken).ConfigureAwait(false);
+        if (first is null)
+        {
+            return new ReapResult(true, false, null);
+        }
+
+        if (first is OperationCanceledException && cancellationToken.IsCancellationRequested)
+        {
+            var retry = await AttemptStopAsync(active, CancellationToken.None).ConfigureAwait(false);
+            if (retry is null)
+            {
+                return new ReapResult(true, true, null);
+            }
+
+            var ensure = await AttemptStopAsync(active, CancellationToken.None).ConfigureAwait(false);
+            return ensure is null
+                ? new ReapResult(true, true, retry)
+                : new ReapResult(false, true, ensure);
+        }
+
+        var second = await AttemptStopAsync(active, CancellationToken.None).ConfigureAwait(false);
+        if (second is null)
+        {
+            return new ReapResult(true, false, first);
+        }
+
+        var final = await AttemptStopAsync(active, CancellationToken.None).ConfigureAwait(false);
+        return final is null
+            ? new ReapResult(true, false, second)
+            : new ReapResult(false, false, final);
+    }
+
+    private async Task<ReapResult> ReapWithRetriesAsync(IGameProcess active, CancellationToken cancellationToken)
+    {
+        var first = await AttemptStopAsync(active, cancellationToken).ConfigureAwait(false);
+        if (first is null)
+        {
+            return new ReapResult(true, false, null);
+        }
+
+        var second = await AttemptStopAsync(active, CancellationToken.None).ConfigureAwait(false);
+        return second is null
+            ? new ReapResult(true, false, first)
+            : new ReapResult(false, false, second);
+    }
+
+    private async Task<Exception?> AttemptStopAsync(IGameProcess active, CancellationToken cancellationToken)
+    {
+        ProcessIdentity[] tracked;
+        lock (gate)
+        {
+            tracked = known.ToArray();
+        }
+
+        try
+        {
+            await launcher.StopAsync(active, tracked, cancellationToken)
+                .WaitAsync(options.StopTimeout, cancellationToken).ConfigureAwait(false);
+            return null;
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            return new OperationCanceledException(cancellationToken);
+        }
+        catch (Exception exception)
+        {
+            return exception;
+        }
+    }
+
+    private SnapshotDecision ApplySnapshot(ProcessSnapshot snapshot)
     {
         if (!snapshot.IsComplete)
         {
             NotifyDegraded(true, snapshot.IncompleteReason ?? "process observation was incomplete; exit is unknown");
-            return;
+            return SnapshotDecision.Continue;
+        }
+
+        int[] relevantPids;
+        lock (gate)
+        {
+            relevantPids = [.. known.Select(identity => identity.ProcessId), process!.Identity.ProcessId];
+        }
+
+        if (snapshot.Unreadable.Any(pid => relevantPids.Contains(pid)))
+        {
+            NotifyDegraded(true, "a process relevant to this session could not be read; exit is unknown");
+            return SnapshotDecision.Continue;
         }
 
         if (degraded)
@@ -342,9 +443,14 @@ public sealed class GameSessionTracker : IGameSessionTracker
         }
 
         var alive = snapshot.Processes.Where(entry => entry.IsRunning).ToArray();
+        var root = process!.Identity;
+        var rootSeen = snapshot.Processes.Any(entry => entry.Identity == root);
         var related = new HashSet<ProcessIdentity>(known);
         related.IntersectWith(alive.Select(entry => entry.Identity));
+        // A child read before the root row disappeared may still name the root as its parent in
+        // this same sample. Anchor on the root PID so that torn sample does not hide the child.
         var relatedPids = related.Select(identity => identity.ProcessId).ToHashSet();
+        relatedPids.Add(root.ProcessId);
         while (true)
         {
             var added = false;
@@ -365,23 +471,56 @@ public sealed class GameSessionTracker : IGameSessionTracker
 
         if (related.Count > 0)
         {
-            known.Clear();
-            known.UnionWith(related);
-            observed = true;
-            return;
+            lock (gate)
+            {
+                known.Clear();
+                known.UnionWith(related);
+                observedAny = true;
+                emptySamples = 0;
+            }
+
+            return SnapshotDecision.Continue;
         }
 
-        known.Clear();
-        if (!observed)
+        if (rootSeen)
         {
-            // A complete sample without the root means the launched process exited before the
-            // first observation rather than that observation is unavailable.
-            observed = true;
+            lock (gate)
+            {
+                observedAny = true;
+            }
         }
 
-        Raise(TryTransition(GameSessionState.Stopping, "process tree ended"));
-        Raise(TryTransition(GameSessionState.Stopped, "process tree ended"));
-        stopSignal.TrySetResult();
+        bool unknown;
+        int confirmations;
+        lock (gate)
+        {
+            if (rootSeen)
+            {
+                observedAny = true;
+            }
+
+            unknown = !observedAny;
+            if (unknown)
+            {
+                emptySamples = 0;
+                confirmations = 0;
+            }
+            else
+            {
+                emptySamples++;
+                confirmations = emptySamples;
+            }
+        }
+
+        if (unknown)
+        {
+            NotifyDegraded(true, "the launched root has not been observed; exit is unknown");
+            return SnapshotDecision.Continue;
+        }
+
+        return confirmations >= options.ExitConfirmationSamples
+            ? SnapshotDecision.Ended
+            : SnapshotDecision.Continue;
     }
 
     private void NotifyDegraded(bool value, string? reason)
@@ -467,7 +606,9 @@ public sealed class GameSessionTracker : IGameSessionTracker
         (GameSessionState.Running, GameSessionState.Stopping) => true,
         (GameSessionState.Running, GameSessionState.Cancelled) => true,
         (GameSessionState.Running, GameSessionState.Failed) => true,
+        (GameSessionState.Stopping, GameSessionState.Running) => true,
         (GameSessionState.Stopping, GameSessionState.Stopped) => true,
+        (GameSessionState.Stopping, GameSessionState.Cancelled) => true,
         (GameSessionState.Stopping, GameSessionState.Failed) => true,
         _ => false,
     };
@@ -484,9 +625,28 @@ public sealed class GameSessionTracker : IGameSessionTracker
 
     private void Raise(SessionStateChanged? change)
     {
-        if (change is not null)
+        if (change is null)
         {
-            StateChanged?.Invoke(this, change);
+            return;
+        }
+
+        var handlers = StateChanged;
+        if (handlers is null)
+        {
+            return;
+        }
+
+        foreach (var handler in handlers.GetInvocationList())
+        {
+            try
+            {
+                ((EventHandler<SessionStateChanged>)handler)(this, change);
+            }
+            catch (Exception exception)
+            {
+                // A subscriber cannot change session lifecycle or prevent the stop path.
+                _ = exception;
+            }
         }
     }
 }

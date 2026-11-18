@@ -24,23 +24,30 @@ visibility) is p5-008; this launcher takes an already-chosen executable and argu
 
 - `LaunchRequest` — absolute executable, argv vector, optional absolute working directory.
   There is no command-line string member. Shell interpreters (`sh`, `bash`, `dash`, `zsh`,
-  `ksh`, `mksh`, `pdksh`, `csh`, `tcsh`, `fish`, `yash`, `rbash`, `busybox`) are rejected, as
-  are relative executables and NUL bytes. Arguments are copied verbatim into
-  `ProcessStartInfo.ArgumentList`; `UseShellExecute` is explicitly `false`.
-- `IProcessLauncher` — `StartAsync`, `IsRunningAsync`, `StopAsync`.
+  `ksh`, `mksh`, `pdksh`, `csh`, `tcsh`, `fish`, `yash`, `rbash`, `busybox`) are rejected as
+  defense in depth, as are relative executables and NUL bytes. The security property does not
+  depend on that denylist: `LinuxProcessStartInfoFactory` copies arguments into
+  `ProcessStartInfo.ArgumentList` and never sets `ProcessStartInfo.Arguments`; a test asserts
+  that shape directly.
+- `IProcessLauncher` — `StartAsync`, `IsRunningAsync`, `StopAsync` (root only), the tracked-tree
+  `StopAsync` overload, and `IAsyncDisposable`. Disposal is the teardown reachable through the
+  interface so application shutdown can always reap launched processes.
 - `IGameProcess` — the immutable `ProcessIdentity` and `StartedAt`.
-- `IProcessObserver` / `ProcessSnapshot` — an unattributed process-table sample and its
-  completeness flag. Command lines and environments are never read.
+- `IProcessObserver` / `ProcessSnapshot` — an unattributed process-table sample, its table
+  completeness, and the PIDs of individually unreadable rows. Command lines and environments
+  are never read.
 - `IGameSessionTracker` — `StateChanged`, `State`, `IsDegraded`, `Playtime`, `TrackAsync`,
   `StopAsync`, `IAsyncDisposable`.
-- `SessionOptions` — poll interval, stop timeout, and
+- `SessionOptions` — poll interval, stop timeout, exit-confirmation sample count, and
   `ExitObservationSupported = false` for the manual fallback.
+- `ProcessOrphanedException` — a failed start whose kill/wait could not prove the spawned
+  process was reaped.
 - `ISessionDelay` — the poll-wait seam used by cancellation tests.
 
 `Playnite.Platform.Linux.Sessions` implements the process system, the `/proc` reader, the
-observer, and the launcher. `IProcessSystem`/`IProcessHandle` and `IProcStatReader` are the
-seams used by the fake-process and cancellation tests; their production implementations use
-`System.Diagnostics.Process` and `/proc` respectively.
+observer, and the launcher. `IProcessSystem`/`IProcessHandle`, `IProcessStartInfoFactory` and
+`IProcStatReader` are the seams used by fake-process, start-shape and cancellation tests; their
+production implementations use `System.Diagnostics.Process` and `/proc` respectively.
 
 ## Process identity rule
 
@@ -51,12 +58,15 @@ The identity is valid only within one boot and PID namespace.
 Every liveness decision reads the current stat row and requires both the PID and the exact
 start ticks to match. Therefore:
 
-- a recycled PID with a different start time is a different process and ends the tracked
-  identity rather than prolonging it;
+- a recycled PID with a different start time is a different process and cannot be mistaken for
+  the game;
 - a zombie or dead state (`Z`, `X`, `x`) is not running;
-- an incomplete or unreadable sample is `unknown` and never `stopped`;
 - descendants are found by a fixed-point closure over parent PIDs independent of enumeration
-  order and retained across reparenting.
+  order and retained across reparenting; a child row that still names the root while the root
+  row is absent is anchored to the root PID for that decision;
+- an unreadable row degrades that entry only. It makes the decision unknown only when its PID is
+  the root or an already-tracked identity; an unrelated unreadable row is ignored;
+- table-level enumeration failure is unknown and never `stopped`.
 
 ## Session state machine
 
@@ -66,32 +76,44 @@ The state names are exactly the `GameSession` model's set: `Idle`, `Starting`, `
 
 | Formal action | Implementation |
 | --- | --- |
-| `Start` / `LaunchOk` | `TrackAsync` emits `Starting` then `Running` for the successfully launched handle. |
-| `Stop` / `StopOk` | Manual `StopAsync` (including during `Starting`), or an observed complete empty tree, emits `Stopping` then `Stopped`. |
-| `CancelLaunch` / cancellation | Caller cancellation or tracker disposal emits `Cancelled`; the owned process is signalled and reaped before the terminal event returns. |
-| `Crash` | An observer or stop failure emits `Failed`; the owned process is still signalled and reaped. |
-| `NoOrphanProcess` | Every terminal path calls `IProcessLauncher.StopAsync`; `LinuxProcessLauncher.DisposeAsync` terminates every process it launched. |
+| `Start` / `LaunchOk` | `TrackAsync` emits `Starting` then `Running` for the successfully launched handle, unless a stop or terminal state raced the launch. |
+| `Stop` / `StopOk` | Manual `StopAsync` (including during `Starting`), or a confirmed observed tree end, emits `Stopping`, then reaps, then emits `Stopped`. |
+| `CancelLaunch` / cancellation | Caller cancellation or tracker disposal reaps and then emits `Cancelled`. |
+| `Crash` | An observer or stop failure reaps and then emits `Failed`, or stays in a degraded `Running` state when reap cannot be proven. |
+| `NoOrphanProcess` | Every terminal transition is preceded by a successful tracked-tree stop: the launcher signals each identity, waits for exit, and verifies it is no longer running. A failed reap never emits a terminal state. |
 | `OneSessionPerGame` | One tracker instance owns at most one active `TrackAsync`; a second concurrent or completed session call is rejected. |
 | `PlaytimeNonDecreasing` | Playtime is measured from the `Running` timestamp with `TimeProvider` and frozen at the terminal transition. |
 
-Natural exit is modeled as `Running → Stopping → Stopped`, so the observable sequence still
-matches the formal stop actions. The tracker never reports `Stopped` for an unavailable
-observation.
+Natural exit is modeled as `Running → Stopping → Stopped`, after the reap proves the tracked
+tree is gone. Stop attempts are serialized by one gate, so concurrent `StopAsync`, disposal and
+cancellation cannot race duplicate transitions or skip a kill.
 
-## Manual fallback and degradation
+A throwing `StateChanged` subscriber is contained per handler: it cannot kill the process,
+abort a transition, or skip stop cleanup.
+
+## Observation and degradation
 
 The platform reports degradation explicitly instead of pretending a session ended:
 
+- A root that has never been observed is `unknown`, not `stopped`. A complete empty sample
+  before the first root or descendant observation emits a degraded `Running` notice and keeps
+  polling; it never infers a terminal state from an unobserved exit.
 - `SessionOptions.ExitObservationSupported = false` makes the tracker enter `Running`, emit a
-  `SessionStateChanged` notice with `IsDegraded = true` and a reason, and wait for
-  `StopAsync`. It does not call the observer and never emits `Stopped` on its own.
-- An incomplete `ProcessSnapshot` similarly emits a degraded running notice, retains the known
-  identities, and keeps polling; a later complete sample can clear the notice. Only a complete
-  sample with no live known identity emits `Stopped`.
-- An observer or stop failure is terminal `Failed`, not a fabricated normal stop.
+  degraded notice with a reason, and wait for `StopAsync`. It never calls the observer and never
+  emits `Stopped` on its own.
+- An incomplete sample or a relevant unreadable row emits a degraded notice, retains the known
+  identities, and keeps polling; a later complete sample clears the notice.
+- `ExitConfirmationSamples` (default 2) requires consecutive complete samples with no live
+  known identity before a natural stop is considered. A single torn sample cannot end a session.
+- A stop failure that cannot be proven reaped emits a degraded `Running` notice and leaves the
+  session non-terminal. In the manual fallback, `TrackAsync` returns instead of waiting forever;
+  `StopAsync` throws the failure and the caller may retry.
+- A natural-exit stop failure is reported the same way: no `Stopped` event is emitted after a
+  failed reap.
 
-Manual stop is always available, including while degraded, and uses the same kill-and-reap
-path as cancellation.
+Manual stop is always available, including while degraded, and uses the same tracked-tree
+kill-and-reap path as cancellation. A successful `StopAsync` proves the root and every known
+descendant are no longer running.
 
 ## Cancellation matrix
 
@@ -102,7 +124,7 @@ state and, where a process exists, that it is gone.
 | --- | --- | --- |
 | `identity read after spawn` | `LinuxProcessLauncher.StartAsync` | `Start_cancelled_during_identity_read_kills_the_spawned_process` |
 | `stat read in IsRunning` | `LinuxGameProcess.IsRunningAsync` | `IsRunning_cancelled_during_stat_read_propagates_without_killing` |
-| `exit wait in Stop` | `LinuxGameProcess.TerminateAsync` | `Stop_cancelled_during_exit_wait_still_kills_and_reaps_the_process` |
+| `exit wait in Stop` | `LinuxProcessLauncher.StopAsync` | `Stop_cancelled_during_exit_wait_still_kills_and_reaps_the_process` |
 | `/proc` row read in a snapshot | `LinuxProcessObserver.SnapshotAsync` | `Observer_snapshot_cancelled_during_proc_read_propagates` |
 | poll delay | `GameSessionTracker.TrackAsync` | `Cancelling_the_tracker_during_the_poll_delay_reports_cancelled_and_stops_the_process` |
 | observer snapshot | `GameSessionTracker.TrackAsync` | `Cancelling_the_tracker_during_an_observer_snapshot_reports_cancelled_and_stops_the_process` |
@@ -112,17 +134,20 @@ state and, where a process exists, that it is gone.
 | stop requested while still `Starting` | `GameSessionTracker.StopAsync` | `Stop_during_starting_reaches_stopped_and_stops_the_process`; `Real_stop_during_starting_leaves_no_child` |
 | cancelled-stop retry failure | `GameSessionTracker.StopAsync` | `Cancelled_stop_reaps_before_reporting_failed` |
 | no-exit-observation wait | `GameSessionTracker.TrackAsync` | `Manual_stop_is_required_and_reported_when_exit_observation_is_unavailable` |
+| manual-fallback stop failure | `GameSessionTracker.StopAsync` | `Manual_fallback_stop_failure_terminates_with_a_degraded_running_outcome` |
+| concurrent stop calls | `GameSessionTracker.StopAsync` | `Concurrent_stop_calls_are_serialized` |
+| natural-exit stop failure | `GameSessionTracker.TrackAsync` | `Natural_exit_stop_failure_is_reported_without_a_false_stopped` |
 
-The stop path deliberately does not take the caller's token for the identity check or the
-signal: once a stop is requested, cancellation can only bound the wait, never skip the kill.
-If the wait is cancelled, the process is reaped without the token before the cancellation
-propagates.
+The stop path deliberately does not take the caller's token for the identity checks or the
+signals: once a stop is requested, cancellation can only bound the wait, never skip the kill.
+If the wait is cancelled, the tracked identities are reaped without the token before the
+cancellation propagates.
 
 ## No-orphan proof
 
 The logic tests use a fake launcher/process and observer. The no-orphan proof additionally uses
-a real, short-lived child (`/usr/bin/sleep 30`, falling back to `/bin/sleep`) launched through
-`LinuxProcessLauncher`, and an actual `/proc` check by `(pid, start ticks)`:
+real children launched through `LinuxProcessLauncher` and actual `/proc` checks by
+`(pid, start ticks)`:
 
 - `Real_stop_during_starting_leaves_no_child` — a manual stop raced while the tracker is still
   `Starting` reaches `Stopped` and the child is gone;
@@ -131,14 +156,20 @@ a real, short-lived child (`/usr/bin/sleep 30`, falling back to `/bin/sleep`) la
 - `Real_cancel_leaves_no_child` — cancelling `TrackAsync` reaches `Cancelled` and the child is
   gone;
 - `Real_tracker_disposal_leaves_no_child` — disposal reaches `Cancelled` and the child is gone;
-- `Real_launcher_shutdown_leaves_no_child` — launcher disposal (application shutdown) leaves no
-  child;
+- `Real_launcher_shutdown_leaves_no_child` — disposal through `IProcessLauncher` (application
+  shutdown) leaves no child;
+- `Real_root_exit_keeps_a_tracked_child_and_stop_reaps_it` — a real `python3` root forks a
+  child and exits; the tracker stays `Running` on the reparented child, and the final stop reaps
+  both identities;
 - `Arguments_containing_shell_metacharacters_are_passed_literally` — a real `/usr/bin/touch`
-  receives a single argument containing `;` and a space; the literal filename is created and
-  no shell-split command runs.
+  receives a single argument containing `;` and a space; the literal filename is created and no
+  shell-split command runs;
+- `Failed_start_reports_the_orphan_when_kill_and_wait_fail` — a real spawned process with an
+  injected kill/wait failure surfaces `ProcessOrphanedException` with its PID instead of
+  swallowing the orphaning, then the test reaps the child for cleanup.
 
-`StartAsync` rejects a handle whose identity cannot be captured because the child already
-exited; a killed start is reaped by the launcher before the exception propagates.
+A failed start always attempts kill and wait; if the process is still running afterwards, the
+launcher throws `ProcessOrphanedException` instead of only rethrowing the original start error.
 
 ## Known limitations
 
@@ -148,6 +179,9 @@ exited; a killed start is reaped by the launcher before the exception propagates
   `UNKNOWN` (p1-010) and is p5-008's concern.
 - Attribution of a Steam launch (which process tree is the game) is not decided here; the
   caller passes the attributed root identity.
+- A child spawned and reparented between samples without ever naming the tracked root is not
+  attributable from `/proc` alone; the confirmation samples and root-PID anchor make the
+  observable cases honest rather than claiming omniscience.
 - The tracker owns one session per instance; multi-game session management belongs to the
   service that creates trackers.
 
@@ -155,7 +189,7 @@ exited; a killed start is reaped by the launcher before the exception propagates
 
 Local Release, warnings as errors:
 
-- `Playnite.Core.Tests`: 2051 passed, 0 failed, 0 skipped (40 new session tests).
+- `Playnite.Core.Tests`: 2064 passed, 0 failed, 0 skipped (53 new session tests).
 - `Playnite.Architecture.Tests`: 188 passed, 0 failed, 0 skipped.
 - `build_port_index.py check --shards-only --against origin/main` is run before delivery.
 

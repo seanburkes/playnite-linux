@@ -20,9 +20,15 @@ public interface IProcessSystem
     IProcessHandle Start(Playnite.Platform.Sessions.LaunchRequest request);
 }
 
-public sealed class SystemProcessSystem : IProcessSystem
+/// <summary>Builds the only start form the launcher permits: an argv vector, never a command string.</summary>
+public interface IProcessStartInfoFactory
 {
-    public IProcessHandle Start(Playnite.Platform.Sessions.LaunchRequest request)
+    ProcessStartInfo Create(Playnite.Platform.Sessions.LaunchRequest request);
+}
+
+public sealed class LinuxProcessStartInfoFactory : IProcessStartInfoFactory
+{
+    public ProcessStartInfo Create(Playnite.Platform.Sessions.LaunchRequest request)
     {
         ArgumentNullException.ThrowIfNull(request);
         var startInfo = new ProcessStartInfo
@@ -41,6 +47,25 @@ public sealed class SystemProcessSystem : IProcessSystem
             startInfo.ArgumentList.Add(argument);
         }
 
+        return startInfo;
+    }
+}
+
+public sealed class SystemProcessSystem : IProcessSystem
+{
+    private readonly IProcessStartInfoFactory factory;
+
+    public SystemProcessSystem()
+        : this(new LinuxProcessStartInfoFactory())
+    {
+    }
+
+    public SystemProcessSystem(IProcessStartInfoFactory factory) =>
+        this.factory = factory ?? throw new ArgumentNullException(nameof(factory));
+
+    public IProcessHandle Start(Playnite.Platform.Sessions.LaunchRequest request)
+    {
+        var startInfo = factory.Create(request);
         var process = Process.Start(startInfo)
             ?? throw new InvalidOperationException("The operating system did not start the process.");
         return new SystemProcessHandle(process);

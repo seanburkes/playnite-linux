@@ -28,7 +28,7 @@ public sealed class LinuxProcessObserver : IProcessObserver
     {
         cancellationToken.ThrowIfCancellationRequested();
         var entries = new List<ProcessEntry>();
-        string? reason = null;
+        var unreadable = new List<int>();
         string[] directories;
         try
         {
@@ -58,7 +58,7 @@ public sealed class LinuxProcessObserver : IProcessObserver
 
                 if (row.ProcessId != pid)
                 {
-                    reason ??= $"process {pid} was replaced by process {row.ProcessId}";
+                    unreadable.Add(pid);
                     continue;
                 }
 
@@ -71,10 +71,10 @@ public sealed class LinuxProcessObserver : IProcessObserver
             }
             catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or FormatException)
             {
-                reason ??= $"process {pid} could not be read";
+                unreadable.Add(pid);
             }
         }
 
-        return new ProcessSnapshot(entries, reason is null, reason);
+        return new ProcessSnapshot(entries, true, null, unreadable.Count == 0 ? null : unreadable);
     }
 }

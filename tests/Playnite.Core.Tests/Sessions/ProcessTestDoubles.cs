@@ -8,6 +8,8 @@ internal sealed class RecordingProcessSystem : IProcessSystem
 
     public bool GateCancellableWait { get; set; }
 
+    public bool FailHandleOperations { get; set; }
+
     public IProcessHandle? LastHandle { get; private set; }
 
     public TaskCompletionSource WaitEntered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -16,7 +18,30 @@ internal sealed class RecordingProcessSystem : IProcessSystem
     {
         var handle = inner.Start(request);
         LastHandle = handle;
+        if (FailHandleOperations)
+        {
+            return new FailingHandle(handle);
+        }
+
         return GateCancellableWait ? new GatedHandle(handle, WaitEntered) : handle;
+    }
+
+    private sealed class FailingHandle : IProcessHandle
+    {
+        private readonly IProcessHandle inner;
+
+        public FailingHandle(IProcessHandle inner) => this.inner = inner;
+
+        public int ProcessId => inner.ProcessId;
+
+        public bool HasExited => inner.HasExited;
+
+        public void KillEntireTree() => throw new InvalidOperationException("injected kill failure");
+
+        public Task WaitForExitAsync(CancellationToken cancellationToken) =>
+            throw new InvalidOperationException("injected wait failure");
+
+        public void Dispose() => inner.Dispose();
     }
 
     private sealed class GatedHandle : IProcessHandle
@@ -49,6 +74,12 @@ internal sealed class RecordingProcessSystem : IProcessSystem
 
         public void Dispose() => inner.Dispose();
     }
+}
+
+internal sealed class NullProcStatReader : IProcStatReader
+{
+    public Task<ProcStat?> ReadAsync(int processId, CancellationToken cancellationToken) =>
+        Task.FromResult<ProcStat?>(null);
 }
 
 internal sealed class GatedProcStatReader : IProcStatReader

@@ -1,4 +1,5 @@
 using Playnite.Platform.Sessions;
+using DiagnosticsProcess = System.Diagnostics.Process;
 
 namespace Playnite.Platform.Linux.Sessions;
 
@@ -38,11 +39,12 @@ public sealed class LinuxProcessLauncher : IProcessLauncher, IAsyncDisposable
         }
 
         var handle = processSystem.Start(request);
+        var processId = handle.ProcessId;
         try
         {
-            var stat = await statReader.ReadAsync(handle.ProcessId, cancellationToken).ConfigureAwait(false)
+            var stat = await statReader.ReadAsync(processId, cancellationToken).ConfigureAwait(false)
                 ?? throw new InvalidOperationException("The launched process exited before its identity could be captured.");
-            var identity = new ProcessIdentity(handle.ProcessId, stat.StartTimeTicks);
+            var identity = new ProcessIdentity(processId, stat.StartTimeTicks);
             var process = new LinuxGameProcess(handle, identity, time.GetUtcNow(), statReader);
             lock (gate)
             {
@@ -52,14 +54,14 @@ public sealed class LinuxProcessLauncher : IProcessLauncher, IAsyncDisposable
 
             return process;
         }
-        catch (OperationCanceledException)
+        catch (Exception startFailure)
         {
-            await ReapFailedStartAsync(handle).ConfigureAwait(false);
-            throw;
-        }
-        catch
-        {
-            await ReapFailedStartAsync(handle).ConfigureAwait(false);
+            var reapFailure = await ReapFailedStartAsync(handle).ConfigureAwait(false);
+            if (reapFailure is not null)
+            {
+                throw new ProcessOrphanedException(processId, startFailure, reapFailure);
+            }
+
             throw;
         }
     }
@@ -70,12 +72,138 @@ public sealed class LinuxProcessLauncher : IProcessLauncher, IAsyncDisposable
         return await game.IsRunningAsync(cancellationToken).ConfigureAwait(false);
     }
 
-    public async Task StopAsync(IGameProcess process, CancellationToken cancellationToken)
+    public Task StopAsync(IGameProcess process, CancellationToken cancellationToken)
     {
-        var game = Owned(process);
-        await game.TerminateAsync(cancellationToken).ConfigureAwait(false);
-        // The handle stays registered so a later IsRunningAsync reports false instead of
-        // rejecting the process; launcher disposal owns the final handle cleanup.
+        ArgumentNullException.ThrowIfNull(process);
+        return StopAsync(process, [process.Identity], cancellationToken);
+    }
+
+    public async Task StopAsync(
+        IGameProcess gameProcess,
+        IReadOnlyCollection<ProcessIdentity> trackedProcesses,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(trackedProcesses);
+        var game = Owned(gameProcess);
+        var identities = trackedProcesses.Append(game.Identity).Distinct().ToArray();
+        var extras = new List<DiagnosticsProcess>();
+        var failures = new List<Exception>();
+
+        foreach (var identity in identities)
+        {
+            ProcStat? stat;
+            try
+            {
+                stat = await statReader.ReadAsync(identity.ProcessId, CancellationToken.None).ConfigureAwait(false);
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or FormatException)
+            {
+                failures.Add(exception);
+                continue;
+            }
+
+            if (stat is not { } row
+                || row.ProcessId != identity.ProcessId
+                || row.StartTimeTicks != identity.StartTimeTicks
+                || !row.IsRunning)
+            {
+                continue;
+            }
+
+            try
+            {
+                if (identity == game.Identity)
+                {
+                    game.KillEntireTree();
+                }
+                else
+                {
+                    var extra = DiagnosticsProcess.GetProcessById(identity.ProcessId);
+                    if (!extra.HasExited)
+                    {
+                        extra.Kill(entireProcessTree: true);
+                        extras.Add(extra);
+                    }
+                    else
+                    {
+                        extra.Dispose();
+                    }
+                }
+            }
+            catch (ArgumentException)
+            {
+                // The process vanished between the stat check and the signal.
+                continue;
+            }
+            catch (Exception exception)
+            {
+                failures.Add(exception);
+            }
+        }
+
+        var cancelled = false;
+        try
+        {
+            await WaitForAllAsync(game, extras, cancellationToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            cancelled = true;
+            await WaitForAllAsync(game, extras, CancellationToken.None).ConfigureAwait(false);
+        }
+        catch (Exception exception)
+        {
+            failures.Add(exception);
+        }
+
+        foreach (var identity in identities)
+        {
+            try
+            {
+                var stat = await statReader.ReadAsync(identity.ProcessId, CancellationToken.None).ConfigureAwait(false);
+                if (stat is { } row
+                    && row.ProcessId == identity.ProcessId
+                    && row.StartTimeTicks == identity.StartTimeTicks
+                    && row.IsRunning)
+                {
+                    failures.Add(new InvalidOperationException($"Process {identity.ProcessId} survived the stop."));
+                }
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or FormatException)
+            {
+                failures.Add(exception);
+            }
+        }
+
+        foreach (var extra in extras)
+        {
+            extra.Dispose();
+        }
+
+        if (failures.Count > 0)
+        {
+            throw new AggregateException("Not every tracked process could be stopped and verified.", failures);
+        }
+
+        if (cancelled)
+        {
+            throw new OperationCanceledException("The stop was cancelled after the process was signalled.", cancellationToken);
+        }
+    }
+
+    private static async Task WaitForAllAsync(
+        LinuxGameProcess game,
+        IEnumerable<DiagnosticsProcess> extras,
+        CancellationToken cancellationToken)
+    {
+        await game.WaitForExitAsync(cancellationToken).ConfigureAwait(false);
+        foreach (var extra in extras)
+        {
+            if (!extra.HasExited)
+            {
+                await extra.WaitForExitAsync(cancellationToken).ConfigureAwait(false);
+            }
+        }
     }
 
     public async ValueTask DisposeAsync()
@@ -130,23 +258,42 @@ public sealed class LinuxProcessLauncher : IProcessLauncher, IAsyncDisposable
         throw new ArgumentException("The process was not launched by this launcher.", nameof(process));
     }
 
-    private static async Task ReapFailedStartAsync(IProcessHandle handle)
+    private static async Task<Exception?> ReapFailedStartAsync(IProcessHandle handle)
     {
+        Exception? failure = null;
         try
         {
             handle.KillEntireTree();
+        }
+        catch (Exception exception)
+        {
+            failure = exception;
+        }
+
+        try
+        {
             await handle.WaitForExitAsync(CancellationToken.None)
                 .WaitAsync(TimeSpan.FromSeconds(5)).ConfigureAwait(false);
         }
         catch (Exception exception)
         {
-            // The handle is disposed below; a start that already failed has no caller to surface
-            // a second failure to, and the original start exception is rethrown.
-            _ = exception;
+            failure ??= exception;
         }
-        finally
+
+        bool running;
+        try
         {
-            handle.Dispose();
+            running = !handle.HasExited;
         }
+        catch (Exception exception)
+        {
+            failure ??= exception;
+            running = true;
+        }
+
+        handle.Dispose();
+        return running
+            ? failure ?? new InvalidOperationException("The failed start's process is still running.")
+            : null;
     }
 }

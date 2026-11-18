@@ -14,6 +14,12 @@ public sealed record SessionOptions
 
     public bool ExitObservationSupported { get; init; } = true;
 
+    /// <summary>
+    /// Consecutive complete samples without a live known process required before a session is
+    /// called stopped. A single torn sample cannot end a session.
+    /// </summary>
+    public int ExitConfirmationSamples { get; init; } = 2;
+
     internal void Validate()
     {
         if (PollInterval <= TimeSpan.Zero)
@@ -24,6 +30,11 @@ public sealed record SessionOptions
         if (StopTimeout <= TimeSpan.Zero)
         {
             throw new ArgumentOutOfRangeException(nameof(StopTimeout), "The stop timeout must be positive.");
+        }
+
+        if (ExitConfirmationSamples < 1)
+        {
+            throw new ArgumentOutOfRangeException(nameof(ExitConfirmationSamples), "At least one confirmation sample is required.");
         }
     }
 }

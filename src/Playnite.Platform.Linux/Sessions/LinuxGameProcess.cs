@@ -74,5 +74,9 @@ internal sealed class LinuxGameProcess : IGameProcess
         }
     }
 
+    public void KillEntireTree() => handle.KillEntireTree();
+
+    public Task WaitForExitAsync(CancellationToken cancellationToken) => handle.WaitForExitAsync(cancellationToken);
+
     public void DisposeHandle() => handle.Dispose();
 }
