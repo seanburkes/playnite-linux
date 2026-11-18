@@ -1,2 +1,2 @@
 id	wave	area	unit	depends	status	owner	oracle	test	notes
-p5-008	W5	steam	Launch native/Proton	p5-002,p5-004	todo	steam	manual	test:launch	real Steam
+p5-008	W5	steam	Launch native/Proton	p5-002,p5-004	in-progress	fm/p5-008	legacy/source/Playnite/Common/ProcessStarter.cs:70; docs/port/08-STEAM-SPEC.md	SteamLaunchTests; SteamRealDiscoveryTests	Conservative external-process adapter; owner Steam/Flatpak acceptance outstanding; docs/port/p5-008-steam-launch.md; no Phase 5 exit
