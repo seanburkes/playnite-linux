@@ -80,6 +80,11 @@ public sealed class SessionSleepInhibition : IAsyncDisposable
         }
     }
 
+    /// <summary>
+    /// Ends one session and releases the shared lease when it was the last one. Teardown is not
+    /// cancellable: an already-cancelled token must still decrement the session count and release
+    /// the inhibitor, otherwise a cancelled stop would hold the lock until shutdown or crash.
+    /// </summary>
     public async Task EndSessionAsync(string sessionId, CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrEmpty(sessionId);
@@ -88,7 +93,9 @@ public sealed class SessionSleepInhibition : IAsyncDisposable
             return;
         }
 
-        await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        // This critical section only mutates local state and disposes the lease; it never waits on
+        // caller code. Ignoring the token is what guarantees the release happens.
+        await gate.WaitAsync(CancellationToken.None).ConfigureAwait(false);
         try
         {
             if (!sessions.Remove(sessionId))

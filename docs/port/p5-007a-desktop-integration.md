@@ -56,7 +56,8 @@ long as the pipe write end is open:
 - **Normal stop:** `EndSessionAsync` disposes the lease, which closes stdin; `cat` reads EOF and
   exits; `systemd-inhibit` releases the block and exits. Release is awaited before the stop call
   returns. A `ProcessExit` hook closes the same pipe, so an orderly shutdown that forgets the
-  coordinator still releases.
+  coordinator still releases. End-of-session teardown is deliberately non-cancellable: an
+  already-cancelled stop still removes the session and releases the last lease.
 - **Cancel:** a cancelled acquire kills the started process tree and throws before a lease is
   returned. A cancel after acquisition closes the pipe, removes the session, and rethrows.
 - **Crash:** process death closes the pipe in the kernel. `cat` sees EOF with no managed code
@@ -80,8 +81,9 @@ dispose runs.
 ## Evidence
 
 - `dotnet build tests/Playnite.Core.Tests -c Release -warnaserror`: zero warnings.
-- `dotnet test --filter-namespace Playnite.Core.Tests.DesktopIntegration`: 57 cases pass, zero
+- `dotnet test --filter-namespace Playnite.Core.Tests.DesktopIntegration`: 59 cases pass, zero
   skips.
+- Full `Playnite.Core.Tests`: 2070 cases pass, zero skips.
 - Fakes cover tray host/presenter, notification backends, inhibitor backends, command execution,
   executable lookup, session evidence and the clock. Real-process tests use `/bin/cat`, `/bin/echo`,
   `/bin/sleep` and `/bin/false` for the stdin lifeline and command timeout/cancel paths; no test

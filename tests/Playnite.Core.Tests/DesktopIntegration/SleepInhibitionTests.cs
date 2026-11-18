@@ -235,6 +235,46 @@ public sealed class SessionSleepInhibitionTests
     }
 
     [Fact]
+    public async Task CancelledEndStillReleasesTheLastSessionAndInhibitor()
+    {
+        var service = new FakeSleepInhibitionService();
+        await using var coordinator = new SessionSleepInhibition(service);
+        await coordinator.BeginSessionAsync("session-1");
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+
+        await coordinator.EndSessionAsync("session-1", cancellation.Token);
+
+        Assert.Equal(0, coordinator.ActiveSessionCount);
+        Assert.False(coordinator.IsHeld);
+        Assert.Equal(0, service.ActiveHandles);
+        Assert.Equal(1, service.Events.Count(item => item == "release"));
+    }
+
+    [Fact]
+    public async Task CancelledEndOfOneSessionKeepsTheLeaseForTheSurvivor()
+    {
+        var service = new FakeSleepInhibitionService();
+        await using var coordinator = new SessionSleepInhibition(service);
+        await coordinator.BeginSessionAsync("session-1");
+        await coordinator.BeginSessionAsync("session-2");
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+
+        await coordinator.EndSessionAsync("session-1", cancellation.Token);
+
+        Assert.Equal(1, coordinator.ActiveSessionCount);
+        Assert.True(coordinator.IsHeld);
+        Assert.Equal(1, service.ActiveHandles);
+
+        await coordinator.EndSessionAsync("session-2");
+        Assert.Equal(0, coordinator.ActiveSessionCount);
+        Assert.False(coordinator.IsHeld);
+        Assert.Equal(0, service.ActiveHandles);
+        Assert.Equal(1, service.Events.Count(item => item == "release"));
+    }
+
+    [Fact]
     public async Task ShutdownReleasesTheLeaseAndRejectsNewSessions()
     {
         var service = new FakeSleepInhibitionService();
