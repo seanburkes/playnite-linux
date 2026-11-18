@@ -36,9 +36,8 @@ public sealed class ArtworkTests
     {
         using var temp = new CacheDirectory();
         await using var stub = new HttpStub(Jpeg);
-        using var client = Client();
         var source = new Source(stub.Url);
-        using var fetcher = Fetcher(source, client, temp.Path);
+        using var fetcher = Fetcher(source, temp.Path);
         var first = await fetcher.FetchAsync(Header);
         Assert.Empty(first.Issues);
         Assert.NotNull(first.Path);
@@ -59,8 +58,7 @@ public sealed class ArtworkTests
     {
         using var temp = new CacheDirectory();
         await using var stub = new HttpStub(Jpeg, status);
-        using var client = Client();
-        using var fetcher = Fetcher(new Source(stub.Url), client, temp.Path);
+        using var fetcher = Fetcher(new Source(stub.Url), temp.Path);
         AssertFailure(await fetcher.FetchAsync(Header), reason);
         Assert.Empty(Directory.GetFiles(temp.Path));
     }
@@ -74,8 +72,7 @@ public sealed class ArtworkTests
         var clock = new Clock();
         string retry = format == "delta" ? "7" : clock.UtcNow.AddSeconds(7).ToString("R");
         await using var stub = new HttpStub(Jpeg, 429, extraHeaders: "Retry-After: " + retry + "\r\n", clock: clock);
-        using var client = Client();
-        using var fetcher = Fetcher(new Source(stub.Url), client, temp.Path, clock);
+        using var fetcher = Fetcher(new Source(stub.Url), temp.Path, clock);
         AssertFailure(await fetcher.FetchAsync(Header), "http-429-retry-after");
         AssertFailure(await fetcher.FetchAsync(Header), "http-429-retry-after");
         Assert.Equal(TimeSpan.FromSeconds(7), Assert.Single(clock.Delays));
@@ -89,8 +86,7 @@ public sealed class ArtworkTests
         using var temp = new CacheDirectory();
         var clock = new Clock();
         await using var stub = new HttpStub(Jpeg, 404);
-        using var client = Client();
-        using var fetcher = Fetcher(new Source(stub.Url), client, temp.Path, clock);
+        using var fetcher = Fetcher(new Source(stub.Url), temp.Path, clock);
         await fetcher.FetchAsync(Header);
         await fetcher.FetchAsync(new(427520, ArtworkKind.Portrait));
         Assert.Equal(TimeSpan.FromSeconds(1), Assert.Single(clock.Delays));
@@ -109,8 +105,7 @@ public sealed class ArtworkTests
         byte[] body = mode switch { "empty" => [], "invalid" => [1, 2], _ => new byte[64] };
         long? length = mode switch { "truncated" => 100, "oversized-streamed" => null, _ => body.Length };
         await using var stub = new HttpStub(body, declaredLength: length, omitLength: mode == "oversized-streamed");
-        using var client = Client();
-        using var fetcher = new ArtworkFetcher(new Source(stub.Url), client, new(temp.Path, 1024), new Clock(), maxBodyBytes: mode == "truncated" ? 200 : 32);
+        using var fetcher = new ArtworkFetcher(new Source(stub.Url), new(temp.Path, 1024, Path.Combine(temp.Path, "steam")), new Clock(), maxBodyBytes: mode == "truncated" ? 200 : 32);
         AssertFailure(await fetcher.FetchAsync(Header), reason);
         Assert.Empty(Directory.GetFiles(temp.Path));
     }
@@ -122,8 +117,7 @@ public sealed class ArtworkTests
     {
         using var temp = new CacheDirectory();
         await using var stub = new HttpStub(Jpeg);
-        using var client = Client();
-        using var fetcher = Fetcher(new Source(configured ? stub.Url : null), client, temp.Path);
+        using var fetcher = Fetcher(new Source(configured ? stub.Url : null), temp.Path);
         var excluded = new ArtworkIdentity(999999, ArtworkKind.Header);
         var result = await fetcher.FetchAsync(excluded, offline: true);
         Assert.Null(result.Path);
@@ -136,8 +130,7 @@ public sealed class ArtworkTests
     {
         using var temp = new CacheDirectory();
         await using var stub = new HttpStub(Jpeg);
-        using var client = Client();
-        using var fetcher = Fetcher(new Source(stub.Url, new string('0', 64)), client, temp.Path);
+        using var fetcher = Fetcher(new Source(stub.Url, new string('0', 64)), temp.Path);
         AssertFailure(await fetcher.FetchAsync(Header), "source-hash-mismatch");
         Assert.Empty(Directory.GetFiles(temp.Path));
     }
@@ -151,8 +144,7 @@ public sealed class ArtworkTests
     {
         using var temp = new CacheDirectory();
         await using var stub = new HttpStub(Encoding.UTF8.GetBytes(json));
-        using var client = Client();
-        using var fetcher = Fetcher(new Source(stub.Url), client, temp.Path);
+        using var fetcher = Fetcher(new Source(stub.Url), temp.Path);
         var result = await fetcher.FetchAsync(new(Header.AppId, ArtworkKind.Achievements));
         Assert.Equal(valid, result.Path != null);
         if (!valid) Assert.Equal("invalid-content", Assert.Single(result.Issues).Reason);
@@ -164,8 +156,7 @@ public sealed class ArtworkTests
         using var temp = new CacheDirectory();
         string local = Path.Combine(temp.Path, "source.jpg");
         await File.WriteAllBytesAsync(local, Jpeg);
-        using var client = Client();
-        using var fetcher = Fetcher(new Source(new Uri(local)), client, Path.Combine(temp.Path, "cache"));
+        using var fetcher = Fetcher(new Source(new Uri(local)), Path.Combine(temp.Path, "cache"));
         var result = await fetcher.FetchAsync(Header, offline: true);
         Assert.NotNull(result.Path);
         Assert.Equal(Jpeg, await File.ReadAllBytesAsync(local));
@@ -177,31 +168,26 @@ public sealed class ArtworkTests
     {
         using var temp = new CacheDirectory();
         string missing = Path.Combine(temp.Path, "absent.jpg");
-        using var client = Client();
-        using var fetcher = Fetcher(new Source(new Uri(missing)), client, Path.Combine(temp.Path, "cache"));
+        using var fetcher = Fetcher(new Source(new Uri(missing)), Path.Combine(temp.Path, "cache"));
         AssertFailure(await fetcher.FetchAsync(Header), "source-or-cache-io-failed");
         Assert.False(File.Exists(missing));
     }
 
     [Fact]
-    public async Task Local_source_size_and_mtime_invalidate_the_cached_identity()
+    public async Task Local_source_changes_are_observed_even_with_identical_size_and_mtime()
     {
         using var temp = new CacheDirectory();
         string local = Path.Combine(temp.Path, "source.jpg");
         await File.WriteAllBytesAsync(local, Jpeg);
         File.SetLastWriteTimeUtc(local, new DateTime(2000, 1, 1, 0, 0, 0, DateTimeKind.Utc));
-        using var client = Client();
-        using var fetcher = Fetcher(new Source(new Uri(local)), client, Path.Combine(temp.Path, "cache"));
+        using var fetcher = Fetcher(new Source(new Uri(local)), Path.Combine(temp.Path, "cache"));
         var first = await fetcher.FetchAsync(Header, offline: true);
-        File.SetLastWriteTimeUtc(local, new DateTime(2001, 1, 1, 0, 0, 0, DateTimeKind.Utc));
-        var changedMtime = await fetcher.FetchAsync(Header, offline: true);
-        Assert.NotEqual(first.Path, changedMtime.Path);
-        byte[] larger = [0xff, 0xd8, 1, 2, 3, 0xff, 0xd9];
-        await File.WriteAllBytesAsync(local, larger);
-        File.SetLastWriteTimeUtc(local, new DateTime(2001, 1, 1, 0, 0, 0, DateTimeKind.Utc));
-        var changedSize = await fetcher.FetchAsync(Header, offline: true);
-        Assert.NotEqual(changedMtime.Path, changedSize.Path);
-        Assert.Equal(larger, await File.ReadAllBytesAsync(changedSize.Path!));
+        byte[] changed = [0xff, 0xd8, 3, 4, 0xff, 0xd9];
+        await File.WriteAllBytesAsync(local, changed);
+        File.SetLastWriteTimeUtc(local, new DateTime(2000, 1, 1, 0, 0, 0, DateTimeKind.Utc));
+        var second = await fetcher.FetchAsync(Header, offline: true);
+        Assert.NotEqual(first.Path, second.Path);
+        Assert.Equal(changed, await File.ReadAllBytesAsync(second.Path!));
     }
 
     [Fact]
@@ -211,8 +197,7 @@ public sealed class ArtworkTests
         string blocked = Path.Combine(temp.Path, "not-a-directory");
         await File.WriteAllTextAsync(blocked, "unchanged");
         await using var stub = new HttpStub(Jpeg);
-        using var client = Client();
-        using var fetcher = Fetcher(new Source(stub.Url), client, blocked);
+        using var fetcher = Fetcher(new Source(stub.Url), blocked);
         AssertFailure(await fetcher.FetchAsync(Header), "source-or-cache-io-failed");
         Assert.Equal("unchanged", await File.ReadAllTextAsync(blocked));
     }
@@ -221,7 +206,7 @@ public sealed class ArtworkTests
     public async Task Cache_eviction_is_oldest_write_then_ordinal_name_with_strict_byte_bound()
     {
         using var temp = new CacheDirectory();
-        var cache = new ArtworkCache(temp.Path, 12);
+        var cache = new ArtworkCache(temp.Path, 12, Path.Combine(temp.Path, "steam"));
         string a = await cache.StoreAsync("A", Jpeg, default);
         string b = await cache.StoreAsync("B", Jpeg, default);
         File.SetLastWriteTimeUtc(a, new DateTime(2000, 1, 1, 0, 0, 0, DateTimeKind.Utc));
@@ -238,7 +223,7 @@ public sealed class ArtworkTests
     {
         using var temp = new CacheDirectory();
         await File.WriteAllBytesAsync(Path.Combine(temp.Path, "A.tmp"), [1, 2, 3]);
-        var cache = new ArtworkCache(temp.Path, 6);
+        var cache = new ArtworkCache(temp.Path, 6, Path.Combine(temp.Path, "steam"));
         Assert.Null(await cache.FindAsync("A", default));
         string path = await cache.StoreAsync("A", Jpeg, default);
         Assert.Equal(Jpeg, await File.ReadAllBytesAsync(path));
@@ -250,7 +235,7 @@ public sealed class ArtworkTests
     public async Task Cancelled_write_cannot_publish_partial_blob()
     {
         using var temp = new CacheDirectory();
-        var cache = new ArtworkCache(temp.Path, 6);
+        var cache = new ArtworkCache(temp.Path, 6, Path.Combine(temp.Path, "steam"));
         using var cts = new CancellationTokenSource();
         cts.Cancel();
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => cache.StoreAsync("A", Jpeg, cts.Token));
@@ -262,8 +247,7 @@ public sealed class ArtworkTests
     {
         using var temp = new CacheDirectory();
         await using var stub = new HttpStub(Jpeg);
-        using var client = Client();
-        using var fetcher = Fetcher(new Source(stub.Url), client, temp.Path);
+        using var fetcher = Fetcher(new Source(stub.Url), temp.Path);
         var first = await fetcher.FetchAsync(Header);
         await File.WriteAllBytesAsync(first.Path!, [1, 2]);
         AssertFailure(await fetcher.FetchAsync(Header, offline: true), "cache-hash-mismatch");
@@ -275,8 +259,7 @@ public sealed class ArtworkTests
     {
         using var temp = new CacheDirectory();
         await using var stub = new HttpStub(Jpeg);
-        using var client = Client();
-        using var fetcher = Fetcher(new Source(stub.Url), client, temp.Path);
+        using var fetcher = Fetcher(new Source(stub.Url), temp.Path);
         using var cts = new CancellationTokenSource();
         cts.Cancel();
         AssertFailure(await fetcher.FetchAsync(Header, cancellationToken: cts.Token), "cancelled");
@@ -301,8 +284,7 @@ public sealed class ArtworkTests
         using var temp = new CacheDirectory();
         string file = Serialization.RepositoryPaths.Combine("tests", "fixtures", "steam", "real", "userdata", "00000000", "config", "librarycache", "1238040.json");
         byte[] before = await File.ReadAllBytesAsync(file);
-        using var client = Client();
-        using var fetcher = Fetcher(new Source(new Uri(file)), client, temp.Path);
+        using var fetcher = Fetcher(new Source(new Uri(file)), temp.Path);
         var result = await fetcher.FetchAsync(new(1238040, ArtworkKind.Achievements), offline: true);
         Assert.Empty(result.Issues);
         Assert.Equal(before, await File.ReadAllBytesAsync(result.Path!));
@@ -317,9 +299,8 @@ public sealed class ArtworkTests
         Directory.CreateDirectory(target);
         string link = Path.Combine(temp.Path, "link");
         Directory.CreateSymbolicLink(link, target);
-        using var client = Client();
         await using var stub = new HttpStub(Jpeg);
-        using var fetcher = Fetcher(new Source(stub.Url), client, link);
+        using var fetcher = Fetcher(new Source(stub.Url), link);
         AssertFailure(await fetcher.FetchAsync(Header), "source-or-cache-io-failed");
         Assert.Empty(Directory.GetFiles(target));
         Assert.Equal(0, stub.Requests);
@@ -332,7 +313,7 @@ public sealed class ArtworkTests
     public async Task Cache_rejects_path_shaped_keys(string key)
     {
         using var temp = new CacheDirectory();
-        var cache = new ArtworkCache(temp.Path, 6);
+        var cache = new ArtworkCache(temp.Path, 6, Path.Combine(temp.Path, "steam"));
         await Assert.ThrowsAsync<ArgumentException>(() => cache.StoreAsync(key, Jpeg, default));
         await Assert.ThrowsAsync<ArgumentException>(() => cache.FindAsync(key, default));
         Assert.Empty(Directory.GetFiles(temp.Path));
@@ -343,8 +324,7 @@ public sealed class ArtworkTests
     {
         using var temp = new CacheDirectory();
         await using var stub = new HttpStub(Jpeg, block: true);
-        using var client = Client();
-        using var fetcher = Fetcher(new Source(stub.Url), client, temp.Path);
+        using var fetcher = Fetcher(new Source(stub.Url), temp.Path);
         using var running = new CancellationTokenSource();
         Task<ArtworkResult> first = fetcher.FetchAsync(Header, cancellationToken: running.Token);
         await stub.Received.Task.WaitAsync(TimeSpan.FromSeconds(5));
@@ -363,10 +343,9 @@ public sealed class ArtworkTests
     {
         using var temp = new CacheDirectory();
         await using var stub = new HttpStub(Jpeg, 404);
-        using var client = Client();
         using var cts = new CancellationTokenSource();
         var clock = new Clock { OnDelay = cts.Cancel };
-        using var fetcher = Fetcher(new Source(stub.Url), client, temp.Path, clock);
+        using var fetcher = Fetcher(new Source(stub.Url), temp.Path, clock);
         AssertFailure(await fetcher.FetchAsync(Header), "http-404");
         AssertFailure(await fetcher.FetchAsync(Header, cancellationToken: cts.Token), "cancelled");
         Assert.Equal(1, stub.Requests);
@@ -379,11 +358,96 @@ public sealed class ArtworkTests
     {
         using var temp = new CacheDirectory();
         await using var stub = new HttpStub([137, 80, 78, 71, 13, 10, 26, 10]);
-        using var client = Client();
-        using var fetcher = Fetcher(new Source(stub.Url), client, temp.Path);
+        using var fetcher = Fetcher(new Source(stub.Url), temp.Path);
         var result = await fetcher.FetchAsync(new(Header.AppId, kind));
         Assert.Equal(valid, result.Path != null);
         if (!valid) Assert.Equal("invalid-content", Assert.Single(result.Issues).Reason);
+    }
+
+    [Fact]
+    public async Task Online_same_uri_changed_content_replaces_stale_snapshot_and_offline_reads_latest()
+    {
+        using var temp = new CacheDirectory();
+        await using var stub = new HttpStub(Jpeg);
+        using var fetcher = Fetcher(new Source(stub.Url), temp.Path);
+        var first = await fetcher.FetchAsync(Header);
+        byte[] changed = [0xff, 0xd8, 3, 4, 0xff, 0xd9];
+        stub.Body = changed;
+        var second = await fetcher.FetchAsync(Header);
+        Assert.NotEqual(first.Path, second.Path);
+        Assert.Equal(changed, await File.ReadAllBytesAsync(second.Path!));
+        var offline = await fetcher.FetchAsync(Header, offline: true);
+        Assert.Equal(second.Path, offline.Path);
+        Assert.Equal(2, stub.Requests);
+        Assert.Single(Directory.GetFiles(temp.Path, "*.blob"));
+    }
+
+    [Fact]
+    public async Task Redirect_policy_is_enforced_by_fetcher_and_never_contacts_target()
+    {
+        using var temp = new CacheDirectory();
+        await using var target = new HttpStub(Jpeg);
+        await using var redirect = new HttpStub([], 302, extraHeaders: "Location: " + target.Url.AbsoluteUri + "\r\n");
+        using var fetcher = Fetcher(new Source(redirect.Url), temp.Path);
+        AssertFailure(await fetcher.FetchAsync(Header), "http-302");
+        Assert.Equal(1, redirect.Requests);
+        Assert.Equal(0, target.Requests);
+        Assert.Empty(Directory.GetFiles(temp.Path));
+    }
+
+    [Theory]
+    [InlineData("root")]
+    [InlineData("steam")]
+    [InlineData("inside-steam")]
+    [InlineData("steam-alias")]
+    public async Task Unsafe_cache_scope_is_reported_before_network_or_writes(string scope)
+    {
+        using var temp = new CacheDirectory();
+        string steam = Path.Combine(temp.Path, "steam");
+        Directory.CreateDirectory(steam);
+        string alias = Path.Combine(temp.Path, "steam-alias");
+        Directory.CreateSymbolicLink(alias, steam);
+        string cachePath = scope switch { "root" => "/", "steam" => steam, _ => Path.Combine(steam, "cache") };
+        await using var stub = new HttpStub(Jpeg);
+        using var fetcher = new ArtworkFetcher(new Source(stub.Url), new(cachePath, 1024, scope == "steam-alias" ? alias : steam), new Clock());
+        AssertFailure(await fetcher.FetchAsync(Header), "cache-directory-unsafe");
+        Assert.Empty(Directory.GetFileSystemEntries(steam));
+        Assert.Equal(0, stub.Requests);
+    }
+
+    [Theory]
+    [InlineData("2147483647")]
+    [InlineData("Fri, 31 Dec 9999 23:59:59 GMT")]
+    public async Task Retry_after_is_capped_at_five_minutes(string retry)
+    {
+        using var temp = new CacheDirectory();
+        var clock = new Clock();
+        await using var stub = new HttpStub(Jpeg, 429, extraHeaders: "Retry-After: " + retry + "\r\n");
+        using var fetcher = Fetcher(new Source(stub.Url), temp.Path, clock);
+        AssertFailure(await fetcher.FetchAsync(Header), "http-429-retry-after");
+        AssertFailure(await fetcher.FetchAsync(Header), "http-429-retry-after");
+        Assert.Equal(TimeSpan.FromMinutes(5), Assert.Single(clock.Delays));
+    }
+
+    [Fact]
+    public async Task Rate_delay_releases_gate_so_offline_cache_hits_can_complete()
+    {
+        using var temp = new CacheDirectory();
+        var clock = new Clock { HoldDelay = true };
+        await using var stub = new HttpStub(Jpeg);
+        using var fetcher = Fetcher(new Source(stub.Url), temp.Path, clock);
+        var first = await fetcher.FetchAsync(Header);
+        using var cts = new CancellationTokenSource();
+        var delayed = fetcher.FetchAsync(Header, cancellationToken: cts.Token);
+        await clock.DelayStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        try
+        {
+            var offline = await fetcher.FetchAsync(Header, offline: true).WaitAsync(TimeSpan.FromSeconds(5));
+            Assert.Equal(first.Path, offline.Path);
+            Assert.Equal(1, stub.Requests);
+        }
+        finally { cts.Cancel(); }
+        AssertFailure(await delayed, "cancelled");
     }
 
     private static void AssertFailure(ArtworkResult result, string reason)
@@ -392,11 +456,10 @@ public sealed class ArtworkTests
         Assert.Equal(new ArtworkIssue(Header.AppId, Header.Kind, reason), Assert.Single(result.Issues));
     }
 
-    private static HttpClient Client() => new(new SocketsHttpHandler { AllowAutoRedirect = false, UseProxy = false }) { Timeout = TimeSpan.FromSeconds(5) };
-    private static ArtworkFetcher Fetcher(Source source, HttpClient client, string path, Clock? clock = null)
+    private static ArtworkFetcher Fetcher(Source source, string path, Clock? clock = null)
     {
         var actualClock = clock ?? new Clock();
-        return new(source, client, new(path, 1024), actualClock);
+        return new(source, new(path, 1024, Path.Combine(path, "steam")), actualClock);
     }
 
     private sealed class Source(Uri? uri, string? hash = null) : IArtworkSource
@@ -407,15 +470,18 @@ public sealed class ArtworkTests
     private sealed class Clock : IArtworkClock
     {
         public Action? OnDelay { get; init; }
+        public bool HoldDelay { get; init; }
+        public TaskCompletionSource DelayStarted { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public DateTimeOffset UtcNow { get; private set; } = new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
         public List<TimeSpan> Delays { get; } = [];
-        public Task DelayAsync(TimeSpan delay, CancellationToken cancellationToken)
+        public async Task DelayAsync(TimeSpan delay, CancellationToken cancellationToken)
         {
             OnDelay?.Invoke();
             cancellationToken.ThrowIfCancellationRequested();
             Delays.Add(delay);
+            DelayStarted.TrySetResult();
+            if (HoldDelay) await Task.Delay(Timeout.Infinite, cancellationToken);
             UtcNow += delay;
-            return Task.CompletedTask;
         }
     }
 
@@ -437,10 +503,12 @@ public sealed class ArtworkTests
         public Uri Url { get; }
         public int Requests { get; private set; }
         public List<DateTimeOffset> Times { get; } = [];
+        public byte[] Body { get; set; }
 
         public HttpStub(byte[] body, int status = 200, long? declaredLength = null, bool omitLength = false, string extraHeaders = "", Clock? clock = null, bool block = false)
         {
             this.block = block;
+            Body = body;
             this.clock = clock;
             listener.Start();
             Url = new Uri($"http://127.0.0.1:{((IPEndPoint)listener.LocalEndpoint).Port}/explicit-source");
@@ -461,9 +529,10 @@ public sealed class ArtworkTests
                     Times.Add(clock?.UtcNow ?? DateTimeOffset.MinValue);
                     Received.TrySetResult();
                     if (block) await Task.Delay(Timeout.Infinite, stop.Token);
-                    string header = $"HTTP/1.1 {status} Stub\r\nConnection: close\r\n" + (omitLength ? "" : $"Content-Length: {length ?? body.Length}\r\n") + extra + "\r\n";
+                    byte[] actualBody = Body;
+                    string header = $"HTTP/1.1 {status} Stub\r\nConnection: close\r\n" + (omitLength ? "" : $"Content-Length: {length ?? actualBody.Length}\r\n") + extra + "\r\n";
                     await stream.WriteAsync(Encoding.ASCII.GetBytes(header), stop.Token);
-                    await stream.WriteAsync(body, stop.Token);
+                    await stream.WriteAsync(actualBody, stop.Token);
                 }
             }
             catch (OperationCanceledException) when (stop.IsCancellationRequested) { }

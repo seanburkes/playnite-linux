@@ -15,13 +15,13 @@ public sealed class ArtworkFetcher : IDisposable
     private readonly SemaphoreSlim gate = new(1, 1);
     private DateTimeOffset nextRequest = DateTimeOffset.MinValue;
 
-    // Client lifetime is caller-owned. Configure redirects off: no implicit source fallback.
-    public ArtworkFetcher(IArtworkSource sources, HttpClient client, ArtworkCache cache,
+    // Own the handler so redirect policy cannot be weakened by an injected client.
+    public ArtworkFetcher(IArtworkSource sources, ArtworkCache cache,
         IArtworkClock clock, int maxBodyBytes = 8 * 1024 * 1024, TimeSpan? interval = null)
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maxBodyBytes);
         this.sources = sources;
-        this.client = client;
+        client = new HttpClient(new SocketsHttpHandler { AllowAutoRedirect = false, UseCookies = false, UseProxy = false });
         this.cache = cache;
         this.clock = clock;
         this.maxBodyBytes = maxBodyBytes;
@@ -46,10 +46,11 @@ public sealed class ArtworkFetcher : IDisposable
             if (source == null) return Fail("source-unconfigured-or-title-excluded");
             if (!source.Location.IsAbsoluteUri || (source.Location.Scheme != "http" && source.Location.Scheme != "https" && !source.Location.IsFile))
                 return Fail("source-invalid");
-            FileInfo? local = source.Location.IsFile ? new FileInfo(source.Location.LocalPath) : null;
-            string key = ArtworkCache.SourceKey(identity, source, local?.Length, local?.LastWriteTimeUtc.Ticks);
+            string key = ArtworkCache.SourceKey(identity, source);
             string? hit = await cache.FindAsync(key, cancellationToken).ConfigureAwait(false);
-            if (hit != null) return new(hit, issues.AsReadOnly());
+            // Offline HTTP hits are validated snapshots. Online and local sources are read anew:
+            // URI, length and mtime alone cannot prove content has not changed.
+            if (hit != null && offline && !source.Location.IsFile) return new(hit, issues.AsReadOnly());
             if (offline && !source.Location.IsFile) return Fail("offline-cache-miss");
 
             byte[] body;
@@ -60,8 +61,15 @@ public sealed class ArtworkFetcher : IDisposable
             }
             else
             {
-                TimeSpan delay = nextRequest - clock.UtcNow;
-                if (delay > TimeSpan.Zero) await clock.DelayAsync(delay, cancellationToken).ConfigureAwait(false);
+                while (nextRequest > clock.UtcNow)
+                {
+                    TimeSpan delay = nextRequest - clock.UtcNow;
+                    gate.Release();
+                    entered = false;
+                    await clock.DelayAsync(delay, cancellationToken).ConfigureAwait(false);
+                    await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+                    entered = true;
+                }
                 cancellationToken.ThrowIfCancellationRequested();
                 nextRequest = clock.UtcNow + interval;
                 using var request = new HttpRequestMessage(HttpMethod.Get, source.Location);
@@ -69,7 +77,11 @@ public sealed class ArtworkFetcher : IDisposable
                 if (response.StatusCode == HttpStatusCode.TooManyRequests)
                 {
                     var retry = response.Headers.RetryAfter;
-                    DateTimeOffset deadline = retry?.Date ?? (clock.UtcNow + (retry?.Delta ?? interval));
+                    DateTimeOffset maximum = clock.UtcNow + TimeSpan.FromMinutes(5);
+                    TimeSpan requested = retry?.Delta ?? interval;
+                    if (requested > TimeSpan.FromMinutes(5)) requested = TimeSpan.FromMinutes(5);
+                    DateTimeOffset deadline = retry?.Date ?? (clock.UtcNow + requested);
+                    if (deadline > maximum) deadline = maximum;
                     if (deadline > nextRequest) nextRequest = deadline;
                     return Fail("http-429-retry-after");
                 }
@@ -125,5 +137,9 @@ public sealed class ArtworkFetcher : IDisposable
         return body.Length >= 4 && body[0] == 0xff && body[1] == 0xd8 && body[^2] == 0xff && body[^1] == 0xd9;
     }
 
-    public void Dispose() => gate.Dispose();
+    public void Dispose()
+    {
+        client.Dispose();
+        gate.Dispose();
+    }
 }

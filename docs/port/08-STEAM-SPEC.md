@@ -551,15 +551,20 @@ directories contained only hashed cache files. Therefore every named file is opt
 There was no `steamapps/librarycache` directory on the host. The earlier draft's path was
 wrong; do not implement it without a fallback check on the target host.
 
-Cache order **[decision]**:
+Acquisition contract **[decision, p5-003 evidence ruling]**:
 
-1. `appcache/librarycache/<appid>/library_600x900.jpg`
-2. `appcache/librarycache/<appid>/header.jpg`
-3. Steam CDN header URL (public app header image) — **UNKNOWN/unverified on this host**
-4. Placeholder
-
-Cache by app id plus source size/mtime under `${XDG_CACHE_HOME}/playnite/steam/`; never block
-the UI thread on network; a failed source falls through to the next.
+- Resolve only explicitly configured sources for an app id and artwork kind. The names above
+  are optional local identities, not remote ids or an automatic source-fallback chain.
+- Steam CDN header URL and remote artwork mapping remain **UNKNOWN/unverified on this host**.
+  Real remote artwork acquisition is deferred until captured HTTP/artwork-id evidence exists;
+  do not derive URLs or hashed Steam ids or substitute a guessed source after a failure.
+- Cache under `${XDG_CACHE_HOME}/playnite/steam/`, outside the Steam tree. Deterministic keys
+  identify app id, kind and explicit source; published blobs bind byte length and content SHA-256.
+  Validate the stored content hash on every hit. Size/mtime alone is not a freshness proof:
+  online HTTP and explicit local-file acquisitions read the source anew; offline HTTP hits are
+  validated snapshots, and a miss reports offline without making a request.
+- Never block the UI thread on network. Every failure/exclusion reports app id, kind and reason;
+  no implicit retry, alternate-source fallback or non-existent success path is allowed.
 
 ### 8.2 Achievement/metadata JSON [host]
 

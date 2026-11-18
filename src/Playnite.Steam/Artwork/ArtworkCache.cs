@@ -7,19 +7,22 @@ namespace Playnite.Steam.Artwork;
 public sealed class ArtworkCache
 {
     private readonly string directory;
+    private readonly string steamRoot;
     public long MaxBytes { get; }
 
-    public ArtworkCache(string directory, long maxBytes)
+    public ArtworkCache(string directory, long maxBytes, string steamRoot)
     {
         if (!Path.IsPathFullyQualified(directory)) throw new ArgumentException("Absolute cache directory required.", nameof(directory));
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maxBytes);
         this.directory = Path.GetFullPath(directory);
+        if (!Path.IsPathFullyQualified(steamRoot)) throw new ArgumentException("Absolute Steam root required.", nameof(steamRoot));
+        this.steamRoot = ResolveDirectory(steamRoot);
         MaxBytes = maxBytes;
     }
 
-    public static string SourceKey(ArtworkIdentity identity, ArtworkSource source, long? sourceSize = null, long? sourceModifiedTicks = null)
+    public static string SourceKey(ArtworkIdentity identity, ArtworkSource source)
     {
-        string key = FormattableString.Invariant($"{identity.AppId}\n{identity.Kind}\n{source.Location.AbsoluteUri}\n{source.ExpectedSha256?.ToUpperInvariant()}\n{sourceSize}\n{sourceModifiedTicks}");
+        string key = FormattableString.Invariant($"{identity.AppId}\n{identity.Kind}\n{source.Location.AbsoluteUri}\n{source.ExpectedSha256?.ToUpperInvariant()}");
         return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(key)));
     }
 
@@ -54,6 +57,12 @@ public sealed class ArtworkCache
         {
             CheckFile(abandoned);
             File.Delete(abandoned);
+        }
+        // Only the most recently acquired snapshot of an explicit source remains discoverable.
+        foreach (string previous in Directory.GetFiles(directory, key + "-*.blob"))
+        {
+            CheckFile(previous);
+            File.Delete(previous);
         }
         var files = Directory.GetFiles(directory, "*.blob").Select(p => new FileInfo(p))
             .OrderBy(f => f.LastWriteTimeUtc).ThenBy(f => f.Name, StringComparer.Ordinal).ToList();
@@ -92,8 +101,23 @@ public sealed class ArtworkCache
 
     private void CheckDirectory()
     {
+        if (directory == Path.GetPathRoot(directory) || directory == steamRoot || directory.StartsWith(steamRoot.TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar, StringComparison.Ordinal))
+            throw new InvalidDataException("cache-directory-unsafe");
         for (DirectoryInfo? current = new(directory); current != null; current = current.Parent)
             if (current.LinkTarget != null) throw new IOException("cache-symlink");
+    }
+
+    private static string ResolveDirectory(string path)
+    {
+        string resolved = Path.GetPathRoot(path)!;
+        foreach (string part in Path.GetFullPath(path).Split(Path.DirectorySeparatorChar, StringSplitOptions.RemoveEmptyEntries))
+        {
+            resolved = Path.Combine(resolved, part);
+            var info = new DirectoryInfo(resolved);
+            if (info.LinkTarget != null)
+                resolved = info.ResolveLinkTarget(returnFinalTarget: true)?.FullName ?? throw new IOException("steam-root-unresolvable");
+        }
+        return Path.TrimEndingDirectorySeparator(resolved);
     }
 
     private static void CheckFile(string path)

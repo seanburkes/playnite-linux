@@ -30,8 +30,9 @@ logged or inferred. Title exclusion/unconfigured mapping is a reported result, n
 `IArtworkSource.Resolve` is injected and local/pure. It supplies an explicit absolute file,
 HTTP or HTTPS URI, optionally with expected SHA-256. There is intentionally no production
 remote mapper. A null source reports `source-unconfigured-or-title-excluded` without HTTP.
-The caller supplies a reusable `HttpClient` **with automatic redirects disabled**, to prevent
-implicit URL fallback, and owns its lifetime. Tests use loopback TCP HTTP only, never external
+The fetcher owns its HTTP handler/client and **enforces automatic redirects disabled**, rejecting
+redirect statuses instead of contacting an alternate URL. It does not use ambient proxies/cookies.
+Tests use loopback TCP HTTP only, never external
 network or host Steam data. Inject the cache root from `IPaths` under the application's Steam
 cache directory; no environment/home discovery occurs here.
 
@@ -55,11 +56,12 @@ rather than returning a stale or partial path.
 One fetcher/cache owner per **private application-owned directory**, no concurrent external
 writers. Operations are serialized. Cache keys are SHA-256 of invariant decimal app id,
 kind (including nominal artwork size), exact explicit source URI and optional expected hash.
-Local file keys additionally include observed source byte length and UTC mtime ticks (§8.1).
 Final names are `<key>-<byte-length>-<content-sha256>.blob`. Source spelling changes invalidate
-the cache key. A remote source mapping can supply an expected
-hash to explicitly version mutable sources. Without that, cached immutable content remains
-until eviction (no implicit freshness/network probe).
+the cache key. Each hit verifies the stored bytes against their length/hash-bound filename.
+Every online HTTP acquisition and every local-file acquisition reads the explicit source anew,
+even if its URI, size and mtime are unchanged; a changed payload replaces the prior snapshot.
+Offline HTTP hits explicitly return the latest validated snapshot, not a freshness guarantee.
+An optional expected SHA-256 additionally pins an explicit source version.
 
 The configured positive byte bound covers owned blobs plus the active temporary file. Evict
 oldest `LastWriteTimeUtc` first, then ordinal filename on ties, **before** writing incoming
@@ -75,14 +77,19 @@ visibility, not directory-fsync power-loss durability. Symlink cache paths/entri
 private ownership is required to exclude hostile concurrent symlink swaps. No writes occur
 outside the cache. Returned paths are verified at return, not pinned against later eviction;
 consumers must handle a subsequent eviction normally.
+The cache constructor requires the explicit Steam root; its canonical directory (including a
+symlinked Steam root) and descendants, and the filesystem root, report `cache-directory-unsafe`
+before network or writes. The caller must pass the discovered root rather than an invented one.
 
 ## Rate limit
 
 One request start per second by default (configurable nonnegative interval), shared by every
 title/kind in the fetcher, including failures. A 429 reports immediately and raises the next
-eligible request time using `Retry-After` delta seconds or HTTP date; the regular interval
-remains a floor. Missing Retry-After uses that floor. No retry is sent for the failed call.
-Cache hits/offline misses/local imports consume no HTTP slot. `IArtworkClock` supplies both
+eligible request time using `Retry-After` delta seconds or HTTP date, capped to five minutes;
+the configured regular interval remains a floor. Missing Retry-After uses that floor.
+No retry is sent for the failed call. The request gate is released during the delay, then
+reacquired and the deadline rechecked, so offline hits/local reads can proceed while HTTP waits.
+Offline hits/misses and local imports consume no HTTP slot. `IArtworkClock` supplies both
 time and cancellation-aware delay; stub tests advance virtual time instead of sleeping.
 
 ## Verification and review
