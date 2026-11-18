@@ -45,6 +45,57 @@ public sealed class LinuxPidFdSignalTests
     }
 
     [Fact]
+    public async Task Scoped_signal_rechecks_the_exact_proton_command_line_argument()
+    {
+        const string argument = "S:\\steamapps\\common\\Hades\\x64\\Hades.exe";
+        var state = new FakeState();
+        var host = new LinuxExternalProcessHost(state, state, _ => "/proton/wine64-preloader",
+            _ => [argument, "--later-arg"]);
+        await host.SignalAsync(new(22, 1, 20), "/proton/wine64-preloader", argument, CancellationToken.None);
+        Assert.Equal([1L], state.SignalledGenerations);
+        Assert.Equal(1, state.Disposals);
+    }
+
+    [Fact]
+    public async Task Scoped_signal_rejects_the_game_path_outside_argv0()
+    {
+        const string argument = "S:\\steamapps\\common\\Hades\\x64\\Hades.exe";
+        var state = new FakeState();
+        var host = new LinuxExternalProcessHost(state, state, _ => "/proton/wine64-preloader",
+            _ => ["C:\\windows\\system32\\services.exe", argument]);
+        await host.SignalAsync(new(22, 1, 20), "/proton/wine64-preloader", argument, CancellationToken.None);
+        Assert.Empty(state.SignalledGenerations);
+        Assert.Equal(1, state.Disposals);
+    }
+
+    [Fact]
+    public async Task Scoped_signal_rejects_a_proton_argument_that_changed_before_SIGTERM()
+    {
+        var argument = "S:\\steamapps\\common\\Hades\\x64\\Hades.exe";
+        var state = new FakeState
+        {
+            AfterRead = () => argument = "S:\\steamapps\\common\\Other\\Other.exe",
+        };
+        var host = new LinuxExternalProcessHost(state, state, _ => "/proton/wine64-preloader",
+            _ => [argument]);
+        await host.SignalAsync(new(22, 1, 20), "/proton/wine64-preloader",
+            "S:\\steamapps\\common\\Hades\\x64\\Hades.exe", CancellationToken.None);
+        Assert.Empty(state.SignalledGenerations);
+        Assert.Equal(1, state.Disposals);
+    }
+
+    [Fact]
+    public async Task Scoped_signal_rejects_an_unreadable_proton_command_line()
+    {
+        var state = new FakeState();
+        var host = new LinuxExternalProcessHost(state, state, _ => "/proton/wine64-preloader", _ => null);
+        await host.SignalAsync(new(22, 1, 20), "/proton/wine64-preloader",
+            "S:\\steamapps\\common\\Hades\\x64\\Hades.exe", CancellationToken.None);
+        Assert.Empty(state.SignalledGenerations);
+        Assert.Equal(1, state.Disposals);
+    }
+
+    [Fact]
     [System.Runtime.Versioning.SupportedOSPlatform("linux")]
     public async Task Steam_individual_stop_terminates_a_real_game_child_in_a_nonowned_group()
     {
@@ -219,6 +270,13 @@ public sealed class LinuxPidFdSignalTests
         {
             Signalled.Add(identity);
             return host.SignalAsync(identity, expectedExecutable, cancellationToken);
+        }
+
+        public Task SignalAsync(ProcessIdentity identity, string expectedExecutable,
+            string? expectedCommandLineArgument, CancellationToken cancellationToken)
+        {
+            Signalled.Add(identity);
+            return host.SignalAsync(identity, expectedExecutable, expectedCommandLineArgument, cancellationToken);
         }
         public void Dispose() => Child?.Dispose();
     }

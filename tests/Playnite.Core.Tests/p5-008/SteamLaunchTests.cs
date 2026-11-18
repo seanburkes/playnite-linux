@@ -392,6 +392,23 @@ public sealed class SteamLaunchTests
     }
 
     [Fact]
+    public async Task Tracked_identity_that_no_longer_presents_game_evidence_is_not_a_terminal_exit()
+    {
+        var host = Host(Native);
+        await using var launcher = Launcher(host, Native);
+        var process = await launcher.StartAsync(launcher.CreateRequest(), CancellationToken.None);
+        host.Rows.RemoveAll(row => row.Process.Identity.ProcessId == 22);
+        host.Rows.Add(Entry(22, 2, 20, "/unrelated/tool"));
+
+        var snapshot = await launcher.SnapshotAsync(CancellationToken.None);
+        Assert.False(snapshot.IsComplete);
+        Assert.Contains("evidence changed", snapshot.IncompleteReason);
+        await Assert.ThrowsAsync<ProcessSurvivorException>(() => launcher.StopAsync(process, CancellationToken.None));
+        Assert.Empty(host.Signalled);
+        host.Rows.RemoveAll(row => row.Process.Identity.ProcessId == 22); // Owner stops the survivor.
+    }
+
+    [Fact]
     public async Task Unreadable_live_game_identity_with_remaining_members_is_not_a_game_gone_sample()
     {
         var host = Host(Native);
@@ -862,11 +879,21 @@ public sealed class SteamLaunchTests
             => throw new InvalidOperationException("Steam must use executable-verified identity stop.");
 
         public Task SignalAsync(ProcessIdentity identity, string expectedExecutable, CancellationToken token)
+            => SignalAsync(identity, expectedExecutable, null, token);
+
+        public Task SignalAsync(ProcessIdentity identity, string expectedExecutable,
+            string? expectedCommandLineArgument, CancellationToken token)
         {
-            Assert.Equal(expectedExecutable, Rows.Single(row => row.Process.Identity == identity).Executable);
+            var row = Rows.Single(candidate => candidate.Process.Identity == identity);
+            Assert.Equal(expectedExecutable, row.Executable);
             Assert.False(SteamProcessAttribution.IsInfrastructure(expectedExecutable));
+            if (expectedCommandLineArgument is not null)
+            {
+                Assert.Contains(expectedCommandLineArgument, row.CommandLine ?? []);
+            }
+
             Signalled.Add(identity);
-            if (!IgnoreSignal) { Rows.RemoveAll(row => row.Process.Identity == identity); }
+            if (!IgnoreSignal) { Rows.RemoveAll(candidate => candidate.Process.Identity == identity); }
             return Task.CompletedTask;
         }
     }

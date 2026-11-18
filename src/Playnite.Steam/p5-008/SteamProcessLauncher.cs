@@ -26,6 +26,15 @@ public sealed class SteamProcessLauncher : IProcessLauncher, IProcessObserver
 
     public SteamStopReport? StopReport { get; private set; }
 
+    /// <summary>The accepted executable evidence for this session, for the acceptance report.</summary>
+    public IReadOnlyList<SteamAttributionCandidate> AttributedGames { get; private set; } = [];
+
+    /// <summary>
+    /// True once any attribution snapshot held a candidate. Diagnostics only: the acceptance
+    /// harness distinguishes a launch that never produced a process from an attribution UNKNOWN.
+    /// </summary>
+    public bool CandidateObserved { get; private set; }
+
     public IReadOnlyCollection<ProcessIdentity> AttributedIdentities => known.Keys.ToArray();
     public IReadOnlyCollection<ProcessIdentity> ObservedDescendants => descendants.Keys.ToArray();
 
@@ -146,9 +155,11 @@ public sealed class SteamProcessLauncher : IProcessLauncher, IProcessObserver
             {
                 var sample = await host.SnapshotAsync(linked.Token).ConfigureAwait(false);
                 var decision = SteamProcessAttribution.Evaluate(target, baseline, sample);
+                CandidateObserved |= decision.Candidates.Count > 0;
                 if (decision.Identity is { } match)
                 {
                     game = new Game(match, time.GetUtcNow());
+                    AttributedGames = decision.Candidates;
                     var games = GameMembers(sample).ToArray();
                     foreach (var row in games)
                     {
@@ -166,7 +177,9 @@ public sealed class SteamProcessLauncher : IProcessLauncher, IProcessObserver
 
                     var tolerated = decision.ToleratedMembers.Count == 0 ? string.Empty
                         : $"; unidentified unreadable member(s) {string.Join(", ", decision.ToleratedMembers)} tolerated as group evidence, never signalled";
-                    Report($"ATTRIBUTED: unique fresh game pid={match.ProcessId} start_ticks={match.StartTimeTicks} pgid={match.ProcessGroupId} exe={decision.Candidates[0].Executable}; game identities={games.Length}{tolerated}", true);
+                    var evidence = string.Join("; ", decision.Candidates.Select(candidate =>
+                        $"{DescribeCandidate(candidate)}"));
+                    Report($"ATTRIBUTED: unique fresh game pid={match.ProcessId} start_ticks={match.StartTimeTicks} pgid={match.ProcessGroupId} {evidence}; game identities={games.Length}{tolerated}", true);
                     return game;
                 }
 
@@ -230,13 +243,24 @@ public sealed class SteamProcessLauncher : IProcessLauncher, IProcessObserver
             return new([], true);
         }
 
-        // A running game identity whose executable the host cannot read is torn evidence. It is
+        // A running game identity whose evidence the host cannot read is torn evidence. It is
         // neither an exit nor proof that the identity changed, so the sample cannot be terminal.
-        if (sample.Processes.Any(row => row.Process.IsRunning && row.Executable is null
-            && known.Keys.Any(identity => SteamProcessAttribution.SameProcess(identity, row.Process.Identity))))
+        if (sample.Processes.Any(row => row.Process.IsRunning
+            && known.Keys.Any(identity => SteamProcessAttribution.SameProcess(identity, row.Process.Identity))
+            && SteamProcessAttribution.IsUnverifiableEvidence(target, row)))
         {
             return new([], false,
-                "A tracked game identity's executable is unreadable; its exit cannot be proven");
+                "A tracked game identity's evidence is unreadable; its exit cannot be proven");
+        }
+
+        // A tracked game identity that is still live but no longer presents game evidence is a
+        // contradiction, not an exit. Only a complete sample with readable, non-game evidence can
+        // reach this branch, so the group is not proven gone.
+        if (sample.Processes.Any(row => row.Process.IsRunning && known.ContainsKey(row.Process.Identity)
+            && !SteamProcessAttribution.IsGame(target, row)))
+        {
+            return new([], false,
+                "A tracked game identity's evidence changed; its exit cannot be proven; stop manually in Steam if necessary");
         }
 
         var tolerated = new List<string>();
@@ -269,6 +293,9 @@ public sealed class SteamProcessLauncher : IProcessLauncher, IProcessObserver
             // Tracker input is not authority to signal arbitrary identities. Only policy-verified
             // games observed with continuity in our fresh group enter the allowlist below.
             StopReport = null;
+            // One SIGTERM per identity: re-sending is not more graceful, and a stop that keeps
+            // signalling the same live process must still end in ProcessSurvivorException.
+            var signalled = new HashSet<ProcessIdentity>();
             var deadline = time.GetTimestamp();
             while (true)
             {
@@ -291,19 +318,21 @@ public sealed class SteamProcessLauncher : IProcessLauncher, IProcessObserver
 
                 var games = GameMembers(sample).ToArray();
                 var changed = sample.Processes.Where(row => row.Process.IsRunning && known.ContainsKey(row.Process.Identity)
-                    && row.Executable is { } executable && !SteamProcessAttribution.Matches(target, executable)).ToArray();
+                    && !SteamProcessAttribution.IsGame(target, row)
+                    && !SteamProcessAttribution.IsUnverifiableEvidence(target, row)).ToArray();
                 if (changed.Length > 0)
                 {
                     throw new ProcessSurvivorException("Attributed identity changed executable; nothing was signalled.",
                         changed.Select(row => row.Process.Identity).ToArray());
                 }
 
-                // A running game identity whose executable became unreadable is torn evidence:
+                // A running game identity whose evidence became unreadable is torn evidence:
                 // not a changed executable, not a natural exit and not a helper survivor, so no
                 // terminal report may be produced from this sample. Retry until it resolves or
                 // the deadline proves the stop unproven.
-                var unverifiable = sample.Processes.Where(row => row.Process.IsRunning && row.Executable is null
-                    && known.Keys.Any(identity => SteamProcessAttribution.SameProcess(identity, row.Process.Identity))).ToArray();
+                var unverifiable = sample.Processes.Where(row => row.Process.IsRunning
+                    && known.Keys.Any(identity => SteamProcessAttribution.SameProcess(identity, row.Process.Identity))
+                    && SteamProcessAttribution.IsUnverifiableEvidence(target, row)).ToArray();
                 if (unverifiable.Length > 0)
                 {
                     if (time.GetElapsedTime(deadline) >= options.StopTimeout)
@@ -349,8 +378,22 @@ public sealed class SteamProcessLauncher : IProcessLauncher, IProcessObserver
 
                 foreach (var row in games)
                 {
+                    // Re-derive the exact evidence for this row. A Proton identity that cannot
+                    // re-present its argv here is not signalled: exe-only evidence is not what
+                    // was accepted, so fail closed and let the loop classify the contradiction.
+                    if (!SteamProcessAttribution.TryGetGame(target, row, out _, out var windowsArgument))
+                    {
+                        continue;
+                    }
+
                     known.TryAdd(row.Process.Identity, 0);
-                    await host.SignalAsync(row.Process.Identity, row.Executable!, CancellationToken.None).ConfigureAwait(false);
+                    if (!signalled.Add(row.Process.Identity))
+                    {
+                        continue;
+                    }
+
+                    await host.SignalAsync(row.Process.Identity, row.Executable!, windowsArgument,
+                        CancellationToken.None).ConfigureAwait(false);
                 }
 
                 if (time.GetElapsedTime(deadline) >= options.StopTimeout)
@@ -393,7 +436,7 @@ public sealed class SteamProcessLauncher : IProcessLauncher, IProcessObserver
         var seen = decision.Candidates.Count == 0
             ? "candidates=0"
             : $"candidates={decision.Candidates.Count} [{string.Join("; ", decision.Candidates.Select(candidate =>
-                $"pid={candidate.Identity.ProcessId} exe={candidate.Executable ?? "<unreadable>"} pgid={candidate.Identity.ProcessGroupId}"))}]";
+                $"pid={candidate.Identity.ProcessId} {DescribeCandidate(candidate)} pgid={candidate.Identity.ProcessGroupId}"))}]";
         if (decision.Rejection is null)
         {
             return $"WAITING: {seen}";
@@ -403,6 +446,11 @@ public sealed class SteamProcessLauncher : IProcessLauncher, IProcessObserver
             : $"; unidentified unreadable member(s) {string.Join(", ", decision.ToleratedMembers)} (never signalled)";
         return $"WAITING: {seen}; rejected: {decision.Rejection}{tolerated}; decision UNKNOWN";
     }
+
+    private static string DescribeCandidate(SteamAttributionCandidate candidate) =>
+        candidate.WindowsArgument is { } argument
+            ? $"exe={candidate.Executable} game={candidate.GamePath} cmdline_arg={argument}"
+            : $"exe={candidate.Executable}";
 
     private IEnumerable<ExternalProcessEntry> GroupMembers(ExternalProcessSnapshot sample) => sample.Processes
         .Where(row => row.Process.IsRunning && row.Process.Identity.ProcessGroupId == game!.Identity.ProcessGroupId);
@@ -464,7 +512,7 @@ public sealed class SteamProcessLauncher : IProcessLauncher, IProcessObserver
     }
 
     private IEnumerable<ExternalProcessEntry> GameMembers(ExternalProcessSnapshot sample) => GroupMembers(sample)
-        .Where(row => SteamProcessAttribution.Matches(target, row.Executable));
+        .Where(row => SteamProcessAttribution.IsGame(target, row));
 
     private void ObserveDescendants(ExternalProcessSnapshot sample)
     {
