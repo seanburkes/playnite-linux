@@ -53,11 +53,24 @@ stop loop treats that unreadable executable as unverifiable: it retries instead 
 proves the stop unproven. An exit therefore needs complete coverage and a readable game identity
 for every live tracked row.
 
+The host also binds every sampled row to a re-read stat identity. Different start ticks mean the
+PID was recycled, so the sampled identity is gone. Equal start ticks in a changed process group
+mean the same live process moved group (`setsid`) between the two reads: the host retains the
+re-read identity, so the launcher's escaped-child check fires, and marks the sample incomplete.
+Dropping that row left a complete, empty snapshot, which read as a natural exit and allowed a
+clean "group empty" stop with zero signals while the game ran in its new group. A launcher that
+sees this shape now returns an incomplete snapshot naming the escape and `StopAsync` refuses a
+terminal report; it never signals the escaped process in its unrelated group.
+
 A survivor is an identified Steam/Proton helper only with evidence: a recognised Steam/Wine/Proton
 runtime executable path, or a parent identity observed as Steam-owned (baseline Steam client,
 attributed game identity, or an already identified helper). `ExternalProcessSnapshot` carries no
 namespace field, so namespace evidence is never assumed. Members without evidence are
 `SteamStopReport.UnidentifiedSurvivors`, keep the report degraded, and require manual inspection.
+`GroupRejection` applies the same contract while the game is still tracked: an unreadable live
+member is tolerated group evidence and never signalled, but it is never labelled a helper there
+either. Only the terminal survivor classifier may identify such a member, and only when the
+observed parent is Steam-owned.
 
 Each stop/cancel/dispose/shutdown re-scans for game identity exit and observed escaped descendants.
 `StopReport` is adapter-owned degraded metadata, surfaced by the acceptance harness alongside
@@ -78,6 +91,10 @@ disposal, per-snapshot rejection evidence, and a deterministic 140-second Proton
 plus 240-second expiry seam. It also covers both torn-evidence triggers (an incomplete sample
 with an empty group, and live members with no readable game identity) and survivor identity:
 null-exe-only survivors stay unidentified, and parent evidence is required to call one a helper.
+`LinuxPidFdSignalTests` adds the host-level `Same_start_ticks_in_a_changed_group_is_retained_and_incomplete`
+and the launcher-level `Launcher_seam_a_group_change_between_reads_cannot_produce_a_clean_stop`
+seam tests: equal start ticks in a new group must retain the re-read identity, make the sample
+incomplete, and refuse both a terminal stop report and any signal.
 `LinuxPidFdSignalTests` retains PID-recycle proofs, adds exec/reuse scoped-signal rejection,
 including an exec that lands after the stat identity check and before the final executable read,
 and stops a real copied short-lived child through `SteamProcessLauncher` using only pidfd SIGTERM.

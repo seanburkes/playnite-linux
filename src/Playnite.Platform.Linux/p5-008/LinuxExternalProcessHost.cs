@@ -53,11 +53,36 @@ public sealed class LinuxExternalProcessHost : IExternalProcessHost
                 complete = false;
                 continue;
             }
-            if (current is { } row && row.StartTimeTicks == entry.Identity.StartTimeTicks
-                && row.ProcessGroupId == entry.Identity.ProcessGroupId)
+
+            if (current is not { } row)
             {
-                entries.Add(new(entry with { IsRunning = row.IsRunning }, executable));
+                // Vanished between the two reads: exit evidence, not a row.
+                continue;
             }
+
+            if (row.StartTimeTicks != entry.Identity.StartTimeTicks)
+            {
+                // A different process reused the PID: never report it as the sampled identity.
+                continue;
+            }
+
+            if (row.ProcessGroupId != entry.Identity.ProcessGroupId)
+            {
+                // Same PID and start ticks in a changed group: the process moved (setsid) between
+                // reads. Retain the re-read identity so a tracked child's escape is visible, and
+                // mark coverage incomplete because the sampled identity is no longer stable.
+                // Dropping the row here made it a silent exit and allowed a clean "group empty"
+                // stop while the game ran in a new group.
+                complete = false;
+                entries.Add(new(entry with
+                {
+                    Identity = new(entry.Identity.ProcessId, row.StartTimeTicks, row.ProcessGroupId),
+                    IsRunning = row.IsRunning,
+                }, executable));
+                continue;
+            }
+
+            entries.Add(new(entry with { IsRunning = row.IsRunning }, executable));
         }
 
         return new(entries, complete);
