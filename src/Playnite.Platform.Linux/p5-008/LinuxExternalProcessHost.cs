@@ -4,21 +4,26 @@ using Playnite.Platform.Sessions;
 
 namespace Playnite.Platform.Linux;
 
-/// <summary>Same-namespace host adapter. Does not read environments or command lines.</summary>
+/// <summary>
+/// Same-namespace host adapter. Reads only argv, never the environment. A Wine/Proton game's
+/// executable is the runtime preloader, so argv is the only place its Windows binary appears.
+/// </summary>
 public sealed class LinuxExternalProcessHost : IExternalProcessHost
 {
     private readonly LinuxProcessObserver observer;
     private readonly IProcStatReader stats;
     private readonly IProcessSignalHandles signals;
     private readonly Func<int, string?> readExecutable;
+    private readonly Func<int, string[]?> readCommandLine;
 
     public LinuxExternalProcessHost(IProcStatReader? statReader = null, IProcessSignalHandles? signalHandles = null,
-        Func<int, string?>? executableReader = null)
+        Func<int, string?>? executableReader = null, Func<int, string[]?>? commandLineReader = null)
     {
         stats = statReader ?? new LinuxProcStatReader();
         observer = new LinuxProcessObserver(stats);
         signals = signalHandles ?? new LinuxPidFd();
         readExecutable = executableReader ?? ReadExecutable;
+        readCommandLine = commandLineReader ?? ReadCommandLine;
     }
 
     public async Task<ExternalProcessSnapshot> SnapshotAsync(CancellationToken cancellationToken)
@@ -30,11 +35,21 @@ public sealed class LinuxExternalProcessHost : IExternalProcessHost
         {
             cancellationToken.ThrowIfCancellationRequested();
             string? executable = null;
+            string[]? commandLine = null;
             if (entry.IsRunning)
             {
                 try
                 {
                     executable = readExecutable(entry.Identity.ProcessId);
+                }
+                catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+                {
+                    _ = exception;
+                }
+
+                try
+                {
+                    commandLine = readCommandLine(entry.Identity.ProcessId);
                 }
                 catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
                 {
@@ -56,7 +71,7 @@ public sealed class LinuxExternalProcessHost : IExternalProcessHost
             if (current is { } row && row.StartTimeTicks == entry.Identity.StartTimeTicks
                 && row.ProcessGroupId == entry.Identity.ProcessGroupId)
             {
-                entries.Add(new(entry with { IsRunning = row.IsRunning }, executable));
+                entries.Add(new(entry with { IsRunning = row.IsRunning }, executable, commandLine));
             }
         }
 
@@ -85,12 +100,17 @@ public sealed class LinuxExternalProcessHost : IExternalProcessHost
     }
 
     public Task SignalAsync(ProcessIdentity identity, CancellationToken cancellationToken) =>
-        SignalCoreAsync(identity, null, cancellationToken);
+        SignalCoreAsync(identity, null, null, cancellationToken);
 
     public Task SignalAsync(ProcessIdentity identity, string expectedExecutable, CancellationToken cancellationToken) =>
-        SignalCoreAsync(identity, expectedExecutable, cancellationToken);
+        SignalCoreAsync(identity, expectedExecutable, null, cancellationToken);
 
-    private async Task SignalCoreAsync(ProcessIdentity identity, string? expectedExecutable, CancellationToken cancellationToken)
+    public Task SignalAsync(ProcessIdentity identity, string expectedExecutable,
+        string? expectedCommandLineArgument, CancellationToken cancellationToken) =>
+        SignalCoreAsync(identity, expectedExecutable, expectedCommandLineArgument, cancellationToken);
+
+    private async Task SignalCoreAsync(ProcessIdentity identity, string? expectedExecutable,
+        string? expectedCommandLineArgument, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
         using var handle = signals.Open(identity.ProcessId);
@@ -101,7 +121,7 @@ public sealed class LinuxExternalProcessHost : IExternalProcessHost
 
         // Pin first, then reverify. The identity check runs before the executable re-read
         // because execve preserves pid/start ticks/PGID: an exec during the stat read is
-        // caught by the later read, and a subsequent PID recycle cannot redirect the signal.
+        // caught by the later reads, and a subsequent PID recycle cannot redirect the signal.
         var row = await stats.ReadAsync(identity.ProcessId, cancellationToken).ConfigureAwait(false);
         if (row is not { } current || current.ProcessId != identity.ProcessId || !current.IsRunning
             || current.StartTimeTicks != identity.StartTimeTicks
@@ -125,6 +145,26 @@ public sealed class LinuxExternalProcessHost : IExternalProcessHost
             }
         }
 
+        // A Wine/Proton game's host executable stays the runtime preloader across execve of the
+        // Windows image, so the exact argv entry is the last evidence read. An exec changes it.
+        if (expectedCommandLineArgument is not null)
+        {
+            string[]? commandLine;
+            try
+            {
+                commandLine = readCommandLine(identity.ProcessId);
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+            {
+                return;
+            }
+
+            if (commandLine is null || !commandLine.Contains(expectedCommandLineArgument, StringComparer.Ordinal))
+            {
+                return;
+            }
+        }
+
         cancellationToken.ThrowIfCancellationRequested();
         handle.Terminate();
     }
@@ -134,5 +174,43 @@ public sealed class LinuxExternalProcessHost : IExternalProcessHost
         var executable = File.ResolveLinkTarget($"/proc/{pid}/exe", true)?.FullName;
         executable = executable is null ? null : File.ResolveLinkTarget(executable, true)?.FullName ?? executable;
         return File.Exists(executable) ? executable : null;
+    }
+
+    private static string[]? ReadCommandLine(int pid)
+    {
+        byte[] bytes;
+        try
+        {
+            bytes = File.ReadAllBytes($"/proc/{pid}/cmdline");
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            return null;
+        }
+
+        if (bytes.Length == 0)
+        {
+            return [];
+        }
+
+        var arguments = new List<string>();
+        var start = 0;
+        for (var index = 0; index < bytes.Length; index++)
+        {
+            if (bytes[index] != 0)
+            {
+                continue;
+            }
+
+            arguments.Add(System.Text.Encoding.UTF8.GetString(bytes, start, index - start));
+            start = index + 1;
+        }
+
+        if (start < bytes.Length)
+        {
+            arguments.Add(System.Text.Encoding.UTF8.GetString(bytes, start, bytes.Length - start));
+        }
+
+        return arguments.ToArray();
     }
 }

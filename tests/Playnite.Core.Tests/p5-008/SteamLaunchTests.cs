@@ -862,11 +862,21 @@ public sealed class SteamLaunchTests
             => throw new InvalidOperationException("Steam must use executable-verified identity stop.");
 
         public Task SignalAsync(ProcessIdentity identity, string expectedExecutable, CancellationToken token)
+            => SignalAsync(identity, expectedExecutable, null, token);
+
+        public Task SignalAsync(ProcessIdentity identity, string expectedExecutable,
+            string? expectedCommandLineArgument, CancellationToken token)
         {
-            Assert.Equal(expectedExecutable, Rows.Single(row => row.Process.Identity == identity).Executable);
+            var row = Rows.Single(candidate => candidate.Process.Identity == identity);
+            Assert.Equal(expectedExecutable, row.Executable);
             Assert.False(SteamProcessAttribution.IsInfrastructure(expectedExecutable));
+            if (expectedCommandLineArgument is not null)
+            {
+                Assert.Contains(expectedCommandLineArgument, row.CommandLine ?? []);
+            }
+
             Signalled.Add(identity);
-            if (!IgnoreSignal) { Rows.RemoveAll(row => row.Process.Identity == identity); }
+            if (!IgnoreSignal) { Rows.RemoveAll(candidate => candidate.Process.Identity == identity); }
             return Task.CompletedTask;
         }
     }
