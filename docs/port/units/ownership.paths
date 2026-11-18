@@ -202,7 +202,7 @@ tests/Playnite.Architecture.Tests/ArchitectureTable.cs	p2-006-harden	9d27f7a5689
 tests/Playnite.Architecture.Tests/ArchitectureTable.cs	p3-003c	0f1c774400a829cd45e1647245bf0a802e237ebb	pull/69
 tests/Playnite.Architecture.Tests/ArchitectureTable.cs	p3-008b	e71ad0db1445f0e382485eaa2a4624d5ec8eb88a	pull/79
 tests/Playnite.Architecture.Tests/AssemblyMarker.cs	p2-001	9afd818ae8a695e921bb98f386bfceb83d0059db	pull/29
-tests/Playnite.Architecture.Tests/BannedConstructInventory.cs	p2-002	b9709e2873a2bdeabd2f5594781705093220ee02	pull/114
+tests/Playnite.Architecture.Tests/BannedConstructInventory.cs	p2-002	df4fc537ad00de8b727ec76850ba53edef03686d	pull/133
 tests/Playnite.Architecture.Tests/DependencyTests.cs	p2-002	df9d089fd82efb1456f751f51a43c2a4aee56681	pull/32
 tests/Playnite.Architecture.Tests/PolicyCoverageTests.cs	p2-002	abdb82bedd0bcadfe93c1fc6f11937c55b116b7c	pull/37
 tests/Playnite.Architecture.Tests/PolicyProbe.cs	p2-002	abdb82bedd0bcadfe93c1fc6f11937c55b116b7c	pull/37
