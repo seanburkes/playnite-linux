@@ -68,7 +68,6 @@ public sealed class SteamLaunchTests
     [InlineData("shared-client")]
     [InlineData("shared-existing")]
     [InlineData("multiple")]
-    [InlineData("unreadable")]
     [InlineData("incomplete")]
     [InlineData("unrelated-member")]
     [InlineData("no-game")]
@@ -83,7 +82,6 @@ public sealed class SteamLaunchTests
             case "shared-client": after = new([Client, game with { Process = game.Process with { Identity = new(22, 2, 10) } }], true); break;
             case "shared-existing": before = new([Client, Entry(20, 1, 20, "/other")], true); break;
             case "multiple": after = new([Client, game, Entry(23, 3, 30, Native.App.InstallPath + "/other")], true); break;
-            case "unreadable": after = new([Client, game, Entry(23, 3, 20, null)], true); break;
             case "incomplete": after = after with { IsComplete = false }; break;
             case "unrelated-member": after = new([Client, game, Entry(23, 3, 20, "/unrelated/tool")], true); break;
             case "no-game": after = Before; break;
@@ -91,6 +89,71 @@ public sealed class SteamLaunchTests
         }
 
         Assert.Null(SteamProcessAttribution.Find(Native, before, after));
+    }
+
+    [Fact]
+    public void Fresh_unreadable_runtime_helper_is_tolerated_but_never_a_candidate()
+    {
+        // Real Dwarf Fortress shape: pv-adverb lives in Steam's mount namespace, so the host
+        // cannot read /proc/PID/exe even though the member is live and fresh.
+        var game = Entry(22, 2, 20, Native.App.InstallPath + "/game");
+        var decision = SteamProcessAttribution.Evaluate(Native, Before,
+            new([Client, Entry(21, 2, 20, null), game], true));
+        Assert.Null(decision.Rejection);
+        Assert.Equal(22, decision.Identity!.Value.ProcessId);
+        Assert.Equal(new ProcessIdentity(22, 2, 20), Assert.Single(decision.Candidates).Identity);
+        Assert.Equal("pid=21 exe=<unreadable>", Assert.Single(decision.ToleratedMembers));
+    }
+
+    [Fact]
+    public void Unreadable_member_that_predates_the_launch_is_shared_and_unknown()
+    {
+        var before = new ExternalProcessSnapshot([Client, Entry(21, 1, 20, null)], true);
+        var after = new ExternalProcessSnapshot([Client, Entry(21, 1, 20, null),
+            Entry(22, 2, 20, Native.App.InstallPath + "/game")], true);
+        Assert.Null(SteamProcessAttribution.Find(Native, before, after));
+        Assert.Contains("contains pre-existing pid=21", SteamProcessAttribution.Evaluate(Native, before, after).Rejection);
+    }
+
+    [Fact]
+    public void Proton_game_identities_in_one_fresh_group_are_attributed_together()
+    {
+        var exe = Entry(22, 2, 20, Proton.ProtonPrefix + "/drive_c/Game.exe");
+        var launcher = Entry(23, 2, 20, Proton.App.InstallPath + "/Game.bin");
+        var decision = SteamProcessAttribution.Evaluate(Proton, Before,
+            new([Client, Entry(20, 2, 20, "/steam/pv-adverb"), exe, launcher], true));
+        Assert.Null(decision.Rejection);
+        Assert.Equal(20, decision.ProcessGroup);
+        Assert.Equal([22, 23], decision.Candidates.Select(candidate => candidate.Identity.ProcessId).Order());
+    }
+
+    [Fact]
+    public void Candidates_in_two_fresh_groups_are_ambiguous_unknown()
+    {
+        var decision = SteamProcessAttribution.Evaluate(Native, Before,
+            new([Client, Entry(22, 2, 20, Native.App.InstallPath + "/game"),
+                Entry(23, 3, 30, Native.App.InstallPath + "/other")], true));
+        Assert.Null(decision.Identity);
+        Assert.Contains("span 2 process groups", decision.Rejection);
+    }
+
+    [Fact]
+    public async Task Wait_progress_names_each_candidate_and_the_exact_rejecting_predicate()
+    {
+        var progress = new List<SteamAttributionProgress>();
+        var host = new FakeHost();
+        host.OnRun = () => host.Rows.Add(Entry(22, 2, 10, Native.App.InstallPath + "/game"));
+        await using var launcher = new SteamProcessLauncher(host, Native, new()
+        {
+            SteamExecutable = "/usr/bin/steam", ProtocolOpener = "/usr/bin/xdg-open",
+            PollInterval = TimeSpan.FromMilliseconds(1), AttributionWindow = TimeSpan.FromMilliseconds(300),
+            ProgressInterval = TimeSpan.FromMilliseconds(20), Progress = new InlineProgress(progress.Add),
+        });
+        await Assert.ThrowsAsync<SteamAttributionUnknownException>(() => launcher.StartAsync(launcher.CreateRequest(), CancellationToken.None));
+        Assert.Empty(host.Signalled);
+        Assert.Contains(progress, row => row.Decision.Contains("pid=22", StringComparison.Ordinal)
+            && row.Decision.Contains("pgid=10", StringComparison.Ordinal)
+            && row.Decision.Contains("rejected: group 10 contains pre-existing pid=10", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -219,6 +282,7 @@ public sealed class SteamLaunchTests
     [InlineData("pv-adverb")]
     [InlineData("wineserver")]
     [InlineData("srt-bwrap")]
+    [InlineData("bash")]
     public async Task Steam_owned_helper_sharing_a_fresh_group_is_never_signalled(string helper)
     {
         var host = new FakeHost();
@@ -233,6 +297,43 @@ public sealed class SteamLaunchTests
         Assert.Equal([new ProcessIdentity(20, 2, 20)], launcher.StopReport.HelperSurvivors);
         Assert.Contains("group not empty", launcher.StopReport.Reason);
         Assert.Contains(host.Rows, row => row.Process.Identity == Client.Process.Identity);
+    }
+
+    [Fact]
+    public async Task Proton_game_exe_and_install_launcher_are_stopped_individually_in_one_fresh_group()
+    {
+        var host = new FakeHost();
+        host.OnRun = () => host.Rows.AddRange([
+            Entry(20, 2, 20, "/steam/pv-adverb"),
+            Entry(22, 2, 20, Proton.ProtonPrefix + "/drive_c/Game.exe"),
+            Entry(23, 2, 20, Proton.App.InstallPath + "/Game.bin"),
+        ]);
+        await using var launcher = Launcher(host, Proton);
+        var game = await launcher.StartAsync(launcher.CreateRequest(), CancellationToken.None);
+        Assert.Equal(20, game.Identity.ProcessGroupId);
+        await launcher.StopAsync(game, CancellationToken.None);
+        Assert.Equal([22, 23], host.Signalled.Select(identity => identity.ProcessId).Order());
+        Assert.DoesNotContain(host.Signalled, identity => identity.ProcessId == 20);
+        Assert.Equal([new ProcessIdentity(20, 2, 20)], launcher.StopReport!.HelperSurvivors);
+        Assert.Contains(host.Rows, row => row.Process.Identity == Client.Process.Identity);
+    }
+
+    [Fact]
+    public async Task Fresh_unreadable_helper_does_not_degrade_tracking_and_is_never_signalled()
+    {
+        var host = new FakeHost();
+        host.OnRun = () => host.Rows.AddRange([
+            Entry(20, 2, 20, "/steam/pv-adverb"), Entry(21, 2, 20, "/steam/wineserver"),
+            Entry(22, 2, 20, Native.App.InstallPath + "/game"), Entry(24, 3, 20, null),
+        ]);
+        await using var launcher = Launcher(host, Native);
+        var game = await launcher.StartAsync(launcher.CreateRequest(), CancellationToken.None);
+        var snapshot = await launcher.SnapshotAsync(CancellationToken.None);
+        Assert.True(snapshot.IsComplete);
+        Assert.Equal([22], snapshot.Processes.Select(row => row.Identity.ProcessId));
+        await launcher.StopAsync(game, CancellationToken.None);
+        Assert.Equal([22], host.Signalled.Select(identity => identity.ProcessId));
+        Assert.Equal([20, 21, 24], launcher.StopReport!.HelperSurvivors.Select(identity => identity.ProcessId).Order());
     }
 
     [Fact]

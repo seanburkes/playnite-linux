@@ -102,6 +102,7 @@ public sealed class SteamProcessLauncher : IProcessLauncher, IProcessObserver
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(lifetime.Token, window.Token);
         var began = time.GetTimestamp();
         var lastProgress = TimeSpan.MinValue;
+        var lastWait = "no snapshot taken";
         void Report(string decision, bool terminal = false)
         {
             var elapsed = time.GetElapsedTime(began);
@@ -141,14 +142,16 @@ public sealed class SteamProcessLauncher : IProcessLauncher, IProcessObserver
             while (true)
             {
                 var sample = await host.SnapshotAsync(linked.Token).ConfigureAwait(false);
-                var identity = SteamProcessAttribution.Find(target, baseline, sample);
-                if (identity is { } match)
+                var decision = SteamProcessAttribution.Evaluate(target, baseline, sample);
+                if (decision.Identity is { } match)
                 {
                     game = new Game(match, time.GetUtcNow());
-                    foreach (var row in GameMembers(sample))
+                    var games = GameMembers(sample).ToArray();
+                    foreach (var row in games)
                     {
                         known.TryAdd(row.Process.Identity, 0);
                     }
+
                     ObserveDescendants(sample);
 
                     // Ownership is established before honoring cancellation: cleanup can now be safe.
@@ -158,21 +161,21 @@ public sealed class SteamProcessLauncher : IProcessLauncher, IProcessObserver
                         linked.Token.ThrowIfCancellationRequested();
                     }
 
-                    Report($"ATTRIBUTED: unique fresh game pid={match.ProcessId} start_ticks={match.StartTimeTicks}", true);
+                    var tolerated = decision.ToleratedMembers.Count == 0 ? string.Empty
+                        : $"; tolerated fresh unreadable member(s) {string.Join(", ", decision.ToleratedMembers)} never signalled";
+                    Report($"ATTRIBUTED: unique fresh game pid={match.ProcessId} start_ticks={match.StartTimeTicks} pgid={match.ProcessGroupId} exe={decision.Candidates[0].Executable}; game identities={games.Length}{tolerated}", true);
                     return game;
                 }
 
-                var candidates = sample.Processes.Count(row => row.Process.IsRunning && SteamProcessAttribution.Matches(target, row.Executable)
-                    && !baseline.Processes.Any(old => SteamProcessAttribution.SameProcess(old.Process.Identity, row.Process.Identity)));
-                Report(!sample.IsComplete ? "WAITING: process coverage incomplete; decision UNKNOWN"
-                    : $"WAITING: unique fresh installdir/prefix game in a safe fresh group; candidates={candidates}; decision UNKNOWN (absent, ambiguous or unsafe)");
+                lastWait = DescribeWait(decision);
+                Report(lastWait);
                 await Task.Delay(options.PollInterval, time, linked.Token).ConfigureAwait(false);
             }
         }
         catch (OperationCanceledException) when (window.IsCancellationRequested && !lifetime.IsCancellationRequested)
         {
             Report("UNKNOWN: attribution window expired; no unique safe game identity; use Steam manual Stop", true);
-            throw new SteamAttributionUnknownException($"UNKNOWN: no unique safe game identity after {time.GetElapsedTime(began).TotalSeconds:F1}s (window {options.AttributionWindow.TotalSeconds:F0}s); stop/attach manually in Steam.");
+            throw new SteamAttributionUnknownException($"UNKNOWN: no unique safe game identity after {time.GetElapsedTime(began).TotalSeconds:F1}s (window {options.AttributionWindow.TotalSeconds:F0}s); last snapshot: {lastWait}; stop/attach manually in Steam.");
         }
         catch (OperationCanceledException) when (lifetime.IsCancellationRequested)
         {
@@ -200,11 +203,28 @@ public sealed class SteamProcessLauncher : IProcessLauncher, IProcessObserver
         ObserveDescendants(sample);
         var members = GroupMembers(sample).ToArray();
         var games = GameMembers(sample).ToArray();
-        if (!sample.IsComplete || members.Any(row => row.Executable is null)
-            || (games.Length > 0 && !games.Any(row => known.ContainsKey(row.Process.Identity)))
-            || (members.Length > 0 && !SteamProcessAttribution.GroupIsSafe(target, baseline!, sample, active.Identity.ProcessGroupId)))
+
+        // A tracked child leaving the group is a residual, not a clean terminal transition.
+        var escaped = sample.Processes.Any(row => row.Process.IsRunning
+            && known.Keys.Concat(descendants.Keys).Any(identity => SteamProcessAttribution.SameProcess(identity, row.Process.Identity))
+            && row.Process.Identity.ProcessGroupId != active.Identity.ProcessGroupId);
+        if (escaped)
         {
-            return new([], false, "Steam group is shared or unverifiable; stop manually in Steam");
+            return new([], false, "A tracked Steam child left its group; stop manually in Steam");
+        }
+
+        if (members.Length == 0)
+        {
+            return new([], true);
+        }
+
+        var tolerated = new List<string>();
+        var rejection = SteamProcessAttribution.GroupRejection(target, baseline!, sample,
+            active.Identity.ProcessGroupId, tolerated);
+        var continuous = games.Any(row => known.ContainsKey(row.Process.Identity) || descendants.ContainsKey(row.Process.Identity));
+        if (!sample.IsComplete || rejection is not null || (games.Length > 0 && !continuous))
+        {
+            return new([], false, $"Steam group is shared or unverifiable: {rejection ?? "new game identity has no observed continuity"}; stop manually in Steam");
         }
 
         foreach (var row in games)
@@ -212,13 +232,7 @@ public sealed class SteamProcessLauncher : IProcessLauncher, IProcessObserver
             known.TryAdd(row.Process.Identity, 0);
         }
 
-        // A tracked child leaving the group is a residual, not a clean terminal transition.
-        var escaped = sample.Processes.Any(row => row.Process.IsRunning
-            && known.Keys.Concat(descendants.Keys).Any(identity => SteamProcessAttribution.SameProcess(identity, row.Process.Identity))
-            && row.Process.Identity.ProcessGroupId != active.Identity.ProcessGroupId);
-        return escaped ? new([], false, "A tracked Steam child left its group; stop manually in Steam")
-            : new(games
-                .Select(row => row.Process).ToArray(), true);
+        return new(games.Select(row => row.Process).ToArray(), true);
     }
 
     public Task StopAsync(IGameProcess process, CancellationToken cancellationToken) =>
@@ -263,19 +277,31 @@ public sealed class SteamProcessLauncher : IProcessLauncher, IProcessObserver
                         changed.Select(row => row.Process.Identity).ToArray());
                 }
 
-                // Require continuity with a previously observed identity, rejecting PGID reuse.
-                if ((games.Length > 0 && !games.Any(row => known.ContainsKey(row.Process.Identity)))
-                    || (members.Length > 0 && !SteamProcessAttribution.GroupIsSafe(target, baseline!, sample, process.Identity.ProcessGroupId)))
+                if (games.Length == 0 && members.Length == 0)
                 {
-                    throw new SteamAttributionUnknownException("UNKNOWN: Steam group identity changed or is shared; nothing was signalled.");
+                    StopReport = new(false, "Attributed game identities gone; observed group empty", []);
+                    cancellationToken.ThrowIfCancellationRequested();
+                    return;
+                }
+
+                var tolerated = new List<string>();
+                var rejection = SteamProcessAttribution.GroupRejection(target, baseline!, sample,
+                    process.Identity.ProcessGroupId, tolerated);
+                // Require continuity with a previously observed identity, rejecting PGID reuse.
+                if (rejection is not null
+                    || (games.Length > 0 && !games.Any(row => known.ContainsKey(row.Process.Identity)
+                        || descendants.ContainsKey(row.Process.Identity))))
+                {
+                    throw new SteamAttributionUnknownException(
+                        $"UNKNOWN: {rejection ?? "game identities changed without observed continuity"}; nothing was signalled.");
                 }
 
                 if (games.Length == 0)
                 {
                     var helpers = members.Select(row => row.Process.Identity).ToArray();
-                    StopReport = new(helpers.Length > 0, helpers.Length > 0
-                        ? "Attributed game identities gone; Steam-owned helper survivors left unsignalled (group not empty)"
-                        : "Attributed game identities gone; observed group empty", helpers);
+                    StopReport = new(true,
+                        $"Attributed game identities gone; Steam-owned helper survivors left unsignalled (group not empty; tolerated unreadable members={tolerated.Count})",
+                        helpers);
                     cancellationToken.ThrowIfCancellationRequested();
                     return;
                 }
@@ -319,6 +345,22 @@ public sealed class SteamProcessLauncher : IProcessLauncher, IProcessObserver
         {
             await StopAsync(active, CancellationToken.None).ConfigureAwait(false);
         }
+    }
+
+    private static string DescribeWait(SteamAttributionDecision decision)
+    {
+        var seen = decision.Candidates.Count == 0
+            ? "candidates=0"
+            : $"candidates={decision.Candidates.Count} [{string.Join("; ", decision.Candidates.Select(candidate =>
+                $"pid={candidate.Identity.ProcessId} exe={candidate.Executable ?? "<unreadable>"} pgid={candidate.Identity.ProcessGroupId}"))}]";
+        if (decision.Rejection is null)
+        {
+            return $"WAITING: {seen}";
+        }
+
+        var tolerated = decision.ToleratedMembers.Count == 0 ? string.Empty
+            : $"; tolerated fresh unreadable member(s) {string.Join(", ", decision.ToleratedMembers)} (never signalled)";
+        return $"WAITING: {seen}; rejected: {decision.Rejection}{tolerated}; decision UNKNOWN";
     }
 
     private IEnumerable<ExternalProcessEntry> GroupMembers(ExternalProcessSnapshot sample) => sample.Processes

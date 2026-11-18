@@ -51,6 +51,24 @@ public sealed record SteamAttributionProgress(TimeSpan Elapsed, TimeSpan Window,
 
 public sealed record SteamStopReport(bool IsDegraded, string Reason, IReadOnlyList<ProcessIdentity> HelperSurvivors);
 
+/// <summary>One fresh executable matching the target's install directory or app prefix.</summary>
+public sealed record SteamAttributionCandidate(ProcessIdentity Identity, string? Executable);
+
+/// <summary>
+/// Per-snapshot attribution evidence. A null <see cref="Rejection"/> with candidates in one
+/// group means the group is eligible for game-only stop. Rejection names the exact predicate
+/// and the process table values that produced it, so a wait can be explained, not guessed.
+/// </summary>
+public sealed record SteamAttributionDecision(
+    IReadOnlyList<SteamAttributionCandidate> Candidates,
+    IReadOnlyList<string> ToleratedMembers,
+    string? Rejection)
+{
+    public ProcessIdentity? Identity => Rejection is null && Candidates.Count > 0 ? Candidates[0].Identity : null;
+
+    public int? ProcessGroup => Rejection is null && Candidates.Count > 0 ? Candidates[0].Identity.ProcessGroupId : null;
+}
+
 public sealed class SteamAttributionUnknownException(string reason) : Exception(reason);
 
 /// <summary>Pure attribution policy. All paths must already be canonical host paths.</summary>
@@ -84,6 +102,8 @@ public static class SteamProcessAttribution
     public static bool IsShellOrSystemBinary(string executable) => Shells.Contains(Path.GetFileName(executable))
         || new[] { "/usr", "/bin", "/sbin", "/lib", "/lib64" }.Any(root => Under(executable, root));
 
+    public static bool IsShell(string? executable) => executable is not null && Shells.Contains(Path.GetFileName(executable));
+
     public static bool IsSteamClient(string? executable) => executable is not null
         && new[] { "steam", "steam.sh", "steamwebhelper", "steamservice" }.Contains(Path.GetFileName(executable), StringComparer.OrdinalIgnoreCase);
 
@@ -98,45 +118,97 @@ public static class SteamProcessAttribution
         && Path.GetFullPath(path).StartsWith(Path.GetFullPath(root).TrimEnd('/') + "/", StringComparison.Ordinal);
 
     public static ProcessIdentity? Find(SteamLaunchTarget target, ExternalProcessSnapshot before, ExternalProcessSnapshot after)
+        => Evaluate(target, before, after).Identity;
+
+    /// <summary>
+    /// Decide ownership from one snapshot pair. Candidates may hold more than one executable
+    /// (a Proton game commonly runs both a prefix .exe and an install-dir launcher), but every
+    /// candidate must share one fresh group. Ownership is then the group's game identities;
+    /// helpers are never signalled and their presence alone never withholds ownership.
+    /// </summary>
+    public static SteamAttributionDecision Evaluate(SteamLaunchTarget target, ExternalProcessSnapshot before,
+        ExternalProcessSnapshot after)
     {
+        var candidates = after.Processes
+            .Where(row => row.Process.IsRunning && Matches(target, row.Executable)
+                && !before.Processes.Any(old => SameProcess(old.Process.Identity, row.Process.Identity)))
+            .Select(row => new SteamAttributionCandidate(row.Process.Identity, row.Executable))
+            .ToArray();
         if (!before.IsComplete || !after.IsComplete)
         {
-            return null;
+            return new(candidates, [], "process coverage incomplete");
         }
 
-        var candidates = after.Processes.Where(row => row.Process.IsRunning && Matches(target, row.Executable)
-            && !before.Processes.Any(old => SameProcess(old.Process.Identity, row.Process.Identity))).ToArray();
-        if (candidates.Length != 1)
+        if (candidates.Length == 0)
         {
-            return null;
+            return new(candidates, [], "no fresh installdir/prefix game process");
         }
 
-        var candidate = candidates[0].Process.Identity;
-        return GroupIsSafe(target, before, after, candidate.ProcessGroupId) ? candidate : null;
+        var groups = candidates.Select(candidate => candidate.Identity.ProcessGroupId).Distinct().ToArray();
+        if (groups.Length != 1)
+        {
+            return new(candidates, [], $"candidates span {groups.Length} process groups ({string.Join(", ", groups)})");
+        }
+
+        var tolerated = new List<string>();
+        var rejection = GroupRejection(target, before, after, groups[0], tolerated);
+        return new(candidates, tolerated, rejection);
     }
 
     public static bool SameProcess(ProcessIdentity left, ProcessIdentity right) => left.ProcessId == right.ProcessId
         && left.StartTimeTicks == right.StartTimeTicks;
 
-    public static bool GroupIsSafe(SteamLaunchTarget target, ExternalProcessSnapshot before,
-        ExternalProcessSnapshot sample, int group)
+    /// <summary>
+    /// Null when the group may be used for game-only stop. A group is eligible when it did not
+    /// exist before this launch and every readable member is a game binary or a launch helper.
+    /// A Steam client or any pre-existing member makes it shared/unverifiable. A live member
+    /// whose executable the host cannot read (a Steam runtime helper running in another mount
+    /// namespace) is fresh, is never signalled, and is reported as tolerated evidence instead
+    /// of poisoning the whole result.
+    /// </summary>
+    public static string? GroupRejection(SteamLaunchTarget target, ExternalProcessSnapshot before,
+        ExternalProcessSnapshot sample, int group, List<string>? tolerated = null)
     {
         if (group <= 1 || !before.IsComplete || !sample.IsComplete)
         {
-            return false;
+            return $"group {group} is not a fresh process group";
         }
 
-        // A pre-existing member makes the group shared/unverifiable, including a client whose
-        // executable could not be read. An unreadable live group member is never permission to kill.
-        if (before.Processes.Any(row => row.Process.IsRunning && row.Process.Identity.ProcessGroupId == group))
+        var preexisting = before.Processes.FirstOrDefault(row => row.Process.IsRunning
+            && row.Process.Identity.ProcessGroupId == group);
+        if (preexisting is not null)
         {
-            return false;
+            return $"group {group} contains pre-existing pid={preexisting.Process.Identity.ProcessId}";
         }
 
-        var members = sample.Processes.Where(row => row.Process.IsRunning && row.Process.Identity.ProcessGroupId == group).ToArray();
-        return members.Length > 0 && members.All(row => row.Executable is not null
-            && !IsSteamClient(row.Executable)
-            && !before.Processes.Any(old => SameProcess(old.Process.Identity, row.Process.Identity))
-            && (Matches(target, row.Executable) || IsInfrastructure(row.Executable)));
+        var members = sample.Processes.Where(row => row.Process.IsRunning
+            && row.Process.Identity.ProcessGroupId == group).ToArray();
+        if (members.Length == 0)
+        {
+            return $"group {group} has no live members";
+        }
+
+        foreach (var member in members)
+        {
+            var pid = member.Process.Identity.ProcessId;
+            if (member.Executable is null)
+            {
+                tolerated?.Add($"pid={pid} exe=<unreadable>");
+                continue;
+            }
+
+            if (IsSteamClient(member.Executable))
+            {
+                return $"group {group} contains Steam client pid={pid} exe={member.Executable}";
+            }
+
+            if (!Matches(target, member.Executable) && !IsInfrastructure(member.Executable)
+                && !IsShell(member.Executable))
+            {
+                return $"group {group} contains unrelated member pid={pid} exe={member.Executable}";
+            }
+        }
+
+        return null;
     }
 }
