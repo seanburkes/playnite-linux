@@ -380,7 +380,10 @@ commit (a brand-new branch's first push) keeps the first-baseline addition path 
 The shard ownership rules are enforced on both sides of the merge: `plan-guards` runs the
 generator selected from the current `main` tip with `--forbid-aggregate-changes` (which includes
 ownership) against the fork point, and the post-merge writer runs
-`--forbid-shard-ownership` against the previous `main` commit before it writes. The latter rejects an edited legacy ledger, a second fragment, a
+`--forbid-shard-ownership` against the previous `main` commit before it writes. The writer adds
+`--allow-generated-ownership` so its own earlier regenerated map is not read as a pull request
+edit; that mode is rejected with the pull request gate, and the post-build `check` still proves
+the committed map is the deterministic regeneration. The latter rejects an edited legacy ledger, a second fragment, a
 non-verbatim `0000-history.tsv` migration, or a retirement delete that `removed.tsv` does not
 record. `PORT-STATUS.md` keeps only one hand-written narrative window; it must begin with
 `## Hand-written narrative` and may not contain a generated banner or generated heading.
