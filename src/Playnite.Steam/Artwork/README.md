@@ -55,8 +55,9 @@ rather than returning a stale or partial path.
 One fetcher/cache owner per **private application-owned directory**, no concurrent external
 writers. Operations are serialized. Cache keys are SHA-256 of invariant decimal app id,
 kind (including nominal artwork size), exact explicit source URI and optional expected hash.
+Local file keys additionally include observed source byte length and UTC mtime ticks (§8.1).
 Final names are `<key>-<byte-length>-<content-sha256>.blob`. Source spelling changes invalidate
-the cache key; no filesystem source mtime is guessed. A source mapping can supply an expected
+the cache key. A remote source mapping can supply an expected
 hash to explicitly version mutable sources. Without that, cached immutable content remains
 until eviction (no implicit freshness/network probe).
 

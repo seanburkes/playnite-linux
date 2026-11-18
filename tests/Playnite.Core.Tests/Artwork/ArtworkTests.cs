@@ -184,6 +184,27 @@ public sealed class ArtworkTests
     }
 
     [Fact]
+    public async Task Local_source_size_and_mtime_invalidate_the_cached_identity()
+    {
+        using var temp = new CacheDirectory();
+        string local = Path.Combine(temp.Path, "source.jpg");
+        await File.WriteAllBytesAsync(local, Jpeg);
+        File.SetLastWriteTimeUtc(local, new DateTime(2000, 1, 1, 0, 0, 0, DateTimeKind.Utc));
+        using var client = Client();
+        using var fetcher = Fetcher(new Source(new Uri(local)), client, Path.Combine(temp.Path, "cache"));
+        var first = await fetcher.FetchAsync(Header, offline: true);
+        File.SetLastWriteTimeUtc(local, new DateTime(2001, 1, 1, 0, 0, 0, DateTimeKind.Utc));
+        var changedMtime = await fetcher.FetchAsync(Header, offline: true);
+        Assert.NotEqual(first.Path, changedMtime.Path);
+        byte[] larger = [0xff, 0xd8, 1, 2, 3, 0xff, 0xd9];
+        await File.WriteAllBytesAsync(local, larger);
+        File.SetLastWriteTimeUtc(local, new DateTime(2001, 1, 1, 0, 0, 0, DateTimeKind.Utc));
+        var changedSize = await fetcher.FetchAsync(Header, offline: true);
+        Assert.NotEqual(changedMtime.Path, changedSize.Path);
+        Assert.Equal(larger, await File.ReadAllBytesAsync(changedSize.Path!));
+    }
+
+    [Fact]
     public async Task Unwritable_cache_reports_and_never_returns_source_path()
     {
         using var temp = new CacheDirectory();

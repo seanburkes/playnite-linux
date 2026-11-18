@@ -46,7 +46,8 @@ public sealed class ArtworkFetcher : IDisposable
             if (source == null) return Fail("source-unconfigured-or-title-excluded");
             if (!source.Location.IsAbsoluteUri || (source.Location.Scheme != "http" && source.Location.Scheme != "https" && !source.Location.IsFile))
                 return Fail("source-invalid");
-            string key = ArtworkCache.SourceKey(identity, source);
+            FileInfo? local = source.Location.IsFile ? new FileInfo(source.Location.LocalPath) : null;
+            string key = ArtworkCache.SourceKey(identity, source, local?.Length, local?.LastWriteTimeUtc.Ticks);
             string? hit = await cache.FindAsync(key, cancellationToken).ConfigureAwait(false);
             if (hit != null) return new(hit, issues.AsReadOnly());
             if (offline && !source.Location.IsFile) return Fail("offline-cache-miss");

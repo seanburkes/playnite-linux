@@ -17,9 +17,9 @@ public sealed class ArtworkCache
         MaxBytes = maxBytes;
     }
 
-    public static string SourceKey(ArtworkIdentity identity, ArtworkSource source)
+    public static string SourceKey(ArtworkIdentity identity, ArtworkSource source, long? sourceSize = null, long? sourceModifiedTicks = null)
     {
-        string key = $"{identity.AppId.ToString(System.Globalization.CultureInfo.InvariantCulture)}\n{identity.Kind}\n{source.Location.AbsoluteUri}\n{source.ExpectedSha256?.ToUpperInvariant()}";
+        string key = FormattableString.Invariant($"{identity.AppId}\n{identity.Kind}\n{source.Location.AbsoluteUri}\n{source.ExpectedSha256?.ToUpperInvariant()}\n{sourceSize}\n{sourceModifiedTicks}");
         return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(key)));
     }
 
