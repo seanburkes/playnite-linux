@@ -58,16 +58,16 @@
 | Status | Units |
 | --- | ---: |
 | deferred | 1 |
-| done | 66 |
-| in-progress | 8 |
+| done | 68 |
+| in-progress | 6 |
 | todo | 28 |
 
 ## Ledger
 
 | Metric | Value |
 | --- | ---: |
-| Ledger rows | 258 |
-| Ledger fragments | 31 |
+| Ledger rows | 264 |
+| Ledger fragments | 37 |
 
 ## Units
 
@@ -89,7 +89,7 @@
 | p1-010 | W1 | spike | Flatpak host launch/tracking | done | `units/p1-010.*`; 5 ledger rows |
 | p1-011 | W1 | repo | Port index shards + generator | done | `units/p1-011.*`; 10 ledger rows |
 | p2-001 | W2 | scaffold | Solution/projects/props | done | `units/p2-001.*`; 2 ledger rows |
-| p2-002 | W2 | scaffold | Analyzers + architecture tests | in-progress | `units/p2-002.*`; 6 ledger rows |
+| p2-002 | W2 | scaffold | Analyzers + architecture tests | in-progress | `units/p2-002.*`; 7 ledger rows |
 | p2-003 | W2 | scaffold | Linux CI + Windows oracle CI | done | `units/p2-003.*`; 4 ledger rows |
 | p2-004 | W2 | scaffold | Empty Avalonia app + CLI smoke | done | `units/p2-004.*`; 3 ledger rows |
 | p2-004-baseline2 | W2 | scaffold | Record the new-suite Linux CI baseline | done | `units/p2-004-baseline2.*`; 5 ledger rows |
@@ -130,7 +130,7 @@
 | p3-009 | W3 | leaves | Localisation v10-to-new key migration | done | `units/p3-009.*`; 4 ledger rows |
 | p3-crc-ds | W3 | leaves | CRC and checksum helpers | done | `units/p3-crc-ds.*`; 6 ledger rows |
 | p3-exit | W3 | repo | Phase 3 exit gate, merged-board reconciliation and owner acceptance | done | `units/p3-exit.*`; 2 ledger rows |
-| p3-fuzz-ds | W3 | leaves | Bounded serialisation fuzz target and CI gate | done | `units/p3-fuzz-ds.*`; 6 ledger rows |
+| p3-fuzz-ds | W3 | leaves | Bounded serialisation fuzz target and CI gate | done | `units/p3-fuzz-ds.*`; 7 ledger rows |
 | p3-loc-coverage-ds | W3 | leaves | Localisation coverage and placeholder validation | done | `units/p3-loc-coverage-ds.*`; 6 ledger rows |
 | p4-001 | W4 | data | SQLite schema/repositories | done | `units/p4-001.*`; 6 ledger rows |
 | p4-002 | W4 | data | v10 LiteDB importer | done | `units/p4-002.*`; 5 ledger rows |
@@ -141,8 +141,8 @@
 | p4-exit | W4 | repo | Phase 4 exit gate and corrected-head evidence | done | `units/p4-exit.*`; 2 ledger rows |
 | p4-tla | W4 | data | Library import crash-safety formal model | done | `units/p4-tla.*`; 4 ledger rows |
 | p5-001 | W5 | steam | VDF/ACF parsers | in-progress | `units/p5-001.*`; 2 ledger rows |
-| p5-002 | W5 | steam | Steam root/library discovery | in-progress | `units/p5-002.*`; 4 ledger rows |
-| p5-003 | W5 | steam | Artwork/metadata cache | in-progress | `units/p5-003.*`; 5 ledger rows |
+| p5-002 | W5 | steam | Steam root/library discovery | done | `units/p5-002.*`; 6 ledger rows |
+| p5-003 | W5 | steam | Artwork/metadata cache | done | `units/p5-003.*`; 7 ledger rows |
 | p5-004 | W5 | platform | Process launcher/session tracker | in-progress | `units/p5-004.*`; 5 ledger rows |
 | p5-005 | W5 | platform | XDG/single-instance/protocol | todo | `units/p5-005.*`; 0 ledger rows |
 | p5-005a | W5 | platform | XDG/single-instance/protocol continuation | in-progress | `units/p5-005a.*`; 3 ledger rows |
