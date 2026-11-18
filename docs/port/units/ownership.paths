@@ -134,7 +134,7 @@ src/Playnite.Platform.Linux/Sessions/LinuxProcessLauncher.cs	p5-004	064e261b5bff
 src/Playnite.Platform.Linux/Sessions/LinuxProcessObserver.cs	p5-004	064e261b5bffa6c434515b9851160a21fd0e317d	pull/120
 src/Playnite.Platform.Linux/Sessions/ProcStat.cs	p5-004	064e261b5bffa6c434515b9851160a21fd0e317d	pull/120
 src/Playnite.Platform.Linux/Sessions/SystemProcessSystem.cs	p5-004	064e261b5bffa6c434515b9851160a21fd0e317d	pull/120
-src/Playnite.Platform.Linux/p5-008/LinuxExternalProcessHost.cs	p5-008	1e842c075aeb3412323fcd467ca93aaaef03b8cb	pull/126
+src/Playnite.Platform.Linux/p5-008/LinuxExternalProcessHost.cs	p5-008	d82758baa26eecf25801e982a8fa32bfb98396c5	pull/137
 src/Playnite.Platform.Linux/p5-008/LinuxPidFd.cs	p5-008	1e842c075aeb3412323fcd467ca93aaaef03b8cb	pull/126
 src/Playnite.Platform/AssemblyMarker.cs	p2-001	9afd818ae8a695e921bb98f386bfceb83d0059db	pull/29
 src/Playnite.Platform/AssemblyMarker.cs	p2-002	abdb82bedd0bcadfe93c1fc6f11937c55b116b7c	pull/37
@@ -148,7 +148,7 @@ src/Playnite.Platform/DesktopIntegration/TrayService.cs	p5-007a	60e71ca950a21b72
 src/Playnite.Platform/IBoundedFileReader.cs	p5-002	c057be0f3e548ac31ac515b6da7ad4c606d17916	pull/115
 src/Playnite.Platform/Integration/ProtocolHandler.cs	p5-005a	785b89200666ab63f07ca2fd1af4e757c3ef1e36	pull/119
 src/Playnite.Platform/Integration/SingleInstance.cs	p5-005a	785b89200666ab63f07ca2fd1af4e757c3ef1e36	pull/119
-src/Playnite.Platform/Sessions/ExternalProcessHost.cs	p5-008	1e842c075aeb3412323fcd467ca93aaaef03b8cb	pull/126
+src/Playnite.Platform/Sessions/ExternalProcessHost.cs	p5-008	d82758baa26eecf25801e982a8fa32bfb98396c5	pull/137
 src/Playnite.Platform/Sessions/GameSessionState.cs	p5-004	064e261b5bffa6c434515b9851160a21fd0e317d	pull/120
 src/Playnite.Platform/Sessions/GameSessionTracker.cs	p5-004	064e261b5bffa6c434515b9851160a21fd0e317d	pull/120
 src/Playnite.Platform/Sessions/IGameSessionTracker.cs	p5-004	064e261b5bffa6c434515b9851160a21fd0e317d	pull/120
@@ -196,8 +196,8 @@ src/Playnite.Steam/SteamLibraryParser.cs	p5-001	777578cc81efb0130b41924c282542f0
 src/Playnite.Steam/SteamManifestParser.cs	p5-001	777578cc81efb0130b41924c282542f0b346836c	pull/109
 src/Playnite.Steam/SteamModels.cs	p5-001	777578cc81efb0130b41924c282542f0b346836c	pull/109
 src/Playnite.Steam/SteamRootResolver.cs	p5-002	f8aed2fe6b29918fbe6bc29dd5f3b54a7af6fcee	pull/112
-src/Playnite.Steam/p5-008/SteamLaunchEvidence.cs	p5-008	1e842c075aeb3412323fcd467ca93aaaef03b8cb	pull/126
-src/Playnite.Steam/p5-008/SteamProcessLauncher.cs	p5-008	1e842c075aeb3412323fcd467ca93aaaef03b8cb	pull/126
+src/Playnite.Steam/p5-008/SteamLaunchEvidence.cs	p5-008	d82758baa26eecf25801e982a8fa32bfb98396c5	pull/137
+src/Playnite.Steam/p5-008/SteamProcessLauncher.cs	p5-008	d82758baa26eecf25801e982a8fa32bfb98396c5	pull/137
 src/README.md	*	a9b884f696be6ce48e42a0f2d93b8275891fac8b	-
 tests/Playnite.Architecture.Tests/ApiCompatTests.cs	p2-006	7c31729c5d61d1a45edf5a41fee4c119ae7437d6	pull/45
 tests/Playnite.Architecture.Tests/ApiCompatTests.cs	p2-006-harden	9d27f7a5689dd4c981f3b5695a689aee87a00282	pull/48
@@ -291,9 +291,10 @@ tests/Playnite.Core.Tests/Steam/SteamParserTests.cs	p5-001	777578cc81efb0130b419
 tests/Playnite.Core.Tests/TestDoubles/MemoryEnvironment.cs	*	d6401f1f07c69474d0ce395797ab694bedf019e7	pull/68
 tests/Playnite.Core.Tests/TestDoubles/MemoryFileSystem.cs	*	d6401f1f07c69474d0ce395797ab694bedf019e7	pull/68
 tests/Playnite.Core.Tests/UtilsGoldenTests.cs	*	29f665a47aa385cafbf87538c4465a8ee70badef	pull/67
-tests/Playnite.Core.Tests/p5-008/LinuxPidFdSignalTests.cs	p5-008	1e842c075aeb3412323fcd467ca93aaaef03b8cb	pull/126
-tests/Playnite.Core.Tests/p5-008/SteamAcceptanceConsentTests.cs	p5-008	1e842c075aeb3412323fcd467ca93aaaef03b8cb	pull/126
-tests/Playnite.Core.Tests/p5-008/SteamLaunchTests.cs	p5-008	1e842c075aeb3412323fcd467ca93aaaef03b8cb	pull/126
+tests/Playnite.Core.Tests/p5-008/LinuxPidFdSignalTests.cs	p5-008	d82758baa26eecf25801e982a8fa32bfb98396c5	pull/137
+tests/Playnite.Core.Tests/p5-008/ManualSteamTime.cs	p5-008	d82758baa26eecf25801e982a8fa32bfb98396c5	pull/137
+tests/Playnite.Core.Tests/p5-008/SteamAcceptanceConsentTests.cs	p5-008	d82758baa26eecf25801e982a8fa32bfb98396c5	pull/137
+tests/Playnite.Core.Tests/p5-008/SteamLaunchTests.cs	p5-008	d82758baa26eecf25801e982a8fa32bfb98396c5	pull/137
 tests/Playnite.Core.Tests/p5-008/SteamRealDiscoveryTests.cs	p5-008	1e842c075aeb3412323fcd467ca93aaaef03b8cb	pull/126
 tests/Playnite.Smoke.Tests/HostSmokeTests.cs	p2-004	34af4f0fb6430fbc585d3b76ce85094390a26467	pull/34
 tests/Playnite.Smoke.Tests/README.md	p2-004	34af4f0fb6430fbc585d3b76ce85094390a26467	pull/34
