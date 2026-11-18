@@ -35,12 +35,18 @@ public static class LinuxProcStat
             throw new FormatException("The stat row has no numeric parent PID.");
         }
 
+        if (!int.TryParse(fields[2], System.Globalization.NumberStyles.None,
+                System.Globalization.CultureInfo.InvariantCulture, out var group))
+        {
+            throw new FormatException("The stat row has no numeric process group.");
+        }
+
         if (!long.TryParse(fields[19], System.Globalization.NumberStyles.None,
                 System.Globalization.CultureInfo.InvariantCulture, out var startTime))
         {
             throw new FormatException("The stat row has no numeric start time.");
         }
 
-        return new ProcStat(pid, parent, fields[0][0], startTime);
+        return new ProcStat(pid, parent, group, fields[0][0], startTime);
     }
 }

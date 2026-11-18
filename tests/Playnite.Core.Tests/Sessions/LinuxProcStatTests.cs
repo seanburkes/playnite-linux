@@ -14,6 +14,7 @@ public sealed class LinuxProcStatTests
         Assert.Equal(1234, stat.ProcessId);
         Assert.Equal(1, stat.ParentProcessId);
         Assert.Equal('S', stat.State);
+        Assert.Equal(1234, stat.ProcessGroupId);
         Assert.Equal(987654, stat.StartTimeTicks);
         Assert.True(stat.IsRunning);
     }

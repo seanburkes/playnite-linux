@@ -1,7 +1,7 @@
 namespace Playnite.Platform.Linux.Sessions;
 
 /// <summary>Fields of <c>/proc/&lt;pid&gt;/stat</c> that establish process identity.</summary>
-public readonly record struct ProcStat(int ProcessId, int ParentProcessId, char State, long StartTimeTicks)
+public readonly record struct ProcStat(int ProcessId, int ParentProcessId, int ProcessGroupId, char State, long StartTimeTicks)
 {
     /// <summary>A zombie or dead process is not running.</summary>
     public bool IsRunning => State is not ('Z' or 'X' or 'x');

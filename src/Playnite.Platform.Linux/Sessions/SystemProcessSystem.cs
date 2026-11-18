@@ -28,12 +28,22 @@ public interface IProcessStartInfoFactory
 
 public sealed class LinuxProcessStartInfoFactory : IProcessStartInfoFactory
 {
+    private readonly string setsidPath;
+
+    public LinuxProcessStartInfoFactory(string? setsidPath = null)
+    {
+        this.setsidPath = setsidPath
+            ?? (File.Exists("/usr/bin/setsid") ? "/usr/bin/setsid"
+                : File.Exists("/bin/setsid") ? "/bin/setsid"
+                : throw new InvalidOperationException("setsid is required for process-group containment."));
+    }
+
     public ProcessStartInfo Create(Playnite.Platform.Sessions.LaunchRequest request)
     {
         ArgumentNullException.ThrowIfNull(request);
         var startInfo = new ProcessStartInfo
         {
-            FileName = request.Executable,
+            FileName = setsidPath,
             UseShellExecute = false,
             CreateNoWindow = true,
         };
@@ -42,6 +52,9 @@ public sealed class LinuxProcessStartInfoFactory : IProcessStartInfoFactory
             startInfo.WorkingDirectory = request.WorkingDirectory;
         }
 
+        // setsid execs the target directly when it is not already a group leader, so the PID
+        // captured after start is the game's PID and its PGID/SID equal that PID.
+        startInfo.ArgumentList.Add(request.Executable);
         foreach (var argument in request.Arguments)
         {
             startInfo.ArgumentList.Add(argument);

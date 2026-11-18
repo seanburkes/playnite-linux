@@ -447,6 +447,16 @@ public sealed class GameSessionTracker : IGameSessionTracker
         var rootSeen = snapshot.Processes.Any(entry => entry.Identity == root);
         var related = new HashSet<ProcessIdentity>(known);
         related.IntersectWith(alive.Select(entry => entry.Identity));
+        if (root.ProcessGroupId > 0)
+        {
+            // The launcher creates a dedicated process group. Membership survives reparenting
+            // and covers a child that was never observed while its parent was still alive.
+            foreach (var entry in alive.Where(entry => entry.Identity.ProcessGroupId == root.ProcessGroupId))
+            {
+                related.Add(entry.Identity);
+            }
+        }
+
         // A child read before the root row disappeared may still name the root as its parent in
         // this same sample. Anchor on the root PID so that torn sample does not hide the child.
         var relatedPids = related.Select(identity => identity.ProcessId).ToHashSet();

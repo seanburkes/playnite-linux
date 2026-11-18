@@ -63,7 +63,7 @@ public sealed class LinuxProcessObserver : IProcessObserver
                 }
 
                 entries.Add(new ProcessEntry(
-                    new ProcessIdentity(pid, row.StartTimeTicks), row.ParentProcessId, row.IsRunning));
+                    new ProcessIdentity(pid, row.StartTimeTicks, row.ProcessGroupId), row.ParentProcessId, row.IsRunning));
             }
             catch (OperationCanceledException)
             {

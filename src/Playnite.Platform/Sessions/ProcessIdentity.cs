@@ -7,15 +7,20 @@ namespace Playnite.Platform.Sessions;
 /// </summary>
 public readonly record struct ProcessIdentity
 {
-    public ProcessIdentity(int processId, long startTimeTicks)
+    public ProcessIdentity(int processId, long startTimeTicks, int processGroupId = 0)
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(processId);
         ArgumentOutOfRangeException.ThrowIfNegative(startTimeTicks);
+        ArgumentOutOfRangeException.ThrowIfNegative(processGroupId);
         ProcessId = processId;
         StartTimeTicks = startTimeTicks;
+        ProcessGroupId = processGroupId;
     }
 
     public int ProcessId { get; }
 
     public long StartTimeTicks { get; }
+
+    /// <summary>The PGID captured with the identity; zero when the caller has no group contract.</summary>
+    public int ProcessGroupId { get; }
 }

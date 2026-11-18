@@ -12,20 +12,31 @@ public sealed class LinuxProcessLauncher : IProcessLauncher, IAsyncDisposable
 {
     private readonly IProcessSystem processSystem;
     private readonly IProcStatReader statReader;
+    private readonly IProcessGroupKiller groupKiller;
     private readonly TimeProvider time;
     private readonly object gate = new();
     private readonly Dictionary<ProcessIdentity, LinuxGameProcess> owned = [];
     private bool disposed;
 
     public LinuxProcessLauncher()
-        : this(new SystemProcessSystem(), new LinuxProcStatReader(), TimeProvider.System)
+        : this(new SystemProcessSystem(), new LinuxProcStatReader(), new LinuxProcessGroupKiller(), TimeProvider.System)
     {
     }
 
     public LinuxProcessLauncher(IProcessSystem processSystem, IProcStatReader statReader, TimeProvider? timeProvider = null)
+        : this(processSystem, statReader, new LinuxProcessGroupKiller(), timeProvider)
+    {
+    }
+
+    public LinuxProcessLauncher(
+        IProcessSystem processSystem,
+        IProcStatReader statReader,
+        IProcessGroupKiller groupKiller,
+        TimeProvider? timeProvider = null)
     {
         this.processSystem = processSystem ?? throw new ArgumentNullException(nameof(processSystem));
         this.statReader = statReader ?? throw new ArgumentNullException(nameof(statReader));
+        this.groupKiller = groupKiller ?? throw new ArgumentNullException(nameof(groupKiller));
         time = timeProvider ?? TimeProvider.System;
     }
 
@@ -42,9 +53,8 @@ public sealed class LinuxProcessLauncher : IProcessLauncher, IAsyncDisposable
         var processId = handle.ProcessId;
         try
         {
-            var stat = await statReader.ReadAsync(processId, cancellationToken).ConfigureAwait(false)
-                ?? throw new InvalidOperationException("The launched process exited before its identity could be captured.");
-            var identity = new ProcessIdentity(processId, stat.StartTimeTicks);
+            var stat = await WaitForGroupLeaderAsync(processId, cancellationToken).ConfigureAwait(false);
+            var identity = new ProcessIdentity(processId, stat.StartTimeTicks, stat.ProcessGroupId);
             var process = new LinuxGameProcess(handle, identity, time.GetUtcNow(), statReader);
             lock (gate)
             {
@@ -63,6 +73,28 @@ public sealed class LinuxProcessLauncher : IProcessLauncher, IAsyncDisposable
             }
 
             throw;
+        }
+    }
+
+    private async Task<ProcStat> WaitForGroupLeaderAsync(int processId, CancellationToken cancellationToken)
+    {
+        var deadline = time.GetUtcNow() + TimeSpan.FromSeconds(5);
+        while (true)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var stat = await statReader.ReadAsync(processId, cancellationToken).ConfigureAwait(false)
+                ?? throw new InvalidOperationException("The launched process exited before its identity could be captured.");
+            if (stat.ProcessGroupId == processId)
+            {
+                return stat;
+            }
+
+            if (time.GetUtcNow() >= deadline)
+            {
+                throw new InvalidOperationException("The launched process did not enter its own process group.");
+            }
+
+            await Task.Delay(TimeSpan.FromMilliseconds(10), cancellationToken).ConfigureAwait(false);
         }
     }
 
@@ -86,8 +118,10 @@ public sealed class LinuxProcessLauncher : IProcessLauncher, IAsyncDisposable
         ArgumentNullException.ThrowIfNull(trackedProcesses);
         var game = Owned(gameProcess);
         var identities = trackedProcesses.Append(game.Identity).Distinct().ToArray();
+        var rootGroup = game.Identity.ProcessGroupId;
         var extras = new List<DiagnosticsProcess>();
         var failures = new List<Exception>();
+        var escaped = new List<ProcessIdentity>();
 
         foreach (var identity in identities)
         {
@@ -107,6 +141,14 @@ public sealed class LinuxProcessLauncher : IProcessLauncher, IAsyncDisposable
                 || row.StartTimeTicks != identity.StartTimeTicks
                 || !row.IsRunning)
             {
+                continue;
+            }
+
+            if (rootGroup > 0 && identity != game.Identity && row.ProcessGroupId != rootGroup)
+            {
+                // The child left the contained group (for example by calling setsid). Do not
+                // silently fold it into a successful group stop; report it as a survivor.
+                escaped.Add(new ProcessIdentity(identity.ProcessId, row.StartTimeTicks, row.ProcessGroupId));
                 continue;
             }
 
@@ -141,6 +183,19 @@ public sealed class LinuxProcessLauncher : IProcessLauncher, IAsyncDisposable
             }
         }
 
+        if (rootGroup > 0 && rootGroup == game.Identity.ProcessId)
+        {
+            try
+            {
+                await groupKiller.KillAsync(rootGroup, CancellationToken.None).ConfigureAwait(false);
+            }
+            catch (Exception exception)
+            {
+                // The group may already be empty; the scan below is the proof, not kill's exit.
+                _ = exception;
+            }
+        }
+
         var cancelled = false;
         try
         {
@@ -156,6 +211,18 @@ public sealed class LinuxProcessLauncher : IProcessLauncher, IAsyncDisposable
             failures.Add(exception);
         }
 
+        var survivors = new List<ProcessIdentity>();
+        if (rootGroup > 0 && rootGroup == game.Identity.ProcessId)
+        {
+            var scan = await ScanGroupAsync(rootGroup, CancellationToken.None).ConfigureAwait(false);
+            if (!scan.Complete)
+            {
+                failures.Add(new InvalidOperationException("The process group could not be fully scanned; survivors are unknown."));
+            }
+
+            survivors.AddRange(scan.Running);
+        }
+
         foreach (var identity in identities)
         {
             try
@@ -166,7 +233,11 @@ public sealed class LinuxProcessLauncher : IProcessLauncher, IAsyncDisposable
                     && row.StartTimeTicks == identity.StartTimeTicks
                     && row.IsRunning)
                 {
-                    failures.Add(new InvalidOperationException($"Process {identity.ProcessId} survived the stop."));
+                    var survivor = new ProcessIdentity(identity.ProcessId, row.StartTimeTicks, row.ProcessGroupId);
+                    if (!survivors.Contains(survivor))
+                    {
+                        survivors.Add(survivor);
+                    }
                 }
             }
             catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or FormatException)
@@ -175,9 +246,24 @@ public sealed class LinuxProcessLauncher : IProcessLauncher, IAsyncDisposable
             }
         }
 
+        foreach (var escapedIdentity in escaped)
+        {
+            if (!survivors.Contains(escapedIdentity))
+            {
+                survivors.Add(escapedIdentity);
+            }
+        }
+
         foreach (var extra in extras)
         {
             extra.Dispose();
+        }
+
+        if (survivors.Count > 0)
+        {
+            throw new ProcessSurvivorException(
+                "The stop left tracked processes outside the reaped group or survivors in it.",
+                survivors);
         }
 
         if (failures.Count > 0)
@@ -189,6 +275,37 @@ public sealed class LinuxProcessLauncher : IProcessLauncher, IAsyncDisposable
         {
             throw new OperationCanceledException("The stop was cancelled after the process was signalled.", cancellationToken);
         }
+    }
+
+    private async Task<(bool Complete, List<ProcessIdentity> Running)> ScanGroupAsync(
+        int processGroupId,
+        CancellationToken cancellationToken)
+    {
+        var running = new List<ProcessIdentity>();
+        var complete = true;
+        foreach (var process in DiagnosticsProcess.GetProcesses())
+        {
+            try
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var stat = await statReader.ReadAsync(process.Id, CancellationToken.None).ConfigureAwait(false);
+                if (stat is { } row && row.ProcessGroupId == processGroupId && row.IsRunning)
+                {
+                    running.Add(new ProcessIdentity(process.Id, row.StartTimeTicks, row.ProcessGroupId));
+                }
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or FormatException)
+            {
+                complete = false;
+                _ = exception;
+            }
+            finally
+            {
+                process.Dispose();
+            }
+        }
+
+        return (complete, running);
     }
 
     private static async Task WaitForAllAsync(
@@ -218,7 +335,6 @@ public sealed class LinuxProcessLauncher : IProcessLauncher, IAsyncDisposable
 
             disposed = true;
             processes = owned.Values.ToArray();
-            owned.Clear();
         }
 
         List<Exception>? failures = null;
@@ -226,7 +342,7 @@ public sealed class LinuxProcessLauncher : IProcessLauncher, IAsyncDisposable
         {
             try
             {
-                await process.TerminateAsync(CancellationToken.None).ConfigureAwait(false);
+                await StopAsync(process, [], CancellationToken.None).ConfigureAwait(false);
             }
             catch (Exception exception)
             {
@@ -238,9 +354,14 @@ public sealed class LinuxProcessLauncher : IProcessLauncher, IAsyncDisposable
             }
         }
 
+        lock (gate)
+        {
+            owned.Clear();
+        }
+
         if (failures is not null)
         {
-            throw new AggregateException("One or more launched processes could not be reaped during shutdown.", failures);
+            throw new AggregateException("One or more launched process groups could not be reaped during shutdown.", failures);
         }
     }
 

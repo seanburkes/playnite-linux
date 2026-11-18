@@ -30,6 +30,7 @@ internal sealed class LinuxGameProcess : IGameProcess
         return stat is { } row
             && row.ProcessId == Identity.ProcessId
             && row.StartTimeTicks == Identity.StartTimeTicks
+            && row.ProcessGroupId == Identity.ProcessGroupId
             && row.IsRunning;
     }
 

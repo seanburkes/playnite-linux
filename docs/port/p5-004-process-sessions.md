@@ -31,8 +31,10 @@ visibility) is p5-008; this launcher takes an already-chosen executable and argu
   that shape directly.
 - `IProcessLauncher` — `StartAsync`, `IsRunningAsync`, `StopAsync` (root only), the tracked-tree
   `StopAsync` overload, and `IAsyncDisposable`. Disposal is the teardown reachable through the
-  interface so application shutdown can always reap launched processes.
-- `IGameProcess` — the immutable `ProcessIdentity` and `StartedAt`.
+  interface so application shutdown can always reap launched processes. The Linux
+  implementation launches through `setsid` in its own process group/session and kills that group
+  on every stop, cancellation, disposal and shutdown path.
+- `IGameProcess` — the immutable `ProcessIdentity` (PID, raw start ticks, PGID) and `StartedAt`.
 - `IProcessObserver` / `ProcessSnapshot` — an unattributed process-table sample, its table
   completeness, and the PIDs of individually unreadable rows. Command lines and environments
   are never read.
@@ -42,6 +44,8 @@ visibility) is p5-008; this launcher takes an already-chosen executable and argu
   `ExitObservationSupported = false` for the manual fallback.
 - `ProcessOrphanedException` — a failed start whose kill/wait could not prove the spawned
   process was reaped.
+- `ProcessSurvivorException` — a stop that found a tracked identity outside the reaped group
+  still running, or could not prove the group empty.
 - `ISessionDelay` — the poll-wait seam used by cancellation tests.
 
 `Playnite.Platform.Linux.Sessions` implements the process system, the `/proc` reader, the
@@ -51,9 +55,13 @@ production implementations use `System.Diagnostics.Process` and `/proc` respecti
 
 ## Process identity rule
 
-`ProcessIdentity` is `(pid, starttime)` where `starttime` is raw `/proc/<pid>/stat` field 22
-(clock ticks since boot), never a wall-clock time and never a formatted `Process.StartTime`.
-The identity is valid only within one boot and PID namespace.
+`ProcessIdentity` is `(pid, starttime, pgid)` where `starttime` is raw `/proc/<pid>/stat`
+field 22 (clock ticks since boot) and `pgid` is field 5. Neither is a wall-clock time or a
+formatted `Process.StartTime`. The identity is valid only within one boot and PID namespace.
+
+The launcher waits until the spawned root has entered its own process group (`PGID == PID`
+from `setsid`) before accepting the identity. If that cannot be established, the start fails
+and is reaped rather than killing an inherited group.
 
 Every liveness decision reads the current stat row and requires both the PID and the exact
 start ticks to match. Therefore:
@@ -61,9 +69,10 @@ start ticks to match. Therefore:
 - a recycled PID with a different start time is a different process and cannot be mistaken for
   the game;
 - a zombie or dead state (`Z`, `X`, `x`) is not running;
-- descendants are found by a fixed-point closure over parent PIDs independent of enumeration
-  order and retained across reparenting; a child row that still names the root while the root
-  row is absent is anchored to the root PID for that decision;
+- descendants are found by process-group membership, a fixed-point closure over parent PIDs,
+  and a root-PID anchor for a child row that still names the root after the root row vanished;
+  group membership survives reparenting and covers a child that was never observed while its
+  parent was alive;
 - an unreadable row degrades that entry only. It makes the decision unknown only when its PID is
   the root or an already-tracked identity; an unrelated unreadable row is ignored;
 - table-level enumeration failure is unknown and never `stopped`.
@@ -79,8 +88,8 @@ The state names are exactly the `GameSession` model's set: `Idle`, `Starting`, `
 | `Start` / `LaunchOk` | `TrackAsync` emits `Starting` then `Running` for the successfully launched handle, unless a stop or terminal state raced the launch. |
 | `Stop` / `StopOk` | Manual `StopAsync` (including during `Starting`), or a confirmed observed tree end, emits `Stopping`, then reaps, then emits `Stopped`. |
 | `CancelLaunch` / cancellation | Caller cancellation or tracker disposal reaps and then emits `Cancelled`. |
-| `Crash` | An observer or stop failure reaps and then emits `Failed`, or stays in a degraded `Running` state when reap cannot be proven. |
-| `NoOrphanProcess` | Every terminal transition is preceded by a successful tracked-tree stop: the launcher signals each identity, waits for exit, and verifies it is no longer running. A failed reap never emits a terminal state. |
+| `Crash` | An observer or stop failure reaps and then emits `Failed`, or stays in a degraded `Running` state when reap cannot be proven. A child that left the group is reported through `ProcessSurvivorException` rather than silently folded into a clean stop. |
+| `NoOrphanProcess` | Every terminal transition is preceded by a successful tracked-tree stop: the launcher signals the whole process group, signals tracked identities, waits for exit, scans the group for survivors, and verifies tracked identities are gone. A failed reap or survivor never emits a terminal state. |
 | `OneSessionPerGame` | One tracker instance owns at most one active `TrackAsync`; a second concurrent or completed session call is rejected. |
 | `PlaytimeNonDecreasing` | Playtime is measured from the `Running` timestamp with `TimeProvider` and frozen at the terminal transition. |
 
@@ -159,8 +168,11 @@ real children launched through `LinuxProcessLauncher` and actual `/proc` checks 
 - `Real_launcher_shutdown_leaves_no_child` — disposal through `IProcessLauncher` (application
   shutdown) leaves no child;
 - `Real_root_exit_keeps_a_tracked_child_and_stop_reaps_it` — a real `python3` root forks a
-  child and exits; the tracker stays `Running` on the reparented child, and the final stop reaps
-  both identities;
+  child in the same process group and exits; the tracker stays `Running` on the reparented
+  child, and the final stop reaps the whole group;
+- `Real_escaped_child_is_reported_as_a_survivor_not_silently_ignored` — a real child calls
+  `setsid()`, leaving the contained group; the stop raises `ProcessSurvivorException`, keeps the
+  session degraded and non-terminal, and the test reaps the survivor manually before retrying;
 - `Arguments_containing_shell_metacharacters_are_passed_literally` — a real `/usr/bin/touch`
   receives a single argument containing `;` and a space; the literal filename is created and no
   shell-split command runs;
@@ -179,9 +191,11 @@ launcher throws `ProcessOrphanedException` instead of only rethrowing the origin
   `UNKNOWN` (p1-010) and is p5-008's concern.
 - Attribution of a Steam launch (which process tree is the game) is not decided here; the
   caller passes the attributed root identity.
-- A child spawned and reparented between samples without ever naming the tracked root is not
-  attributable from `/proc` alone; the confirmation samples and root-PID anchor make the
-  observable cases honest rather than claiming omniscience.
+- Process-group containment is the no-orphan boundary. A child that calls `setsid` or is
+  reparented into a different group **before observation** is out of scope for the guarantee;
+  a tracked identity that escapes is reported as a survivor, not silently ignored. A child
+  spawned and reparented between samples without ever naming the root or sharing its group is
+  likewise not attributable from `/proc` alone.
 - The tracker owns one session per instance; multi-game session management belongs to the
   service that creates trackers.
 
@@ -189,7 +203,7 @@ launcher throws `ProcessOrphanedException` instead of only rethrowing the origin
 
 Local Release, warnings as errors:
 
-- `Playnite.Core.Tests`: 2064 passed, 0 failed, 0 skipped (53 new session tests).
+- `Playnite.Core.Tests`: 2065 passed, 0 failed, 0 skipped (54 new session tests).
 - `Playnite.Architecture.Tests`: 188 passed, 0 failed, 0 skipped.
 - `build_port_index.py check --shards-only --against origin/main` is run before delivery.
 

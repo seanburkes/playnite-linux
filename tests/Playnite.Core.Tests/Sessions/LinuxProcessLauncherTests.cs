@@ -14,10 +14,11 @@ public sealed class LinuxProcessLauncherTests
         var startInfo = new LinuxProcessStartInfoFactory().Create(
             new LaunchRequest("/usr/bin/printf", ["%s; touch /tmp/p5-004-nope", "a b"]));
 
+        var setsid = File.Exists("/usr/bin/setsid") ? "/usr/bin/setsid" : "/bin/setsid";
         Assert.False(startInfo.UseShellExecute);
         Assert.Equal(string.Empty, startInfo.Arguments);
-        Assert.Equal(["/usr/bin/printf"], new[] { startInfo.FileName });
-        Assert.Equal(["%s; touch /tmp/p5-004-nope", "a b"], startInfo.ArgumentList);
+        Assert.Equal([setsid], new[] { startInfo.FileName });
+        Assert.Equal(["/usr/bin/printf", "%s; touch /tmp/p5-004-nope", "a b"], startInfo.ArgumentList);
     }
 
     [Fact]
@@ -182,11 +183,11 @@ public sealed class LinuxProcessLauncherTests
         var start = launcher.StartAsync(new LaunchRequest(SleepPath, ["30"]), cancellation.Token);
         await reader.ReadEntered.Task.WaitAsync(TimeSpan.FromSeconds(5));
         var processId = processSystem.LastHandle!.ProcessId;
-        var startTicks = (await new LinuxProcStatReader().ReadAsync(processId, CancellationToken.None))!.Value.StartTimeTicks;
+        var stat = (await new LinuxProcStatReader().ReadAsync(processId, CancellationToken.None))!.Value;
         cancellation.Cancel();
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => start);
-        await AssertProcessGoneAsync(new ProcessIdentity(processId, startTicks));
+        await AssertProcessGoneAsync(new ProcessIdentity(processId, stat.StartTimeTicks, stat.ProcessGroupId));
     }
 
     [Fact]
@@ -250,7 +251,8 @@ public sealed class LinuxProcessLauncherTests
         var stat = await new LinuxProcStatReader().ReadAsync(Environment.ProcessId, CancellationToken.None);
         Assert.NotNull(stat);
         Assert.Contains(snapshot.Processes, entry =>
-            entry.Identity == new ProcessIdentity(Environment.ProcessId, stat.Value.StartTimeTicks));
+            entry.Identity == new ProcessIdentity(
+                Environment.ProcessId, stat.Value.StartTimeTicks, stat.Value.ProcessGroupId));
     }
 
     [Fact]
@@ -309,7 +311,7 @@ public sealed class LinuxProcessLauncherTests
             var childPid = int.Parse(File.ReadAllText(pidFile), System.Globalization.CultureInfo.InvariantCulture);
             var childStat = await new LinuxProcStatReader().ReadAsync(childPid, CancellationToken.None);
             Assert.NotNull(childStat);
-            childIdentity = new ProcessIdentity(childPid, childStat.Value.StartTimeTicks);
+            childIdentity = new ProcessIdentity(childPid, childStat.Value.StartTimeTicks, childStat.Value.ProcessGroupId);
 
             await using var tracker = new GameSessionTracker(launcher, new LinuxProcessObserver());
             using var recorder = new SessionEventRecorder(tracker);
@@ -353,6 +355,86 @@ public sealed class LinuxProcessLauncherTests
     }
 
     [Fact]
+    public async Task Real_escaped_child_is_reported_as_a_survivor_not_silently_ignored()
+    {
+        const string python = "/usr/bin/python3";
+        Assert.True(File.Exists(python), "The process-group test requires python3.");
+        var pidFile = Path.Combine(Path.GetTempPath(), $"p5-004-escape-{Path.GetRandomFileName()}");
+        const string script =
+            "import os,sys,time\n" +
+            "pid=os.fork()\n" +
+            "if pid==0:\n" +
+            "    os.setsid()\n" +
+            "    time.sleep(30)\n" +
+            "    os._exit(0)\n" +
+            "open(sys.argv[1],'w').write(str(pid))\n" +
+            "time.sleep(2)\n" +
+            "os._exit(0)\n";
+        ProcessIdentity childIdentity = default;
+        await using var launcher = new LinuxProcessLauncher();
+        try
+        {
+            var process = await launcher.StartAsync(
+                new LaunchRequest(python, ["-c", script, pidFile]), CancellationToken.None);
+            var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(5);
+            while (!File.Exists(pidFile) && DateTime.UtcNow < deadline)
+            {
+                await Task.Delay(10);
+            }
+
+            Assert.True(File.Exists(pidFile), "The escaping child PID file was not written.");
+            var childPid = int.Parse(File.ReadAllText(pidFile), System.Globalization.CultureInfo.InvariantCulture);
+            while (DateTime.UtcNow < deadline)
+            {
+                var stat = await new LinuxProcStatReader().ReadAsync(childPid, CancellationToken.None);
+                if (stat is { } row && row.ProcessGroupId == childPid)
+                {
+                    childIdentity = new ProcessIdentity(childPid, row.StartTimeTicks, row.ProcessGroupId);
+                    break;
+                }
+
+                await Task.Delay(10);
+            }
+
+            Assert.True(childIdentity.ProcessId == childPid, "The child never entered its own session.");
+            await using var tracker = new GameSessionTracker(launcher, new LinuxProcessObserver());
+            using var recorder = new SessionEventRecorder(tracker);
+            var tracking = tracker.TrackAsync(
+                process,
+                new SessionOptions { PollInterval = TimeSpan.FromMilliseconds(10) },
+                CancellationToken.None);
+            await recorder.WaitForAsync(change => change.State == GameSessionState.Running);
+
+            while (await launcher.IsRunningAsync(process, CancellationToken.None))
+            {
+                await Task.Delay(10);
+            }
+
+            await Task.Delay(100);
+            var survivor = await Assert.ThrowsAsync<ProcessSurvivorException>(() => tracker.StopAsync(CancellationToken.None));
+            Assert.Contains(survivor.Survivors, identity => identity.ProcessId == childPid);
+            Assert.Equal(GameSessionState.Running, tracker.State);
+            Assert.True(tracker.IsDegraded);
+            Assert.True(await IdentityIsRunningAsync(childIdentity), "The escaped child must be reported, not killed silently.");
+
+            await KillIdentityAsync(childIdentity);
+            Assert.True(await tracker.StopAsync(CancellationToken.None));
+            await tracking;
+            Assert.Equal(GameSessionState.Stopped, tracker.State);
+            await AssertProcessGoneAsync(process.Identity);
+            await AssertProcessGoneAsync(childIdentity);
+        }
+        finally
+        {
+            File.Delete(pidFile);
+            if (childIdentity.ProcessId > 0)
+            {
+                await KillIdentityAsync(childIdentity);
+            }
+        }
+    }
+
+    [Fact]
     public async Task Observer_marks_only_the_unreadable_row()
     {
         var root = Path.Combine(Path.GetTempPath(), $"p5-004-proc-{Path.GetRandomFileName()}");
@@ -368,12 +450,31 @@ public sealed class LinuxProcessLauncherTests
             var snapshot = await observer.SnapshotAsync(CancellationToken.None);
 
             Assert.True(snapshot.IsComplete);
-            Assert.Contains(snapshot.Processes, entry => entry.Identity == new ProcessIdentity(100, 5));
+            Assert.Contains(snapshot.Processes, entry => entry.Identity == new ProcessIdentity(100, 5, 100));
             Assert.Equal([101], snapshot.Unreadable);
         }
         finally
         {
             Directory.Delete(root, recursive: true);
+        }
+    }
+
+    private static async Task KillIdentityAsync(ProcessIdentity identity)
+    {
+        if (!await IdentityIsRunningAsync(identity))
+        {
+            return;
+        }
+
+        try
+        {
+            using var process = System.Diagnostics.Process.GetProcessById(identity.ProcessId);
+            process.Kill(entireProcessTree: true);
+            await process.WaitForExitAsync();
+        }
+        catch (ArgumentException)
+        {
+            // Already gone.
         }
     }
 
