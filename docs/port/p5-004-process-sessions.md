@@ -75,6 +75,10 @@ start ticks to match. Therefore:
   parent was alive;
 - an unreadable row degrades that entry only. It makes the decision unknown only when its PID is
   the root or an already-tracked identity; an unrelated unreadable row is ignored;
+- a row that vanishes between enumeration and the read is absent, not an error: `ENOENT`
+  (`FileNotFoundException`), `ENOTDIR` (`DirectoryNotFoundException`) and `ESRCH` (an
+  `IOException` whose `HResult` is the raw errno `3`) all map to not-found. Any other I/O
+  failure stays unknown coverage;
 - table-level enumeration failure is unknown and never `stopped`.
 
 ## Session state machine
@@ -170,6 +174,11 @@ real children launched through `LinuxProcessLauncher` and actual `/proc` checks 
 - `Real_root_exit_keeps_a_tracked_child_and_stop_reaps_it` — a real `python3` root forks a
   child in the same process group and exits; the tracker stays `Running` on the reparented
   child, and the final stop reaps the whole group;
+- `Real_child_reparented_before_the_first_snapshot_is_still_contained` — a real child is
+  reparented away from the root before the tracker's first sample but remains in the root's
+  group; the test proves the reparenting and the unchanged group membership, the tracker stays
+  `Running` while the child lives, and the final stop reaps the whole group before reporting
+  `Stopped`; a PID-only tracker would report a clean `Stopped` while the child survives;
 - `Real_escaped_child_is_reported_as_a_survivor_not_silently_ignored` — a real child calls
   `setsid()`, leaving the contained group; the stop raises `ProcessSurvivorException`, keeps the
   session degraded and non-terminal, and the test reaps the survivor manually before retrying;
@@ -195,7 +204,10 @@ launcher throws `ProcessOrphanedException` instead of only rethrowing the origin
   reparented into a different group **before observation** is out of scope for the guarantee;
   a tracked identity that escapes is reported as a survivor, not silently ignored. A child
   spawned and reparented between samples without ever naming the root or sharing its group is
-  likewise not attributable from `/proc` alone.
+  likewise not attributable from `/proc` alone. Reparenting to init (or another subreaper) while
+  the child stays in the launch's process group does **not** leave the boundary: the group
+  membership keeps it contained even when the tracker never observed it, as covered by
+  `Real_child_reparented_before_the_first_snapshot_is_still_contained`.
 - The tracker owns one session per instance; multi-game session management belongs to the
   service that creates trackers.
 
@@ -203,7 +215,7 @@ launcher throws `ProcessOrphanedException` instead of only rethrowing the origin
 
 Local Release, warnings as errors:
 
-- `Playnite.Core.Tests`: 2065 passed, 0 failed, 0 skipped (54 new session tests).
+- `Playnite.Core.Tests`: 2287 passed, 0 failed, 0 skipped (70 session tests).
 - `Playnite.Architecture.Tests`: 188 passed, 0 failed, 0 skipped.
 - `build_port_index.py check --shards-only --against origin/main` is run before delivery.
 

@@ -39,4 +39,14 @@ public sealed class LinuxProcStatTests
     {
         Assert.Throws<FormatException>(() => LinuxProcStat.Parse(text));
     }
+
+    [Theory]
+    [InlineData(3, true)]
+    [InlineData(2, false)]
+    [InlineData(5, false)]
+    [InlineData(-2147024894, false)]
+    public void Only_the_no_such_process_error_is_treated_as_a_vanished_row(int hresult, bool vanished)
+    {
+        Assert.Equal(vanished, LinuxProcStatReader.IsNoSuchProcess(new IOException("probe", hresult)));
+    }
 }
