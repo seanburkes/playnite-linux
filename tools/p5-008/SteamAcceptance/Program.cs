@@ -94,7 +94,9 @@ try
             Console.WriteLine($"Launching {label} app={appId} for {(cancel ? "cancel" : "stop")} acceptance.");
             await using var launcher = new SteamProcessLauncher(host, target, new()
             {
-                SteamExecutable = steam, ProtocolOpener = opener, AttributionWindow = TimeSpan.FromSeconds(60),
+                SteamExecutable = steam, ProtocolOpener = opener,
+                Progress = new InlineProgress<SteamAttributionProgress>(progress => Console.WriteLine(
+                    $"ATTRIBUTION elapsed={progress.Elapsed.TotalSeconds:F1}s window={progress.Window.TotalSeconds:F0}s {progress.Decision}")),
             });
             var process = await launcher.StartAsync(launcher.CreateRequest(), CancellationToken.None);
             Console.WriteLine($"ATTRIBUTED pid={process.Identity.ProcessId} start_ticks={process.Identity.StartTimeTicks} pgid={process.Identity.ProcessGroupId}");
@@ -132,10 +134,15 @@ try
                 throw new InvalidOperationException($"Expected {expected}, got {tracker.State}.");
             }
 
+            await tracker.DisposeAsync();
+            await launcher.DisposeAsync();
             var after = await host.SnapshotAsync(CancellationToken.None);
-            if (!after.IsComplete || after.Processes.Any(row => row.Process.IsRunning && row.Process.Identity.ProcessGroupId == process.Identity.ProcessGroupId))
+            if (!after.IsComplete || after.Processes.Any(row => row.Process.IsRunning
+                && (SteamProcessAttribution.Matches(target, row.Executable)
+                    || launcher.AttributedIdentities.Concat(launcher.ObservedDescendants)
+                        .Any(identity => SteamProcessAttribution.SameProcess(identity, row.Process.Identity)))))
             {
-                throw new InvalidOperationException("No-orphan assertion failed: group remains live or unverifiable.");
+                throw new InvalidOperationException("No-orphan assertion failed: game identity remains live or unverifiable.");
             }
 
             if (clients.Any(client => !after.Processes.Any(row => row.Process.IsRunning && row.Process.Identity == client)))
@@ -143,7 +150,13 @@ try
                 throw new InvalidOperationException("An original Steam client/helper identity disappeared; inspect before proceeding.");
             }
 
-            Console.WriteLine($"PASS {label} {expected}: attributed group empty, original Steam client identities retained.");
+            var report = launcher.StopReport ?? throw new InvalidOperationException("Missing game-exit proof.");
+            Console.WriteLine($"STOP REPORT degraded={report.IsDegraded} reason={report.Reason}");
+            foreach (var helper in report.HelperSurvivors)
+            {
+                Console.WriteLine($"HELPER SURVIVOR pid={helper.ProcessId} start_ticks={helper.StartTimeTicks} pgid={helper.ProcessGroupId}; unsignalled");
+            }
+            Console.WriteLine($"PASS {label} {expected}: attributed game identities gone, original Steam client identities retained; no group/client/helper signal.");
         }
     }
 
@@ -205,8 +218,16 @@ sealed class ReportingHost : IExternalProcessHost
     }
 
     public Task SignalAsync(ProcessIdentity identity, CancellationToken cancellationToken)
+        => throw new InvalidOperationException("Unscoped signal forbidden in Steam acceptance.");
+
+    public Task SignalAsync(ProcessIdentity identity, string expectedExecutable, CancellationToken cancellationToken)
     {
-        Console.WriteLine($"STOP pid={identity.ProcessId} start_ticks={identity.StartTimeTicks} pgid={identity.ProcessGroupId}");
-        return host.SignalAsync(identity, cancellationToken);
+        Console.WriteLine($"SIGTERM pidfd pid={identity.ProcessId} start_ticks={identity.StartTimeTicks} pgid={identity.ProcessGroupId} exe={expectedExecutable}");
+        return host.SignalAsync(identity, expectedExecutable, cancellationToken);
     }
+}
+
+sealed class InlineProgress<T>(Action<T> report) : IProgress<T>
+{
+    public void Report(T value) => report(value);
 }

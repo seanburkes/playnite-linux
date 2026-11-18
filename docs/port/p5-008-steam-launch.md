@@ -1,6 +1,7 @@
 # p5-008 — Steam launch and conservative external-process attribution
 
-Implementation only. **No real Steam run, Flatpak acceptance, or Phase 5 exit is claimed.**
+For the p5-008b follow-up, see [the revised window/identity-stop contract](p5-008-identity-stop.md).
+The original implementation below predates that correction. **No Flatpak acceptance or Phase 5 exit is claimed.**
 Frozen oracle: `legacy/source/Playnite/Common/ProcessStarter.cs:70–81` opens URLs; it supplies
 no Steam discovery or process-attribution behaviour. The Linux-specific contract is
 `08-STEAM-SPEC.md` §§5–7 plus the firstmate ruling of 2026-11-18 below.

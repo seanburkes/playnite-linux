@@ -24,7 +24,9 @@ public sealed class SteamLaunchTests
         Assert.Equal(new ProcessIdentity(22, 2, 20), process.Identity);
         Assert.NotEqual(Client.Process.Identity, process.Identity);
         await launcher.StopAsync(process, CancellationToken.None);
-        Assert.Equal([20, 21, 22], host.Signalled.Select(identity => identity.ProcessId).Order());
+        Assert.Equal([22], host.Signalled.Select(identity => identity.ProcessId));
+        Assert.True(launcher.StopReport!.IsDegraded);
+        Assert.Equal([20, 21], launcher.StopReport.HelperSurvivors.Select(identity => identity.ProcessId).Order());
         Assert.True(host.Rows.Any(row => row.Process.Identity == Client.Process.Identity));
     }
 
@@ -56,7 +58,9 @@ public sealed class SteamLaunchTests
         };
         await tracker.TrackAsync(process, new SessionOptions { PollInterval = TimeSpan.FromMilliseconds(1) }, CancellationToken.None);
         Assert.Equal(GameSessionState.Stopped, tracker.State);
-        Assert.DoesNotContain(host.Rows, row => row.Process.Identity.ProcessGroupId == 20 && row.Process.IsRunning);
+        Assert.DoesNotContain(host.Rows, row => SteamProcessAttribution.Matches(Proton, row.Executable));
+        Assert.Equal([20, 21], launcher.StopReport!.HelperSurvivors.Select(identity => identity.ProcessId).Order());
+        Assert.Empty(host.Signalled); // The game exited naturally; helpers must remain untouched.
         Assert.DoesNotContain(host.Signalled, identity => identity.ProcessId == 10);
     }
 
@@ -138,6 +142,154 @@ public sealed class SteamLaunchTests
         await using var launcher = Launcher(host, Native, window: TimeSpan.FromMilliseconds(10));
         await Assert.ThrowsAsync<SteamAttributionUnknownException>(() => launcher.StartAsync(launcher.CreateRequest(), CancellationToken.None));
         Assert.Empty(host.Signalled);
+    }
+
+    [Fact]
+    public async Task Proton_can_appear_after_sixty_seconds_with_wait_progress_and_an_attributed_decision()
+    {
+        var clock = new ManualSteamTime();
+        var progress = new List<SteamAttributionProgress>();
+        var host = new FakeHost();
+        var sampled = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        host.OnSnapshot = () =>
+        {
+            if (host.Request is null) { return; }
+            if (clock.GetUtcNow() >= DateTimeOffset.UnixEpoch.AddSeconds(140))
+            {
+                host.Rows.Add(Entry(22, 2, 20, Proton.ProtonPrefix + "/game.exe"));
+            }
+            sampled.TrySetResult();
+        };
+        var launcher = new SteamProcessLauncher(host, Proton, new()
+        {
+            SteamExecutable = "/usr/bin/steam", ProtocolOpener = "/usr/bin/xdg-open",
+            PollInterval = TimeSpan.FromSeconds(1),
+            Progress = new InlineProgress(progress.Add),
+        }, clock);
+        using var cancellation = new CancellationTokenSource();
+        var start = launcher.StartAsync(launcher.CreateRequest(), cancellation.Token);
+        try
+        {
+            await sampled.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            await clock.PollScheduled.WaitAsync(TimeSpan.FromSeconds(5));
+            sampled = new(TaskCreationOptions.RunContinuationsAsynchronously);
+            clock.Advance(TimeSpan.FromSeconds(70));
+            await sampled.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            await clock.PollScheduled.WaitAsync(TimeSpan.FromSeconds(5));
+            Assert.False(start.IsCompleted);
+            Assert.Contains(progress, row => row.Elapsed == TimeSpan.FromSeconds(70) && row.Decision.StartsWith("WAITING:", StringComparison.Ordinal));
+            clock.Advance(TimeSpan.FromSeconds(70));
+            var game = await start.WaitAsync(TimeSpan.FromSeconds(5));
+            Assert.Equal(22, game.Identity.ProcessId);
+            Assert.Equal(TimeSpan.FromSeconds(240), progress[^1].Window);
+            Assert.Equal(TimeSpan.FromSeconds(140), progress[^1].Elapsed);
+            Assert.StartsWith("ATTRIBUTED:", progress[^1].Decision);
+        }
+        finally
+        {
+            host.OnSnapshot = null;
+            host.Rows.RemoveAll(row => SteamProcessAttribution.Matches(Proton, row.Executable));
+            cancellation.Cancel();
+            clock.Advance(TimeSpan.FromSeconds(240));
+            await launcher.DisposeAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(5));
+        }
+    }
+
+    [Fact]
+    public async Task Window_expiry_reports_a_terminal_unknown_without_signalling()
+    {
+        var clock = new ManualSteamTime();
+        var progress = new List<SteamAttributionProgress>();
+        var host = new FakeHost();
+        await using var launcher = new SteamProcessLauncher(host, Proton, new()
+        {
+            ProtocolOpener = "/usr/bin/xdg-open", Progress = new InlineProgress(progress.Add),
+        }, clock);
+        var start = launcher.StartAsync(launcher.CreateRequest(), CancellationToken.None);
+        clock.Advance(TimeSpan.FromSeconds(240));
+        var error = await Assert.ThrowsAsync<SteamAttributionUnknownException>(() => start.WaitAsync(TimeSpan.FromSeconds(5)));
+        Assert.Contains("window 240s", error.Message);
+        Assert.StartsWith("UNKNOWN: attribution window expired", progress[^1].Decision);
+        Assert.Equal(TimeSpan.FromSeconds(240), progress[^1].Elapsed);
+        Assert.Empty(host.Signalled);
+    }
+
+    [Theory]
+    [InlineData("steam-launch-wrapper")]
+    [InlineData("pv-adverb")]
+    [InlineData("wineserver")]
+    [InlineData("srt-bwrap")]
+    public async Task Steam_owned_helper_sharing_a_fresh_group_is_never_signalled(string helper)
+    {
+        var host = new FakeHost();
+        host.OnRun = () => host.Rows.AddRange([
+            Entry(20, 2, 20, "/steam/" + helper), Entry(22, 2, 20, Native.App.InstallPath + "/game"),
+        ]);
+        await using var launcher = Launcher(host, Native);
+        var game = await launcher.StartAsync(launcher.CreateRequest(), CancellationToken.None);
+        await launcher.StopAsync(game, CancellationToken.None);
+        Assert.Equal([22], host.Signalled.Select(identity => identity.ProcessId));
+        Assert.True(launcher.StopReport!.IsDegraded);
+        Assert.Equal([new ProcessIdentity(20, 2, 20)], launcher.StopReport.HelperSurvivors);
+        Assert.Contains("group not empty", launcher.StopReport.Reason);
+        Assert.Contains(host.Rows, row => row.Process.Identity == Client.Process.Identity);
+    }
+
+    [Fact]
+    public async Task Tracker_disposal_stops_game_identities_but_not_steam_helpers()
+    {
+        var host = Host(Native);
+        await using var launcher = Launcher(host, Native);
+        var game = await launcher.StartAsync(launcher.CreateRequest(), CancellationToken.None);
+        var tracker = new GameSessionTracker(launcher, launcher);
+        var tracking = tracker.TrackAsync(game, new SessionOptions(), CancellationToken.None);
+        await tracker.DisposeAsync();
+        await tracking;
+        Assert.Equal(GameSessionState.Cancelled, tracker.State);
+        AssertOnlyClientAndUnsignalledHelpersRemain(host);
+        Assert.True(launcher.StopReport!.IsDegraded);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Preexisting_or_client_shared_group_is_unknown_and_receives_zero_signals(bool client)
+    {
+        var host = new FakeHost();
+        var group = client ? 10 : 20;
+        if (!client) { host.Rows.Add(Entry(20, 1, group, "/steam/pv-adverb")); }
+        host.OnRun = () => host.Rows.Add(Entry(22, 2, group, Native.App.InstallPath + "/game"));
+        await using var launcher = Launcher(host, Native, window: TimeSpan.FromMilliseconds(10));
+        await Assert.ThrowsAsync<SteamAttributionUnknownException>(() => launcher.StartAsync(launcher.CreateRequest(), CancellationToken.None));
+        Assert.Empty(host.Signalled);
+        Assert.Null(launcher.StopReport);
+        Assert.Contains(Client, host.Rows);
+        Assert.Contains(host.Rows, row => row.Process.Identity.ProcessId == 22); // Owner must stop unknown games.
+    }
+
+    [Fact]
+    public async Task Surviving_game_is_reported_and_is_not_a_clean_stop()
+    {
+        var host = Host(Native);
+        host.IgnoreSignal = true;
+        var launcher = new SteamProcessLauncher(host, Native, new()
+        {
+            ProtocolOpener = "/usr/bin/xdg-open", PollInterval = TimeSpan.FromMilliseconds(1),
+            StopTimeout = TimeSpan.FromMilliseconds(10),
+        });
+        try
+        {
+            var game = await launcher.StartAsync(launcher.CreateRequest(), CancellationToken.None);
+            var error = await Assert.ThrowsAsync<ProcessSurvivorException>(() => launcher.StopAsync(game, CancellationToken.None));
+            Assert.Contains("could not be proven", error.Message);
+            Assert.Null(launcher.StopReport);
+            Assert.All(host.Signalled, identity => Assert.Equal(game.Identity, identity));
+        }
+        finally
+        {
+            host.Rows.RemoveAll(row => row.Process.Identity.ProcessId == 22); // Owner eventually stops the survivor.
+            await launcher.DisposeAsync();
+        }
     }
 
     [Fact]
@@ -223,8 +375,7 @@ public sealed class SteamLaunchTests
             Assert.Equal(GameSessionState.Stopped, tracker.State);
         }
 
-        Assert.Single(host.Rows);
-        Assert.Equal(Client, host.Rows[0]);
+        AssertOnlyClientAndUnsignalledHelpersRemain(host);
     }
 
     [Fact]
@@ -246,8 +397,7 @@ public sealed class SteamLaunchTests
         using var source = new CancellationTokenSource();
         source.Cancel();
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => launcher.StopAsync(process, source.Token));
-        Assert.Single(host.Rows);
-        Assert.Equal(Client, host.Rows[0]);
+        AssertOnlyClientAndUnsignalledHelpersRemain(host);
     }
 
     [Fact]
@@ -264,8 +414,7 @@ public sealed class SteamLaunchTests
         };
         await using var launcher = Launcher(host, Native);
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => launcher.StartAsync(launcher.CreateRequest(), source.Token));
-        Assert.Single(host.Rows);
-        Assert.Equal(Client, host.Rows[0]);
+        AssertOnlyClientAndUnsignalledHelpersRemain(host);
     }
 
     [Fact]
@@ -287,8 +436,7 @@ public sealed class SteamLaunchTests
         var launcher = Launcher(host, Native);
         _ = await launcher.StartAsync(launcher.CreateRequest(), CancellationToken.None);
         await launcher.DisposeAsync();
-        Assert.Single(host.Rows);
-        Assert.Equal(Client, host.Rows[0]);
+        AssertOnlyClientAndUnsignalledHelpersRemain(host);
     }
 
     [Fact]
@@ -352,6 +500,14 @@ public sealed class SteamLaunchTests
     private static ExternalProcessEntry Entry(int pid, long ticks, int group, string? executable) =>
         new(new(new(pid, ticks, group), 1, true), executable);
 
+    private static void AssertOnlyClientAndUnsignalledHelpersRemain(FakeHost host)
+    {
+        Assert.Equal([10, 20, 21], host.Rows.Select(row => row.Process.Identity.ProcessId).Order());
+        Assert.Equal(Client, host.Rows.Single(row => row.Process.Identity.ProcessId == 10));
+        Assert.All(host.Rows, row => Assert.True(SteamProcessAttribution.IsInfrastructure(row.Executable)));
+        Assert.Equal([22], host.Signalled.Select(identity => identity.ProcessId));
+    }
+
     private static FakeHost Host(SteamLaunchTarget target)
     {
         var host = new FakeHost();
@@ -380,6 +536,7 @@ public sealed class SteamLaunchTests
         public bool Complete { get; set; } = true;
         public int ExitCode { get; set; }
         public bool WaitInRun { get; set; }
+        public bool IgnoreSignal { get; set; }
         public TaskCompletionSource RunEntered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public Task<ExternalProcessSnapshot> SnapshotAsync(CancellationToken token)
         {
@@ -403,10 +560,20 @@ public sealed class SteamLaunchTests
         }
 
         public Task SignalAsync(ProcessIdentity identity, CancellationToken token)
+            => throw new InvalidOperationException("Steam must use executable-verified identity stop.");
+
+        public Task SignalAsync(ProcessIdentity identity, string expectedExecutable, CancellationToken token)
         {
+            Assert.Equal(expectedExecutable, Rows.Single(row => row.Process.Identity == identity).Executable);
+            Assert.False(SteamProcessAttribution.IsInfrastructure(expectedExecutable));
             Signalled.Add(identity);
-            Rows.RemoveAll(row => row.Process.Identity == identity);
+            if (!IgnoreSignal) { Rows.RemoveAll(row => row.Process.Identity == identity); }
             return Task.CompletedTask;
         }
+    }
+
+    private sealed class InlineProgress(Action<SteamAttributionProgress> report) : IProgress<SteamAttributionProgress>
+    {
+        public void Report(SteamAttributionProgress value) => report(value);
     }
 }

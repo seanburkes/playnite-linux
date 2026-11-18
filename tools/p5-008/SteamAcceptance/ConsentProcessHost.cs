@@ -24,4 +24,14 @@ public sealed class ConsentProcessHost(IExternalProcessHost inner, bool allowLau
 
         return inner.SignalAsync(identity, cancellationToken);
     }
+
+    public Task SignalAsync(ProcessIdentity identity, string expectedExecutable, CancellationToken cancellationToken)
+    {
+        if (!allowStop)
+        {
+            throw new UnauthorizedAccessException("Read-only acceptance: stop consent was not given.");
+        }
+
+        return inner.SignalAsync(identity, expectedExecutable, cancellationToken);
+    }
 }

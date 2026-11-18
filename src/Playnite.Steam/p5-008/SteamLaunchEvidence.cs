@@ -40,10 +40,16 @@ public sealed record SteamLaunchOptions
 {
     public required string ProtocolOpener { get; init; }
     public string? SteamExecutable { get; init; }
-    public TimeSpan AttributionWindow { get; init; } = TimeSpan.FromSeconds(30);
+    public TimeSpan AttributionWindow { get; init; } = TimeSpan.FromSeconds(240);
     public TimeSpan PollInterval { get; init; } = TimeSpan.FromMilliseconds(250);
+    public TimeSpan ProgressInterval { get; init; } = TimeSpan.FromSeconds(5);
+    public IProgress<SteamAttributionProgress>? Progress { get; init; }
     public TimeSpan StopTimeout { get; init; } = TimeSpan.FromSeconds(5);
 }
+
+public sealed record SteamAttributionProgress(TimeSpan Elapsed, TimeSpan Window, string Decision);
+
+public sealed record SteamStopReport(bool IsDegraded, string Reason, IReadOnlyList<ProcessIdentity> HelperSurvivors);
 
 public sealed class SteamAttributionUnknownException(string reason) : Exception(reason);
 
@@ -54,7 +60,7 @@ public static class SteamProcessAttribution
     {
         "steam", "steam.sh", "steamwebhelper", "steamservice", "steamerrorreporter", "steammonitor",
         "steam-runtime-launcher-service", "srt-logger", "gameoverlayui", "steam-overlay-ui",
-        "pv-adverb", "pressure-vessel-wrap", "pressure-vessel-adverb", "reaper", "wineserver", "wineserver64",
+        "pv-adverb", "pressure-vessel-wrap", "pressure-vessel-adverb", "reaper", "srt-bwrap", "wineserver", "wineserver64",
         "wine", "wine64", "wine-preloader", "wine64-preloader", "proton", "bwrap", "pressure-vessel",
         "wineboot.exe", "winedevice.exe", "services.exe", "explorer.exe", "plugplay.exe", "rpcss.exe",
         "conhost.exe", "rundll32.exe", "start.exe", "steamclient_loader", "steam-launch-wrapper",
