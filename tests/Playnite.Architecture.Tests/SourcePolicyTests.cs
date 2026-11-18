@@ -49,6 +49,113 @@ public sealed class SourcePolicyTests
         Assert.Contains(PolicyProbe.Check("Playnite.Core", source), v => v.Contains(expected, StringComparison.Ordinal));
     }
 
+    [Fact]
+    public void Permits_exactly_the_reviewed_handle_bound_read_entry_points()
+    {
+        // The discovery unit binds a handle with openat, inspects it with statx, reads the
+        // same handle, and closes it. An explicit EntryPoint and the default method-name
+        // form both resolve to the reviewed symbol.
+        var source = """
+            class C
+            {
+                [System.Runtime.InteropServices.DllImport("libc")]
+                static extern int openat(int dirfd, string pathname, int flags);
+
+                [System.Runtime.InteropServices.DllImport("libc", EntryPoint = "statx")]
+                static extern int Statx(int dirfd, string pathname, int flags, uint mask, byte[] buffer);
+
+                [System.Runtime.InteropServices.DllImport("libc")]
+                static extern nint read(int fd, byte[] buffer, nint count);
+
+                [System.Runtime.InteropServices.DllImport("libc", EntryPoint = "close")]
+                static extern int Close(int fd);
+            }
+            """;
+
+        Assert.Empty(PolicyProbe.Check("Playnite.Platform.Linux", source));
+    }
+
+    [Theory]
+    [InlineData("open")]
+    [InlineData("unlink")]
+    [InlineData("chmod")]
+    [InlineData("execve")]
+    [InlineData("getpid")]
+    [InlineData("fstat")]
+    public void Rejects_every_native_entry_point_outside_the_reviewed_allowlist(string entryPoint)
+    {
+        var source = $$"""
+            class C
+            {
+                [System.Runtime.InteropServices.DllImport("libc", EntryPoint = "{{entryPoint}}")]
+                static extern int Call(byte[] buffer);
+            }
+            """;
+
+        Assert.Contains(PolicyProbe.Check("Playnite.Platform.Linux", source),
+            v => v.Contains("native import needs a reviewed Linux allow-list", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void A_permitted_method_name_cannot_smuggle_a_different_entry_point()
+    {
+        // The allow-list is the bound symbol, not the declaring method name.
+        var source = """
+            class C
+            {
+                [System.Runtime.InteropServices.DllImport("libc", EntryPoint = "open")]
+                static extern int openat(int dirfd, string pathname, int flags);
+            }
+            """;
+
+        Assert.Contains(PolicyProbe.Check("Playnite.Platform.Linux", source),
+            v => v.Contains("native import needs a reviewed Linux allow-list", StringComparison.Ordinal));
+    }
+
+    [Theory]
+    [InlineData("open")]
+    [InlineData("unlink")]
+    [InlineData("chmod")]
+    [InlineData("execve")]
+    [InlineData("fstat")]
+    public void Rejects_a_banned_default_entry_point_taken_from_the_method_name(string methodName)
+    {
+        // With no EntryPoint the marshaller binds the method name, so the default form is
+        // judged by the same allow-list rather than only the declaration being present.
+        var source = $$"""
+            class C
+            {
+                [System.Runtime.InteropServices.DllImport("libc")]
+                static extern int {{methodName}}(byte[] buffer);
+            }
+            """;
+
+        Assert.Contains(PolicyProbe.Check("Playnite.Platform.Linux", source),
+            v => v.Contains("native import needs a reviewed Linux allow-list", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Reviewing_an_entry_point_does_not_permit_it_outside_Platform_Linux()
+    {
+        var source = """
+            class C
+            {
+                [System.Runtime.InteropServices.DllImport("libc")]
+                static extern int openat(int dirfd, string pathname, int flags);
+            }
+            """;
+
+        Assert.Contains(PolicyProbe.Check("Playnite.Core", source),
+            v => v.Contains("native import outside Playnite.Platform.Linux", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Linux_native_import_allowlist_is_exactly_the_reviewed_set()
+    {
+        // A later edit that silently widens the capability must fail here, not only in review.
+        Assert.Equal(new[] { "close", "openat", "read", "statx" }, SourcePolicy.LinuxNativeImportAllowlist);
+    }
+
     [Theory]
     [InlineData("Playnite.Core", "class C { System.Windows.Input.ICommand? command; }")]
     [InlineData("Playnite.Core", "class C { object M() => new System.Random(42); }")]
