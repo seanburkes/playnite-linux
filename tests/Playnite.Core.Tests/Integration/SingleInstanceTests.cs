@@ -1,4 +1,6 @@
 using System.Diagnostics;
+using System.Net.Sockets;
+using System.Text;
 using Playnite.Core.Tests.TestDoubles;
 using Playnite.Platform.Integration;
 using Playnite.Platform.Linux.Integration;
@@ -46,6 +48,66 @@ public sealed class SingleInstanceTests
 
         Assert.True(forwarded.Status == SingleInstanceStatus.Forwarded, forwarded.Diagnostic);
         Assert.Equal(activation, await received.Task.WaitAsync(TimeSpan.FromSeconds(10)));
+    }
+
+    [Fact]
+    public async Task DisposingASecondInstanceLeavesTheOwnerSocketAndForwardingIntact()
+    {
+        using var temporary = new IntegrationTemporaryDirectory();
+        var directories = Directories(temporary, "run");
+        var socketPath = Path.Combine(directories.Runtime, Id + ".sock");
+        const string activation = "playnite://search/second";
+        var received = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        await using var owner = SingleInstanceService.Start(Id, directories);
+        owner.Activated += (_, request) => received.TrySetResult(request.Uri);
+
+        var second = SingleInstanceService.Start(Id, directories);
+        Assert.Equal(SingleInstanceStatus.AlreadyRunning, second.Result.Status);
+        await second.DisposeAsync();
+
+        Assert.True(File.Exists(socketPath));
+        await using var third = SingleInstanceService.Start(Id, directories);
+        Assert.Equal(SingleInstanceStatus.AlreadyRunning, third.Result.Status);
+        var forwarded = await third.ActivateAsync(activation);
+
+        Assert.True(forwarded.Status == SingleInstanceStatus.Forwarded, forwarded.Diagnostic);
+        Assert.Equal(activation, await received.Task.WaitAsync(TimeSpan.FromSeconds(10)));
+    }
+
+    [Fact]
+    public async Task ActivationForwardedBeforeTheOwnerSubscribesIsDeliveredOnSubscription()
+    {
+        using var temporary = new IntegrationTemporaryDirectory();
+        var directories = Directories(temporary, "run");
+        const string activation = "playnite://search/queued";
+        var received = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        await using var owner = SingleInstanceService.Start(Id, directories);
+        await using var second = SingleInstanceService.Start(Id, directories);
+        var forwarded = await second.ActivateAsync(activation);
+        Assert.Equal(SingleInstanceStatus.Forwarded, forwarded.Status);
+
+        owner.Activated += (_, request) => received.TrySetResult(request.Uri);
+
+        Assert.Equal(activation, await received.Task.WaitAsync(TimeSpan.FromSeconds(10)));
+    }
+
+    [Fact]
+    public async Task AStalledClientDoesNotBlockLaterActivations()
+    {
+        using var temporary = new IntegrationTemporaryDirectory();
+        var directories = Directories(temporary, "run");
+        var socketPath = Path.Combine(directories.Runtime, Id + ".sock");
+
+        await using var owner = SingleInstanceService.Start(Id, directories);
+        using var stalled = new Socket(AddressFamily.Unix, SocketType.Stream, ProtocolType.Unspecified);
+        await stalled.ConnectAsync(new UnixDomainSocketEndPoint(socketPath));
+        await using var second = SingleInstanceService.Start(Id, directories);
+
+        var forwarded = await second.ActivateAsync("playnite://search/after-stall").WaitAsync(TimeSpan.FromSeconds(3));
+
+        Assert.True(forwarded.Status == SingleInstanceStatus.Forwarded, forwarded.Diagnostic);
     }
 
     [Fact]
@@ -107,6 +169,94 @@ public sealed class SingleInstanceTests
     }
 
     [Fact]
+    public async Task OversizedActivationIsRejectedBeforeTheOwnerReadsIt()
+    {
+        using var temporary = new IntegrationTemporaryDirectory();
+        var directories = Directories(temporary, "run");
+        var uri = "playnite://search/" + new string('文', 1000) + "/" + new string('文', 400);
+
+        await using var owner = SingleInstanceService.Start(Id, directories);
+        await using var second = SingleInstanceService.Start(Id, directories);
+
+        var forwarded = await second.ActivateAsync(uri);
+
+        Assert.Equal(SingleInstanceStatus.Unavailable, forwarded.Status);
+        Assert.Contains("larger than", forwarded.Diagnostic, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task HostCancellationIsObservedInsteadOfReportedAsUnavailability()
+    {
+        using var temporary = new IntegrationTemporaryDirectory();
+        var directories = Directories(temporary, "run");
+        await using var owner = SingleInstanceService.Start(Id, directories);
+        await using var second = SingleInstanceService.Start(Id, directories);
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            () => second.ActivateAsync("playnite://search/cancel", cancellation.Token));
+    }
+
+    [Fact]
+    public async Task RuntimeLockAndSocketArePrivateToTheUser()
+    {
+        using var temporary = new IntegrationTemporaryDirectory();
+        var directories = Directories(temporary, "run");
+
+        await using var owner = SingleInstanceService.Start(Id, directories);
+        if (OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        const UnixFileMode privateFile = UnixFileMode.UserRead | UnixFileMode.UserWrite;
+        const UnixFileMode privateDirectory = privateFile | UnixFileMode.UserExecute;
+        Assert.Equal(privateDirectory, File.GetUnixFileMode(directories.Runtime));
+        Assert.Equal(privateFile, File.GetUnixFileMode(Path.Combine(directories.Runtime, Id + ".lock")));
+        Assert.Equal(privateFile, File.GetUnixFileMode(Path.Combine(directories.Runtime, Id + ".sock")));
+    }
+
+    [Fact]
+    public async Task APreExistingLockFileIsNotTruncatedAndOwnershipStillSucceeds()
+    {
+        using var temporary = new IntegrationTemporaryDirectory();
+        var directories = Directories(temporary, "run");
+        Directory.CreateDirectory(directories.Runtime);
+        var lockPath = Path.Combine(directories.Runtime, Id + ".lock");
+        File.WriteAllText(lockPath, new string('x', 200));
+
+        await using (var owner = SingleInstanceService.Start(Id, directories))
+        {
+            Assert.Equal(SingleInstanceStatus.Owner, owner.Result.Status);
+        }
+
+        var bytes = File.ReadAllBytes(lockPath);
+        Assert.True(bytes.Length >= 200);
+        Assert.StartsWith($"{Environment.ProcessId}\n", Encoding.UTF8.GetString(bytes));
+    }
+
+    [Fact]
+    public async Task NonContentionLockFailureIsUnavailableRatherThanAnotherInstance()
+    {
+        using var temporary = new IntegrationTemporaryDirectory();
+        var directories = Directories(temporary, "run");
+        Directory.CreateDirectory(directories.Runtime);
+        var lockPath = Path.Combine(directories.Runtime, Id + ".lock");
+        if (OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        File.CreateSymbolicLink(lockPath, lockPath);
+        await using var service = SingleInstanceService.Start(Id, directories);
+
+        Assert.Equal(SingleInstanceStatus.Unavailable, service.Result.Status);
+        Assert.Contains("Cannot open the single-instance lock", service.Result.Diagnostic, StringComparison.Ordinal);
+        Assert.DoesNotContain("Another Playnite instance", service.Result.Diagnostic, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task UnusableRuntimeDegradesToUnavailableWithoutThrowing()
     {
         using var temporary = new IntegrationTemporaryDirectory();
@@ -165,6 +315,12 @@ public sealed class SingleInstanceTests
         {
             Assert.Equal("ready", await process.StandardOutput.ReadLineAsync().WaitAsync(TimeSpan.FromSeconds(30)));
             Assert.True(File.Exists(Path.Combine(runtime, "playnite", Id + ".lock")));
+
+            // Prove cross-process contention while the host is alive, not just after it dies.
+            await using (var contender = SingleInstanceService.Start(Id, Directories(temporary, "run")))
+            {
+                Assert.Equal(SingleInstanceStatus.AlreadyRunning, contender.Result.Status);
+            }
         }
         finally
         {

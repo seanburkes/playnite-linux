@@ -150,7 +150,7 @@ public sealed class ProtocolHandlerTests
         var result = await handler.RegisterAsync();
 
         Assert.Equal(ProtocolRegistrationStatus.Failed, result.Status);
-        Assert.Contains("not absolute", result.Diagnostic, StringComparison.Ordinal);
+        Assert.Contains("absolute path", result.Diagnostic, StringComparison.Ordinal);
         Assert.Empty(fileSystem.Files);
     }
 
@@ -166,11 +166,90 @@ public sealed class ProtocolHandlerTests
         Assert.Equal(expected, PlayniteProtocolHandler.UpdateMimeApps(expected));
     }
 
+    [Fact]
+    public async Task CRLFStyleAndUnrelatedKeysArePreservedWhileSpacePaddedKeyIsReplaced()
+    {
+        using var temporary = new IntegrationTemporaryDirectory();
+        var environment = new MemoryEnvironment { Home = temporary.Path };
+        environment.Variables["XDG_CONFIG_HOME"] = temporary.Path + "/config";
+        var directories = XdgDirectories.Resolve(environment);
+        var fileSystem = new RecordingFileSystem();
+        fileSystem.Files[temporary.Path + "/config/mimeapps.list"] = string.Join("\r\n",
+            "[Default Applications]",
+            "x-scheme-handler/playnite = old-handler.desktop",
+            "text/plain=editor.desktop",
+            string.Empty);
+
+        var handler = new PlayniteProtocolHandler(directories, "/opt/playnite", environment, fileSystem);
+        var result = await handler.RegisterAsync();
+
+        Assert.True(result.IsRegistered, result.Diagnostic);
+        Assert.Equal(string.Join("\r\n",
+            "[Default Applications]",
+            "x-scheme-handler/playnite=playnite-handler.desktop",
+            "text/plain=editor.desktop",
+            string.Empty), fileSystem.Files[handler.MimeAppsPath]);
+    }
+
+    [Fact]
+    public async Task FailedMimeAppsUpdateRollsBackANewDesktopEntry()
+    {
+        using var temporary = new IntegrationTemporaryDirectory();
+        var environment = new MemoryEnvironment { Home = temporary.Path };
+        var directories = XdgDirectories.Resolve(environment);
+        var fileSystem = new RecordingFileSystem { FailReplaceCall = 2 };
+        var handler = new PlayniteProtocolHandler(directories, "/opt/playnite", environment, fileSystem);
+
+        var result = await handler.RegisterAsync();
+
+        Assert.Equal(ProtocolRegistrationStatus.Failed, result.Status);
+        Assert.False(fileSystem.FileExists(handler.DesktopEntryPath));
+        Assert.Contains(handler.DesktopEntryPath, fileSystem.Deleted);
+    }
+
+    [Fact]
+    public async Task ProductionFileSystemWritesOnlyInsideTheXdgDirectoriesAndLeavesNoTemporaryFiles()
+    {
+        using var temporary = new IntegrationTemporaryDirectory();
+        var environment = new MemoryEnvironment { Home = temporary.Path };
+        environment.Variables["XDG_DATA_HOME"] = temporary.Path + "/data";
+        environment.Variables["XDG_CONFIG_HOME"] = temporary.Path + "/config";
+        var directories = XdgDirectories.Resolve(environment);
+        var handler = new PlayniteProtocolHandler(directories, "/opt/playnite", environment, new SystemProtocolFileSystem());
+
+        var result = await handler.RegisterAsync();
+
+        Assert.True(result.IsRegistered, result.Diagnostic);
+        Assert.True(File.Exists(handler.DesktopEntryPath));
+        Assert.True(File.Exists(handler.MimeAppsPath));
+        Assert.Empty(Directory.GetFiles(temporary.Path, "*.tmp.*", SearchOption.AllDirectories));
+        var topLevel = Directory.GetFileSystemEntries(temporary.Path).Order(StringComparer.Ordinal).ToArray();
+        Assert.Equal(new[] { temporary.Path + "/config", temporary.Path + "/data" }, topLevel);
+    }
+
+    [Fact]
+    public async Task ExecutablePathWithControlCharactersIsRejectedBeforeAnyWrite()
+    {
+        using var temporary = new IntegrationTemporaryDirectory();
+        var environment = new MemoryEnvironment { Home = temporary.Path };
+        var directories = XdgDirectories.Resolve(environment);
+        var fileSystem = new RecordingFileSystem();
+        var handler = new PlayniteProtocolHandler(directories, "/opt/play\nnite", environment, fileSystem);
+
+        var result = await handler.RegisterAsync();
+
+        Assert.Equal(ProtocolRegistrationStatus.Failed, result.Status);
+        Assert.Contains("control characters", result.Diagnostic, StringComparison.Ordinal);
+        Assert.Empty(fileSystem.Files);
+    }
+
     private sealed class RecordingFileSystem : IProtocolFileSystem
     {
         internal Dictionary<string, string> Files { get; } = new(StringComparer.Ordinal);
+        internal List<string> Deleted { get; } = [];
         internal int Writes { get; private set; }
         internal bool FailWrites { get; init; }
+        internal int FailReplaceCall { get; init; }
 
         public bool FileExists(string path) => Files.ContainsKey(path);
 
@@ -180,9 +259,15 @@ public sealed class ProtocolHandlerTests
 
         public string ReadAllText(string path) => Files[path];
 
-        public void WriteAllText(string path, string contents)
+        public void DeleteFile(string path)
         {
-            if (FailWrites)
+            Deleted.Add(path);
+            Files.Remove(path);
+        }
+
+        public void ReplaceAtomically(string path, string contents)
+        {
+            if (FailWrites || FailReplaceCall == Writes + 1)
             {
                 throw new IOException("denied by test");
             }

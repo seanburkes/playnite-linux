@@ -74,7 +74,7 @@ public sealed class XdgDirectories
     {
         ArgumentNullException.ThrowIfNull(environment);
         var diagnostics = new List<string>();
-        var home = RequireHome(environment.Home);
+        var home = ResolveHome(environment, diagnostics);
 
         var configHome = BaseDirectory(environment, "XDG_CONFIG_HOME", home, ".config", diagnostics);
         var dataHome = BaseDirectory(environment, "XDG_DATA_HOME", home, ".local/share", diagnostics);
@@ -84,7 +84,7 @@ public sealed class XdgDirectories
         var state = Path.Combine(stateHome, ApplicationDirectoryName);
         var runtimeValue = environment.GetVariable("XDG_RUNTIME_DIR");
         string runtime;
-        if (IsUsableOverride(runtimeValue))
+        if (LinuxPaths.IsUsableBase(runtimeValue))
         {
             runtime = Path.Combine(Paths.Normalize(runtimeValue!, "/"), ApplicationDirectoryName);
         }
@@ -100,14 +100,26 @@ public sealed class XdgDirectories
     }
 
     /// <summary>
-    /// Creates the runtime directory on demand. Failures return a diagnostic instead of
-    /// escaping into startup; no other XDG directory is created.
+    /// Creates the runtime directory on demand and keeps it private to the user (0700). An
+    /// existing world/group-accessible directory is tightened when this process owns it.
+    /// Failures return a diagnostic instead of escaping into startup; no other XDG directory is
+    /// created.
     /// </summary>
     public string? EnsureRuntimeDirectory()
     {
         try
         {
             Directory.CreateDirectory(Runtime);
+            if (!OperatingSystem.IsWindows())
+            {
+                const UnixFileMode privateMode = UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute;
+                var mode = File.GetUnixFileMode(Runtime);
+                if (mode != privateMode)
+                {
+                    File.SetUnixFileMode(Runtime, privateMode);
+                }
+            }
+
             return null;
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or NotSupportedException or ArgumentException)
@@ -116,14 +128,18 @@ public sealed class XdgDirectories
         }
     }
 
-    private static string RequireHome(string home)
+    private static string ResolveHome(IEnvironment environment, List<string> diagnostics)
     {
-        if (!Paths.IsFullPath(home))
+        if (Paths.IsFullPath(environment.Home))
         {
-            throw new ArgumentException("HOME must be an absolute path to resolve XDG directories.", nameof(home));
+            return Paths.Normalize(environment.Home, "/");
         }
 
-        return Paths.Normalize(home, "/");
+        var fallback = Paths.IsFullPath(environment.CurrentDirectory)
+            ? Paths.Normalize(environment.CurrentDirectory, "/")
+            : "/";
+        diagnostics.Add($"HOME is not an absolute path ({environment.Home}); using {fallback} for XDG resolution.");
+        return fallback;
     }
 
     private static string BaseDirectory(
@@ -134,19 +150,16 @@ public sealed class XdgDirectories
         List<string> diagnostics)
     {
         var value = environment.GetVariable(variable);
-        if (IsUsableOverride(value))
+        if (LinuxPaths.IsUsableBase(value))
         {
             return Paths.Normalize(value!, "/");
         }
 
-        if (!string.IsNullOrWhiteSpace(value))
+        if (value is not null)
         {
-            diagnostics.Add($"{variable} is not an absolute path ({value}); using HOME/{fallback}.");
+            diagnostics.Add($"{variable} is not an absolute path ({value}); using the fallback under {home}.");
         }
 
         return Path.Combine(home, fallback);
     }
-
-    private static bool IsUsableOverride(string? value) =>
-        !string.IsNullOrWhiteSpace(value) && Path.IsPathFullyQualified(value) && !value.StartsWith('~');
 }

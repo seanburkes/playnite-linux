@@ -47,7 +47,7 @@ public sealed record PlayniteUri
 
         foreach (var character in value)
         {
-            if (character is < ' ' or '\u007f')
+            if (character < ' ' || character == '\u007f' || (character >= '\u0080' && character <= '\u009f'))
             {
                 error = "The URI contains a control character.";
                 return false;
@@ -142,8 +142,10 @@ public sealed record PlayniteUri
         try
         {
             // v10 used HttpUtility.UrlDecode, which treats '+' as a space. Percent escapes are
-            // decoded as bytes so malformed UTF-8 fails instead of becoming a replacement char.
+            // decoded as bytes so malformed UTF-8 fails instead of becoming a replacement char,
+            // while a raw surrogate pair is encoded as its single scalar value.
             var bytes = new List<byte>(value.Length);
+            Span<byte> encoded = stackalloc byte[4];
             for (var index = 0; index < value.Length; index++)
             {
                 if (value[index] == '%')
@@ -151,9 +153,22 @@ public sealed record PlayniteUri
                     bytes.Add((byte)((HexValue(value[index + 1]) << 4) | HexValue(value[index + 2])));
                     index += 2;
                 }
+                else if (value[index] == '+')
+                {
+                    bytes.Add((byte)' ');
+                }
                 else
                 {
-                    bytes.AddRange(StrictUtf8.GetBytes(value[index] == '+' ? " " : value[index].ToString()));
+                    var status = Rune.DecodeFromUtf16(value.AsSpan(index), out var rune, out var consumed);
+                    if (status != System.Buffers.OperationStatus.Done)
+                    {
+                        error = "The URI contains an unpaired surrogate.";
+                        return false;
+                    }
+
+                    var count = rune.EncodeToUtf8(encoded);
+                    bytes.AddRange(encoded[..count].ToArray());
+                    index += consumed - 1;
                 }
             }
 
@@ -165,7 +180,7 @@ public sealed record PlayniteUri
             return false;
         }
 
-        if (decoded.Any(character => character is < ' ' or '\u007f'))
+        if (decoded.Any(character => character < ' ' || character == '\u007f' || (character >= '\u0080' && character <= '\u009f')))
         {
             error = "The URI argument decodes to a control character.";
             return false;

@@ -1,4 +1,5 @@
 using Playnite.Core.Tests.TestDoubles;
+using Playnite.Platform.Linux;
 using Playnite.Platform.Linux.Integration;
 using Xunit;
 
@@ -141,9 +142,68 @@ public sealed class XdgDirectoriesTests
     }
 
     [Fact]
-    public void NonAbsoluteHomeIsRejectedInsteadOfGuessed()
+    public void NonAbsoluteHomeDegradesWithADiagnosticInsteadOfThrowing()
     {
-        var environment = new MemoryEnvironment { Home = "relative-home" };
-        Assert.Throws<ArgumentException>(() => XdgDirectories.Resolve(environment));
+        var environment = new MemoryEnvironment { Home = "relative-home", CurrentDirectory = "/working" };
+
+        var directories = XdgDirectories.Resolve(environment);
+
+        Assert.Equal("/working/.config/playnite", directories.Config);
+        Assert.Equal("/working/.local/share/playnite", directories.Data);
+        Assert.Contains(directories.Diagnostics, line => line.Contains("HOME is not an absolute path", StringComparison.Ordinal));
+        Assert.Contains(directories.Diagnostics, line => line.Contains("/working", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void ResolverAgreesWithLinuxPathsForEveryBaseDirectory()
+    {
+        var environment = new MemoryEnvironment { Home = "/home/test-user" };
+        environment.Variables["XDG_CONFIG_HOME"] = "/custom/../config";
+        environment.Variables["XDG_DATA_HOME"] = "relative";
+        environment.Variables["XDG_CACHE_HOME"] = "/cache";
+        environment.Variables["XDG_STATE_HOME"] = "";
+        var directories = XdgDirectories.Resolve(environment);
+        var paths = new LinuxPaths(environment, new MemoryFileSystem());
+
+        Assert.Equal(paths.Config, directories.Config);
+        Assert.Equal(paths.UserData, directories.Data);
+        Assert.Equal(paths.Cache, directories.Cache);
+        Assert.Equal(paths.State, directories.State);
+    }
+
+    [Fact]
+    public void InvalidBaseValuesAreRecordedAsDiagnostics()
+    {
+        var environment = new MemoryEnvironment();
+        environment.Variables["XDG_DATA_HOME"] = "relative";
+        environment.Variables["XDG_CACHE_HOME"] = "";
+
+        var directories = XdgDirectories.Resolve(environment);
+
+        Assert.Contains(directories.Diagnostics, line => line.StartsWith("XDG_DATA_HOME is not an absolute path", StringComparison.Ordinal));
+        Assert.Contains(directories.Diagnostics, line => line.StartsWith("XDG_CACHE_HOME is not an absolute path", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void RuntimeDirectoryIsTightenedToUserOnlyPermissions()
+    {
+        using var temporary = new IntegrationTemporaryDirectory();
+        var environment = new MemoryEnvironment { Home = temporary.Path };
+        environment.Variables["XDG_RUNTIME_DIR"] = temporary.Path + "/run";
+        var directories = XdgDirectories.Resolve(environment);
+        Directory.CreateDirectory(directories.Runtime);
+        if (OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        File.SetUnixFileMode(directories.Runtime,
+            UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute
+            | UnixFileMode.GroupRead | UnixFileMode.GroupExecute | UnixFileMode.OtherRead | UnixFileMode.OtherExecute);
+
+        Assert.Null(directories.EnsureRuntimeDirectory());
+        Assert.Equal(
+            UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute,
+            File.GetUnixFileMode(directories.Runtime));
     }
 }

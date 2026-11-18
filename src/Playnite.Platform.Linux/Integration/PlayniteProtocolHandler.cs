@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Text;
 using Playnite.Core;
 using Playnite.Platform.Integration;
@@ -10,7 +11,8 @@ public interface IProtocolFileSystem
     bool FileExists(string path);
     void CreateDirectory(string path);
     string ReadAllText(string path);
-    void WriteAllText(string path, string contents);
+    void DeleteFile(string path);
+    void ReplaceAtomically(string path, string contents);
 }
 
 /// <summary>Production file access for the desktop entry and mimeapps list.</summary>
@@ -21,7 +23,29 @@ public sealed class SystemProtocolFileSystem : IProtocolFileSystem
     public bool FileExists(string path) => File.Exists(path);
     public void CreateDirectory(string path) => Directory.CreateDirectory(path);
     public string ReadAllText(string path) => File.ReadAllText(path);
-    public void WriteAllText(string path, string contents) => File.WriteAllText(path, contents, Utf8NoBom);
+    public void DeleteFile(string path) => File.Delete(path);
+
+    public void ReplaceAtomically(string path, string contents)
+    {
+        var temporary = path + ".tmp." + Environment.ProcessId + "." + Path.GetRandomFileName();
+        try
+        {
+            File.WriteAllText(temporary, contents, Utf8NoBom);
+            File.Move(temporary, path, overwrite: true);
+        }
+        finally
+        {
+            try
+            {
+                File.Delete(temporary);
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+            {
+                // The rename succeeded or the primary failure is already propagating.
+                Debug.WriteLine(exception);
+            }
+        }
+    }
 }
 
 /// <summary>
@@ -39,7 +63,6 @@ public sealed class PlayniteProtocolHandler : IProtocolHandler
 
     private const string MimeType = "x-scheme-handler/" + SchemeName;
     private const string DefaultApplicationsSection = "[Default Applications]";
-    private const string MimeKey = MimeType + "=";
 
     private readonly XdgDirectories directories;
     private readonly string executablePath;
@@ -77,22 +100,46 @@ public sealed class PlayniteProtocolHandler : IProtocolHandler
                 $"Protocol registration is not permitted inside {sandbox}; the host desktop must register {SchemeName}://."));
         }
 
-        if (!Path.IsPathFullyQualified(executablePath))
+        if (string.IsNullOrWhiteSpace(executablePath) || !Path.IsPathFullyQualified(executablePath)
+            || executablePath.Any(character => character < ' ' || character == '\u007f' || (character >= '\u0080' && character <= '\u009f')))
         {
             return Task.FromResult(new ProtocolRegistrationResult(
                 ProtocolRegistrationStatus.Failed,
-                $"Cannot register {SchemeName}://: the executable path {executablePath} is not absolute."));
+                $"Cannot register {SchemeName}://: the executable path {executablePath} is not an absolute path without control characters."));
         }
 
+        var desktopExisted = false;
+        var desktopWritten = false;
         try
         {
+            desktopExisted = fileSystem.FileExists(DesktopEntryPath);
             fileSystem.CreateDirectory(Path.GetDirectoryName(DesktopEntryPath)!);
-            WriteIfChanged(DesktopEntryPath, DesktopEntry(executablePath));
+            var entry = DesktopEntry(executablePath);
+            if (!desktopExisted || fileSystem.ReadAllText(DesktopEntryPath) != entry)
+            {
+                fileSystem.ReplaceAtomically(DesktopEntryPath, entry);
+                desktopWritten = true;
+            }
+
             fileSystem.CreateDirectory(Path.GetDirectoryName(MimeAppsPath)!);
-            WriteIfChanged(MimeAppsPath, UpdateMimeApps(fileSystem.FileExists(MimeAppsPath) ? fileSystem.ReadAllText(MimeAppsPath) : string.Empty));
+            var mimeApps = fileSystem.FileExists(MimeAppsPath) ? fileSystem.ReadAllText(MimeAppsPath) : string.Empty;
+            WriteIfChanged(MimeAppsPath, UpdateMimeApps(mimeApps));
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or NotSupportedException or ArgumentException)
         {
+            if (desktopWritten && !desktopExisted)
+            {
+                try
+                {
+                    fileSystem.DeleteFile(DesktopEntryPath);
+                }
+                catch (Exception rollback) when (rollback is IOException or UnauthorizedAccessException)
+                {
+                    // The diagnostic below still names the original failure.
+                    Debug.WriteLine(rollback);
+                }
+            }
+
             return Task.FromResult(new ProtocolRegistrationResult(
                 ProtocolRegistrationStatus.Failed,
                 $"Cannot register {SchemeName}:// in the XDG directories: {exception.Message}"));
@@ -116,11 +163,13 @@ public sealed class PlayniteProtocolHandler : IProtocolHandler
 
     /// <summary>
     /// Adds or replaces the default handler line while preserving every other section, key and
-    /// comment byte-for-byte. The section is created when absent.
+    /// comment. The file's CRLF or LF line-ending style is retained.
     /// </summary>
     public static string UpdateMimeApps(string contents)
     {
-        var lines = contents.Length == 0 ? [] : contents.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n').ToList();
+        var newline = contents.Contains("\r\n", StringComparison.Ordinal) ? "\r\n" : "\n";
+        var normalized = contents.Replace("\r\n", "\n", StringComparison.Ordinal);
+        var lines = normalized.Length == 0 ? [] : normalized.Split('\n').ToList();
         if (lines.Count > 0 && lines[^1].Length == 0)
         {
             lines.RemoveAt(lines.Count - 1);
@@ -135,8 +184,8 @@ public sealed class PlayniteProtocolHandler : IProtocolHandler
             }
 
             lines.Add(DefaultApplicationsSection);
-            lines.Add(MimeKey + DesktopFileName);
-            return string.Join('\n', lines) + "\n";
+            lines.Add(MimeType + "=" + DesktopFileName);
+            return string.Join(newline, lines) + newline;
         }
 
         var sectionEnd = lines.FindIndex(section + 1, line => line.TrimStart().StartsWith('['));
@@ -145,26 +194,32 @@ public sealed class PlayniteProtocolHandler : IProtocolHandler
             sectionEnd = lines.Count;
         }
 
-        var existing = lines.FindIndex(section + 1, sectionEnd - section - 1,
-            line => line.StartsWith(MimeKey, StringComparison.Ordinal));
+        var existing = lines.FindIndex(section + 1, sectionEnd - section - 1, IsMimeKeyLine);
         if (existing >= 0)
         {
-            lines[existing] = MimeKey + DesktopFileName;
+            lines[existing] = MimeType + "=" + DesktopFileName;
         }
         else
         {
-            lines.Insert(section + 1, MimeKey + DesktopFileName);
+            lines.Insert(section + 1, MimeType + "=" + DesktopFileName);
         }
 
-        return string.Join('\n', lines) + "\n";
+        return string.Join(newline, lines) + newline;
     }
 
     private void WriteIfChanged(string path, string contents)
     {
         if (!fileSystem.FileExists(path) || fileSystem.ReadAllText(path) != contents)
         {
-            fileSystem.WriteAllText(path, contents);
+            fileSystem.ReplaceAtomically(path, contents);
         }
+    }
+
+    private static bool IsMimeKeyLine(string line)
+    {
+        var trimmed = line.TrimStart();
+        var separator = trimmed.IndexOf('=');
+        return separator > 0 && trimmed[..separator].Trim() == MimeType;
     }
 
     private string? SandboxName()

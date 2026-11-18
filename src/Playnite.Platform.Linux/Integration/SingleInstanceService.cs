@@ -11,22 +11,29 @@ namespace Playnite.Platform.Linux.Integration;
 /// leaves a lock that must be broken manually. The lock file itself may remain and is harmless.
 /// A Unix domain socket next to the lock forwards activation to the owner when the path fits
 /// the platform limit; otherwise ownership still works and the diagnostic says forwarding is
-/// unavailable.
+/// unavailable. Only the process that bound the socket may remove it, so disposing a refused
+/// second instance never disables the live owner.
 /// </summary>
 public sealed class SingleInstanceService : ISingleInstance
 {
     private const int MaxInstanceIdLength = 64;
     private const int MaxActivationBytes = 4096;
-    private const int MaxSocketPathBytes = 100;
+    private const int MaxSocketPathBytes = 108;
     private const int ActivationTimeoutMilliseconds = 5000;
+    private const int ConnectionTimeoutMilliseconds = 5000;
+    private const int MaxPendingActivations = 16;
 
     private static readonly UTF8Encoding StrictUtf8 = new(false, true);
 
     private readonly FileStream? lockStream;
     private readonly Socket? listener;
     private readonly string? socketPath;
+    private readonly bool ownsListener;
     private readonly CancellationTokenSource shutdown = new();
     private readonly Task? acceptLoop;
+    private readonly object activationGate = new();
+    private readonly Queue<string> pendingActivations = new();
+    private EventHandler<ActivationRequest>? activated;
     private int disposed;
 
     private SingleInstanceService(
@@ -39,6 +46,7 @@ public sealed class SingleInstanceService : ISingleInstance
         this.lockStream = lockStream;
         this.socketPath = socketPath;
         this.listener = listener;
+        ownsListener = listener is not null;
         if (listener is not null)
         {
             acceptLoop = AcceptLoopAsync(listener, shutdown.Token);
@@ -47,7 +55,50 @@ public sealed class SingleInstanceService : ISingleInstance
 
     public SingleInstanceResult Result { get; }
 
-    public event EventHandler<ActivationRequest>? Activated;
+    /// <summary>
+    /// Raised on the owner when another instance forwards an activation URI. Activations that
+    /// arrive before the first subscriber are queued and delivered when it subscribes, so a
+    /// sender is never told <see cref="SingleInstanceStatus.Forwarded"/> for a URI nobody will see.
+    /// </summary>
+    public event EventHandler<ActivationRequest>? Activated
+    {
+        add
+        {
+            if (value is null)
+            {
+                return;
+            }
+
+            List<string>? queued = null;
+            lock (activationGate)
+            {
+                activated += value;
+                if (pendingActivations.Count > 0)
+                {
+                    queued = pendingActivations.ToList();
+                    pendingActivations.Clear();
+                }
+            }
+
+            if (queued is not null)
+            {
+                _ = Task.Run(() =>
+                {
+                    foreach (var uri in queued)
+                    {
+                        InvokeHandlers(value, new ActivationRequest(uri));
+                    }
+                });
+            }
+        }
+        remove
+        {
+            lock (activationGate)
+            {
+                activated -= value;
+            }
+        }
+    }
 
     /// <summary>
     /// Acquires ownership or reports that a live process already owns it. This method never
@@ -74,7 +125,7 @@ public sealed class SingleInstanceService : ISingleInstance
         {
             lockStream = new FileStream(lockPath, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
         }
-        catch (IOException)
+        catch (IOException exception) when (IsLockContention(exception))
         {
             return new SingleInstanceService(
                 new SingleInstanceResult(
@@ -84,7 +135,7 @@ public sealed class SingleInstanceService : ISingleInstance
                 socketPath,
                 null);
         }
-        catch (Exception exception) when (exception is UnauthorizedAccessException or NotSupportedException or ArgumentException)
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or NotSupportedException or ArgumentException)
         {
             return new SingleInstanceService(
                 new SingleInstanceResult(SingleInstanceStatus.Unavailable, $"Cannot open the single-instance lock {lockPath}: {exception.Message}"),
@@ -95,8 +146,15 @@ public sealed class SingleInstanceService : ISingleInstance
 
         try
         {
-            var owner = Encoding.UTF8.GetBytes($"{Environment.ProcessId}\n");
-            lockStream.SetLength(0);
+            if (!OperatingSystem.IsWindows())
+            {
+                File.SetUnixFileMode(lockPath, UnixFileMode.UserRead | UnixFileMode.UserWrite);
+            }
+
+            // OpenOrCreate never truncates. Overwrite a fixed-width owner record in place; a
+            // longer stale record from a future version is inert trailing data.
+            var owner = Encoding.UTF8.GetBytes($"{Environment.ProcessId}\n".PadRight(64, ' '));
+            lockStream.Position = 0;
             lockStream.Write(owner);
             lockStream.Flush(flushToDisk: true);
         }
@@ -141,11 +199,18 @@ public sealed class SingleInstanceService : ISingleInstance
                 $"Activation forwarding unavailable: the socket path {socketPath} exceeds the Unix socket limit.");
         }
 
-        if (!PlayniteUri.TryParse(uri, out _, out var error) || uri.Contains('\n') || uri.Contains('\r'))
+        if (!PlayniteUri.TryParse(uri, out _, out var error))
         {
             return new SingleInstanceResult(
                 SingleInstanceStatus.Unavailable,
-                $"Refusing to forward a malformed activation URI: {error ?? "the URI contains a line break"}");
+                $"Refusing to forward a malformed activation URI: {error}");
+        }
+
+        if (Encoding.UTF8.GetByteCount(uri) >= MaxActivationBytes)
+        {
+            return new SingleInstanceResult(
+                SingleInstanceStatus.Unavailable,
+                $"Refusing to forward an activation URI larger than {MaxActivationBytes - 1} UTF-8 bytes.");
         }
 
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
@@ -166,6 +231,10 @@ public sealed class SingleInstanceService : ISingleInstance
             }
 
             return new SingleInstanceResult(SingleInstanceStatus.Forwarded, null);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
         }
         catch (Exception exception) when (exception is SocketException or IOException or OperationCanceledException or ObjectDisposedException)
         {
@@ -196,16 +265,9 @@ public sealed class SingleInstanceService : ISingleInstance
             }
         }
 
-        if (socketPath is not null)
+        if (ownsListener && socketPath is not null)
         {
-            try
-            {
-                File.Delete(socketPath);
-            }
-            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
-            {
-                Debug.WriteLine(exception);
-            }
+            TryDeleteSocket(socketPath);
         }
 
         lockStream?.Dispose();
@@ -221,26 +283,25 @@ public sealed class SingleInstanceService : ISingleInstance
 
         try
         {
-            if (File.Exists(socketPath))
-            {
-                File.Delete(socketPath);
-            }
-
+            TryDeleteSocket(socketPath);
             var socket = new Socket(AddressFamily.Unix, SocketType.Stream, ProtocolType.Unspecified);
             try
             {
                 socket.Bind(new UnixDomainSocketEndPoint(socketPath));
-                socket.Listen(4);
                 if (!OperatingSystem.IsWindows())
                 {
                     File.SetUnixFileMode(socketPath, UnixFileMode.UserRead | UnixFileMode.UserWrite);
                 }
 
+                // Listen only after the permissions are restrictive, so no client can connect
+                // while the socket still carries umask-derived access.
+                socket.Listen(4);
                 return (socket, null);
             }
             catch
             {
                 socket.Dispose();
+                TryDeleteSocket(socketPath);
                 throw;
             }
         }
@@ -259,19 +320,50 @@ public sealed class SingleInstanceService : ISingleInstance
             {
                 client = await socket.AcceptAsync(cancellationToken).ConfigureAwait(false);
             }
-            catch (Exception exception) when (exception is OperationCanceledException or ObjectDisposedException or SocketException)
+            catch (Exception exception) when (exception is OperationCanceledException or ObjectDisposedException)
             {
-                if (!cancellationToken.IsCancellationRequested)
-                {
-                    Debug.WriteLine(exception);
-                }
-
                 return;
             }
-
-            using (client)
+            catch (SocketException exception)
             {
-                await HandleClientAsync(client, cancellationToken).ConfigureAwait(false);
+                if (cancellationToken.IsCancellationRequested)
+                {
+                    return;
+                }
+
+                Debug.WriteLine(exception);
+                try
+                {
+                    await Task.Delay(100, cancellationToken).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException)
+                {
+                    return;
+                }
+
+                continue;
+            }
+
+            // A stalled client must not block later activations; each connection owns a bounded
+            // timeout and runs independently of the accept loop.
+            _ = HandleClientDetachedAsync(client, cancellationToken);
+        }
+    }
+
+    private async Task HandleClientDetachedAsync(Socket client, CancellationToken cancellationToken)
+    {
+        using (client)
+        using (var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken))
+        {
+            timeout.CancelAfter(ConnectionTimeoutMilliseconds);
+            try
+            {
+                await HandleClientAsync(client, timeout.Token).ConfigureAwait(false);
+            }
+            catch (Exception exception) when (exception is SocketException or IOException or OperationCanceledException
+                or ObjectDisposedException or DecoderFallbackException)
+            {
+                Debug.WriteLine(exception);
             }
         }
     }
@@ -280,57 +372,103 @@ public sealed class SingleInstanceService : ISingleInstance
     {
         var buffer = new byte[MaxActivationBytes + 1];
         var length = 0;
-        try
+        while (length < buffer.Length)
         {
-            while (length < buffer.Length)
+            var received = await client.ReceiveAsync(buffer.AsMemory(length), SocketFlags.None, cancellationToken).ConfigureAwait(false);
+            if (received == 0)
             {
-                var received = await client.ReceiveAsync(buffer.AsMemory(length), SocketFlags.None, cancellationToken).ConfigureAwait(false);
-                if (received == 0)
+                break;
+            }
+
+            length += received;
+            if (buffer.AsSpan(0, length).IndexOf((byte)'\n') >= 0)
+            {
+                break;
+            }
+        }
+
+        var newline = buffer.AsSpan(0, length).IndexOf((byte)'\n');
+        if (newline < 0 || newline == 0 || newline > MaxActivationBytes)
+        {
+            await ReplyAsync(client, "ERR malformed activation\n", cancellationToken).ConfigureAwait(false);
+            return;
+        }
+
+        var uri = StrictUtf8.GetString(buffer, 0, newline);
+        if (!PlayniteUri.TryParse(uri, out _, out var error))
+        {
+            await ReplyAsync(client, $"ERR {error}\n", cancellationToken).ConfigureAwait(false);
+            return;
+        }
+
+        if (!TryDeliver(new ActivationRequest(uri)))
+        {
+            await ReplyAsync(client, "ERR activation not accepted\n", cancellationToken).ConfigureAwait(false);
+            return;
+        }
+
+        await ReplyAsync(client, "OK\n", cancellationToken).ConfigureAwait(false);
+    }
+
+    private bool TryDeliver(ActivationRequest request)
+    {
+        EventHandler<ActivationRequest>? handlers;
+        lock (activationGate)
+        {
+            handlers = activated;
+            if (handlers is null)
+            {
+                if (pendingActivations.Count >= MaxPendingActivations)
                 {
-                    break;
+                    return false;
                 }
 
-                length += received;
-                if (buffer.AsSpan(0, length).IndexOf((byte)'\n') >= 0)
-                {
-                    break;
-                }
+                pendingActivations.Enqueue(request.Uri);
+                return true;
             }
+        }
 
-            var newline = buffer.AsSpan(0, length).IndexOf((byte)'\n');
-            if (newline < 0 || newline == 0 || newline > MaxActivationBytes)
-            {
-                await ReplyAsync(client, "ERR malformed activation\n", cancellationToken).ConfigureAwait(false);
-                return;
-            }
+        return InvokeHandlers(handlers, request);
+    }
 
-            var uri = StrictUtf8.GetString(buffer, 0, newline);
-            if (!PlayniteUri.TryParse(uri, out _, out var error))
-            {
-                await ReplyAsync(client, $"ERR {error}\n", cancellationToken).ConfigureAwait(false);
-                return;
-            }
-
-            await ReplyAsync(client, "OK\n", cancellationToken).ConfigureAwait(false);
+    private bool InvokeHandlers(EventHandler<ActivationRequest> handlers, ActivationRequest request)
+    {
+        var delivered = false;
+        foreach (var handler in handlers.GetInvocationList().Cast<EventHandler<ActivationRequest>>())
+        {
             try
             {
-                Activated?.Invoke(this, new ActivationRequest(uri));
+                handler(this, request);
+                delivered = true;
             }
             catch (Exception exception)
             {
                 Debug.WriteLine(exception);
             }
         }
-        catch (Exception exception) when (exception is SocketException or IOException or OperationCanceledException or ObjectDisposedException or DecoderFallbackException)
-        {
-            Debug.WriteLine(exception);
-        }
+
+        return delivered;
     }
 
     private static async Task ReplyAsync(Socket client, string reply, CancellationToken cancellationToken)
     {
         await client.SendAsync(Encoding.UTF8.GetBytes(reply), SocketFlags.None, cancellationToken).ConfigureAwait(false);
         client.Shutdown(SocketShutdown.Send);
+    }
+
+    private static bool IsLockContention(IOException exception) =>
+        exception.HResult == 11 || exception.HResult == 35 || exception.HResult == unchecked((int)0x80070020);
+
+    private static void TryDeleteSocket(string path)
+    {
+        try
+        {
+            File.Delete(path);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            Debug.WriteLine(exception);
+        }
     }
 
     private static void ValidateInstanceId(string instanceId)

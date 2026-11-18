@@ -37,8 +37,9 @@ public interface ISingleInstance : IAsyncDisposable
     event EventHandler<ActivationRequest>? Activated;
 
     /// <summary>
-    /// Sends an activation URI to the owning instance. Returns false with a diagnostic when this
-    /// process owns the lock, forwarding is unavailable, or the payload is malformed.
+    /// Sends an activation URI to the owning instance. A forwarded result means the owner
+    /// queued or dispatched it; malformed payloads, local ownership, cancellation and an
+    /// unavailable owner are reported by the returned result (host cancellation still throws).
     /// </summary>
     Task<SingleInstanceResult> ActivateAsync(string uri, CancellationToken cancellationToken = default);
 }

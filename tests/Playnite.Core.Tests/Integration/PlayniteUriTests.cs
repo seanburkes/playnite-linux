@@ -79,6 +79,36 @@ public sealed class PlayniteUriTests
     }
 
     [Fact]
+    public void RawAndPercentEncodedNonBmpCodePointsRoundTripUnchanged()
+    {
+        const string emoji = "😀";
+        Assert.True(PlayniteUri.TryParse("playnite://search/" + emoji, out var raw, out var rawError), rawError);
+        Assert.Equal(emoji, Assert.Single(raw!.Arguments));
+        Assert.True(PlayniteUri.TryParse("playnite://search/%F0%9F%98%80", out var encoded, out var encodedError), encodedError);
+        Assert.Equal(emoji, Assert.Single(encoded!.Arguments));
+        Assert.Equal(raw.Arguments, encoded.Arguments);
+    }
+
+    [Theory]
+    [InlineData(0xD83D)]
+    [InlineData(0xDC00)]
+    public void UnpairedSurrogatesAreRejected(int codeUnit)
+    {
+        var value = "playnite://search/" + (char)codeUnit;
+        Assert.False(PlayniteUri.TryParse(value, out _, out var error));
+        Assert.Contains("surrogate", error, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("playnite://search/%C2%80")]
+    [InlineData("playnite://search/%C2%9F")]
+    public void C1ControlCodePointsAreRejected(string value)
+    {
+        Assert.False(PlayniteUri.TryParse(value, out _, out var error));
+        Assert.Contains("control", error, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void ShellMetacharactersStayLiteralAndAreNeverExecuted()
     {
         using var temporary = new IntegrationTemporaryDirectory();
