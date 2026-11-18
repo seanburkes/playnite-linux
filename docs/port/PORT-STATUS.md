@@ -58,7 +58,7 @@
 | Status | Units |
 | --- | ---: |
 | deferred | 1 |
-| done | 64 |
+| done | 65 |
 | in-progress | 3 |
 | todo | 30 |
 
@@ -66,8 +66,8 @@
 
 | Metric | Value |
 | --- | ---: |
-| Ledger rows | 237 |
-| Ledger fragments | 10 |
+| Ledger rows | 239 |
+| Ledger fragments | 12 |
 
 ## Units
 
@@ -147,6 +147,7 @@
 | p5-006 | W5 | platform | WebView service | todo | `units/p5-006.*`; 0 ledger rows |
 | p5-007 | W5 | platform | Tray/notifications/sleep | todo | `units/p5-007.*`; 0 ledger rows |
 | p5-008 | W5 | steam | Launch native/Proton | todo | `units/p5-008.*`; 0 ledger rows |
+| p5-shards | W5 | repo | Phase 5 shard board reconciliation | done | `units/p5-shards.*`; 2 ledger rows |
 | p6-001 | W6 | core | Library service | todo | `units/p6-001.*`; 0 ledger rows |
 | p6-002 | W6 | core | Import/sync service | todo | `units/p6-002.*`; 0 ledger rows |
 | p6-003 | W6 | core | Settings/metadata services | todo | `units/p6-003.*`; 0 ledger rows |
