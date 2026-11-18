@@ -59,8 +59,8 @@ re-read (the `FakeHost` in `SteamLaunchTests` returns rows directly and cannot e
 ## P2-2 — the rewritten `GroupRejection` contract comment contradicts the survivor classifier added by the same PR
 
 **Files:** `src/Playnite.Steam/p5-008/SteamLaunchEvidence.cs:172-176` versus
-`src/Playnite.Steam/p5-008/SteamProcessLauncher.cs:418-461` (`ClassifySurvivors`),
-`tests/Playnite.Core.Tests/p5-008/SteamLaunchTests.cs:376-395`, and
+`src/Playnite.Steam/p5-008/SteamProcessLauncher.cs:418-464` (`ClassifySurvivors`),
+`tests/Playnite.Core.Tests/p5-008/SteamLaunchTests.cs:375-392`, and
 `tools/p5-008/SteamAcceptance/Program.cs:158`.
 
 **Concrete failure.** The comment says a live member whose executable is unreadable is "an
