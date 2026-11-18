@@ -15,8 +15,10 @@ A unit PR must, in the diff from the merge base to the PR head:
 
 A process PR that touches no unit evidence needs neither.  The check never
 writes, never flips state, and fails closed whenever the owning unit is
-ambiguous.  ``--verify-ci`` additionally checks the cited run through the
-read-only GitHub API (the workflow enables it).
+ambiguous.  ``--verify-ci`` resolves every cited run through the read-only
+GitHub API: the run must exist in this repository, be a completed successful
+``linux-ci`` run, and its ``head_sha`` must equal a head the fragment cites.
+The workflow always enables it.
 
 Exit codes: 0 allowed, 1 policy or ambiguity failure.
 """
