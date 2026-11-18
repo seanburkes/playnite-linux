@@ -49,7 +49,12 @@ for this PR.
 
 `--forbid-shard-ownership` runs the same ownership check without requiring the
 aggregate-ownership paths. It is the form the post-merge `port-index` writer uses
-before it commits; `--forbid-aggregate-changes` implies it for pull requests. A
+before it commits; `--forbid-aggregate-changes` implies it for pull requests. The
+writer adds `--allow-generated-ownership` so its own previous regeneration, which
+appears in the `--against` diff, is not mistaken for a pull request edit. That
+mode never reaches the pull request gate: the map is still bot-owned, a pull
+request still fails on any change to it, and `build` rewrites the map from merged
+history before `check` verifies the committed bytes. A
 documented one-time migration of a legacy `<unit>.ledger.tsv` to
 `<unit>.ledger.d/0000-history.tsv` is allowed only when the legacy file is deleted in
 the same change and the history bytes are its verbatim content. Retirement deletes
@@ -1674,13 +1679,20 @@ def _removed_units_at_head(root: Path) -> set[str]:
 
 
 def shard_ownership_errors(root: Path, ref: str, unit: str | None = None,
-                           pr: str | None = None) -> list[str]:
+                           pr: str | None = None,
+                           allow_generated_ownership: bool = False) -> list[str]:
     """Existing evidence is frozen; a PR adds only its own evidence namespace.
 
     A documented legacy-to-history migration is allowed when the legacy file is
     deleted in the same change and the new history bytes are its verbatim
     content. A retirement may delete the legacy file only when removed.tsv
     records that unit.
+
+    ``allow_generated_ownership`` is the post-merge writer's mode. The previous
+    writer run's `ref..HEAD` change set contains the map that run committed, so
+    the writer must not read its own output as a pull request edit. The pull
+    request gate never sets it; `build` still rewrites the map from merged
+    history and `check` still verifies the committed bytes.
     """
     changes = _units_changes(root, ref)
     errors = []
@@ -1694,11 +1706,18 @@ def shard_ownership_errors(root: Path, ref: str, unit: str | None = None,
     for status, name in changes:
         path = Path(name)
         if path.name == "ownership.paths":
-            if not (status == "A" and _map_bootstrap_allowed(root, ref)):
-                errors.append(
-                    f"{name}: the path ownership map is generated on main; a pull "
-                    "request must not add, edit, rename or delete it"
-                )
+            if status == "A" and _map_bootstrap_allowed(root, ref):
+                continue
+            if allow_generated_ownership:
+                # The writer's own regeneration is legitimate output even
+                # though a pull request must never produce it. The map is
+                # rewritten deterministically by build before the commit, so
+                # this does not trust or preserve the bytes seen here.
+                continue
+            errors.append(
+                f"{name}: the path ownership map is generated on main; a pull "
+                "request must not add, edit, rename or delete it"
+            )
             continue
         if path.parent.name.endswith(FRAGMENT_SUFFIX):
             unit_id = path.parent.name[:-len(FRAGMENT_SUFFIX)]
@@ -2462,6 +2481,15 @@ def main(
         ),
     )
     parser.add_argument(
+        "--allow-generated-ownership",
+        action="store_true",
+        help=(
+            "post-merge writer mode: permit the writer's own regenerated "
+            "ownership.paths to appear in the --against change set; never used "
+            "by the pull request gate and requires --forbid-shard-ownership"
+        ),
+    )
+    parser.add_argument(
         "--allow-baseline-note-edits",
         action="store_true",
         default=os.environ.get("PORT_BASELINE_NOTE_EDITS") == "true",
@@ -2517,6 +2545,22 @@ def main(
         return 0
 
     forbid_ownership = args.forbid_aggregate_changes or args.forbid_shard_ownership
+    if args.allow_generated_ownership:
+        if args.forbid_aggregate_changes:
+            print(
+                "error: --allow-generated-ownership is the post-merge writer mode "
+                "and cannot be combined with the pull request gate "
+                "--forbid-aggregate-changes",
+                file=sys.stderr,
+            )
+            return 1
+        if not args.forbid_shard_ownership:
+            print(
+                "error: --allow-generated-ownership requires "
+                "--forbid-shard-ownership",
+                file=sys.stderr,
+            )
+            return 1
     if forbid_ownership:
         if not args.against:
             flag = ("--forbid-aggregate-changes" if args.forbid_aggregate_changes
@@ -2530,7 +2574,10 @@ def main(
                 root, args.against, queue, ledger, recorded_base, index,
                 args.allow_baseline_note_edits,
             ) if args.forbid_aggregate_changes else [])
-            ownership = shard_ownership_errors(root, args.against, args.unit, args.pr)
+            ownership = shard_ownership_errors(
+                root, args.against, args.unit, args.pr,
+                allow_generated_ownership=args.allow_generated_ownership,
+            )
             merge = _git(root, "merge-base", args.against, "HEAD").decode(
                 "ascii", "replace").strip()
             if merge and _map_bootstrap_allowed(root, merge):

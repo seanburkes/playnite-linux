@@ -2747,6 +2747,140 @@ class PortIndexTests(unittest.TestCase):
         self.assertIn("changed: docs/port/units/ownership.paths", output)
         self.assertIn("bot-owned", output)
 
+    def test_writer_mode_accepts_the_writers_own_regenerated_map(self):
+        self.write_queue_shard("p1-001", queue_row("p1-001"))
+        self.build()
+        base = self.start_git_history()
+        product = self.root / "src" / "App" / "Thing.cs"
+        product.parent.mkdir(parents=True)
+        product.write_text("// product\n")
+        self.write_queue_shard("p1-001", queue_row("p1-001", status="in-progress"))
+        self.git("add", "-A")
+        self.git("commit", "-q", "-m", "feat: add the thing (#60)")
+        before = self.ownership_map().read_bytes()
+        self.build()
+        self.assertNotEqual(before, self.ownership_map().read_bytes())
+        self.commit("chore(port-index): regenerate aggregates from unit shards")
+        aggregates = {
+            path: path.read_bytes()
+            for path in (
+                self.queue,
+                self.ledger,
+                self.root / "docs" / "port" / "PORT-STATUS.md",
+                self.ownership_map(),
+            )
+        }
+
+        # The pull request gate still reads the writer's own map commit as a
+        # pull request edit, which is exactly the bug this mode closes.
+        status, output = self.check_with_git(
+            "--shards-only", "--against", base, "--forbid-shard-ownership")
+        self.assertEqual(1, status, output)
+        self.assertIn(
+            "docs/port/units/ownership.paths: the path ownership map is generated "
+            "on main", output)
+        self.assertIn(
+            "ownership map is generated on main",
+            " ".join(port_index.shard_ownership_errors(self.root, base)),
+        )
+
+        # The writer's mode accepts its own earlier regeneration, and a second
+        # run is byte-identical so the writer has nothing to commit.
+        status, output = self.check_with_git(
+            "--shards-only", "--against", base, "--forbid-shard-ownership",
+            "--allow-generated-ownership")
+        self.assertEqual(0, status, output)
+        self.assertIn("shards are valid", output)
+        self.assertEqual(
+            [], port_index.shard_ownership_errors(
+                self.root, base, allow_generated_ownership=True))
+        self.build()
+        self.assertEqual(
+            aggregates,
+            {
+                path: path.read_bytes()
+                for path in (
+                    self.queue,
+                    self.ledger,
+                    self.root / "docs" / "port" / "PORT-STATUS.md",
+                    self.ownership_map(),
+                )
+            },
+        )
+        status, output = self.check()
+        self.assertEqual(0, status, output)
+
+    def test_writer_mode_replaces_a_tampered_map_deterministically(self):
+        self.write_queue_shard("p1-001", queue_row("p1-001"))
+        self.build()
+        base = self.start_git_history()
+        product = self.root / "src" / "App" / "Thing.cs"
+        product.parent.mkdir(parents=True)
+        product.write_text("// product\n")
+        self.write_queue_shard("p1-001", queue_row("p1-001", status="in-progress"))
+        self.git("add", "-A")
+        self.git("commit", "-q", "-m", "feat: add the thing (#60)")
+        self.build()
+        self.commit("chore(port-index): regenerate aggregates from unit shards")
+        self.ownership_map().write_text(
+            port_index.OWNERSHIP_HEADER
+            + "\n"
+            + f"src/Fake.cs\tp1-001\t{'a' * 40}\tpull/999\n"
+        )
+        self.git("add", "docs")
+        self.git("commit", "-q", "-m", "hand edit the map")
+
+        status, output = self.check_with_git(
+            "--shards-only", "--against", base, "--forbid-shard-ownership",
+            "--allow-generated-ownership")
+        self.assertEqual(0, status, output)
+
+        # build never trusts the bytes it saw: it derives the map from merged
+        # history, and check then proves the committed map matches.
+        self.build()
+        self.assertEqual(
+            port_index.render_ownership_map(
+                self.root, self.units, port_index.build_index(self.units)),
+            self.ownership_map().read_bytes(),
+        )
+        self.assertNotIn("src/Fake.cs", self.ownership_map().read_text())
+        status, output = self.check()
+        self.assertEqual(0, status, output)
+
+    def test_writer_mode_is_rejected_outside_the_writer_gate(self):
+        self.write_queue_shard("p1-001", queue_row("p1-001"))
+        self.build()
+        base = self.start_git_history()
+
+        status, output = self.check_with_git(
+            "--shards-only", "--against", base, "--allow-generated-ownership")
+        self.assertEqual(1, status)
+        self.assertIn("requires --forbid-shard-ownership", output)
+
+        status, output = self.check_with_git(
+            "--shards-only", "--against", base, "--forbid-aggregate-changes",
+            "--allow-generated-ownership")
+        self.assertEqual(1, status)
+        self.assertIn(
+            "cannot be combined with the pull request gate", output)
+
+    def test_port_index_workflow_uses_writer_ownership_mode_only(self):
+        workflow = (
+            port_index.ROOT / ".github" / "workflows" / "port-index.yml"
+        ).read_text(encoding="utf-8")
+        pr_guard = (
+            port_index.ROOT / ".github" / "workflows" / "plan-guards.yml"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn("--allow-generated-ownership", workflow)
+        self.assertIn("--forbid-shard-ownership", workflow)
+        self.assertNotIn("--allow-generated-ownership", pr_guard)
+        self.assertIn("--forbid-aggregate-changes", pr_guard)
+        self.assertLess(
+            workflow.index("--allow-generated-ownership"),
+            workflow.index("build_port_index.py build"),
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
