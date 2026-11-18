@@ -19,6 +19,7 @@
     <ProjectReference Include="../../tools/SettingsMigration.CrashHost/SettingsMigration.CrashHost.csproj" />
     <ProjectReference Include="../../tools/AssetCopy.CrashHost/AssetCopy.CrashHost.csproj" />
     <ProjectReference Include="../../tools/Playnite.SingleInstance.Host/Playnite.SingleInstance.Host.csproj" />
+    <ProjectReference Include="../../tools/p5-008/SteamAcceptance/SteamAcceptance.csproj" />
   </ItemGroup>
   <ItemGroup>
     <None Include="../golden/settings/*.json" Link="golden/settings/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />

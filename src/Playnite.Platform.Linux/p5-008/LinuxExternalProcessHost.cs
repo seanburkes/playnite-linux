@@ -7,8 +7,16 @@ namespace Playnite.Platform.Linux;
 /// <summary>Same-namespace host adapter. Does not read environments or command lines.</summary>
 public sealed class LinuxExternalProcessHost : IExternalProcessHost
 {
-    private readonly LinuxProcessObserver observer = new();
-    private readonly LinuxProcStatReader stats = new();
+    private readonly LinuxProcessObserver observer;
+    private readonly IProcStatReader stats;
+    private readonly IProcessSignalHandles signals;
+
+    public LinuxExternalProcessHost(IProcStatReader? statReader = null, IProcessSignalHandles? signalHandles = null)
+    {
+        stats = statReader ?? new LinuxProcStatReader();
+        observer = new LinuxProcessObserver(stats);
+        signals = signalHandles ?? new LinuxPidFd();
+    }
 
     public async Task<ExternalProcessSnapshot> SnapshotAsync(CancellationToken cancellationToken)
     {
@@ -84,27 +92,21 @@ public sealed class LinuxExternalProcessHost : IExternalProcessHost
     public async Task SignalAsync(ProcessIdentity identity, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
+        using var handle = signals.Open(identity.ProcessId);
+        if (handle is null)
+        {
+            return;
+        }
+
+        // Pin first, then reverify. A subsequent PID recycle cannot redirect the pidfd signal.
         var row = await stats.ReadAsync(identity.ProcessId, cancellationToken).ConfigureAwait(false);
-        if (row is not { } current || !current.IsRunning || current.StartTimeTicks != identity.StartTimeTicks
+        if (row is not { } current || current.ProcessId != identity.ProcessId || !current.IsRunning
+            || current.StartTimeTicks != identity.StartTimeTicks
             || current.ProcessGroupId != identity.ProcessGroupId)
         {
             return;
         }
 
-        try
-        {
-            using var process = Process.GetProcessById(identity.ProcessId);
-            process.Kill(); // Only this identity; never an unobserved child or an unrelated group.
-        }
-        catch (ArgumentException)
-        {
-            // Exit between the checked stat and opening the process handle.
-            return;
-        }
-        catch (InvalidOperationException)
-        {
-            // Exit between opening the handle and signalling.
-            return;
-        }
+        handle.Terminate();
     }
 }

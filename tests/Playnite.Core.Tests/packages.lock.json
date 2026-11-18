@@ -257,6 +257,13 @@
           "Playnite.Core": "[1.0.0, )"
         }
       },
+      "steamacceptance": {
+        "type": "Project",
+        "dependencies": {
+          "Playnite.Platform.Linux": "[1.0.0, )",
+          "Playnite.Steam": "[1.0.0, )"
+        }
+      },
       "Dapper": {
         "type": "CentralTransitive",
         "requested": "[2.1.89, )",

@@ -3,15 +3,26 @@ using Playnite.Platform.Sessions;
 using Playnite.Steam;
 
 // Owner-only acceptance. Not a test project and never invoked by CI.
-if (args.Length < 5 || args[0] != "--confirm-no-unsaved-data")
+if (args.Length < 4)
 {
-    Console.Error.WriteLine("WARNING: force-stops the selected games, including on cancellation. Save all game data first.");
-    Console.Error.WriteLine("Usage: steam-acceptance.sh --confirm-no-unsaved-data NATIVE_LIBRARY NATIVE_APPID PROTON_LIBRARY PROTON_APPID [--uri] [--native-exe ABS_PATH] [--proton-exe ABS_PATH]");
+    Console.Error.WriteLine("Default: read-only inspection; no launch or signal. Save data before explicitly consenting to launch and graceful stop.");
+    Console.Error.WriteLine("Usage: steam-acceptance.sh NATIVE_LIBRARY NATIVE_APPID PROTON_LIBRARY PROTON_APPID [--allow-launch --allow-stop] [--uri] [--native-exe ABS_PATH] [--proton-exe ABS_PATH]");
     return 2;
 }
 
 try
 {
+    ValidateOptions();
+    var allowLaunch = args.Contains("--allow-launch", StringComparer.Ordinal);
+    var allowStop = args.Contains("--allow-stop", StringComparer.Ordinal);
+    if (allowLaunch != allowStop)
+    {
+        throw new ArgumentException("Live acceptance requires both --allow-launch and --allow-stop: consent to four launches and graceful stop/cancel cleanup for these two selected apps only.");
+    }
+
+    Console.WriteLine(allowLaunch
+        ? "CONSENT: four selected-app launches and graceful SIGTERM stop/cancel/disposal cleanup permitted. Never SIGKILL; uncooperative games require manual Steam Stop."
+        : "DRY RUN: read-only inspection. No Steam command, launch or signal will be issued.");
     var uri = args.Contains("--uri", StringComparer.Ordinal);
     var steam = uri ? null : FindExecutable("steam");
     var opener = FindExecutable("xdg-open") ?? "/usr/bin/xdg-open";
@@ -20,19 +31,19 @@ try
         Console.WriteLine("Steam executable unavailable; using protocol-handler fallback.");
     }
 
-    var host = new ReportingHost();
+    var host = new ConsentProcessHost(new ReportingHost(), allowLaunch, allowStop);
     var initial = await host.SnapshotAsync(CancellationToken.None);
     var clients = initial.Processes.Where(row => row.Process.IsRunning && SteamProcessAttribution.IsSteamClient(row.Executable))
         .Select(row => row.Process.Identity).ToArray();
-    if (!initial.IsComplete || clients.Length == 0)
+    if (allowLaunch && (!initial.IsComplete || clients.Length == 0))
     {
         throw new InvalidOperationException("Start Steam and log in first; a complete baseline and existing client are required for this acceptance run.");
     }
 
     foreach (var (label, library, id, executable) in new[]
     {
-        ("native", args[1], args[2], Optional("--native-exe")),
-        ("Proton", args[3], args[4], Optional("--proton-exe")),
+        ("native", args[0], args[1], Optional("--native-exe")),
+        ("Proton", args[2], args[3], Optional("--proton-exe")),
     })
     {
         var files = new SteamFileSystem(new LinuxBoundedFileReader());
@@ -62,10 +73,26 @@ try
             Console.WriteLine("Explicit executable override enabled: attribution is an owner-selected heuristic.");
         }
 
+        var target = new SteamLaunchTarget(app, prefix, canonicalOverride);
+        if (canonicalOverride is not null && !SteamProcessAttribution.Matches(target, canonicalOverride))
+        {
+            throw new ArgumentException("Executable selector must remain under this game's install directory/prefix and must not be a shell, system binary or helper.");
+        }
+
+        if (!allowLaunch)
+        {
+            foreach (var row in initial.Processes.Where(row => row.Process.IsRunning && SteamProcessAttribution.Matches(target, row.Executable)))
+            {
+                Console.WriteLine($"READ ONLY existing candidate pid={row.Process.Identity.ProcessId} start_ticks={row.Process.Identity.StartTimeTicks} pgid={row.Process.Identity.ProcessGroupId}; not fresh attribution");
+            }
+
+            continue;
+        }
+
         foreach (var cancel in new[] { false, true })
         {
             Console.WriteLine($"Launching {label} app={appId} for {(cancel ? "cancel" : "stop")} acceptance.");
-            await using var launcher = new SteamProcessLauncher(host, new(app, prefix, canonicalOverride), new()
+            await using var launcher = new SteamProcessLauncher(host, target, new()
             {
                 SteamExecutable = steam, ProtocolOpener = opener, AttributionWindow = TimeSpan.FromSeconds(60),
             });
@@ -120,7 +147,9 @@ try
         }
     }
 
-    Console.WriteLine("Owner acceptance completed. This does not verify Flatpak, launch options, offline mode, or Phase 5 exit.");
+    Console.WriteLine(allowLaunch
+        ? "Owner acceptance completed. This does not verify Flatpak, launch options, offline mode, or Phase 5 exit."
+        : "DRY RUN completed: no launches or signals; no acceptance evidence collected.");
     return 0;
 }
 catch (Exception exception)
@@ -132,8 +161,33 @@ catch (Exception exception)
 
 string? Optional(string option)
 {
-    var index = Array.IndexOf(args, option);
+    var index = Array.FindIndex(args, 4, value => value == option);
     return index < 0 ? null : index + 1 < args.Length ? args[index + 1] : throw new ArgumentException("Missing option value.");
+}
+
+void ValidateOptions()
+{
+    var seen = new HashSet<string>(StringComparer.Ordinal);
+    for (var index = 4; index < args.Length; index++)
+    {
+        var option = args[index];
+        if (!seen.Add(option))
+        {
+            throw new ArgumentException("Duplicate option.");
+        }
+
+        if (option is "--native-exe" or "--proton-exe")
+        {
+            if (++index >= args.Length || !Path.IsPathFullyQualified(args[index]))
+            {
+                throw new ArgumentException("Executable selectors require an absolute path.");
+            }
+        }
+        else if (option is not ("--allow-launch" or "--allow-stop" or "--uri"))
+        {
+            throw new ArgumentException("Unknown option; nothing was launched.");
+        }
+    }
 }
 
 static string? FindExecutable(string name) => (Environment.GetEnvironmentVariable("PATH") ?? string.Empty)

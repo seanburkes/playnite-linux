@@ -52,21 +52,40 @@ public static class SteamProcessAttribution
 {
     private static readonly HashSet<string> Infrastructure = new(StringComparer.OrdinalIgnoreCase)
     {
-        "steam", "steamwebhelper", "steamservice", "steam-runtime-launcher-service", "srt-logger",
+        "steam", "steam.sh", "steamwebhelper", "steamservice", "steamerrorreporter", "steammonitor",
+        "steam-runtime-launcher-service", "srt-logger", "gameoverlayui", "steam-overlay-ui",
         "pv-adverb", "pressure-vessel-wrap", "pressure-vessel-adverb", "reaper", "wineserver", "wineserver64",
-        "wine", "wine64", "wine-preloader", "wine64-preloader", "proton", "bwrap",
+        "wine", "wine64", "wine-preloader", "wine64-preloader", "proton", "bwrap", "pressure-vessel",
+        "wineboot.exe", "winedevice.exe", "services.exe", "explorer.exe", "plugplay.exe", "rpcss.exe",
+        "conhost.exe", "rundll32.exe", "start.exe", "steamclient_loader", "steam-launch-wrapper",
+        "wineboot", "winecfg", "wineconsole", "winedbg", "winepath", "winefile", "winemenubuilder",
+        "winecfg.exe", "wineconsole.exe", "winedbg.exe", "winepath.exe", "winefile.exe", "winemenubuilder.exe",
     };
 
-    public static bool IsInfrastructure(string? executable) => executable is not null
-        && Infrastructure.Contains(Path.GetFileName(executable));
+    private static readonly HashSet<string> Shells = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "sh", "bash", "dash", "zsh", "ksh", "mksh", "pdksh", "csh", "tcsh", "fish", "yash", "rbash", "busybox",
+    };
+
+    public static bool IsInfrastructure(string? executable)
+    {
+        var name = Path.GetFileName(executable);
+        return name is not null && (Infrastructure.Contains(name)
+            || name.StartsWith("pressure-vessel-", StringComparison.OrdinalIgnoreCase)
+            || name.StartsWith("steam-runtime-", StringComparison.OrdinalIgnoreCase));
+    }
+
+    public static bool IsShellOrSystemBinary(string executable) => Shells.Contains(Path.GetFileName(executable))
+        || new[] { "/usr", "/bin", "/sbin", "/lib", "/lib64" }.Any(root => Under(executable, root));
 
     public static bool IsSteamClient(string? executable) => executable is not null
-        && Path.GetFileName(executable) is "steam" or "steamwebhelper" or "steamservice";
+        && new[] { "steam", "steam.sh", "steamwebhelper", "steamservice" }.Contains(Path.GetFileName(executable), StringComparer.OrdinalIgnoreCase);
 
     public static bool Matches(SteamLaunchTarget target, string? executable) => executable is not null
         && !IsInfrastructure(executable)
-        && (Under(executable, target.App.InstallPath) || Under(executable, target.ProtonPrefix)
-            || (target.ExecutableOverride is not null && executable == target.ExecutableOverride));
+        && !IsShellOrSystemBinary(executable)
+        && (Under(executable, target.App.InstallPath) || Under(executable, target.ProtonPrefix))
+        && (target.ExecutableOverride is null || executable == target.ExecutableOverride);
 
     public static bool Under(string path, string? root) => root is not null
         && Path.IsPathFullyQualified(root) && Path.IsPathFullyQualified(path)

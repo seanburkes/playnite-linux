@@ -106,6 +106,17 @@ public sealed class SteamLaunchTests
     [InlineData("pv-adverb")]
     [InlineData("wineserver")]
     [InlineData("wine64-preloader")]
+    [InlineData("pressure-vessel")]
+    [InlineData("pressure-vessel-supervisor")]
+    [InlineData("steam-runtime-launcher-service")]
+    [InlineData("steam-runtime-supervisor")]
+    [InlineData("srt-logger")]
+    [InlineData("proton")]
+    [InlineData("wineboot.exe")]
+    [InlineData("winedevice.exe")]
+    [InlineData("services.exe")]
+    [InlineData("explorer.exe")]
+    [InlineData("steam.sh")]
     public void Infrastructure_never_starts_a_session_even_under_the_install_root(string name)
     {
         Assert.Null(SteamProcessAttribution.Find(Native, Before,
@@ -302,11 +313,40 @@ public sealed class SteamLaunchTests
     }
 
     [Fact]
-    public void Owner_executable_override_is_opt_in_and_cannot_bypass_infrastructure_exclusion()
+    public void Owner_executable_selector_only_narrows_the_existing_install_or_prefix_match()
     {
         Assert.False(SteamProcessAttribution.Matches(Native, "/explicit/selected-game"));
-        Assert.True(SteamProcessAttribution.Matches(Native with { ExecutableOverride = "/explicit/selected-game" }, "/explicit/selected-game"));
+        Assert.False(SteamProcessAttribution.Matches(Native with { ExecutableOverride = "/explicit/selected-game" }, "/explicit/selected-game"));
         Assert.False(SteamProcessAttribution.Matches(Native with { ExecutableOverride = "/explicit/steam" }, "/explicit/steam"));
+        var selected = Native.App.InstallPath + "/selected-game";
+        Assert.True(SteamProcessAttribution.Matches(Native with { ExecutableOverride = selected }, selected));
+        Assert.False(SteamProcessAttribution.Matches(Native with { ExecutableOverride = selected }, Native.App.InstallPath + "/other-game"));
+        Assert.True(SteamProcessAttribution.Matches(Proton with { ExecutableOverride = Proton.ProtonPrefix + "/game.exe" }, Proton.ProtonPrefix + "/game.exe"));
+    }
+
+    [Theory]
+    [InlineData("/usr/bin/bash")]
+    [InlineData("/usr/bin/selected-game")]
+    [InlineData("/bin/tool")]
+    [InlineData("/sbin/tool")]
+    [InlineData("/library/steamapps/common/Game with spaces/bash")]
+    [InlineData("/library/steamapps/common/Game with spaces/pv-adverb")]
+    public void Owner_selector_rejects_shell_system_and_helper_binaries(string executable)
+    {
+        Assert.False(SteamProcessAttribution.Matches(Native with { ExecutableOverride = executable }, executable));
+        Assert.Throws<ArgumentException>(() => Launcher(new FakeHost(), Native with { ExecutableOverride = executable }));
+    }
+
+    [Fact]
+    public void Owner_selector_cannot_weaken_unique_fresh_group_requirements()
+    {
+        var executable = Native.App.InstallPath + "/selected-game";
+        var target = Native with { ExecutableOverride = executable };
+        Assert.Null(SteamProcessAttribution.Find(target, Before, new([Client, Entry(22, 2, 10, executable)], true)));
+        Assert.Null(SteamProcessAttribution.Find(target, Before,
+            new([Client, Entry(22, 2, 20, executable), Entry(23, 3, 30, executable)], true)));
+        Assert.Null(SteamProcessAttribution.Find(target, new([Client, Entry(20, 1, 20, "/existing")], true),
+            new([Client, Entry(22, 2, 20, executable)], true)));
     }
 
     private static ExternalProcessEntry Entry(int pid, long ticks, int group, string? executable) =>

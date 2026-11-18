@@ -62,10 +62,13 @@ unverified. Prefix paths are supplied explicitly, including non-default prefix l
    executable, pre-existing membership or incomplete coverage means UNKNOWN, not permission.
 5. Once attributed, retain PID/start/PGID identities for all observed group members. Stop,
    cancel, disposal and natural exit revalidate complete coverage, group continuity and every
-   member before signalling **individual identity-checked members of this group only**.
+   member before signalling **individual identity-checked members of this group only** with
+   **SIGTERM only**, through a pinned pidfd followed by a final stat identity check.
    Re-scan and stop fresh in-group children until the whole group is proven empty. No `kill`
    shell command, negative-PGID signal, arbitrary process-tree kill or unrelated group signal.
-   A recycled PGID without a retained identity is not ownership.
+   A recycled PGID without a retained identity is not ownership. An uncooperative game that
+   ignores SIGTERM fails stop verification and stays degraded/nonterminal; there is no
+   force-kill escalation or unsafe PID-based fallback when pidfd support is unavailable.
 6. The unchanged p5-004 tracker debounces game-process absence (two complete samples by
    default); adapter cleanup then reaps runtime helpers before a terminal transition.
    A known child escaping the group raises `ProcessSurvivorException` / degrades observation;
@@ -74,8 +77,10 @@ unverified. Prefix paths are supplied explicitly, including non-default prefix l
 All host paths passed to the policy must be canonical, not symlink aliases; the production
 host resolves executable links, p5-002 resolves library roots, and the acceptance tool checks
 the full install root. An explicit canonical `ExecutableOverride` is an **owner-selected
-heuristic**, not manifest evidence; it does not bypass uniqueness, infrastructure exclusions
-or group safety. It is opt-in, not required by the normal attribution path.
+heuristic**, not manifest evidence; it is a narrowing selector **within** the installdir/prefix,
+never an additive match outside them. Shells, system binaries and known Steam/Proton helpers
+are rejected even if the owner selects them. It does not bypass uniqueness or group safety.
+It is opt-in, not required by the normal attribution path.
 
 ### UNKNOWN / manual fallback and residuals
 
@@ -93,9 +98,16 @@ is UNKNOWN/manual. An unobserved child escaping between samples is likewise outs
 An immediately exiting game may disappear before the tracker sees its first live sample;
 the existing tracker then degrades rather than inventing an exit. A Proton process whose
 `/proc/exe` resolves to the shared Wine loader outside the game/prefix is UNKNOWN; no argv or
-environment heuristic silently upgrades it. Group scans are not atomic, and the BCL signal
-path has the usual stat-check-to-signal race; this is not a pidfd/cgroup containment guarantee.
-Host namespaces and start ticks cannot be mixed across boots or PID namespaces.
+environment heuristic silently upgrades it. Group scans are not atomic; this is not cgroup
+containment and cannot prove ownership of an unobserved escaped child.
+The pidfd is opened before the final stat verification, so subsequent PID recycling cannot
+redirect SIGTERM to a replacement process. `pidfd_open`, `pidfd_send_signal` (constant 15 only)
+and descriptor `close` are the reviewed Linux interop surface; unsupported kernels/libcs
+fail closed. This eliminates signal redirection to a recycled PID, not the non-atomic
+observation boundary: a pinned process can still exec or change groups after its final stat
+check. The signal still targets that original process, never a replacement PID. Group/exec
+provenance is not atomically locked with the signal and is not claimed to be. Host namespaces
+and start ticks cannot be mixed across boots or PID namespaces.
 
 ## Tests and acceptance
 
@@ -110,20 +122,33 @@ No skipped or conditionally passing corpus test, no fixture/oracle edits.
 Owner-only script (not run by CI; building it is not real-machine evidence):
 
 ```sh
-scripts/p5-008/steam-acceptance.sh --confirm-no-unsaved-data \
+# Default: read-only inspection; no launch or signal, no acceptance claim.
+scripts/p5-008/steam-acceptance.sh \
   /absolute/native/SteamLibrary 427520 /absolute/proton/SteamLibrary 1238040
-# Repeat with --uri to test the protocol-handler path.
+# Only after saving data, explicitly consent to all four selected-app launches and
+# graceful stop/cancel/disposal cleanup. There is no force-kill option.
+scripts/p5-008/steam-acceptance.sh \
+  /absolute/native/SteamLibrary 427520 /absolute/proton/SteamLibrary 1238040 \
+  --allow-launch --allow-stop
+# Repeat the explicitly consented invocation with --uri for the protocol-handler path.
 # Optional --native-exe /canonical/game/binary --proton-exe /canonical/game.exe
 ```
 
 Use **your installed appids**, not blindly the example ids. Start/log in to Steam first;
 close other copies of the selected games, save data and use a disposable test save/profile.
-The script runs native stop, native cancel, Proton stop, Proton cancel. It prints request
+The default script only inspects manifests and existing candidate shapes. An independently
+tested `ConsentProcessHost` rejects launch and stop calls unless their separate flags were
+supplied, even if program control flow accidentally attempts them. Supplying only one consent
+flag is rejected before any launch. With **both explicit flags**, it runs native stop, native
+cancel, Proton stop, Proton cancel; the consent also covers graceful cleanup on disposal.
+It prints request
 argv, attributed PID/start ticks/PGID, every signalled PID/PGID and tracker transitions;
 asserts Running → Stopped/Cancelled, empty attributed groups and surviving original client
 identities. It does not change launch options, prefixes, Steam configuration or permissions.
-It force-stops selected games (not graceful shutdown); game-generated files/Steam playtime
-are normal launch effects and **not rolled back**. Do not use a session with unsaved progress.
+It **never force-stops** games: SIGTERM only, with a bounded wait and explicit failure/manual
+Steam Stop when a game ignores it. No SIGKILL fallback exists. Game-generated files/Steam
+playtime are normal effects of an explicitly consented launch and **not rolled back**; the
+default inspection avoids these effects. Do not consent with unsaved progress.
 UNKNOWN exits nonzero and explicitly asks the owner to stop the selected game in Steam;
 it never “cleans up” unidentified processes. Keep output private: executable paths can contain
 the owner's home. Inspect remaining processes manually before another run.
@@ -160,7 +185,8 @@ silently or call the overall sandbox narrow merely because filesystem access is 
 
 ### Exact outstanding owner-machine checklist
 
-- Native Steam: native and Proton stop/cancel script runs, then the same four via `--uri`;
+- Native Steam: read-only inspection first; then explicitly consent to native and Proton
+  stop/cancel script runs, then the same four via `--uri` with both consent flags;
   retain real PID/start/PGID output, return codes and tracker events. Verify the actual game
   visible in Steam matches the requested app, including DRM/overlay behaviour.
 - Verify full original client/helper survival and no live game/runtime group member after

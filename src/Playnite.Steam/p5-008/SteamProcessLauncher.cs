@@ -42,6 +42,10 @@ public sealed class SteamProcessLauncher : IProcessLauncher, IProcessObserver
 
         ValidateOptionalPath(target.ProtonPrefix);
         ValidateOptionalPath(target.ExecutableOverride);
+        if (target.ExecutableOverride is { } executable && !SteamProcessAttribution.Matches(target, executable))
+        {
+            throw new ArgumentException("An executable selector must be a non-helper game binary under the install directory or app prefix; shells and system binaries are forbidden.", nameof(target));
+        }
         _ = CreateRequest();
     }
 
