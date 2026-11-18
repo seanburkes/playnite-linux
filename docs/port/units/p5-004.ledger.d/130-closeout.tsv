@@ -1,0 +1,3 @@
+timestamp	unit	from	to	actor	evidence
+2026-11-18T17:10:55Z	p5-004	in-progress	done	fm/p5-004-closeout	Canonical close-out of merged delivery https://github.com/seanburkes/playnite-linux/pull/120 at 064e261; merged-head linux-ci 44345002684; the merge is verified an ancestor of main 722fc8c. Close-out PR https://github.com/seanburkes/playnite-linux/pull/130. No product, test, oracle, baseline or aggregate change.
+2026-11-18T17:10:55Z	p5-004	done	done	fm/p5-004-closeout	Validated head a1625e367cca0e2b2836b7fb212accafe16e831f; linux-ci run https://github.com/seanburkes/playnite-linux/actions/runs/44354634594 completed success on that exact head. build_port_index check --shards-only --against origin/main passes; unit ownership is the p5-004 namespace only.

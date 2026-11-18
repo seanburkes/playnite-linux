@@ -58,16 +58,16 @@
 | Status | Units |
 | --- | ---: |
 | deferred | 1 |
-| done | 68 |
-| in-progress | 6 |
+| done | 69 |
+| in-progress | 5 |
 | todo | 28 |
 
 ## Ledger
 
 | Metric | Value |
 | --- | ---: |
-| Ledger rows | 264 |
-| Ledger fragments | 37 |
+| Ledger rows | 266 |
+| Ledger fragments | 39 |
 
 ## Units
 
@@ -143,7 +143,7 @@
 | p5-001 | W5 | steam | VDF/ACF parsers | in-progress | `units/p5-001.*`; 2 ledger rows |
 | p5-002 | W5 | steam | Steam root/library discovery | done | `units/p5-002.*`; 6 ledger rows |
 | p5-003 | W5 | steam | Artwork/metadata cache | done | `units/p5-003.*`; 7 ledger rows |
-| p5-004 | W5 | platform | Process launcher/session tracker | in-progress | `units/p5-004.*`; 5 ledger rows |
+| p5-004 | W5 | platform | Process launcher/session tracker | done | `units/p5-004.*`; 7 ledger rows |
 | p5-005 | W5 | platform | XDG/single-instance/protocol | todo | `units/p5-005.*`; 0 ledger rows |
 | p5-005a | W5 | platform | XDG/single-instance/protocol continuation | in-progress | `units/p5-005a.*`; 3 ledger rows |
 | p5-006 | W5 | platform | WebView service | todo | `units/p5-006.*`; 0 ledger rows |
