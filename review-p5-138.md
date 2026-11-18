@@ -1,4 +1,4 @@
-# Review — p5-008c (PR #138)
+# Review — p5-008c (https://github.com/seanburkes/playnite-linux/pull/138)
 
 - PR: https://github.com/seanburkes/playnite-linux/pull/138
 - PR head: `7fc57ff`; code head: `17d923a2d0904eb1de211a750524da95169ab388`
