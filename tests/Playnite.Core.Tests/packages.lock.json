@@ -238,6 +238,12 @@
       "playnite.sdk.abstractions": {
         "type": "Project"
       },
+      "playnite.singleinstance.host": {
+        "type": "Project",
+        "dependencies": {
+          "Playnite.Platform.Linux": "[1.0.0, )"
+        }
+      },
       "playnite.steam": {
         "type": "Project",
         "dependencies": {
