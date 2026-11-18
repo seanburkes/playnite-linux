@@ -28,6 +28,12 @@ internal static class SourcePolicy
     internal static readonly string[] LogicProjects = ["Playnite.Core", "Playnite.SDK.Abstractions", "Playnite.Steam"];
     internal static readonly string[] UiProjects = ["Playnite.Desktop", "Playnite.SDK"];
 
+    // PORTING allows native imports only in Platform.Linux with a reviewed allow-list. The
+    // list is the closed set of libc entry points a handle-bound file read needs; a
+    // declaration naming any other entry point, in another project, or whose entry point
+    // cannot be read from source is rejected. Adding a symbol is a reviewed policy change.
+    internal static readonly string[] LinuxNativeImportAllowlist = ["close", "openat", "read", "statx"];
+
     // PORTING allows GC.Collect only in a benchmark/soak harness with a comment. The harness
     // projects come from the protected docs/port/BenchmarkHarnessAllowlist.props file, so
     // widening the exception needs the oracle-change label and the protected-path gate; review
@@ -114,10 +120,25 @@ internal static class SourcePolicy
         if (name is "System.Runtime.InteropServices.DllImportAttribute" or "System.Runtime.InteropServices.LibraryImportAttribute")
         {
             // PORTING allows native imports only in Platform.Linux with a reviewed allow-list.
-            // No entry has been reviewed yet, so even Linux rejects them until its unit adds one.
-            return project == "Playnite.Platform.Linux"
-                ? "native import needs a reviewed Linux allow-list (currently empty)"
-                : "native import outside Playnite.Platform.Linux";
+            // The reviewed entry points are the only thing this permits; the declaration is
+            // rejected when its entry point is not on the list or cannot be proven from source.
+            if (project != "Playnite.Platform.Linux")
+            {
+                return "native import outside Playnite.Platform.Linux";
+            }
+
+            // A named argument (EntryPoint) or a bare type reference resolves inside the
+            // attribute but declares no import; only the attribute constructor is a native
+            // declaration to judge.
+            if (symbol is not IMethodSymbol { MethodKind: MethodKind.Constructor })
+            {
+                return null;
+            }
+
+            var entryPoint = NativeImportEntryPoint(node, model);
+            return entryPoint != null && LinuxNativeImportAllowlist.Contains(entryPoint, StringComparer.Ordinal)
+                ? null
+                : $"native import needs a reviewed Linux allow-list entry; '{entryPoint ?? "unknown entry point"}' is not allowed";
         }
 
         if (symbol is IMethodSymbol method)
@@ -198,6 +219,39 @@ internal static class SourcePolicy
     }
 
     private static bool IsEmpty(BlockSyntax block) => block.Statements.All(s => s is EmptyStatementSyntax || s is BlockSyntax nested && IsEmpty(nested));
+
+    /// <summary>
+    /// Returns the native entry point the declaration actually binds, or null when source
+    /// cannot prove it. An explicit EntryPoint wins; otherwise the method name is the entry
+    /// point, matching the interop marshaller. A non-constant EntryPoint is unprovable and
+    /// therefore rejected by the caller.
+    /// </summary>
+    private static string? NativeImportEntryPoint(SyntaxNode node, SemanticModel model)
+    {
+        // The attribute name is itself an ExpressionSyntax whose symbol can resolve to the
+        // constructor, so resolve every hit back to the declaration it belongs to.
+        var attribute = node as AttributeSyntax
+            ?? node.Ancestors().OfType<AttributeSyntax>().FirstOrDefault();
+        if (attribute?.ArgumentList == null
+            || attribute.Parent is not AttributeListSyntax { Parent: MethodDeclarationSyntax method })
+        {
+            return null;
+        }
+
+        foreach (var argument in attribute.ArgumentList.Arguments)
+        {
+            if (argument.NameEquals?.Name.Identifier.ValueText != "EntryPoint")
+            {
+                continue;
+            }
+
+            return model.GetConstantValue(argument.Expression) is { HasValue: true, Value: string value }
+                ? value
+                : null;
+        }
+
+        return method.Identifier.ValueText;
+    }
 
     private static bool InNamespace(string name, string prefix) => name == prefix || name.StartsWith(prefix + ".", StringComparison.Ordinal);
     private static bool IsHost(string project) => HostProjects.Contains(project);

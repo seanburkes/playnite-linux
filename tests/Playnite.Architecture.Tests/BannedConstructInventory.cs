@@ -30,7 +30,7 @@ internal static class BannedConstructInventory
         new("DllImport/LibraryImport", "BannedSymbols.Interop.txt", "T:System.Runtime.InteropServices.DllImportAttribute", false,
             "Playnite.Core", "class C { [System.Runtime.InteropServices.DllImport(\"libc\")] static extern int getpid(); }",
             "native import", "Only Playnite.Platform.Linux with a reviewed allow-list.",
-            "The reviewed allow-list is currently empty, so Platform.Linux imports are rejected too; its porting unit must add entries."),
+            "The reviewed allow-list permits exactly the libc entry points close, openat, read and statx for a handle-bound file read; every other entry point, every other project and an entry point that source cannot resolve are rejected."),
         new("System.Management", "BannedSymbols.txt", "N:System.Management", true, null, null, null, "No exception.",
             "The namespace is absent from the net11 reference set; only the symbol row can catch it if a package adds it."),
         new("BinaryFormatter", "BannedSymbols.txt", "T:System.Runtime.Serialization.Formatters.Binary.BinaryFormatter", false,
