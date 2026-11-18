@@ -128,8 +128,11 @@ public sealed class SteamProcessLauncher : IProcessLauncher, IProcessObserver
             catch
             {
                 linked.Cancel();
-                try { await requestTask.ConfigureAwait(false); }
-                catch (OperationCanceledException) when (linked.IsCancellationRequested) { }
+                // Observe an abandoned request fault without swallowing it: nothing may infer a
+                // game start from this outcome, and only attribution can authorize a signal.
+                _ = requestTask.ContinueWith(task => _ = task.Exception, CancellationToken.None,
+                    TaskContinuationOptions.ExecuteSynchronously | TaskContinuationOptions.OnlyOnFaulted,
+                    TaskScheduler.Default);
                 throw;
             }
 
