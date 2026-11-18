@@ -58,16 +58,16 @@
 | Status | Units |
 | --- | ---: |
 | deferred | 1 |
-| done | 69 |
-| in-progress | 5 |
+| done | 72 |
+| in-progress | 2 |
 | todo | 28 |
 
 ## Ledger
 
 | Metric | Value |
 | --- | ---: |
-| Ledger rows | 266 |
-| Ledger fragments | 39 |
+| Ledger rows | 272 |
+| Ledger fragments | 45 |
 
 ## Units
 
@@ -140,15 +140,15 @@
 | p4-006 | W4 | data | Skip report (non-Steam) | done | `units/p4-006.*`; 1 ledger rows |
 | p4-exit | W4 | repo | Phase 4 exit gate and corrected-head evidence | done | `units/p4-exit.*`; 2 ledger rows |
 | p4-tla | W4 | data | Library import crash-safety formal model | done | `units/p4-tla.*`; 4 ledger rows |
-| p5-001 | W5 | steam | VDF/ACF parsers | in-progress | `units/p5-001.*`; 2 ledger rows |
+| p5-001 | W5 | steam | VDF/ACF parsers | done | `units/p5-001.*`; 4 ledger rows |
 | p5-002 | W5 | steam | Steam root/library discovery | done | `units/p5-002.*`; 6 ledger rows |
 | p5-003 | W5 | steam | Artwork/metadata cache | done | `units/p5-003.*`; 7 ledger rows |
 | p5-004 | W5 | platform | Process launcher/session tracker | done | `units/p5-004.*`; 7 ledger rows |
 | p5-005 | W5 | platform | XDG/single-instance/protocol | todo | `units/p5-005.*`; 0 ledger rows |
-| p5-005a | W5 | platform | XDG/single-instance/protocol continuation | in-progress | `units/p5-005a.*`; 3 ledger rows |
+| p5-005a | W5 | platform | XDG/single-instance/protocol continuation | done | `units/p5-005a.*`; 5 ledger rows |
 | p5-006 | W5 | platform | WebView service | todo | `units/p5-006.*`; 0 ledger rows |
 | p5-007 | W5 | platform | Tray/notifications/sleep | todo | `units/p5-007.*`; 0 ledger rows |
-| p5-007a | W5 | platform | Tray/notifications/sleep inhibition | in-progress | `units/p5-007a.*`; 1 ledger rows |
+| p5-007a | W5 | platform | Tray/notifications/sleep inhibition | done | `units/p5-007a.*`; 3 ledger rows |
 | p5-008 | W5 | steam | Launch native/Proton | todo | `units/p5-008.*`; 0 ledger rows |
 | p5-shards | W5 | repo | Phase 5 shard board reconciliation | done | `units/p5-shards.*`; 2 ledger rows |
 | p5-shards2 | W5 | repo | Phase 5 exit assessment and merged-wave reconciliation | done | `units/p5-shards2.*`; 4 ledger rows |
