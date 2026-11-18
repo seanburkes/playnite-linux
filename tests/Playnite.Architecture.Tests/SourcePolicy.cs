@@ -29,10 +29,20 @@ internal static class SourcePolicy
     internal static readonly string[] UiProjects = ["Playnite.Desktop", "Playnite.SDK"];
 
     // PORTING allows native imports only in Platform.Linux with a reviewed allow-list. The
-    // list is the closed set of libc entry points a handle-bound file read needs; a
-    // declaration naming any other entry point, in another project, or whose entry point
-    // cannot be read from source is rejected. Adding a symbol is a reviewed policy change.
-    internal static readonly string[] LinuxNativeImportAllowlist = ["close", "openat", "read", "statx"];
+    // list is the closed set of libc entry points a handle-bound file read needs plus the
+    // PID-reuse-free signal pair; a declaration naming any other entry point, in another
+    // project, or whose entry point cannot be read from source is rejected. Adding a symbol
+    // is a reviewed policy change.
+    internal static readonly string[] LinuxNativeImportAllowlist =
+        ["close", "openat", "read", "statx", "pidfd_open", "pidfd_send_signal"];
+
+    // pidfd_send_signal can deliver any signal, so the entry-point allow-list alone would
+    // review the syscall but not its capability. The reviewed capability is exactly SIGTERM
+    // against a pidfd the same code opened: every reference must be a direct call whose
+    // signal argument is the compile-time constant 15, and a forwarded or runtime signal is
+    // unprovable and rejected rather than assumed safe.
+    internal const string PidfdSendSignalEntryPoint = "pidfd_send_signal";
+    internal const long SigTerm = 15;
 
     // PORTING allows GC.Collect only in a benchmark/soak harness with a comment. The harness
     // projects come from the protected docs/port/BenchmarkHarnessAllowlist.props file, so
@@ -143,6 +153,11 @@ internal static class SourcePolicy
 
         if (symbol is IMethodSymbol method)
         {
+            if (ImportedEntryPoint(method) == PidfdSendSignalEntryPoint)
+            {
+                return PidfdSendSignalViolation(node, method, model);
+            }
+
             if (name == "System.GC" && method.Name == "Collect")
             {
                 // The table's exception is a benchmark/soak harness with a comment. The harness
@@ -251,6 +266,79 @@ internal static class SourcePolicy
         }
 
         return method.Identifier.ValueText;
+    }
+
+    /// <summary>
+    /// Returns the entry point an imported method binds, matching the declaration rule: an
+    /// explicit EntryPoint wins, otherwise the method name. Null when the method is not a
+    /// native import at all.
+    /// </summary>
+    private static string? ImportedEntryPoint(IMethodSymbol method)
+    {
+        foreach (var attribute in method.GetAttributes())
+        {
+            var attributeName = attribute.AttributeClass?.ToDisplayString();
+            if (attributeName is not ("System.Runtime.InteropServices.DllImportAttribute"
+                or "System.Runtime.InteropServices.LibraryImportAttribute"))
+            {
+                continue;
+            }
+
+            foreach (var named in attribute.NamedArguments)
+            {
+                if (named.Key == "EntryPoint")
+                {
+                    return named.Value.Value as string;
+                }
+            }
+
+            return method.Name;
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Enforces the SIGTERM-only capability of the reviewed pidfd_send_signal import. The
+    /// only accepted reference is a direct call whose signal argument is a compile-time
+    /// SIGTERM; a method group, function pointer, forwarded or runtime signal is rejected
+    /// because the delivered signal would no longer be provable from source.
+    /// </summary>
+    private static string? PidfdSendSignalViolation(SyntaxNode node, IMethodSymbol method, SemanticModel model)
+    {
+        if (node is not InvocationExpressionSyntax invocation)
+        {
+            var enclosing = node.Ancestors().OfType<InvocationExpressionSyntax>()
+                .FirstOrDefault(candidate => candidate.Expression.Span.Contains(node.Span));
+            return enclosing != null && SymbolEqualityComparer.Default.Equals(model.GetSymbolInfo(enclosing).Symbol, method)
+                ? null
+                : "pidfd_send_signal may only be called directly with SIGTERM; a method group or function pointer could send any signal";
+        }
+
+        ArgumentSyntax? signalArgument = null;
+        for (var index = 0; index < invocation.ArgumentList.Arguments.Count; index++)
+        {
+            var argument = invocation.ArgumentList.Arguments[index];
+            var parameter = argument.NameColon is { } named
+                ? method.Parameters.FirstOrDefault(candidate => candidate.Name == named.Name.Identifier.ValueText)
+                : index < method.Parameters.Length ? method.Parameters[index] : null;
+            if (parameter?.Ordinal == 1)
+            {
+                signalArgument = argument;
+                break;
+            }
+        }
+
+        if (signalArgument == null
+            || model.GetConstantValue(signalArgument.Expression) is not { HasValue: true, Value: IConvertible constant })
+        {
+            return "pidfd_send_signal signal must be the compile-time constant SIGTERM (15); a forwarded or runtime signal is not provable";
+        }
+
+        var signal = constant.ToInt64(System.Globalization.CultureInfo.InvariantCulture);
+        return signal == SigTerm
+            ? null
+            : $"pidfd_send_signal is restricted to SIGTERM (15); signal {signal} is not allowed";
     }
 
     private static bool InNamespace(string name, string prefix) => name == prefix || name.StartsWith(prefix + ".", StringComparison.Ordinal);
