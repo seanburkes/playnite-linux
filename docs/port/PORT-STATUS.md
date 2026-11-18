@@ -59,15 +59,15 @@
 | --- | ---: |
 | deferred | 1 |
 | done | 65 |
-| in-progress | 4 |
-| todo | 29 |
+| in-progress | 8 |
+| todo | 28 |
 
 ## Ledger
 
 | Metric | Value |
 | --- | ---: |
-| Ledger rows | 244 |
-| Ledger fragments | 17 |
+| Ledger rows | 253 |
+| Ledger fragments | 26 |
 
 ## Units
 
@@ -103,6 +103,7 @@
 | p2-ci-guard | W2 | scaffold | CI policy review hardening | done | `units/p2-ci-guard.*`; 5 ledger rows |
 | p2-ci-harden | W2 | scaffold | Linux CI policy hardening | done | `units/p2-ci-harden.*`; 2 ledger rows |
 | p2-ci-mergeability | W2 | repo | Merge queue limitation and strict-off policy | done | `units/p2-ci-mergeability.*`; 1 ledger rows |
+| p2-evidence2 | W2 | repo | Unit evidence proves its cited run | in-progress | `units/p2-evidence2.*`; 1 ledger rows |
 | p2-exit | W2 | repo | Phase 2 exit gate and merged-board reconciliation | done | `units/p2-exit.*`; 3 ledger rows |
 | p2-guard-paths | W2 | repo | Protect all workflows and harden aggregate SSH push | done | `units/p2-guard-paths.*`; 2 ledger rows |
 | p2-guard-wording2 | W2 | repo | Protected-path gate wording correction | done | `units/p2-guard-wording2.*`; 2 ledger rows |
@@ -142,10 +143,12 @@
 | p5-001 | W5 | steam | VDF/ACF parsers | in-progress | `units/p5-001.*`; 2 ledger rows |
 | p5-002 | W5 | steam | Steam root/library discovery | in-progress | `units/p5-002.*`; 4 ledger rows |
 | p5-003 | W5 | steam | Artwork/metadata cache | in-progress | `units/p5-003.*`; 5 ledger rows |
-| p5-004 | W5 | platform | Process launcher/session tracker | todo | `units/p5-004.*`; 0 ledger rows |
+| p5-004 | W5 | platform | Process launcher/session tracker | in-progress | `units/p5-004.*`; 4 ledger rows |
 | p5-005 | W5 | platform | XDG/single-instance/protocol | todo | `units/p5-005.*`; 0 ledger rows |
+| p5-005a | W5 | platform | XDG/single-instance/protocol continuation | in-progress | `units/p5-005a.*`; 3 ledger rows |
 | p5-006 | W5 | platform | WebView service | todo | `units/p5-006.*`; 0 ledger rows |
 | p5-007 | W5 | platform | Tray/notifications/sleep | todo | `units/p5-007.*`; 0 ledger rows |
+| p5-007a | W5 | platform | Tray/notifications/sleep inhibition | in-progress | `units/p5-007a.*`; 1 ledger rows |
 | p5-008 | W5 | steam | Launch native/Proton | todo | `units/p5-008.*`; 0 ledger rows |
 | p5-shards | W5 | repo | Phase 5 shard board reconciliation | done | `units/p5-shards.*`; 2 ledger rows |
 | p6-001 | W6 | core | Library service | todo | `units/p6-001.*`; 0 ledger rows |
