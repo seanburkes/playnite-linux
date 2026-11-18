@@ -636,7 +636,9 @@ public sealed class SteamDiscoveryTests : IDisposable
         File.WriteAllText(outside, "\"libraryfolders\" { }");
         var racing = new SwapFileSystem(fileSystem, declared, outside);
 
-        var result = SteamDiscovery.Discover(environment, Paths(), racing);
+        var work = Task.Run(() => SteamDiscovery.Discover(environment, Paths(), racing));
+        Assert.True(work.Wait(TimeSpan.FromSeconds(5)), "declared-link swap blocked");
+        var result = work.Result;
 
         Assert.Equal(2, result.Libraries.Count);
         Assert.Empty(result.Issues);
@@ -767,7 +769,7 @@ public sealed class SteamDiscoveryTests : IDisposable
     }
 
     [Fact]
-    public void Zero_length_paths_are_rejected_before_opening()
+    public void Nonregular_and_empty_paths_are_rejected_without_reading()
     {
         if (OperatingSystem.IsWindows())
         {
