@@ -135,9 +135,19 @@ public sealed class FuzzTargetTests
         using var output = new StringWriter();
         var result = FuzzRunner.Run(options, output);
 
-        Assert.Equal("iterations", result.Budget);
-        Assert.True(result.Cases >= FuzzOptions.MinimumIterations);
-        Assert.Contains("FUZZ COMPLETE ", output.ToString(), StringComparison.Ordinal);
+        // Both budgets are at their documented minimums. Which one stops a valid run is a
+        // wall-clock race, so assert the configured budget values and the completion marker
+        // directly instead of asserting that the iteration budget necessarily won.
+        var log = output.ToString();
+        Assert.Contains(
+            $"FUZZ START seed=0x{options.Seed:X16} seconds={FuzzOptions.MinimumWallClockSeconds} " +
+            $"iterations={FuzzOptions.MinimumIterations} ",
+            log,
+            StringComparison.Ordinal);
+        Assert.Contains($"FUZZ COMPLETE seed=0x{options.Seed:X16} ", log, StringComparison.Ordinal);
+        Assert.True(result.Cases > 0);
+        Assert.Equal(result.Cases, result.Clean + result.Rejected);
+        Assert.Contains(result.Budget, new[] { "iterations", "wall-clock" });
 
         var tinySeconds = options with { Seconds = FuzzOptions.MinimumWallClockSeconds - 1 };
         var tinyIterations = options with { Iterations = FuzzOptions.MinimumIterations - 1 };

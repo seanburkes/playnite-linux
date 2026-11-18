@@ -66,8 +66,8 @@
 
 | Metric | Value |
 | --- | ---: |
-| Ledger rows | 262 |
-| Ledger fragments | 35 |
+| Ledger rows | 263 |
+| Ledger fragments | 36 |
 
 ## Units
 
@@ -130,7 +130,7 @@
 | p3-009 | W3 | leaves | Localisation v10-to-new key migration | done | `units/p3-009.*`; 4 ledger rows |
 | p3-crc-ds | W3 | leaves | CRC and checksum helpers | done | `units/p3-crc-ds.*`; 6 ledger rows |
 | p3-exit | W3 | repo | Phase 3 exit gate, merged-board reconciliation and owner acceptance | done | `units/p3-exit.*`; 2 ledger rows |
-| p3-fuzz-ds | W3 | leaves | Bounded serialisation fuzz target and CI gate | done | `units/p3-fuzz-ds.*`; 6 ledger rows |
+| p3-fuzz-ds | W3 | leaves | Bounded serialisation fuzz target and CI gate | done | `units/p3-fuzz-ds.*`; 7 ledger rows |
 | p3-loc-coverage-ds | W3 | leaves | Localisation coverage and placeholder validation | done | `units/p3-loc-coverage-ds.*`; 6 ledger rows |
 | p4-001 | W4 | data | SQLite schema/repositories | done | `units/p4-001.*`; 6 ledger rows |
 | p4-002 | W4 | data | v10 LiteDB importer | done | `units/p4-002.*`; 5 ledger rows |
