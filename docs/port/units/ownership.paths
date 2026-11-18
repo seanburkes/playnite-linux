@@ -128,7 +128,7 @@ src/Playnite.Platform.Linux/LinuxFileSystem.cs	*	d6401f1f07c69474d0ce395797ab694
 src/Playnite.Platform.Linux/LinuxPaths.cs	p5-002	a37890f33110c70b8411bac4457d16e0aa41822f	pull/116
 src/Playnite.Platform.Linux/Sessions/LinuxGameProcess.cs	p5-004	064e261b5bffa6c434515b9851160a21fd0e317d	pull/120
 src/Playnite.Platform.Linux/Sessions/LinuxProcStat.cs	p5-004	064e261b5bffa6c434515b9851160a21fd0e317d	pull/120
-src/Playnite.Platform.Linux/Sessions/LinuxProcStatReader.cs	p5-004	064e261b5bffa6c434515b9851160a21fd0e317d	pull/120
+src/Playnite.Platform.Linux/Sessions/LinuxProcStatReader.cs	p5-004	5c4d11a68fd716b4be169b994ae71b27f7a105a2	pull/125
 src/Playnite.Platform.Linux/Sessions/LinuxProcessGroupKiller.cs	p5-004	064e261b5bffa6c434515b9851160a21fd0e317d	pull/120
 src/Playnite.Platform.Linux/Sessions/LinuxProcessLauncher.cs	p5-004	064e261b5bffa6c434515b9851160a21fd0e317d	pull/120
 src/Playnite.Platform.Linux/Sessions/LinuxProcessObserver.cs	p5-004	064e261b5bffa6c434515b9851160a21fd0e317d	pull/120
@@ -275,8 +275,8 @@ tests/Playnite.Core.Tests/Serialization/TomlSerializationTests.cs	p3-003c	0f1c77
 tests/Playnite.Core.Tests/Serialization/V10GoldenTests.cs	p3-003c	0f1c774400a829cd45e1647245bf0a802e237ebb	pull/69
 tests/Playnite.Core.Tests/Serialization/YamlSerializationTests.cs	p3-003c	0f1c774400a829cd45e1647245bf0a802e237ebb	pull/69
 tests/Playnite.Core.Tests/Sessions/GameSessionTrackerTests.cs	p5-004	064e261b5bffa6c434515b9851160a21fd0e317d	pull/120
-tests/Playnite.Core.Tests/Sessions/LinuxProcStatTests.cs	p5-004	064e261b5bffa6c434515b9851160a21fd0e317d	pull/120
-tests/Playnite.Core.Tests/Sessions/LinuxProcessLauncherTests.cs	p5-004	064e261b5bffa6c434515b9851160a21fd0e317d	pull/120
+tests/Playnite.Core.Tests/Sessions/LinuxProcStatTests.cs	p5-004	5c4d11a68fd716b4be169b994ae71b27f7a105a2	pull/125
+tests/Playnite.Core.Tests/Sessions/LinuxProcessLauncherTests.cs	p5-004	5c4d11a68fd716b4be169b994ae71b27f7a105a2	pull/125
 tests/Playnite.Core.Tests/Sessions/ProcessTestDoubles.cs	p5-004	064e261b5bffa6c434515b9851160a21fd0e317d	pull/120
 tests/Playnite.Core.Tests/Sessions/SessionEventRecorder.cs	p5-004	064e261b5bffa6c434515b9851160a21fd0e317d	pull/120
 tests/Playnite.Core.Tests/Sessions/SessionTestDoubles.cs	p5-004	064e261b5bffa6c434515b9851160a21fd0e317d	pull/120
