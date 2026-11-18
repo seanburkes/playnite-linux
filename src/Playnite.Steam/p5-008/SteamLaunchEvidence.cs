@@ -49,7 +49,15 @@ public sealed record SteamLaunchOptions
 
 public sealed record SteamAttributionProgress(TimeSpan Elapsed, TimeSpan Window, string Decision);
 
-public sealed record SteamStopReport(bool IsDegraded, string Reason, IReadOnlyList<ProcessIdentity> HelperSurvivors);
+/// <summary>
+/// Terminal stop evidence. <see cref="IsDegraded"/> is true whenever the group is not proven
+/// empty, so a Stopped/Cancelled session with survivors is never reported as a clean stop.
+/// <see cref="HelperSurvivors"/> holds only members with provable Steam/Proton ownership
+/// evidence; <see cref="UnidentifiedSurvivors"/> holds remaining members whose identity is
+/// unknown and which therefore require manual inspection.
+/// </summary>
+public sealed record SteamStopReport(bool IsDegraded, string Reason,
+    IReadOnlyList<ProcessIdentity> HelperSurvivors, IReadOnlyList<ProcessIdentity> UnidentifiedSurvivors);
 
 /// <summary>One fresh executable matching the target's install directory or app prefix.</summary>
 public sealed record SteamAttributionCandidate(ProcessIdentity Identity, string? Executable);
@@ -162,9 +170,10 @@ public static class SteamProcessAttribution
     /// Null when the group may be used for game-only stop. A group is eligible when it did not
     /// exist before this launch and every readable member is a game binary or a launch helper.
     /// A Steam client or any pre-existing member makes it shared/unverifiable. A live member
-    /// whose executable the host cannot read (a Steam runtime helper running in another mount
-    /// namespace) is fresh, is never signalled, and is reported as tolerated evidence instead
-    /// of poisoning the whole result.
+    /// whose executable the host cannot read is unidentified: its identity is never assumed,
+    /// it is never signalled, and it is reported as tolerated group evidence. If such a member
+    /// outlives the game, it is an unidentified survivor requiring manual inspection, never an
+    /// asserted Steam helper.
     /// </summary>
     public static string? GroupRejection(SteamLaunchTarget target, ExternalProcessSnapshot before,
         ExternalProcessSnapshot sample, int group, List<string>? tolerated = null)

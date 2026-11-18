@@ -22,12 +22,25 @@ public sealed class LinuxPidFdSignalTests
     }
 
     [Fact]
-    public async Task Scoped_signal_rejects_pid_reuse_after_executable_read()
+    public async Task Exec_after_the_stat_identity_check_is_rejected_by_the_final_executable_read()
+    {
+        var executable = "/games/game";
+        var state = new FakeState { AfterRead = () => executable = "/steam/steam" };
+        var host = new LinuxExternalProcessHost(state, state, _ => executable);
+        await host.SignalAsync(new(22, 1, 20), "/games/game", CancellationToken.None);
+        Assert.Empty(state.SignalledGenerations);
+        Assert.Equal(1, state.Disposals);
+    }
+
+    [Fact]
+    public async Task Pid_reuse_during_the_final_executable_read_cannot_redirect_the_pinned_signal()
     {
         var state = new FakeState();
         var host = new LinuxExternalProcessHost(state, state, _ => { state.Ticks = 2; return "/games/game"; });
         await host.SignalAsync(new(22, 1, 20), "/games/game", CancellationToken.None);
-        Assert.Empty(state.SignalledGenerations);
+        // The pinned handle still targets the verified process, never the recycled PID.
+        Assert.Equal([1L], state.SignalledGenerations);
+        Assert.Equal(2, state.Ticks);
         Assert.Equal(1, state.Disposals);
     }
 

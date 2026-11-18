@@ -10,6 +10,7 @@ if (args.Length < 4)
     return 2;
 }
 
+var degraded = false;
 try
 {
     ValidateOptions();
@@ -154,10 +155,31 @@ try
             Console.WriteLine($"STOP REPORT degraded={report.IsDegraded} reason={report.Reason}");
             foreach (var helper in report.HelperSurvivors)
             {
-                Console.WriteLine($"HELPER SURVIVOR pid={helper.ProcessId} start_ticks={helper.StartTimeTicks} pgid={helper.ProcessGroupId}; unsignalled");
+                Console.WriteLine($"IDENTIFIED HELPER SURVIVOR pid={helper.ProcessId} start_ticks={helper.StartTimeTicks} pgid={helper.ProcessGroupId}; runtime/parent evidence; unsignalled");
             }
+
+            foreach (var survivor in report.UnidentifiedSurvivors)
+            {
+                Console.WriteLine($"UNIDENTIFIED SURVIVOR pid={survivor.ProcessId} start_ticks={survivor.StartTimeTicks} pgid={survivor.ProcessGroupId}; no evidence of Steam ownership; unsignalled; inspect manually");
+            }
+
+            if (report.IsDegraded)
+            {
+                // Survivors mean the group is not proven empty: this flow is not a clean stop,
+                // so it can never print PASS.
+                degraded = true;
+                Console.WriteLine($"DEGRADED {label} {expected}: the terminal stop report is degraded, so this flow is NOT a successful acceptance. Inspect Steam and the process table manually.");
+                continue;
+            }
+
             Console.WriteLine($"PASS {label} {expected}: attributed game identities gone, original Steam client identities retained; no group/client/helper signal.");
         }
+    }
+
+    if (degraded)
+    {
+        Console.WriteLine("Owner acceptance INCOMPLETE: at least one flow ended with a degraded stop report; survivors must be inspected manually. This is not a clean acceptance and not Phase 5 exit.");
+        return 1;
     }
 
     Console.WriteLine(allowLaunch

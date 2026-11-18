@@ -165,7 +165,7 @@ public sealed class SteamProcessLauncher : IProcessLauncher, IProcessObserver
                     }
 
                     var tolerated = decision.ToleratedMembers.Count == 0 ? string.Empty
-                        : $"; tolerated fresh unreadable member(s) {string.Join(", ", decision.ToleratedMembers)} never signalled";
+                        : $"; unidentified unreadable member(s) {string.Join(", ", decision.ToleratedMembers)} tolerated as group evidence, never signalled";
                     Report($"ATTRIBUTED: unique fresh game pid={match.ProcessId} start_ticks={match.StartTimeTicks} pgid={match.ProcessGroupId} exe={decision.Candidates[0].Executable}; game identities={games.Length}{tolerated}", true);
                     return game;
                 }
@@ -216,16 +216,34 @@ public sealed class SteamProcessLauncher : IProcessLauncher, IProcessObserver
             return new([], false, "A tracked Steam child left its group; stop manually in Steam");
         }
 
+        // An unread snapshot is not evidence that the group is gone. Check coverage before the
+        // empty-members shortcut, otherwise a torn /proc read reads as a natural exit and a
+        // later healthy stop could signal a game that is still running.
+        if (!sample.IsComplete)
+        {
+            return new([], false,
+                "Process coverage is incomplete; the attributed group's exit cannot be proven; stop manually in Steam if necessary");
+        }
+
         if (members.Length == 0)
         {
             return new([], true);
+        }
+
+        // A running game identity whose executable the host cannot read is torn evidence. It is
+        // neither an exit nor proof that the identity changed, so the sample cannot be terminal.
+        if (sample.Processes.Any(row => row.Process.IsRunning && row.Executable is null
+            && known.Keys.Any(identity => SteamProcessAttribution.SameProcess(identity, row.Process.Identity))))
+        {
+            return new([], false,
+                "A tracked game identity's executable is unreadable; its exit cannot be proven");
         }
 
         var tolerated = new List<string>();
         var rejection = SteamProcessAttribution.GroupRejection(target, baseline!, sample,
             active.Identity.ProcessGroupId, tolerated);
         var continuous = games.Any(row => known.ContainsKey(row.Process.Identity) || descendants.ContainsKey(row.Process.Identity));
-        if (!sample.IsComplete || rejection is not null || (games.Length > 0 && !continuous))
+        if (rejection is not null || (games.Length > 0 && !continuous))
         {
             return new([], false, $"Steam group is shared or unverifiable: {rejection ?? "new game identity has no observed continuity"}; stop manually in Steam");
         }
@@ -273,16 +291,35 @@ public sealed class SteamProcessLauncher : IProcessLauncher, IProcessObserver
 
                 var games = GameMembers(sample).ToArray();
                 var changed = sample.Processes.Where(row => row.Process.IsRunning && known.ContainsKey(row.Process.Identity)
-                    && !SteamProcessAttribution.Matches(target, row.Executable)).ToArray();
+                    && row.Executable is { } executable && !SteamProcessAttribution.Matches(target, executable)).ToArray();
                 if (changed.Length > 0)
                 {
                     throw new ProcessSurvivorException("Attributed identity changed executable; nothing was signalled.",
                         changed.Select(row => row.Process.Identity).ToArray());
                 }
 
+                // A running game identity whose executable became unreadable is torn evidence:
+                // not a changed executable, not a natural exit and not a helper survivor, so no
+                // terminal report may be produced from this sample. Retry until it resolves or
+                // the deadline proves the stop unproven.
+                var unverifiable = sample.Processes.Where(row => row.Process.IsRunning && row.Executable is null
+                    && known.Keys.Any(identity => SteamProcessAttribution.SameProcess(identity, row.Process.Identity))).ToArray();
+                if (unverifiable.Length > 0)
+                {
+                    if (time.GetElapsedTime(deadline) >= options.StopTimeout)
+                    {
+                        throw new ProcessSurvivorException(
+                            "A game identity's executable stayed unreadable; the stop cannot be proven; use Steam manual stop.",
+                            unverifiable.Select(row => row.Process.Identity).ToArray());
+                    }
+
+                    await Task.Delay(options.PollInterval, time, CancellationToken.None).ConfigureAwait(false);
+                    continue;
+                }
+
                 if (games.Length == 0 && members.Length == 0)
                 {
-                    StopReport = new(false, "Attributed game identities gone; observed group empty", []);
+                    StopReport = new(false, "Attributed game identities gone; observed group empty", [], []);
                     cancellationToken.ThrowIfCancellationRequested();
                     return;
                 }
@@ -301,10 +338,11 @@ public sealed class SteamProcessLauncher : IProcessLauncher, IProcessObserver
 
                 if (games.Length == 0)
                 {
-                    var helpers = members.Select(row => row.Process.Identity).ToArray();
-                    StopReport = new(true,
-                        $"Attributed game identities gone; Steam-owned helper survivors left unsignalled (group not empty; tolerated unreadable members={tolerated.Count})",
-                        helpers);
+                    var (helpers, unidentified) = ClassifySurvivors(members);
+                    StopReport = new(true, unidentified.Length == 0
+                        ? $"Attributed game identities gone; identified Steam/Proton helper survivors left unsignalled (group not empty; tolerated unreadable members={tolerated.Count})"
+                        : $"Attributed game identities gone; unidentified survivor(s) {string.Join(", ", unidentified.Select(identity => $"pid={identity.ProcessId}"))} left unsignalled with no runtime, parent or namespace evidence; manual inspection required (group not empty; tolerated unreadable members={tolerated.Count})",
+                        helpers, unidentified);
                     cancellationToken.ThrowIfCancellationRequested();
                     return;
                 }
@@ -362,12 +400,68 @@ public sealed class SteamProcessLauncher : IProcessLauncher, IProcessObserver
         }
 
         var tolerated = decision.ToleratedMembers.Count == 0 ? string.Empty
-            : $"; tolerated fresh unreadable member(s) {string.Join(", ", decision.ToleratedMembers)} (never signalled)";
+            : $"; unidentified unreadable member(s) {string.Join(", ", decision.ToleratedMembers)} (never signalled)";
         return $"WAITING: {seen}; rejected: {decision.Rejection}{tolerated}; decision UNKNOWN";
     }
 
     private IEnumerable<ExternalProcessEntry> GroupMembers(ExternalProcessSnapshot sample) => sample.Processes
         .Where(row => row.Process.IsRunning && row.Process.Identity.ProcessGroupId == game!.Identity.ProcessGroupId);
+
+    /// <summary>
+    /// Split the remaining group members into identified Steam/Proton runtime survivors and
+    /// unidentified survivors. Identification needs provable evidence: a recognised runtime
+    /// helper executable path, or a parent identity this session observed as Steam-owned (a
+    /// baseline Steam client, an attributed game identity, or an already identified survivor).
+    /// An unreadable executable is never guessed to be a helper, and the snapshot model carries
+    /// no namespace field, so unreadable members without parent evidence stay unidentified.
+    /// </summary>
+    private (ProcessIdentity[] Identified, ProcessIdentity[] Unidentified) ClassifySurvivors(
+        ExternalProcessEntry[] members)
+    {
+        var ownedParentPids = new HashSet<int>();
+        foreach (var row in baseline?.Processes ?? [])
+        {
+            if (row.Process.IsRunning && SteamProcessAttribution.IsSteamClient(row.Executable))
+            {
+                ownedParentPids.Add(row.Process.Identity.ProcessId);
+            }
+        }
+
+        foreach (var identity in known.Keys.Concat(descendants.Keys))
+        {
+            ownedParentPids.Add(identity.ProcessId);
+        }
+
+        var identified = new bool[members.Length];
+        bool changed;
+        do
+        {
+            changed = false;
+            for (var index = 0; index < members.Length; index++)
+            {
+                if (identified[index])
+                {
+                    continue;
+                }
+
+                var member = members[index];
+                if (!SteamProcessAttribution.IsInfrastructure(member.Executable)
+                    && !ownedParentPids.Contains(member.Process.ParentProcessId))
+                {
+                    continue;
+                }
+
+                identified[index] = true;
+                ownedParentPids.Add(member.Process.Identity.ProcessId);
+                changed = true;
+            }
+        }
+        while (changed);
+
+        return (
+            members.Where((_, index) => identified[index]).Select(row => row.Process.Identity).ToArray(),
+            members.Where((_, index) => !identified[index]).Select(row => row.Process.Identity).ToArray());
+    }
 
     private IEnumerable<ExternalProcessEntry> GameMembers(ExternalProcessSnapshot sample) => GroupMembers(sample)
         .Where(row => SteamProcessAttribution.Matches(target, row.Executable));
