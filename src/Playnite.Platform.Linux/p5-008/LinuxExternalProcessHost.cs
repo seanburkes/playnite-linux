@@ -99,7 +99,17 @@ public sealed class LinuxExternalProcessHost : IExternalProcessHost
             return;
         }
 
-        // Pin first, then reverify. A subsequent PID recycle cannot redirect the pidfd signal.
+        // Pin first, then reverify. The identity check runs before the executable re-read
+        // because execve preserves pid/start ticks/PGID: an exec during the stat read is
+        // caught by the later read, and a subsequent PID recycle cannot redirect the signal.
+        var row = await stats.ReadAsync(identity.ProcessId, cancellationToken).ConfigureAwait(false);
+        if (row is not { } current || current.ProcessId != identity.ProcessId || !current.IsRunning
+            || current.StartTimeTicks != identity.StartTimeTicks
+            || current.ProcessGroupId != identity.ProcessGroupId)
+        {
+            return;
+        }
+
         if (expectedExecutable is not null)
         {
             try
@@ -113,14 +123,6 @@ public sealed class LinuxExternalProcessHost : IExternalProcessHost
             {
                 return;
             }
-        }
-
-        var row = await stats.ReadAsync(identity.ProcessId, cancellationToken).ConfigureAwait(false);
-        if (row is not { } current || current.ProcessId != identity.ProcessId || !current.IsRunning
-            || current.StartTimeTicks != identity.StartTimeTicks
-            || current.ProcessGroupId != identity.ProcessGroupId)
-        {
-            return;
         }
 
         cancellationToken.ThrowIfCancellationRequested();

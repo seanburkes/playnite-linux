@@ -392,6 +392,52 @@ public sealed class SteamLaunchTests
     }
 
     [Fact]
+    public async Task Unreadable_live_game_identity_with_remaining_members_is_not_a_game_gone_sample()
+    {
+        var host = Host(Native);
+        await using var launcher = Launcher(host, Native);
+        var process = await launcher.StartAsync(launcher.CreateRequest(), CancellationToken.None);
+        await using var tracker = new GameSessionTracker(launcher, launcher);
+        var observed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        host.OnSnapshot = () => observed.TrySetResult();
+        using var cancellation = new CancellationTokenSource();
+        var tracking = tracker.TrackAsync(process,
+            new SessionOptions { PollInterval = TimeSpan.FromMilliseconds(1) }, cancellation.Token);
+        await observed.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        host.OnSnapshot = null;
+
+        // The group still holds its helper rows, but no readable game identity remains while the
+        // known game identity is still live. That is unverifiable, not "the game went away".
+        host.Rows.RemoveAll(row => row.Process.Identity.ProcessId == 22);
+        host.Rows.Add(Entry(22, 2, 20, null));
+        var torn = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        host.OnSnapshot = () => torn.TrySetResult();
+        await torn.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await Task.Delay(50);
+        host.OnSnapshot = null;
+
+        var snapshot = await launcher.SnapshotAsync(CancellationToken.None);
+        Assert.False(snapshot.IsComplete);
+        Assert.Contains("unreadable", snapshot.IncompleteReason);
+        Assert.Equal(GameSessionState.Running, tracker.State);
+        Assert.True(tracker.IsDegraded);
+        Assert.Empty(host.Signalled);
+
+        // /proc recovers; the session is still live and stops the game through the manual path.
+        host.Rows.RemoveAll(row => row.Process.Identity.ProcessId == 22);
+        host.Rows.Add(Entry(22, 2, 20, Native.App.InstallPath + "/game"));
+        var healthy = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        host.OnSnapshot = () => healthy.TrySetResult();
+        await healthy.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await Task.Delay(50);
+        host.OnSnapshot = null;
+        Assert.True(await tracker.StopAsync(CancellationToken.None));
+        await tracking;
+        Assert.Equal(GameSessionState.Stopped, tracker.State);
+        Assert.Equal([22], host.Signalled.Select(identity => identity.ProcessId));
+    }
+
+    [Fact]
     public async Task Unreadable_game_executable_is_torn_evidence_not_a_changed_identity_or_exit()
     {
         var host = Host(Native);
