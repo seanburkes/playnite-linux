@@ -58,7 +58,7 @@ public static class SteamDiscovery
         var seen = new Dictionary<string, string>(StringComparer.Ordinal);
         foreach (var declared in parsed?.Libraries ?? [])
         {
-            libraries.Add(Inspect(declared, file!, fileSystem, seen, issues));
+            libraries.Add(Inspect(declared, file ?? throw new IOException("Parsed library file has no path."), fileSystem, seen, issues));
         }
 
         if (!seen.ContainsKey(root))
@@ -108,7 +108,8 @@ public static class SteamDiscovery
                     return null;
             }
 
-            var result = SteamLibraryParser.Parse(read.Bytes!, name, maxBytes);
+            var bytes = read.Bytes ?? throw new IOException("Successful library read has no bytes.");
+            var result = SteamLibraryParser.Parse(bytes, name, maxBytes);
             issues.AddRange(result.Issues);
             return result.Value;
         }
