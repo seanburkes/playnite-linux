@@ -38,20 +38,21 @@ Linux policy: `08-STEAM-SPEC.md` §§5–7 and firstmate's game-only stop ruling
 
 The adapter allowlist retains only policy-verified game identities, not arbitrary tracker input.
 Immediately before SIGTERM the Linux host opens a **pidfd**, rechecks PID/start ticks/PGID/running
-state, then re-reads the canonical executable against the sampled expected game path. The
-executable read is last because `execve` preserves pid/start/PGID, so an exec during the stat
-read is still caught; a PID recycle after that final read cannot redirect the pinned signal.
+state, re-reads the canonical executable against the sampled expected game path and, for an
+argv-based Proton identity, requires the exact argv[0] token to still match. Those are the last
+reads because `execve` preserves pid/start/PGID, so an exec during the stat read is still caught;
+a PID recycle after the final read cannot redirect the pinned signal.
 Signals use the existing reviewed pidfd allowlist; no new interop, PID fallback, negative PID,
 group signal, Steam-client signal or helper signal. Exec/group changes after the final check
 remain a non-atomic `/proc` residual; pidfd prevents redirecting the signal to a recycled PID.
 
 A sample that cannot prove the group state is never a terminal fact. `SnapshotAsync` returns an
-incomplete snapshot with a reason when host coverage is incomplete, and also when a tracked game
-identity is still running with an unreadable executable, before any empty-group shortcut. The
-stop loop treats that unreadable executable as unverifiable: it retries instead of raising
-*changed executable*, and fails with `ProcessSurvivorException` only when the stop deadline
-proves the stop unproven. An exit therefore needs complete coverage and a readable game identity
-for every live tracked row.
+incomplete snapshot with a reason when host coverage is incomplete, when a tracked game identity
+is still running with unreadable evidence, and when a live tracked identity no longer presents
+game evidence at all, before any empty-group shortcut. The stop loop treats unreadable evidence as
+unverifiable: it retries instead of raising *changed executable*, and fails with
+`ProcessSurvivorException` only when the stop deadline proves the stop unproven. An exit therefore
+needs complete coverage and readable game evidence for every live tracked row.
 
 A survivor is an identified Steam/Proton helper only with evidence: a recognised Steam/Wine/Proton
 runtime executable path, or a parent identity observed as Steam-owned (baseline Steam client,
@@ -68,6 +69,100 @@ that setsid/reparent before observation remain outside the proof: this is not cg
 
 **p5-004 is unchanged:** launcher-created setsid groups still use its exclusive containment
 contract, identity-scoped SIGTERM to every proven member and complete group-empty proof.
+
+## Proton/Windows identity
+
+A Proton game never exposes its binary through `/proc/PID/exe`: the pathological evidence is
+Hades `1145360` on 2026-11-18, whose process had `comm=Hades.exe`, its own fresh group, and
+`/proc/PID/exe -> .../Proton - Experimental/files/lib/wine/i386-unix/wine64-preloader`. The
+runtime preloader is never under the installdir or the app prefix, so the exe-path rule alone
+can never attribute a Proton title.
+
+`/proc/PID/exe` stays the primary identity for every title. Only when it matches nothing does a
+Proton target use the Windows command line:
+
+1. Read `/proc/PID/cmdline` and take **argv[0]**, the process image path. Later arguments are
+   not evidence: a wrapper that merely carries the game path in an argument is never the game.
+2. Accept it only as an absolute drive path (`S:\...` or `s:/...`); relative paths and UNC paths
+   are rejected without a lookup.
+3. Resolve the drive through **this app's own prefix**: read the
+   `compatdata/<appid>/pfx/dosdevices/<lowercase-drive>:` symlink from the target's
+   `ProtonPrefix`, append the remaining components, and canonicalise every component so a
+   symlinked directory cannot alias a root.
+4. The resulting host path must exist and be under this target's installdir or `ProtonPrefix`;
+   the owner `ExecutableOverride`, when present, still has to equal it. A drive mapped to `/`
+   therefore cannot pull a host file in, and `S:\..\...` traversal is rejected by the same check.
+5. A wrapper identity is never accepted, whether it is the process's host executable or the
+   resolved Windows image. The exclusion set covers `steam`, `steam.sh`, `steam.exe`,
+   `steamwebhelper`, `steamservice`, `steam-launch-wrapper`, `python`/`python2`/`python3`
+   (and their `.exe` forms), `pv-adverb`, `pressure-vessel*`, `reaper`, `srt-bwrap`, `bwrap`,
+   `proton`, `wineserver`/`wineserver64`, `winedevice(.exe)`, `explorer(.exe)`,
+   `services(.exe)`, `plugplay`, `rpcss`, `conhost`, `rundll32`, `start`, `winemenubuilder`,
+   `wineboot(.exe)`, `winecfg`, `wineconsole`, `winedbg`, `regsvr32`, `msiexec` and the
+   Steam runtime wrappers. The Wine preloaders are deliberately not excluded: the game's own
+   process executes through them.
+
+Every existing safety rule is unchanged: candidates must still be one unique fresh process in
+one fresh group, the group is still rejected for a pre-existing member, Steam client identity,
+or readable unrelated member, and the executable/argv evidence is still bound to the exact
+`/proc` stat identity. Immediately before SIGTERM the host pins a pidfd, rechecks
+pid/start-ticks/PGID/running state, re-reads `/proc/PID/exe`, and then requires the exact
+argv[0] argument to still be present. A missing path, unreadable command line, changed argv,
+changed executable, shared group or incomplete coverage is UNKNOWN / unverifiable and produces
+no signal.
+
+The acceptance harness now waits for Steam readiness between flows: a complete snapshot, the
+original Steam client identities present, and every previously attributed game identity gone
+for a 15-second settle window before the next `-applaunch`, so a launch is never issued into a
+previous teardown. If the window expires with no candidate it prints `NO LAUNCH` with the
+Steam request exit code and the installdir/prefix it watched, which distinguishes a launch
+failure from an `ATTRIBUTION UNKNOWN` where candidates were seen but rejected. `PASS` still
+requires `StopReport.IsDegraded=false`.
+
+## Verification (Proton/Windows identity)
+
+`SteamProtonCommandLineTests` builds a real temporary library, installdir, prefix and
+`dosdevices` map, then covers: cmdline-plus-dosdevices resolution to the real game path;
+drive-letter and separator variants (`S:`, `s:`, `T:` with `\` and `/`); a relative `dosdevices`
+link into `drive_c`; rejection of a sibling installdir, a drive mapped outside the library, a
+missing drive link, traversal, relative and UNC paths, and a symlinked file that escapes the
+roots; wrapper exclusion for each listed identity as host executable and wrapper Windows images
+inside the prefix, including a symlinked image whose resolved name is a wrapper; argv[0]-only
+evidence; the native exe staying primary; unreadable cmdline not guessed; a no-candidate launch
+made only of wrappers; a launcher-level Proton session that signals only the resolved identity
+with the argv argument rechecked; and a tracked Proton identity whose argv becomes unreadable
+mid-stop being unverifiable, not a changed executable. `SteamLaunchTests` adds the same
+"tracked identity no longer presents game evidence is not a terminal exit" rule for a native
+session. `LinuxPidFdSignalTests` adds the matching/changed/unreadable and non-argv[0] rechecks
+immediately before SIGTERM. `SteamAcceptanceConsentTests` covers consent for the new signal
+overload.
+
+## Owner-machine acceptance — Proton/Windows (p5-008d)
+
+Consented run on code head `955260bce2fb0728e7ded1231bf4f025b3bb0f1c` (later PR commits are
+docs-only), the owner's default Steam library as the library argument, apps `770100` and
+`1145360`, both consent flags: four flows, all `PASS`, every
+`STOP REPORT degraded=False` with reason `Attributed game identities gone; observed group
+empty`, exit 0. Every launch waited for Steam readiness (clients retained, previous identities
+gone, 15s settle); each Steam request exited 0.
+
+Selection evidence: native `770100` is `Unknown` (a Linux binary; Steam owns selection);
+Proton `1145360` is `Proton` (prefix markers; Steam owns the actual tool).
+
+- native stop: `pid=1488781 start_ticks=233528506 pgid=1488728`,
+  `exe=.../One Deck Dungeon/OneDeckDungeon.x86_64`, attributed in 5.0s.
+- native cancel: `pid=1513302 start_ticks=233530998 pgid=1513257`, same exe, 3.9s.
+- Proton stop: `pid=1543135 start_ticks=233533909 pgid=1543135`,
+  `exe=.../Proton - Experimental/files/lib/wine/i386-unix/wine64-preloader`,
+  `game=.../steamapps/common/Hades/x64/Hades.exe`,
+  `cmdline argv[0]=S:\steamapps\common\Hades\x64\Hades.exe`, attributed in 8.2s.
+- Proton cancel: `pid=1563976 start_ticks=233537004 pgid=1563976`, same Proton exe/game/argv,
+  10.0s.
+
+Each flow sent a single pidfd SIGTERM to the attributed game executable only, retained the
+original Steam client identities, and passed the harness's no-orphan assertion; no SIGKILL,
+group signal, client signal or helper signal occurred. The Proton flows prove the
+Windows-binary stop/cancel shape; Flatpak, launch options and Phase 5 exit remain out of scope.
 
 ## Verification
 
