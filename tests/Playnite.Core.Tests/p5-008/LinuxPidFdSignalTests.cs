@@ -2,12 +2,69 @@ using System.Diagnostics;
 using Playnite.Platform.Linux;
 using Playnite.Platform.Linux.Sessions;
 using Playnite.Platform.Sessions;
+using Playnite.Steam;
 using Xunit;
 
 namespace Playnite.Core.Tests.Steam;
 
 public sealed class LinuxPidFdSignalTests
 {
+    [Fact]
+    public async Task Scoped_signal_rechecks_executable_after_pinning_and_rejects_exec_changes()
+    {
+        var executable = "/games/game";
+        var state = new FakeState { AfterOpen = () => executable = "/steam/steam" };
+        var host = new LinuxExternalProcessHost(state, state, _ => executable);
+        await host.SignalAsync(new(22, 1, 20), "/games/game", CancellationToken.None);
+        Assert.Empty(state.SignalledGenerations);
+        Assert.Equal(1, state.Opens);
+        Assert.Equal(1, state.Disposals);
+    }
+
+    [Fact]
+    public async Task Scoped_signal_rejects_pid_reuse_after_executable_read()
+    {
+        var state = new FakeState();
+        var host = new LinuxExternalProcessHost(state, state, _ => { state.Ticks = 2; return "/games/game"; });
+        await host.SignalAsync(new(22, 1, 20), "/games/game", CancellationToken.None);
+        Assert.Empty(state.SignalledGenerations);
+        Assert.Equal(1, state.Disposals);
+    }
+
+    [Fact]
+    [System.Runtime.Versioning.SupportedOSPlatform("linux")]
+    public async Task Steam_individual_stop_terminates_a_real_game_child_in_a_nonowned_group()
+    {
+        var directory = Directory.CreateTempSubdirectory("playnite-p5-008b-child-").FullName;
+        var target = new SteamLaunchTarget(new SteamApp(42, "Test", "Game", directory,
+            SteamAppState.Installed, false, null, null, 4));
+        var install = target.App.InstallPath;
+        Directory.CreateDirectory(install);
+        var gameExecutable = Path.Combine(install, "game");
+        File.Copy("/usr/bin/sleep", gameExecutable);
+        File.SetUnixFileMode(gameExecutable, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        using var host = new ChildHost(gameExecutable);
+        var launcher = new SteamProcessLauncher(host, target, new()
+        {
+            ProtocolOpener = "/usr/bin/xdg-open", PollInterval = TimeSpan.FromMilliseconds(1),
+        });
+        try
+        {
+            var game = await launcher.StartAsync(launcher.CreateRequest(), CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(5));
+            await launcher.StopAsync(game, CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(5));
+            await host.Child!.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(5));
+            Assert.Equal(143, host.Child.ExitCode);
+            Assert.Equal([game.Identity], host.Signalled);
+            Assert.Empty((await host.SnapshotAsync(CancellationToken.None)).Processes);
+            Assert.False(launcher.StopReport!.IsDegraded);
+        }
+        finally
+        {
+            await launcher.DisposeAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(5));
+            Directory.Delete(directory, true);
+        }
+    }
+
     [Fact]
     public async Task Pid_recycled_while_opening_is_rejected_by_final_identity_check()
     {
@@ -123,5 +180,33 @@ public sealed class LinuxPidFdSignalTests
             public void Terminate() => state.SignalledGenerations.Add(pinnedGeneration);
             public void Dispose() => state.Disposals++;
         }
+    }
+
+    private sealed class ChildHost(string executable) : IExternalProcessHost, IDisposable
+    {
+        private readonly LinuxExternalProcessHost host = new();
+        public string Executable { get; set; } = executable;
+        public Process? Child { get; private set; }
+        public List<ProcessIdentity> Signalled { get; } = [];
+        public async Task<ExternalProcessSnapshot> SnapshotAsync(CancellationToken cancellationToken)
+        {
+            if (Child is null || Child.HasExited) { return new([], true); }
+            var stat = await new LinuxProcStatReader().ReadAsync(Child.Id, cancellationToken);
+            if (stat is not { } row || !row.IsRunning) { return new([], true); }
+            return new([new(new(new(row.ProcessId, row.StartTimeTicks, row.ProcessGroupId), row.ParentProcessId, true), Executable)], true);
+        }
+        public Task<int> RunAsync(LaunchRequest request, CancellationToken cancellationToken)
+        {
+            Child = Process.Start(new ProcessStartInfo(Executable) { UseShellExecute = false, ArgumentList = { "5" } });
+            return Task.FromResult(Child is null ? 1 : 0);
+        }
+        public Task SignalAsync(ProcessIdentity identity, CancellationToken cancellationToken) =>
+            throw new InvalidOperationException("Unscoped stop forbidden.");
+        public Task SignalAsync(ProcessIdentity identity, string expectedExecutable, CancellationToken cancellationToken)
+        {
+            Signalled.Add(identity);
+            return host.SignalAsync(identity, expectedExecutable, cancellationToken);
+        }
+        public void Dispose() => Child?.Dispose();
     }
 }

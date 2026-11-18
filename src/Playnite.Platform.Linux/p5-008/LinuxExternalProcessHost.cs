@@ -10,12 +10,15 @@ public sealed class LinuxExternalProcessHost : IExternalProcessHost
     private readonly LinuxProcessObserver observer;
     private readonly IProcStatReader stats;
     private readonly IProcessSignalHandles signals;
+    private readonly Func<int, string?> readExecutable;
 
-    public LinuxExternalProcessHost(IProcStatReader? statReader = null, IProcessSignalHandles? signalHandles = null)
+    public LinuxExternalProcessHost(IProcStatReader? statReader = null, IProcessSignalHandles? signalHandles = null,
+        Func<int, string?>? executableReader = null)
     {
         stats = statReader ?? new LinuxProcStatReader();
         observer = new LinuxProcessObserver(stats);
         signals = signalHandles ?? new LinuxPidFd();
+        readExecutable = executableReader ?? ReadExecutable;
     }
 
     public async Task<ExternalProcessSnapshot> SnapshotAsync(CancellationToken cancellationToken)
@@ -31,15 +34,7 @@ public sealed class LinuxExternalProcessHost : IExternalProcessHost
             {
                 try
                 {
-                    executable = File.ResolveLinkTarget($"/proc/{entry.Identity.ProcessId}/exe", true)?.FullName;
-                    if (executable is not null)
-                    {
-                        executable = File.ResolveLinkTarget(executable, true)?.FullName ?? executable;
-                        if (!File.Exists(executable))
-                        {
-                            executable = null;
-                        }
-                    }
+                    executable = readExecutable(entry.Identity.ProcessId);
                 }
                 catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
                 {
@@ -89,7 +84,13 @@ public sealed class LinuxExternalProcessHost : IExternalProcessHost
         return process.ExitCode;
     }
 
-    public async Task SignalAsync(ProcessIdentity identity, CancellationToken cancellationToken)
+    public Task SignalAsync(ProcessIdentity identity, CancellationToken cancellationToken) =>
+        SignalCoreAsync(identity, null, cancellationToken);
+
+    public Task SignalAsync(ProcessIdentity identity, string expectedExecutable, CancellationToken cancellationToken) =>
+        SignalCoreAsync(identity, expectedExecutable, cancellationToken);
+
+    private async Task SignalCoreAsync(ProcessIdentity identity, string? expectedExecutable, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
         using var handle = signals.Open(identity.ProcessId);
@@ -99,6 +100,21 @@ public sealed class LinuxExternalProcessHost : IExternalProcessHost
         }
 
         // Pin first, then reverify. A subsequent PID recycle cannot redirect the pidfd signal.
+        if (expectedExecutable is not null)
+        {
+            try
+            {
+                if (readExecutable(identity.ProcessId) != expectedExecutable)
+                {
+                    return;
+                }
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+            {
+                return;
+            }
+        }
+
         var row = await stats.ReadAsync(identity.ProcessId, cancellationToken).ConfigureAwait(false);
         if (row is not { } current || current.ProcessId != identity.ProcessId || !current.IsRunning
             || current.StartTimeTicks != identity.StartTimeTicks
@@ -107,6 +123,14 @@ public sealed class LinuxExternalProcessHost : IExternalProcessHost
             return;
         }
 
+        cancellationToken.ThrowIfCancellationRequested();
         handle.Terminate();
+    }
+
+    private static string? ReadExecutable(int pid)
+    {
+        var executable = File.ResolveLinkTarget($"/proc/{pid}/exe", true)?.FullName;
+        executable = executable is null ? null : File.ResolveLinkTarget(executable, true)?.FullName ?? executable;
+        return File.Exists(executable) ? executable : null;
     }
 }

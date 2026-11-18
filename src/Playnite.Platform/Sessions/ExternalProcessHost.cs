@@ -11,4 +11,6 @@ public interface IExternalProcessHost
     Task<ExternalProcessSnapshot> SnapshotAsync(CancellationToken cancellationToken);
     Task<int> RunAsync(LaunchRequest request, CancellationToken cancellationToken);
     Task SignalAsync(ProcessIdentity identity, CancellationToken cancellationToken);
+    /// <summary>Pin the identity and reverify both executable and stat before SIGTERM. No PID fallback.</summary>
+    Task SignalAsync(ProcessIdentity identity, string expectedExecutable, CancellationToken cancellationToken);
 }
