@@ -59,8 +59,16 @@ public sealed record SteamAttributionProgress(TimeSpan Elapsed, TimeSpan Window,
 public sealed record SteamStopReport(bool IsDegraded, string Reason,
     IReadOnlyList<ProcessIdentity> HelperSurvivors, IReadOnlyList<ProcessIdentity> UnidentifiedSurvivors);
 
-/// <summary>One fresh executable matching the target's install directory or app prefix.</summary>
-public sealed record SteamAttributionCandidate(ProcessIdentity Identity, string? Executable);
+/// <summary>
+/// One fresh game executable matching the target's install directory or app prefix.
+/// <see cref="Executable"/> is the host-visible <c>/proc/PID/exe</c>; for a Wine/Proton game
+/// that is the runtime preloader. <see cref="GamePath"/> is the identity the policy accepted:
+/// the same host executable for a native title, or the Windows binary resolved through the
+/// app's own <c>pfx/dosdevices</c> map for a Proton title. <see cref="WindowsArgument"/> is the
+/// exact argv entry that supplied that path, rechecked immediately before SIGTERM.
+/// </summary>
+public sealed record SteamAttributionCandidate(ProcessIdentity Identity, string Executable,
+    string GamePath, string? WindowsArgument, IReadOnlyList<string>? CommandLine);
 
 /// <summary>
 /// Per-snapshot attribution evidence. A null <see cref="Rejection"/> with candidates in one
@@ -78,6 +86,170 @@ public sealed record SteamAttributionDecision(
 }
 
 public sealed class SteamAttributionUnknownException(string reason) : Exception(reason);
+
+/// <summary>
+/// Resolve a Wine/Proton game's Windows binary through the app's own prefix drive map. A Proton
+/// game's host executable is the runtime preloader inside the Proton distribution, never a path
+/// under the installdir or prefix, so <c>/proc/PID/exe</c> alone can never identify it. The
+/// command line names the Windows image; <c>&lt;prefix&gt;/dosdevices/&lt;drive&gt;:</c> is a
+/// symlink the app's own prefix provides, and the resolved host path must still be under this
+/// target's installdir or prefix. Nothing is guessed: a missing drive link, a relative or UNC
+/// path, a wrapper identity, or a path outside those roots yields no candidate.
+/// </summary>
+public static class ProtonCommandLine
+{
+    // Steam/Proton/Wine wrapper identities. These run inside a prefix or beside a game and can
+    // carry a game path in argv; they are never the game. The runtime preloaders are
+    // deliberately absent: a Proton game's own process executes through them.
+    private static readonly HashSet<string> Wrappers = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "steam", "steam.sh", "steam.exe", "steamwebhelper", "steamservice", "steamerrorreporter",
+        "steammonitor", "steam-launch-wrapper", "steamclient_loader", "gameoverlayui", "steam-overlay-ui",
+        "python", "python2", "python3", "python.exe", "pythonw", "pythonw.exe",
+        "pv-adverb", "pressure-vessel", "pressure-vessel-wrap", "pressure-vessel-adverb",
+        "reaper", "srt-bwrap", "bwrap", "proton", "wineserver", "wineserver64",
+        "winedevice", "winedevice.exe", "explorer", "explorer.exe", "services", "services.exe",
+        "plugplay", "plugplay.exe", "rpcss", "rpcss.exe", "conhost", "conhost.exe",
+        "rundll32", "rundll32.exe", "start", "start.exe", "winemenubuilder", "winemenubuilder.exe",
+        "wineboot", "wineboot.exe", "winecfg", "winecfg.exe", "wineconsole", "wineconsole.exe",
+        "winedbg", "winedbg.exe", "regsvr32", "regsvr32.exe", "msiexec", "msiexec.exe",
+    };
+
+    public static bool IsWrapper(string? executable)
+    {
+        var name = WindowsBaseName(executable);
+        return name is not null && (Wrappers.Contains(name)
+            || name.StartsWith("pressure-vessel-", StringComparison.OrdinalIgnoreCase)
+            || name.StartsWith("steam-runtime-", StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
+    /// Resolve the process image path (argv[0]) when it is an absolute Windows drive path to a
+    /// real host file under the target's installdir or prefix. Only argv[0] is the image: a
+    /// wrapper that merely carries the game path in a later argument is never the game.
+    /// Returns false without touching the filesystem when the target has no Proton prefix.
+    /// </summary>
+    public static bool TryResolve(SteamLaunchTarget target, IReadOnlyList<string>? commandLine,
+        out string gamePath, out string? windowsArgument)
+    {
+        gamePath = string.Empty;
+        windowsArgument = null;
+        if (target.ProtonPrefix is not { } prefix || commandLine is not { Count: > 0 })
+        {
+            return false;
+        }
+
+        var argument = commandLine[0];
+        if (!TryParseDrivePath(argument, out var drive, out var relative) || IsWrapper(argument))
+        {
+            return false;
+        }
+
+        var mapped = Map(prefix, drive, relative);
+        if (mapped is null || IsWrapper(mapped) || !SteamProcessAttribution.Matches(target, mapped))
+        {
+            return false;
+        }
+
+        gamePath = mapped;
+        windowsArgument = argument;
+        return true;
+    }
+
+    private static string? Map(string prefix, char drive, string relative)
+    {
+        var link = Path.Combine(prefix, "dosdevices", $"{char.ToLowerInvariant(drive)}:");
+        var root = Canonical(link);
+        if (root is null)
+        {
+            return null;
+        }
+
+        var combined = root;
+        foreach (var part in relative.Split(['\\', '/'], StringSplitOptions.RemoveEmptyEntries))
+        {
+            if (part == ".")
+            {
+                continue;
+            }
+
+            if (part == "..")
+            {
+                combined = Path.GetDirectoryName(combined);
+                if (combined is null)
+                {
+                    return null;
+                }
+
+                continue;
+            }
+
+            combined = Path.Combine(combined, part);
+        }
+
+        // Only a real, canonical host file is evidence. A drive mapped to "/" must not let a
+        // Windows path escape into the host once resolved.
+        var canonical = Canonical(combined);
+        return canonical is not null && File.Exists(canonical) ? canonical : null;
+    }
+
+    /// <summary>Absolute drive-letter path with either separator, e.g. <c>S:\a\b.exe</c>.</summary>
+    private static bool TryParseDrivePath(string argument, out char drive, out string relative)
+    {
+        drive = '\0';
+        relative = string.Empty;
+        if (argument.Length < 3 || !char.IsAsciiLetter(argument[0]) || argument[1] != ':'
+            || (argument[2] != '\\' && argument[2] != '/'))
+        {
+            return false;
+        }
+
+        drive = argument[0];
+        relative = argument[2..];
+        return true;
+    }
+
+    private static string? WindowsBaseName(string? path)
+    {
+        if (path is null)
+        {
+            return null;
+        }
+
+        var normalized = path.Replace('\\', '/').TrimEnd('/');
+        var index = normalized.LastIndexOf('/');
+        return index < 0 ? normalized : normalized[(index + 1)..];
+    }
+
+    /// <summary>Resolve every path component so a symlinked directory cannot alias the roots.</summary>
+    private static string? Canonical(string path)
+    {
+        try
+        {
+            var full = Path.GetFullPath(path);
+            var root = Path.GetPathRoot(full);
+            if (string.IsNullOrEmpty(root))
+            {
+                return null;
+            }
+
+            var current = root;
+            foreach (var part in full[root.Length..].Split('/', StringSplitOptions.RemoveEmptyEntries))
+            {
+                var next = Path.Combine(current, part);
+                var target = File.ResolveLinkTarget(next, true);
+                current = target?.FullName ?? next;
+            }
+
+            return current;
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException
+            or ArgumentException or NotSupportedException)
+        {
+            return null;
+        }
+    }
+}
 
 /// <summary>Pure attribution policy. All paths must already be canonical host paths.</summary>
 public static class SteamProcessAttribution
@@ -107,6 +279,9 @@ public static class SteamProcessAttribution
             || name.StartsWith("steam-runtime-", StringComparison.OrdinalIgnoreCase));
     }
 
+    /// <summary>A Steam/Proton wrapper identity that must never be taken as the game.</summary>
+    public static bool IsProtonWrapper(string? executable) => ProtonCommandLine.IsWrapper(executable);
+
     public static bool IsShellOrSystemBinary(string executable) => Shells.Contains(Path.GetFileName(executable))
         || new[] { "/usr", "/bin", "/sbin", "/lib", "/lib64" }.Any(root => Under(executable, root));
 
@@ -133,15 +308,25 @@ public static class SteamProcessAttribution
     /// (a Proton game commonly runs both a prefix .exe and an install-dir launcher), but every
     /// candidate must share one fresh group. Ownership is then the group's game identities;
     /// helpers are never signalled and their presence alone never withholds ownership.
+    /// The host-visible executable is the primary identity. Only when it matches nothing does
+    /// a Proton target resolve the Windows argv path through this app's own prefix drive map.
     /// </summary>
     public static SteamAttributionDecision Evaluate(SteamLaunchTarget target, ExternalProcessSnapshot before,
         ExternalProcessSnapshot after)
     {
-        var candidates = after.Processes
-            .Where(row => row.Process.IsRunning && Matches(target, row.Executable)
-                && !before.Processes.Any(old => SameProcess(old.Process.Identity, row.Process.Identity)))
-            .Select(row => new SteamAttributionCandidate(row.Process.Identity, row.Executable))
-            .ToArray();
+        var candidates = new List<SteamAttributionCandidate>();
+        foreach (var row in after.Processes)
+        {
+            if (!row.Process.IsRunning
+                || before.Processes.Any(old => SameProcess(old.Process.Identity, row.Process.Identity))
+                || !TryGetGame(target, row, out var gamePath, out var windowsArgument))
+            {
+                continue;
+            }
+
+            candidates.Add(new(row.Process.Identity, row.Executable!, gamePath, windowsArgument, row.CommandLine));
+        }
+
         if (!before.IsComplete || !after.IsComplete)
         {
             return new(candidates, [], "process coverage incomplete");
@@ -154,7 +339,7 @@ public static class SteamProcessAttribution
             return new(candidates, [], "a candidate changed process group between reads");
         }
 
-        if (candidates.Length == 0)
+        if (candidates.Count == 0)
         {
             return new(candidates, [], "no fresh installdir/prefix game process");
         }
@@ -172,6 +357,47 @@ public static class SteamProcessAttribution
 
     public static bool SameProcess(ProcessIdentity left, ProcessIdentity right) => left.ProcessId == right.ProcessId
         && left.StartTimeTicks == right.StartTimeTicks;
+
+    /// <summary>
+    /// The accepted game identity for a live row, if any. <c>/proc/PID/exe</c> is authoritative
+    /// for native titles. For a Proton target whose host executable is a runtime path, the
+    /// Windows argv path resolved through the app's own prefix is the only executable evidence.
+    /// A wrapper identity is never accepted even when its argv names the game.
+    /// </summary>
+    public static bool IsGame(SteamLaunchTarget target, ExternalProcessEntry row) =>
+        TryGetGame(target, row, out _, out _);
+
+    /// <summary>
+    /// A live tracked identity whose evidence cannot be read at all is unverifiable, never an
+    /// exit and never a changed executable. For a Proton identity argv is the evidence, so an
+    /// unreadable or empty command line is torn proof, not a contradiction.
+    /// </summary>
+    public static bool IsUnverifiableEvidence(SteamLaunchTarget target, ExternalProcessEntry row) =>
+        row.Executable is null
+        || (target.ProtonPrefix is not null && row.CommandLine is not { Count: > 0 }
+            && !Matches(target, row.Executable));
+
+    /// <summary>The accepted game identity and its exact argv evidence, if any.</summary>
+    public static bool TryGetGame(SteamLaunchTarget target, ExternalProcessEntry row,
+        out string gamePath, out string? windowsArgument)
+    {
+        windowsArgument = null;
+        if (row.Executable is { } executable && Matches(target, executable)
+            && !IsProtonWrapper(executable) && !IsSteamClient(executable))
+        {
+            gamePath = executable;
+            return true;
+        }
+
+        gamePath = string.Empty;
+        if (target.ProtonPrefix is null || row.Executable is null
+            || IsProtonWrapper(row.Executable) || IsSteamClient(row.Executable) || IsShell(row.Executable))
+        {
+            return false;
+        }
+
+        return ProtonCommandLine.TryResolve(target, row.CommandLine, out gamePath, out windowsArgument);
+    }
 
     /// <summary>
     /// Null when the group may be used for game-only stop. A group is eligible when it did not
@@ -220,7 +446,7 @@ public static class SteamProcessAttribution
                 return $"group {group} contains Steam client pid={pid} exe={member.Executable}";
             }
 
-            if (!Matches(target, member.Executable) && !IsInfrastructure(member.Executable)
+            if (!IsGame(target, member) && !IsInfrastructure(member.Executable)
                 && !IsShell(member.Executable))
             {
                 return $"group {group} contains unrelated member pid={pid} exe={member.Executable}";

@@ -1,7 +1,11 @@
 namespace Playnite.Platform.Sessions;
 
-/// <summary>Canonical executable evidence; null means unreadable, never a guessed path.</summary>
-public sealed record ExternalProcessEntry(ProcessEntry Process, string? Executable);
+/// <summary>
+/// Canonical executable evidence; null means unreadable, never a guessed path.
+/// <see cref="CommandLine"/> is argv only when the host can read it; null means unreadable.
+/// </summary>
+public sealed record ExternalProcessEntry(ProcessEntry Process, string? Executable,
+    IReadOnlyList<string>? CommandLine = null);
 
 /// <summary>
 /// One process-table sample. <paramref name="MovedIdentities"/> lists rows whose process group
@@ -25,4 +29,12 @@ public interface IExternalProcessHost
     Task SignalAsync(ProcessIdentity identity, CancellationToken cancellationToken);
     /// <summary>Pin the identity and reverify both executable and stat before SIGTERM. No PID fallback.</summary>
     Task SignalAsync(ProcessIdentity identity, string expectedExecutable, CancellationToken cancellationToken);
+    /// <summary>
+    /// Pin the identity and reverify stat, executable and, when it is given, the exact command-line
+    /// argument before SIGTERM. The argument form is the only executable evidence a Wine/Proton
+    /// game exposes: its host executable is the runtime preloader, not the Windows binary.
+    /// No PID fallback.
+    /// </summary>
+    Task SignalAsync(ProcessIdentity identity, string expectedExecutable, string? expectedCommandLineArgument,
+        CancellationToken cancellationToken);
 }

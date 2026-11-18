@@ -14,6 +14,7 @@ public sealed class SteamAcceptanceConsentTests
         await Assert.ThrowsAsync<UnauthorizedAccessException>(() => host.RunAsync(new("/synthetic/steam", ["-applaunch", "42"]), CancellationToken.None));
         await Assert.ThrowsAsync<UnauthorizedAccessException>(() => host.SignalAsync(new(42, 1, 42), CancellationToken.None));
         await Assert.ThrowsAsync<UnauthorizedAccessException>(() => host.SignalAsync(new(42, 1, 42), "/games/game", CancellationToken.None));
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => host.SignalAsync(new(42, 1, 42), "/games/game", "S:\\game\\game.exe", CancellationToken.None));
         Assert.Equal(0, inner.Launches);
         Assert.Equal(0, inner.Signals);
     }
@@ -40,20 +41,25 @@ public sealed class SteamAcceptanceConsentTests
         {
             await host.SignalAsync(new(42, 1, 42), CancellationToken.None);
             await host.SignalAsync(new(42, 1, 42), "/games/game", CancellationToken.None);
+            await host.SignalAsync(new(42, 1, 42), "/games/game", "S:\\game\\game.exe", CancellationToken.None);
         }
         else
         {
             await Assert.ThrowsAsync<UnauthorizedAccessException>(() => host.SignalAsync(new(42, 1, 42), CancellationToken.None));
             await Assert.ThrowsAsync<UnauthorizedAccessException>(() => host.SignalAsync(new(42, 1, 42), "/games/game", CancellationToken.None));
+            await Assert.ThrowsAsync<UnauthorizedAccessException>(() => host.SignalAsync(new(42, 1, 42), "/games/game", "S:\\game\\game.exe", CancellationToken.None));
         }
 
         Assert.Equal(launch ? 1 : 0, inner.Launches);
-        Assert.Equal(stop ? 2 : 0, inner.Signals);
+        Assert.Equal(stop ? 3 : 0, inner.Signals);
     }
 
     private sealed class RecordingHost : IExternalProcessHost
     {
         public Task SignalAsync(ProcessIdentity identity, string expectedExecutable, CancellationToken cancellationToken) =>
+            SignalAsync(identity, cancellationToken);
+        public Task SignalAsync(ProcessIdentity identity, string expectedExecutable,
+            string? expectedCommandLineArgument, CancellationToken cancellationToken) =>
             SignalAsync(identity, cancellationToken);
         public int Launches { get; private set; }
         public int Signals { get; private set; }
