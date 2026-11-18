@@ -278,12 +278,12 @@ public sealed class SteamLaunchTests
     }
 
     [Theory]
-    [InlineData("steam-launch-wrapper")]
-    [InlineData("pv-adverb")]
-    [InlineData("wineserver")]
-    [InlineData("srt-bwrap")]
-    [InlineData("bash")]
-    public async Task Steam_owned_helper_sharing_a_fresh_group_is_never_signalled(string helper)
+    [InlineData("steam-launch-wrapper", true)]
+    [InlineData("pv-adverb", true)]
+    [InlineData("wineserver", true)]
+    [InlineData("srt-bwrap", true)]
+    [InlineData("bash", false)]
+    public async Task Steam_owned_helper_sharing_a_fresh_group_is_never_signalled(string helper, bool identified)
     {
         var host = new FakeHost();
         host.OnRun = () => host.Rows.AddRange([
@@ -294,7 +294,20 @@ public sealed class SteamLaunchTests
         await launcher.StopAsync(game, CancellationToken.None);
         Assert.Equal([22], host.Signalled.Select(identity => identity.ProcessId));
         Assert.True(launcher.StopReport!.IsDegraded);
-        Assert.Equal([new ProcessIdentity(20, 2, 20)], launcher.StopReport.HelperSurvivors);
+        if (identified)
+        {
+            Assert.Equal([new ProcessIdentity(20, 2, 20)], launcher.StopReport.HelperSurvivors);
+            Assert.Empty(launcher.StopReport.UnidentifiedSurvivors);
+        }
+        else
+        {
+            // A bare shell carries no runtime path or parent evidence, so it is not claimed
+            // to be a Steam helper even though it is left unsignalled.
+            Assert.Empty(launcher.StopReport.HelperSurvivors);
+            Assert.Equal([new ProcessIdentity(20, 2, 20)], launcher.StopReport.UnidentifiedSurvivors);
+            Assert.Contains("manual inspection required", launcher.StopReport.Reason);
+        }
+
         Assert.Contains("group not empty", launcher.StopReport.Reason);
         Assert.Contains(host.Rows, row => row.Process.Identity == Client.Process.Identity);
     }
@@ -333,7 +346,146 @@ public sealed class SteamLaunchTests
         Assert.Equal([22], snapshot.Processes.Select(row => row.Identity.ProcessId));
         await launcher.StopAsync(game, CancellationToken.None);
         Assert.Equal([22], host.Signalled.Select(identity => identity.ProcessId));
-        Assert.Equal([20, 21, 24], launcher.StopReport!.HelperSurvivors.Select(identity => identity.ProcessId).Order());
+        Assert.Equal([20, 21], launcher.StopReport!.HelperSurvivors.Select(identity => identity.ProcessId).Order());
+        Assert.Equal([24], launcher.StopReport.UnidentifiedSurvivors.Select(identity => identity.ProcessId).Order());
+        Assert.Contains("manual inspection required", launcher.StopReport.Reason);
+    }
+
+    [Fact]
+    public async Task Unreadable_survivor_without_evidence_is_unidentified_and_not_a_helper_claim()
+    {
+        var host = new FakeHost();
+        host.OnRun = () => host.Rows.AddRange([
+            Entry(22, 2, 20, Native.App.InstallPath + "/game"),
+            Entry(24, 2, 20, null),
+        ]);
+        await using var launcher = Launcher(host, Native);
+        var game = await launcher.StartAsync(launcher.CreateRequest(), CancellationToken.None);
+        await launcher.StopAsync(game, CancellationToken.None);
+        Assert.Equal([22], host.Signalled.Select(identity => identity.ProcessId));
+        var report = launcher.StopReport!;
+        Assert.True(report.IsDegraded);
+        Assert.Empty(report.HelperSurvivors);
+        Assert.Equal([new ProcessIdentity(24, 2, 20)], report.UnidentifiedSurvivors);
+        Assert.Contains("unidentified survivor(s) pid=24", report.Reason);
+        Assert.Contains("manual inspection required", report.Reason);
+        Assert.DoesNotContain("helper", report.Reason, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task Unreadable_survivor_with_observed_steam_parent_is_an_identified_helper()
+    {
+        var host = new FakeHost();
+        host.OnRun = () => host.Rows.AddRange([
+            Entry(20, 2, 20, "/steam/pv-adverb"),
+            Entry(22, 2, 20, Native.App.InstallPath + "/game"),
+        ]);
+        await using var launcher = Launcher(host, Native);
+        var game = await launcher.StartAsync(launcher.CreateRequest(), CancellationToken.None);
+        // Its /proc/PID/exe stays unreadable; only the observed parent names it as Steam-owned.
+        host.Rows.Add(Entry(24, 2, 20, null, parent: 20));
+        await launcher.StopAsync(game, CancellationToken.None);
+        var report = launcher.StopReport!;
+        Assert.True(report.IsDegraded);
+        Assert.Equal([20, 24], report.HelperSurvivors.Select(identity => identity.ProcessId).Order());
+        Assert.Empty(report.UnidentifiedSurvivors);
+    }
+
+    [Fact]
+    public async Task Unreadable_game_executable_is_torn_evidence_not_a_changed_identity_or_exit()
+    {
+        var host = Host(Native);
+        var launcher = new SteamProcessLauncher(host, Native, new()
+        {
+            SteamExecutable = "/usr/bin/steam", ProtocolOpener = "/usr/bin/xdg-open",
+            PollInterval = TimeSpan.FromMilliseconds(1), AttributionWindow = TimeSpan.FromSeconds(1),
+            StopTimeout = TimeSpan.FromMilliseconds(20),
+        });
+        try
+        {
+            var game = await launcher.StartAsync(launcher.CreateRequest(), CancellationToken.None);
+            // The same PID/start/PGID, mid-exit: /proc/PID/exe no longer resolves.
+            host.Rows.RemoveAll(row => row.Process.Identity.ProcessId == 22);
+            host.Rows.Add(Entry(22, 2, 20, null));
+            var snapshot = await launcher.SnapshotAsync(CancellationToken.None);
+            Assert.False(snapshot.IsComplete);
+            Assert.Contains("unreadable", snapshot.IncompleteReason);
+            var error = await Assert.ThrowsAsync<ProcessSurvivorException>(
+                () => launcher.StopAsync(game, CancellationToken.None));
+            Assert.Contains("stayed unreadable", error.Message);
+            Assert.Null(launcher.StopReport);
+            Assert.Empty(host.Signalled);
+        }
+        finally
+        {
+            host.Rows.RemoveAll(row => row.Process.Identity.ProcessId == 22);
+            await launcher.DisposeAsync();
+        }
+    }
+
+    [Fact]
+    public async Task Incomplete_sample_after_attribution_is_not_a_natural_exit_and_never_signals()
+    {
+        var host = Host(Native);
+        await using var launcher = Launcher(host, Native);
+        var process = await launcher.StartAsync(launcher.CreateRequest(), CancellationToken.None);
+        await using var tracker = new GameSessionTracker(launcher, launcher);
+        var events = new List<SessionStateChanged>();
+        tracker.StateChanged += (_, change) => { lock (events) { events.Add(change); } };
+        SessionStateChanged[] Recorded()
+        {
+            lock (events) { return [.. events]; }
+        }
+
+        // First let the tracker observe the live game, so a later torn sample is the only
+        // evidence the exit path could ever use.
+        var observed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        host.OnSnapshot = () => observed.TrySetResult();
+        using var cancellation = new CancellationTokenSource();
+        var tracking = tracker.TrackAsync(process,
+            new SessionOptions { PollInterval = TimeSpan.FromMilliseconds(1) }, cancellation.Token);
+        await observed.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.Equal(GameSessionState.Running, tracker.State);
+        host.OnSnapshot = null;
+
+        // The sample becomes unreadable and its rows vanish: a torn /proc read is not an exit.
+        host.Complete = false;
+        host.Rows.Clear();
+        var torn = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        host.OnSnapshot = () => torn.TrySetResult();
+        await torn.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await Task.Delay(50); // Many more torn samples: the exit confirmation can never be reached.
+        host.OnSnapshot = null;
+
+        var snapshot = await launcher.SnapshotAsync(CancellationToken.None);
+        Assert.False(snapshot.IsComplete);
+        Assert.NotNull(snapshot.IncompleteReason);
+        Assert.Equal(GameSessionState.Running, tracker.State);
+        Assert.True(tracker.IsDegraded);
+        Assert.Empty(host.Signalled);
+        Assert.DoesNotContain(Recorded(), change => change.State is GameSessionState.Stopping
+            or GameSessionState.Stopped or GameSessionState.Cancelled or GameSessionState.Failed);
+
+        // /proc recovers and the game is still running; the session must stop it, not assume exit.
+        host.Rows.AddRange([
+            Entry(20, 2, 20, "/steam/pv-adverb"),
+            Entry(21, 2, 20, "/steam/wineserver"),
+            Entry(22, 2, 20, Native.App.InstallPath + "/game"),
+        ]);
+        host.Complete = true;
+        var healthy = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        host.OnSnapshot = () => healthy.TrySetResult();
+        await healthy.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await Task.Delay(50);
+        host.OnSnapshot = null;
+        Assert.Equal(GameSessionState.Running, tracker.State);
+        Assert.False(tracker.IsDegraded);
+
+        Assert.True(await tracker.StopAsync(CancellationToken.None));
+        await tracking;
+        Assert.Equal(GameSessionState.Stopped, tracker.State);
+        Assert.Equal([22], host.Signalled.Select(identity => identity.ProcessId));
+        Assert.Equal([20, 21], launcher.StopReport!.HelperSurvivors.Select(identity => identity.ProcessId).Order());
     }
 
     [Fact]
@@ -598,8 +750,8 @@ public sealed class SteamLaunchTests
             new([Client, Entry(22, 2, 20, executable)], true)));
     }
 
-    private static ExternalProcessEntry Entry(int pid, long ticks, int group, string? executable) =>
-        new(new(new(pid, ticks, group), 1, true), executable);
+    private static ExternalProcessEntry Entry(int pid, long ticks, int group, string? executable, int parent = 1) =>
+        new(new(new(pid, ticks, group), parent, true), executable);
 
     private static void AssertOnlyClientAndUnsignalledHelpersRemain(FakeHost host)
     {
