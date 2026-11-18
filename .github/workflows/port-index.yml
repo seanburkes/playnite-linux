@@ -115,8 +115,15 @@ jobs:
             # committed by the bot and thereby launder a deletion through main.
             # Ownership (fragment immutability, the one-time history migration,
             # and retirement deletes) is enforced here too, not only in the PR gate.
+            #
+            # --allow-generated-ownership is writer-only: HEAD may itself be a
+            # previous writer commit whose regenerated map is part of this
+            # --against diff. Pull requests never pass it and still fail on any
+            # map change; build rewrites the map from merged history below and
+            # the post-build check verifies the committed bytes.
             python3 scripts/port/build_port_index.py check --shards-only \
-              --against "$BASE_SHA" --forbid-shard-ownership
+              --against "$BASE_SHA" --forbid-shard-ownership \
+              --allow-generated-ownership
 
             python3 scripts/port/build_port_index.py build "${capture_args[@]}"
             python3 scripts/port/build_port_index.py check
