@@ -364,6 +364,77 @@ public sealed class LinuxProcessLauncherTests
     }
 
     [Fact]
+    public async Task Real_child_reparented_before_the_first_snapshot_is_still_contained()
+    {
+        const string python = "/usr/bin/python3";
+        Assert.True(File.Exists(python), "The process-group test requires python3.");
+        var pidFile = Path.Combine(Path.GetTempPath(), $"p5-004-reparent-{Path.GetRandomFileName()}");
+        const string script =
+            "import os,sys,time\n" +
+            "pid=os.fork()\n" +
+            "if pid==0:\n" +
+            "    time.sleep(30)\n" +
+            "    os._exit(0)\n" +
+            "with open(sys.argv[1],'w') as handle:\n" +
+            "    handle.write(str(pid))\n" +
+            "time.sleep(0.3)\n" +
+            "os._exit(0)\n";
+        ProcessIdentity childIdentity = default;
+        await using var launcher = new LinuxProcessLauncher();
+        try
+        {
+            var process = await launcher.StartAsync(
+                new LaunchRequest(python, ["-c", script, pidFile]), CancellationToken.None);
+            var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(5);
+            var childPid = 0;
+            while (DateTime.UtcNow < deadline)
+            {
+                if (File.Exists(pidFile)
+                    && int.TryParse(File.ReadAllText(pidFile), System.Globalization.NumberStyles.None,
+                        System.Globalization.CultureInfo.InvariantCulture, out childPid)
+                    && childPid > 0)
+                {
+                    break;
+                }
+
+                await Task.Delay(10);
+            }
+
+            Assert.True(childPid > 0, "The child PID file was not written.");
+            var childStat = await new LinuxProcStatReader().ReadAsync(childPid, CancellationToken.None);
+            Assert.NotNull(childStat);
+            childIdentity = new ProcessIdentity(childPid, childStat.Value.StartTimeTicks, childStat.Value.ProcessGroupId);
+            while (await launcher.IsRunningAsync(process, CancellationToken.None))
+            {
+                await Task.Delay(10);
+            }
+
+            await using var tracker = new GameSessionTracker(launcher, new LinuxProcessObserver());
+            using var recorder = new SessionEventRecorder(tracker);
+            var tracking = tracker.TrackAsync(
+                process,
+                new SessionOptions { PollInterval = TimeSpan.FromMilliseconds(10) },
+                CancellationToken.None);
+            await recorder.WaitForAsync(change => change.State == GameSessionState.Running);
+            await Task.Delay(50);
+            Assert.Equal(GameSessionState.Running, tracker.State);
+            Assert.True(await IdentityIsRunningAsync(childIdentity), "The reparented group child is not running.");
+            Assert.True(await tracker.StopAsync(CancellationToken.None));
+            await tracking;
+            Assert.Equal(GameSessionState.Stopped, tracker.State);
+            await AssertProcessGoneAsync(childIdentity);
+        }
+        finally
+        {
+            File.Delete(pidFile);
+            if (childIdentity.ProcessId > 0)
+            {
+                await KillIdentityAsync(childIdentity);
+            }
+        }
+    }
+
+    [Fact]
     public async Task Real_escaped_child_is_reported_as_a_survivor_not_silently_ignored()
     {
         const string python = "/usr/bin/python3";

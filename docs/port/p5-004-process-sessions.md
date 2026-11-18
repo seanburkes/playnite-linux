@@ -170,6 +170,9 @@ real children launched through `LinuxProcessLauncher` and actual `/proc` checks 
 - `Real_root_exit_keeps_a_tracked_child_and_stop_reaps_it` — a real `python3` root forks a
   child in the same process group and exits; the tracker stays `Running` on the reparented
   child, and the final stop reaps the whole group;
+- `Real_child_reparented_before_the_first_snapshot_is_still_contained` — a real child is
+  reparented to PID 1 before the tracker's first sample but remains in the root's group; the
+  group membership still keeps it tracked and the stop reaps it;
 - `Real_escaped_child_is_reported_as_a_survivor_not_silently_ignored` — a real child calls
   `setsid()`, leaving the contained group; the stop raises `ProcessSurvivorException`, keeps the
   session degraded and non-terminal, and the test reaps the survivor manually before retrying;
@@ -203,7 +206,7 @@ launcher throws `ProcessOrphanedException` instead of only rethrowing the origin
 
 Local Release, warnings as errors:
 
-- `Playnite.Core.Tests`: 2065 passed, 0 failed, 0 skipped (54 new session tests).
+- `Playnite.Core.Tests`: 2066 passed, 0 failed, 0 skipped (55 new session tests).
 - `Playnite.Architecture.Tests`: 188 passed, 0 failed, 0 skipped.
 - `build_port_index.py check --shards-only --against origin/main` is run before delivery.
 
