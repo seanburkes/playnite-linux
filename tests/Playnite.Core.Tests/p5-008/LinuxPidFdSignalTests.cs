@@ -163,6 +163,55 @@ public sealed class LinuxPidFdSignalTests
     }
 
     [Fact]
+    public async Task Same_start_ticks_in_a_changed_group_is_retained_as_an_anomaly_and_complete()
+    {
+        // The observer read says pgid=20; the host's identity re-read says the same pid and start
+        // ticks are now in pgid=30 (setsid). Dropping that row left a complete, empty snapshot.
+        var reader = new GroupChangeStatReader(Environment.ProcessId, ticks: 2, firstGroup: 20, secondGroup: 30);
+        var host = new LinuxExternalProcessHost(reader, null, _ => "/library/game");
+
+        var snapshot = await host.SnapshotAsync(CancellationToken.None);
+
+        // A move is reported as an anomaly, not as whole-table incompleteness: unrelated churn
+        // must not abort a launch or a stop.
+        Assert.True(snapshot.IsComplete);
+        var row = Assert.Single(snapshot.Processes);
+        Assert.Equal(new ProcessIdentity(Environment.ProcessId, 2, 30), row.Process.Identity);
+        Assert.Equal(row.Process.Identity, Assert.Single(snapshot.Moved));
+        Assert.True(row.Process.IsRunning);
+    }
+
+    [Fact]
+    public async Task Launcher_seam_a_group_change_between_reads_cannot_produce_a_clean_stop()
+    {
+        var target = new SteamLaunchTarget(new SteamApp(42, "Synthetic", "Game", "/library",
+            SteamAppState.Installed, false, null, null, 4));
+        var reader = new SeamStatReader(Environment.ProcessId, ticks: 2, group: 20, escapedGroup: 30);
+        var seam = new SeamHost(reader, target.App.InstallPath + "/game");
+        var launcher = new SteamProcessLauncher(seam, target, new()
+        {
+            ProtocolOpener = "/usr/bin/xdg-open", PollInterval = TimeSpan.FromMilliseconds(1),
+            AttributionWindow = TimeSpan.FromSeconds(1), StopTimeout = TimeSpan.FromMilliseconds(20),
+        });
+
+        var game = await launcher.StartAsync(launcher.CreateRequest(), CancellationToken.None);
+        Assert.Equal(20, game.Identity.ProcessGroupId);
+        reader.Escaped = true;
+
+        var snapshot = await launcher.SnapshotAsync(CancellationToken.None);
+        Assert.False(snapshot.IsComplete);
+        Assert.Contains("left its group", snapshot.IncompleteReason);
+
+        // The old shape produced a complete empty snapshot and therefore a clean "group empty"
+        // report with zero signals while the game lived on in pgid=30. A tracked identity that
+        // escaped its group is a survivor, never a terminal report.
+        await Assert.ThrowsAsync<ProcessSurvivorException>(
+            () => launcher.StopAsync(game, CancellationToken.None));
+        Assert.Null(launcher.StopReport);
+        Assert.Empty(seam.Signalled);
+    }
+
+    [Fact]
     public async Task Cancellation_before_pinning_never_opens_a_handle_or_signals()
     {
         var state = new FakeState();
@@ -209,6 +258,86 @@ public sealed class LinuxPidFdSignalTests
                 child.Kill(); // Cleanup only our artificial sleep child after a failed test.
                 await child.WaitForExitAsync();
             }
+        }
+    }
+
+    /// <summary>Host-level seam: the observer read and the identity re-read disagree on PGID.</summary>
+    private sealed class GroupChangeStatReader(int processId, long ticks, int firstGroup, int secondGroup)
+        : IProcStatReader
+    {
+        private int reads;
+
+        public Task<ProcStat?> ReadAsync(int pid, CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (pid != processId)
+            {
+                return Task.FromResult<ProcStat?>(null);
+            }
+
+            var group = Interlocked.Increment(ref reads) == 1 ? firstGroup : secondGroup;
+            return Task.FromResult<ProcStat?>(new ProcStat(pid, 1, group, 'S', ticks));
+        }
+    }
+
+    /// <summary>Launcher seam: a live target appears on launch, then moves group mid-read.</summary>
+    private sealed class SeamStatReader(int processId, long ticks, int group, int escapedGroup) : IProcStatReader
+    {
+        private int escapeReads;
+
+        public int ProcessId { get; } = processId;
+        public volatile bool Present;
+        public volatile bool Escaped;
+
+        public Task<ProcStat?> ReadAsync(int pid, CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (pid != ProcessId || !Present)
+            {
+                return Task.FromResult<ProcStat?>(null);
+            }
+
+            // Once escaped, the observer still reads the old group and the host re-read sees the
+            // new one, reproducing the exact two-read disagreement in every snapshot.
+            var read = Escaped ? Interlocked.Increment(ref escapeReads) : 1;
+            var row = Escaped && read % 2 == 0 ? escapedGroup : group;
+            return Task.FromResult<ProcStat?>(new ProcStat(pid, 1, row, 'S', ticks));
+        }
+    }
+
+    private sealed class SeamHost(SeamStatReader reader, string executable) : IExternalProcessHost
+    {
+        private readonly LinuxExternalProcessHost host =
+            new(reader, null, pid => pid == reader.ProcessId ? executable : null);
+
+        public List<ProcessIdentity> Signalled { get; } = [];
+
+        public Task<ExternalProcessSnapshot> SnapshotAsync(CancellationToken cancellationToken) =>
+            host.SnapshotAsync(cancellationToken);
+
+        public Task<int> RunAsync(LaunchRequest request, CancellationToken cancellationToken)
+        {
+            reader.Present = true;
+            return Task.FromResult(0);
+        }
+
+        public Task SignalAsync(ProcessIdentity identity, CancellationToken cancellationToken) =>
+            throw new InvalidOperationException("Unscoped signal forbidden.");
+
+        public Task SignalAsync(ProcessIdentity identity, string expectedExecutable,
+            CancellationToken cancellationToken)
+        {
+            Signalled.Add(identity);
+            reader.Present = false;
+            return Task.CompletedTask;
+        }
+
+        public Task SignalAsync(ProcessIdentity identity, string expectedExecutable,
+            string? expectedCommandLineArgument, CancellationToken cancellationToken)
+        {
+            Signalled.Add(identity);
+            reader.Present = false;
+            return Task.CompletedTask;
         }
     }
 

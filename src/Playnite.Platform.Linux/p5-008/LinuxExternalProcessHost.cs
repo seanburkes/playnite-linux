@@ -30,6 +30,7 @@ public sealed class LinuxExternalProcessHost : IExternalProcessHost
     {
         var sample = await observer.SnapshotAsync(cancellationToken).ConfigureAwait(false);
         var entries = new List<ExternalProcessEntry>();
+        var moved = new List<ProcessIdentity>();
         var complete = sample.IsComplete && sample.Unreadable.Count == 0;
         foreach (var entry in sample.Processes)
         {
@@ -68,14 +69,37 @@ public sealed class LinuxExternalProcessHost : IExternalProcessHost
                 complete = false;
                 continue;
             }
-            if (current is { } row && row.StartTimeTicks == entry.Identity.StartTimeTicks
-                && row.ProcessGroupId == entry.Identity.ProcessGroupId)
+
+            if (current is not { } row)
             {
-                entries.Add(new(entry with { IsRunning = row.IsRunning }, executable, commandLine));
+                // Vanished between the two reads: exit evidence, not a row.
+                continue;
             }
+
+            if (row.StartTimeTicks != entry.Identity.StartTimeTicks)
+            {
+                // A different process reused the PID: never report it as the sampled identity.
+                continue;
+            }
+
+            if (row.ProcessGroupId != entry.Identity.ProcessGroupId)
+            {
+                // Same PID and start ticks in a changed group: the process moved (setsid) between
+                // reads. Retain the re-read identity so an attributed identity's escape stays
+                // visible, and report it as an anomaly rather than degrading the whole sample:
+                // an unrelated move must not abort a launch or a stop.
+                var movedIdentity = new ProcessIdentity(entry.Identity.ProcessId, row.StartTimeTicks,
+                    row.ProcessGroupId);
+                moved.Add(movedIdentity);
+                entries.Add(new(entry with { Identity = movedIdentity, IsRunning = row.IsRunning },
+                    executable, commandLine));
+                continue;
+            }
+
+            entries.Add(new(entry with { IsRunning = row.IsRunning }, executable, commandLine));
         }
 
-        return new(entries, complete);
+        return new(entries, complete, moved);
     }
 
     public async Task<int> RunAsync(LaunchRequest request, CancellationToken cancellationToken)

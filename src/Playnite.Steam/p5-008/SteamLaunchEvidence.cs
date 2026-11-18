@@ -332,6 +332,13 @@ public static class SteamProcessAttribution
             return new(candidates, [], "process coverage incomplete");
         }
 
+        // A candidate whose own row changed group mid-read is not stable evidence. Unrelated
+        // moved rows are irrelevant here and must not reject an otherwise fresh group.
+        if (candidates.Any(candidate => after.Moved.Any(moved => SameProcess(moved, candidate.Identity))))
+        {
+            return new(candidates, [], "a candidate changed process group between reads");
+        }
+
         if (candidates.Count == 0)
         {
             return new(candidates, [], "no fresh installdir/prefix game process");
@@ -396,10 +403,12 @@ public static class SteamProcessAttribution
     /// Null when the group may be used for game-only stop. A group is eligible when it did not
     /// exist before this launch and every readable member is a game binary or a launch helper.
     /// A Steam client or any pre-existing member makes it shared/unverifiable. A live member
-    /// whose executable the host cannot read is unidentified: its identity is never assumed,
-    /// it is never signalled, and it is reported as tolerated group evidence. If such a member
-    /// outlives the game, it is an unidentified survivor requiring manual inspection, never an
-    /// asserted Steam helper.
+    /// whose executable the host cannot read is never assumed, never signalled, and reported as
+    /// tolerated group evidence. If such a member outlives the game, it is identified as a
+    /// Steam/Proton helper survivor only when parent evidence proves it: an observed parent that
+    /// is the baseline Steam client, an attributed game identity, or an already identified
+    /// helper. Without that parent evidence it remains an unidentified survivor requiring
+    /// manual inspection.
     /// </summary>
     public static string? GroupRejection(SteamLaunchTarget target, ExternalProcessSnapshot before,
         ExternalProcessSnapshot sample, int group, List<string>? tolerated = null)
