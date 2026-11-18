@@ -29,7 +29,7 @@ public static class SteamRootResolver
         ArgumentNullException.ThrowIfNull(paths);
         var candidates = new List<SteamRootCandidate>();
         var overridden = environment.GetVariable("STEAM_ROOT");
-        if (!string.IsNullOrWhiteSpace(overridden))
+        if (!string.IsNullOrEmpty(overridden))
         {
             candidates.Add(new(SteamRootKind.Override, overridden));
         }

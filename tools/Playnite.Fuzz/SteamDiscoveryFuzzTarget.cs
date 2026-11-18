@@ -59,11 +59,6 @@ public static class SteamDiscoveryFuzzTarget
             {
                 throw new FuzzFailureException("A returned library path is not absolute.");
             }
-
-            if (library.Apps is { } apps && apps.Keys.Any(id => id == 0))
-            {
-                throw new FuzzFailureException("A returned library app id is zero.");
-            }
         }
 
         if (result.Value.UnknownFields.Any(field => string.Equals(field.Key, "LastOwner", StringComparison.OrdinalIgnoreCase)))

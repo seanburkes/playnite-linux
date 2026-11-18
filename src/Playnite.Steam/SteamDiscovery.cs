@@ -37,29 +37,28 @@ public static class SteamDiscovery
         var primary = Path.Combine(root, "steamapps", "libraryfolders.vdf");
         var secondary = Path.Combine(root, "config", "libraryfolders.vdf");
         string? file = null;
-        SteamLibraries? parsed = null;
-        if (fileSystem.FileExists(primary))
+        var parsed = TryReadAndParse(primary, root, fileSystem, maxBytes, issues, out var primarySeen);
+        if (primarySeen)
         {
             file = primary;
-            parsed = TryReadAndParse(primary, root, fileSystem, maxBytes, issues);
         }
 
-        if (parsed is null && fileSystem.FileExists(secondary))
+        if (parsed is null)
         {
-            file = secondary;
-            parsed = TryReadAndParse(secondary, root, fileSystem, maxBytes, issues);
-        }
-
-        if (file is null)
-        {
-            issues.Add(new(Path.GetFileName(primary), "libraryfolders", "library-file-missing", null, 0));
+            var fallbackIssues = new List<SteamParseIssue>();
+            parsed = TryReadAndParse(secondary, root, fileSystem, maxBytes, fallbackIssues, out var secondarySeen);
+            if (secondarySeen)
+            {
+                file = secondary;
+                issues.AddRange(fallbackIssues);
+            }
         }
 
         // Unknown root fields are intentionally discarded here; only typed discovery state escapes.
         var seen = new Dictionary<string, string>(StringComparer.Ordinal);
         foreach (var declared in parsed?.Libraries ?? [])
         {
-            libraries.Add(Inspect(declared, file!, fileSystem, seen, issues));
+            libraries.Add(Inspect(declared, file ?? throw new IOException("Parsed library file has no path."), fileSystem, seen, issues));
         }
 
         if (!seen.ContainsKey(root))
@@ -73,13 +72,14 @@ public static class SteamDiscovery
     }
 
     private static SteamLibraries? TryReadAndParse(string file, string root, ISteamFileSystem fileSystem, int maxBytes,
-        List<SteamParseIssue> issues)
+        List<SteamParseIssue> issues, out bool observed)
     {
+        observed = false;
         var name = Path.GetFileName(file);
         try
         {
-            // Read the canonical path, not the declared one: a link that is swapped after the
-            // containment check must not turn the read into an outside-root read.
+            // Resolution checks containment; the reader must additionally bind type/size/data to
+            // one handle and refuse links in every component of this canonical path.
             var real = fileSystem.GetRealPath(file);
             if (real is null)
             {
@@ -87,6 +87,7 @@ public static class SteamDiscovery
                 return null;
             }
 
+            observed = true;
             if (!SteamRootResolver.IsWithin(root, real))
             {
                 issues.Add(new(name, "libraryfolders", "library-file-outside-root", null, 0));
@@ -107,12 +108,14 @@ public static class SteamDiscovery
                     return null;
             }
 
-            var result = SteamLibraryParser.Parse(read.Bytes!, name, maxBytes);
+            var bytes = read.Bytes ?? throw new IOException("Successful library read has no bytes.");
+            var result = SteamLibraryParser.Parse(bytes, name, maxBytes);
             issues.AddRange(result.Issues);
             return result.Value;
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
+            observed = true;
             issues.Add(new(name, "libraryfolders", "unreadable-library-file", null, 0));
             return null;
         }

@@ -1,4 +1,5 @@
 using Playnite.Core;
+using Playnite.Platform;
 
 namespace Playnite.Steam;
 
@@ -18,8 +19,8 @@ public interface ISteamFileSystem
     bool FileExists(string path);
 
     /// <summary>
-    /// Reads at most <paramref name="maxBytes"/> from a canonical path. A non-regular file is
-    /// rejected before it is opened, so a FIFO or device cannot block or stream forever.
+    /// Reads at most <paramref name="maxBytes"/> from one handle opened without following links
+    /// in any canonical-path component. Type and length checks apply to that same handle.
     /// </summary>
     SteamFileRead ReadFile(string path, int maxBytes);
 
@@ -36,7 +37,7 @@ public interface ISteamFileSystem
 }
 
 /// <summary>The host filesystem. Every member is a read; nothing is opened for writing.</summary>
-public sealed class SteamFileSystem : ISteamFileSystem
+public sealed class SteamFileSystem(IBoundedFileReader reader) : ISteamFileSystem
 {
     private const int MaxLinks = 40;
 
@@ -46,60 +47,16 @@ public sealed class SteamFileSystem : ISteamFileSystem
 
     public SteamFileRead ReadFile(string path, int maxBytes)
     {
-        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maxBytes);
-        long length;
-        try
+        var read = reader.Read(path, maxBytes);
+        var status = read.Status switch
         {
-            var info = new FileInfo(path);
-            if (!info.Exists)
-            {
-                return new(SteamFileReadStatus.Missing, null);
-            }
-
-            length = info.Length;
-        }
-        catch (FileNotFoundException)
-        {
-            return new(SteamFileReadStatus.Missing, null);
-        }
-
-        // A FIFO, socket or device reports length zero; so does an empty regular file. None is
-        // opened, so a hostile path cannot block the caller. An empty file is skipped, not parsed.
-        if (length <= 0)
-        {
-            return new(SteamFileReadStatus.NotRegularFile, null);
-        }
-
-        if (length > maxBytes)
-        {
-            return new(SteamFileReadStatus.TooLarge, null);
-        }
-
-        try
-        {
-            // Allocate exactly the stat length and read at most that many bytes: a file that grows
-            // after the stat cannot over-allocate or extend the read.
-            using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Delete,
-                1, FileOptions.SequentialScan);
-            var buffer = new byte[(int)length];
-            var read = 0;
-            while (read < buffer.Length)
-            {
-                var count = stream.Read(buffer, read, buffer.Length - read);
-                if (count == 0)
-                {
-                    break;
-                }
-
-                read += count;
-            }
-
-            return new(SteamFileReadStatus.Ok, read == buffer.Length ? buffer : buffer[..read]);
-        }
-        catch (FileNotFoundException)
-        {
-            return new(SteamFileReadStatus.Missing, null);
-        }
+            BoundedFileReadStatus.Ok => SteamFileReadStatus.Ok,
+            BoundedFileReadStatus.Missing => SteamFileReadStatus.Missing,
+            BoundedFileReadStatus.NotRegularFile => SteamFileReadStatus.NotRegularFile,
+            BoundedFileReadStatus.TooLarge => SteamFileReadStatus.TooLarge,
+            _ => throw new IOException("Unknown bounded read status."),
+        };
+        return new(status, read.Bytes);
     }
 
     public bool IsMountPoint(string path)
@@ -136,7 +93,7 @@ public sealed class SteamFileSystem : ISteamFileSystem
     // "link/../x" before the link is followed.
     private static string? Resolve(string path, ref int hops)
     {
-        var root = Path.GetPathRoot(path)!;
+        var root = Path.GetPathRoot(path) ?? throw new ArgumentException("An absolute path is required.", nameof(path));
         var parts = path[root.Length..].Split(Path.DirectorySeparatorChar, StringSplitOptions.RemoveEmptyEntries);
         var current = root;
         for (var index = 0; index < parts.Length; index++)
@@ -149,6 +106,22 @@ public sealed class SteamFileSystem : ISteamFileSystem
 
             if (part == "..")
             {
+                // realpath must traverse this component before walking back out of it.
+                FileAttributes attributes;
+                try
+                {
+                    attributes = File.GetAttributes(current);
+                }
+                catch (Exception exception) when (exception is FileNotFoundException or DirectoryNotFoundException)
+                {
+                    return null;
+                }
+
+                if ((attributes & FileAttributes.Directory) == 0)
+                {
+                    return null;
+                }
+
                 current = Path.GetDirectoryName(current) ?? root;
                 continue;
             }

@@ -20,7 +20,7 @@ public sealed class SteamDiscoveryTests : IDisposable
     private static string Corpus => RepositoryPaths.Combine("tools", "Playnite.Fuzz", "Corpus", "p5-002");
     private readonly string home = Directory.CreateTempSubdirectory("playnite-steam-discovery-").FullName;
     private readonly MemoryEnvironment environment;
-    private readonly SteamFileSystem fileSystem = new();
+    private readonly SteamFileSystem fileSystem = new(new LinuxBoundedFileReader());
     private readonly ITestOutputHelper output;
 
     public SteamDiscoveryTests(ITestOutputHelper output)
@@ -288,6 +288,143 @@ public sealed class SteamDiscoveryTests : IDisposable
 
     // ---- library discovery ----------------------------------------------------------------
 
+    [Theory]
+    [InlineData("missing")]
+    [InlineData("file")]
+    [InlineData("dangling")]
+    [InlineData("directory-link")]
+    public void Raw_override_dotdot_requires_a_real_directory_through_production_paths(string component)
+    {
+        var root = CreateRoot(Path.Combine(home, "root"));
+        var preceding = Path.Combine(home, "preceding");
+        if (component == "file")
+        {
+            File.WriteAllText(preceding, "not a directory");
+        }
+        else if (component == "dangling")
+        {
+            Directory.CreateSymbolicLink(preceding, "missing-target");
+        }
+        else if (component == "directory-link")
+        {
+            Directory.CreateDirectory(Path.Combine(home, "directory"));
+            Directory.CreateSymbolicLink(preceding, "directory");
+        }
+
+        var raw = home + "/preceding/../root";
+        environment.Variables["STEAM_ROOT"] = raw;
+        var result = SteamRootResolver.Discover(environment, new LinuxPaths(environment, new LinuxFileSystem()), fileSystem);
+
+        Assert.Equal(raw, result.Candidates[0].Path);
+        Assert.Equal(component == "directory-link" ? SteamRootState.Accepted : SteamRootState.Missing,
+            result.Candidates[0].State);
+        Assert.Equal(component == "directory-link" ? root : null, result.Root);
+    }
+
+    [Fact]
+    public void Candidate_order_includes_xdg_and_reports_realpaths_even_when_not_accepted()
+    {
+        var bare = Path.Combine(home, "bare");
+        Directory.CreateDirectory(bare);
+        Directory.CreateDirectory(Path.Combine(home, ".steam"));
+        Directory.CreateSymbolicLink(Path.Combine(home, ".steam", "steam"), bare);
+        environment.Variables["STEAM_ROOT"] = bare;
+        environment.Variables["XDG_DATA_HOME"] = Path.Combine(home, "xdg");
+        var result = ResolveRoots();
+
+        Assert.Equal([SteamRootKind.Override, SteamRootKind.HomeSteam, SteamRootKind.HomeSteamRoot,
+            SteamRootKind.XdgData, SteamRootKind.HomeLocalShare, SteamRootKind.Flatpak], result.Candidates.Select(c => c.Kind));
+        Assert.Equal(SteamRootState.SteamAppsMissing, result.Candidates[0].State);
+        Assert.Equal(bare, result.Candidates[0].RealPath);
+        Assert.Equal(SteamRootState.DuplicateRealPath, result.Candidates[1].State);
+        Assert.Equal(bare, result.Candidates[1].RealPath);
+    }
+
+    [Fact]
+    public void Whitespace_override_is_reported_invalid_not_dropped()
+    {
+        environment.Variables["STEAM_ROOT"] = " \t ";
+        var result = ResolveRoots();
+        Assert.Equal(SteamRootKind.Override, result.Candidates[0].Kind);
+        Assert.Equal(" \t ", result.Candidates[0].Path);
+        Assert.Equal(SteamRootState.InvalidPath, result.Candidates[0].State);
+    }
+
+    [Fact]
+    public void Zero_app_id_is_valid_input_to_the_discovery_fuzz_invariants()
+    {
+        var bytes = System.Text.Encoding.UTF8.GetBytes("libraryfolders { 0 { path /synthetic apps { 0 1 } } }");
+        var parsed = Assert.IsType<SteamLibraries>(SteamDiscoveryFuzzTarget.Parse(bytes, 1024));
+        Assert.True(Assert.Single(parsed.Libraries).Apps?.ContainsKey(0));
+    }
+
+    [Theory]
+    [InlineData("leaf")]
+    [InlineData("parent")]
+    [InlineData("fifo")]
+    public void Canonical_path_swapped_after_containment_is_rejected_promptly(string swap)
+    {
+        var root = CreateRoot(Path.Combine(home, ".local", "share", "Steam"));
+        var file = WriteLibrariesRaw(Path.Combine(root, "steamapps"), "libraryfolders { }");
+        var outside = CreateRoot(Path.Combine(home, "outside"));
+        File.WriteAllText(Path.Combine(outside, "libraryfolders.vdf"), "libraryfolders { 9 /escaped }");
+        var racing = new BeforeReadFileSystem(fileSystem, () =>
+        {
+            if (swap == "parent")
+            {
+                Directory.Move(Path.GetDirectoryName(file) ?? throw new InvalidOperationException(), Path.Combine(root, "saved"));
+                Directory.CreateSymbolicLink(Path.Combine(root, "steamapps"), outside);
+            }
+            else
+            {
+                File.Delete(file);
+                if (swap == "fifo")
+                {
+                    MakeFifo(file);
+                }
+                else
+                {
+                    File.CreateSymbolicLink(file, Path.Combine(outside, "libraryfolders.vdf"));
+                }
+            }
+        });
+
+        var work = Task.Run(() => SteamDiscovery.Discover(environment, Paths(), racing));
+        Assert.True(work.Wait(TimeSpan.FromSeconds(5)), "swapped read blocked");
+        var result = work.Result;
+        Assert.Equal(SteamDiscovery.RootLibraryIndex, Assert.Single(result.Libraries).Index);
+        Assert.Contains(result.Issues, issue => issue.Reason == (swap == "fifo" ? "not-a-regular-file" : "unreadable-library-file"));
+    }
+
+    [Fact]
+    public void Fifo_replacement_after_handle_stat_never_reopens_the_path()
+    {
+        var file = Path.Combine(home, "stat-swap.vdf");
+        var bytes = System.Text.Encoding.UTF8.GetBytes("libraryfolders { }");
+        File.WriteAllBytes(file, bytes);
+        var work = Task.Run(() => new LinuxBoundedFileReader().Read(file, 1024, () =>
+        {
+            File.Delete(file);
+            MakeFifo(file);
+        }));
+
+        Assert.True(work.Wait(TimeSpan.FromSeconds(5)), "post-stat FIFO replacement blocked");
+        Assert.Equal(Playnite.Platform.BoundedFileReadStatus.Ok, work.Result.Status);
+        Assert.Equal(bytes, work.Result.Bytes);
+    }
+
+    [Fact]
+    public void Library_file_path_is_recorded_when_file_exists_preflight_would_hide_it()
+    {
+        var root = CreateRoot(Path.Combine(home, ".local", "share", "Steam"));
+        var file = Path.Combine(root, "steamapps", "libraryfolders.vdf");
+        Directory.CreateDirectory(file);
+        Assert.False(fileSystem.FileExists(file));
+        var result = Discover();
+        Assert.Equal(file, result.LibraryFilePath);
+        Assert.Contains(result.Issues, issue => issue.Reason == "not-a-regular-file");
+    }
+
     [Fact]
     public void Modern_file_reports_every_library_apps_and_first_appid_wins()
     {
@@ -499,7 +636,9 @@ public sealed class SteamDiscoveryTests : IDisposable
         File.WriteAllText(outside, "\"libraryfolders\" { }");
         var racing = new SwapFileSystem(fileSystem, declared, outside);
 
-        var result = SteamDiscovery.Discover(environment, Paths(), racing);
+        var work = Task.Run(() => SteamDiscovery.Discover(environment, Paths(), racing));
+        Assert.True(work.Wait(TimeSpan.FromSeconds(5)), "declared-link swap blocked");
+        var result = work.Result;
 
         Assert.Equal(2, result.Libraries.Count);
         Assert.Empty(result.Issues);
@@ -630,7 +769,7 @@ public sealed class SteamDiscoveryTests : IDisposable
     }
 
     [Fact]
-    public void Zero_length_paths_are_rejected_before_opening()
+    public void Nonregular_and_empty_paths_are_rejected_without_reading()
     {
         if (OperatingSystem.IsWindows())
         {
@@ -877,6 +1016,19 @@ public sealed class SteamDiscoveryTests : IDisposable
             return inner.ReadFile(path, maxBytes);
         }
 
+        public string? GetRealPath(string path) => inner.GetRealPath(path);
+        public bool IsMountPoint(string path) => inner.IsMountPoint(path);
+    }
+
+    private sealed class BeforeReadFileSystem(ISteamFileSystem inner, Action beforeRead) : ISteamFileSystem
+    {
+        public bool DirectoryExists(string path) => inner.DirectoryExists(path);
+        public bool FileExists(string path) => inner.FileExists(path);
+        public SteamFileRead ReadFile(string path, int maxBytes)
+        {
+            beforeRead();
+            return inner.ReadFile(path, maxBytes);
+        }
         public string? GetRealPath(string path) => inner.GetRealPath(path);
         public bool IsMountPoint(string path) => inner.IsMountPoint(path);
     }
