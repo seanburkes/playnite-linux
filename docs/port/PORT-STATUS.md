@@ -66,8 +66,8 @@
 
 | Metric | Value |
 | --- | ---: |
-| Ledger rows | 257 |
-| Ledger fragments | 30 |
+| Ledger rows | 258 |
+| Ledger fragments | 31 |
 
 ## Units
 
@@ -143,7 +143,7 @@
 | p5-001 | W5 | steam | VDF/ACF parsers | in-progress | `units/p5-001.*`; 2 ledger rows |
 | p5-002 | W5 | steam | Steam root/library discovery | in-progress | `units/p5-002.*`; 4 ledger rows |
 | p5-003 | W5 | steam | Artwork/metadata cache | in-progress | `units/p5-003.*`; 5 ledger rows |
-| p5-004 | W5 | platform | Process launcher/session tracker | in-progress | `units/p5-004.*`; 4 ledger rows |
+| p5-004 | W5 | platform | Process launcher/session tracker | in-progress | `units/p5-004.*`; 5 ledger rows |
 | p5-005 | W5 | platform | XDG/single-instance/protocol | todo | `units/p5-005.*`; 0 ledger rows |
 | p5-005a | W5 | platform | XDG/single-instance/protocol continuation | in-progress | `units/p5-005a.*`; 3 ledger rows |
 | p5-006 | W5 | platform | WebView service | todo | `units/p5-006.*`; 0 ledger rows |
