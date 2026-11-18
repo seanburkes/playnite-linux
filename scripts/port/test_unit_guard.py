@@ -7,11 +7,15 @@ inspects an internal function as a substitute for the command's exit status.
 
 from __future__ import annotations
 
+import json
+import os
 import shutil
 import subprocess
 import sys
 import tempfile
+import threading
 import unittest
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -39,6 +43,88 @@ def ledger_row(unit: str, evidence: str) -> str:
 
 def claim(path: str, unit: str, pull: int = 96) -> tuple[str, str, str, str]:
     return (path, unit, "a" * 40, f"pull/{pull}")
+
+
+def linux_ci_run(
+    head: str,
+    *,
+    repository: str = "example/repo",
+    status: str = "completed",
+    conclusion: str | None = "success",
+    name: str = "linux-ci",
+    path: str = ".github/workflows/linux-ci.yml",
+) -> dict[str, object]:
+    """Return an Actions run payload as the read-only API would print it."""
+
+    return {
+        "head_sha": head,
+        "status": status,
+        "conclusion": conclusion,
+        "name": name,
+        "path": path,
+        "repository": {"full_name": repository},
+    }
+
+
+class FakeGitHubApi:
+    """A local stand-in for the read-only Actions run endpoint.
+
+    The guard may only reach the API through ``GITHUB_API_URL``, so the tests
+    exercise the real HTTP path without touching github.com.  Any path the test
+    did not stage is a 404, exactly like a run id that does not exist.
+    """
+
+    def __init__(self, runs: dict[str, dict[str, object]]) -> None:
+        self.responses = {
+            f"/repos/example/repo/actions/runs/{run_id}": payload
+            for run_id, payload in runs.items()
+        }
+        self.server: ThreadingHTTPServer | None = None
+        self.thread: threading.Thread | None = None
+        self.url = ""
+
+    def __enter__(self) -> "FakeGitHubApi":
+        responses = self.responses
+
+        class Handler(BaseHTTPRequestHandler):
+            def do_GET(self) -> None:
+                payload = responses.get(self.path)
+                if payload is None:
+                    body = b'{"message":"Not Found"}'
+                    self.send_response(404)
+                else:
+                    body = json.dumps(payload).encode("utf-8")
+                    self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+            def log_message(self, *_args: object) -> None:
+                pass
+
+        self.server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
+        self.thread.start()
+        host, port = self.server.server_address[:2]
+        self.url = f"http://{host}:{port}"
+        return self
+
+    def __exit__(self, *_args: object) -> None:
+        if self.server is not None:
+            self.server.shutdown()
+            self.server.server_close()
+        if self.thread is not None:
+            self.thread.join(timeout=5)
+
+    @property
+    def env(self) -> dict[str, str]:
+        return {
+            "GITHUB_API_URL": self.url,
+            "GITHUB_TOKEN": "test-token",
+            "NO_PROXY": "127.0.0.1,localhost",
+            "no_proxy": "127.0.0.1,localhost",
+        }
 
 
 class Fixture:
@@ -142,13 +228,19 @@ class Fixture:
         self.write(relative, LEDGER_HEADER + "\n" + ledger_row(unit, evidence) + "\n")
         return relative
 
-    def run(self, script: str, *args: str) -> subprocess.CompletedProcess[str]:
+    def run(
+        self,
+        script: str,
+        *args: str,
+        env: dict[str, str] | None = None,
+    ) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
             [sys.executable, str(SCRIPTS / script), "--repo", str(self.root), *args],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
             check=False,
+            env={**os.environ, **(env or {})},
         )
 
     def ownership(self, head: str, *args: str) -> subprocess.CompletedProcess[str]:
@@ -161,7 +253,12 @@ class Fixture:
             *args,
         )
 
-    def evidence(self, head: str, *args: str) -> subprocess.CompletedProcess[str]:
+    def evidence(
+        self,
+        head: str,
+        *args: str,
+        env: dict[str, str] | None = None,
+    ) -> subprocess.CompletedProcess[str]:
         # Pin the expected repository slug so the test is hermetic even when
         # GitHub Actions exports GITHUB_REPOSITORY for the outer checkout.
         return self.run(
@@ -175,6 +272,7 @@ class Fixture:
             "--repo-slug",
             "example/repo",
             *args,
+            env=env,
         )
 
 
@@ -1129,6 +1227,145 @@ class EvidenceGuardTests(unittest.TestCase):
 
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn(f"head {implementation}", result.stdout)
+
+    def test_fragment_citing_an_invented_head_alongside_a_valid_one_fails(self) -> None:
+        implementation = self.fixture.commit("implementation head")
+        self.fixture.set_queue("p4-003", "in-progress")
+        invented = "0" * 40
+        self.fixture.add_fragment(
+            head=implementation,
+            evidence=(
+                f"PR #123 head {implementation} linux-ci "
+                f"actions/runs/43964833995; rechecked head {invented}"
+            ),
+        )
+        head = self.fixture.commit("fragment with an invented head")
+
+        result = self.fixture.evidence(head, "--branch", "fm/p4-003")
+
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertIn("does not resolve to a commit in this repository", result.stderr)
+        self.assertIn(invented, result.stderr)
+
+    def test_verified_run_cited_on_its_own_head_passes(self) -> None:
+        implementation = self.fixture.commit("implementation head")
+        self.fixture.set_queue("p4-003", "in-progress")
+        self.fixture.add_fragment(head=implementation)
+        head = self.fixture.commit("evidence head")
+        with FakeGitHubApi(
+            {"43964833995": linux_ci_run(implementation)}
+        ) as api:
+            result = self.fixture.evidence(
+                head, "--branch", "fm/p4-003", "--verify-ci", env=api.env
+            )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn(f"head {implementation}, run 43964833995", result.stdout)
+
+    def test_verified_run_cited_against_the_wrong_head_fails(self) -> None:
+        implementation = self.fixture.commit("implementation head")
+        self.fixture.set_queue("p4-003", "in-progress")
+        self.fixture.add_fragment(head=implementation)
+        head = self.fixture.commit("evidence head")
+        wrong = self.fixture.base
+        with FakeGitHubApi({"43964833995": linux_ci_run(wrong)}) as api:
+            result = self.fixture.evidence(
+                head, "--branch", "fm/p4-003", "--verify-ci", env=api.env
+            )
+
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertIn(f"run 43964833995 was executed on head {wrong}", result.stderr)
+        self.assertIn(implementation, result.stderr)
+        self.assertIn("run id and head SHA must agree with the API", result.stderr)
+
+    def test_verified_nonexistent_run_id_fails(self) -> None:
+        implementation = self.fixture.commit("implementation head")
+        self.fixture.set_queue("p4-003", "in-progress")
+        self.fixture.add_fragment(
+            head=implementation,
+            run="https://github.com/example/repo/actions/runs/99999999999",
+        )
+        head = self.fixture.commit("fragment with a missing run")
+        with FakeGitHubApi({}) as api:
+            result = self.fixture.evidence(
+                head, "--branch", "fm/p4-003", "--verify-ci", env=api.env
+            )
+
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertIn(
+            "run 99999999999 does not exist in example/repo (GitHub API HTTP 404)",
+            result.stderr,
+        )
+
+    def test_verified_run_from_another_repository_fails(self) -> None:
+        implementation = self.fixture.commit("implementation head")
+        self.fixture.set_queue("p4-003", "in-progress")
+        self.fixture.add_fragment(head=implementation)
+        head = self.fixture.commit("evidence head")
+        with FakeGitHubApi(
+            {"43964833995": linux_ci_run(implementation, repository="other/repo")}
+        ) as api:
+            result = self.fixture.evidence(
+                head, "--branch", "fm/p4-003", "--verify-ci", env=api.env
+            )
+
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertIn("belongs to other/repo, not example/repo", result.stderr)
+
+    def test_verified_run_must_be_completed(self) -> None:
+        implementation = self.fixture.commit("implementation head")
+        self.fixture.set_queue("p4-003", "in-progress")
+        self.fixture.add_fragment(head=implementation)
+        head = self.fixture.commit("evidence head")
+        with FakeGitHubApi(
+            {
+                "43964833995": linux_ci_run(
+                    implementation, status="in_progress", conclusion=None
+                )
+            }
+        ) as api:
+            result = self.fixture.evidence(
+                head, "--branch", "fm/p4-003", "--verify-ci", env=api.env
+            )
+
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertIn("run 43964833995 is not completed", result.stderr)
+
+    def test_verified_run_must_have_succeeded(self) -> None:
+        implementation = self.fixture.commit("implementation head")
+        self.fixture.set_queue("p4-003", "in-progress")
+        self.fixture.add_fragment(head=implementation)
+        head = self.fixture.commit("evidence head")
+        with FakeGitHubApi(
+            {"43964833995": linux_ci_run(implementation, conclusion="failure")}
+        ) as api:
+            result = self.fixture.evidence(
+                head, "--branch", "fm/p4-003", "--verify-ci", env=api.env
+            )
+
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertIn("concluded 'failure', not 'success'", result.stderr)
+
+    def test_unreachable_api_fails_instead_of_passing(self) -> None:
+        implementation = self.fixture.commit("implementation head")
+        self.fixture.set_queue("p4-003", "in-progress")
+        self.fixture.add_fragment(head=implementation)
+        head = self.fixture.commit("evidence head")
+        result = self.fixture.evidence(
+            head,
+            "--branch",
+            "fm/p4-003",
+            "--verify-ci",
+            env={
+                "GITHUB_API_URL": "http://127.0.0.1:1",
+                "GITHUB_TOKEN": "test-token",
+                "NO_PROXY": "127.0.0.1,localhost",
+                "no_proxy": "127.0.0.1,localhost",
+            },
+        )
+
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertIn("GitHub API is unreachable", result.stderr)
 
 
 class WorkflowShapeTests(unittest.TestCase):

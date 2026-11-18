@@ -43,7 +43,16 @@ on.  The guard accepts the historical free-text forms (``PR #97``, ``pull/97``,
 ``head 2e09983...`` and ``actions/runs/43964833995``).  The cited head must be on
 the pull request's own first-parent spine after the merge base (or the merge
 commit, when supplied); an unrelated ancestor or a main commit merged after the
-branch point is rejected rather than treated as evidence.
+branch point is rejected rather than treated as evidence.  Every cited head must
+also resolve to a commit in the repository, so a mistyped or invented SHA fails
+instead of being skipped.
+
+With ``--verify-ci`` (always enabled by the unit-evidence CI job) every cited
+run id is resolved through the read-only GitHub Actions API: the run must exist
+in this repository, be a completed ``linux-ci`` run with conclusion ``success``,
+and its ``head_sha`` must equal a head the fragment cites.  A run id from another
+repository, a missing run, an unfinished or failed run, an unreachable API or a
+disagreeing head fails closed; the check never caches an API result.
 
 Diff paths are repository-relative with no traversal component.  Renames are
 expanded to an explicit delete plus add, deletions are checked like any other
@@ -1199,12 +1208,14 @@ def validate_fragment_evidence(
             "expected a 40-hex commit id or 'head <sha>'"
         )
     valid_heads: list[str] = []
+    unresolved: list[str] = []
     saw_merge_base = False
     pr_commits = _pr_commits(repo, merge_base, base, head)
     for candidate in head_candidates:
         try:
             resolved = resolve_commit(repo, candidate, "fragment head")
         except GuardError:
+            unresolved.append(candidate)
             continue
         if resolved == merge_base:
             saw_merge_base = True
@@ -1212,8 +1223,15 @@ def validate_fragment_evidence(
         produced = resolved in pr_commits
         if not produced and merge_commit is not None and resolved == merge_commit:
             produced = True
-        if produced:
+        if produced and resolved not in valid_heads:
             valid_heads.append(resolved)
+    if unresolved:
+        raise GuardError(
+            f"fragment for {unit} names head {', '.join(unresolved)}, which does "
+            "not resolve to a commit in this repository; it is not the pull request "
+            f"head or a commit produced by this pull request (merge base "
+            f"{merge_base}), so it cannot certify this change"
+        )
     if not valid_heads:
         if saw_merge_base:
             raise GuardError(
@@ -1238,40 +1256,69 @@ def validate_fragment_evidence(
     expected_slug = (repo_slug or "").lower()
     candidates: list[tuple[str, str | None]] = []
     mismatched: list[str] = []
+    seen_runs: set[str] = set()
     for run_id, slug in runs:
         if expected_slug and slug and slug != expected_slug:
             mismatched.append(f"{slug}/actions/runs/{run_id}")
             continue
-        candidates.append((run_id, slug))
-    if not candidates:
+        if run_id not in seen_runs:
+            seen_runs.add(run_id)
+            candidates.append((run_id, slug))
+    if mismatched:
         raise GuardError(
             f"fragment for {unit} cites CI runs outside {expected_slug}: "
             f"{', '.join(mismatched)}"
+        )
+    if not candidates:
+        raise GuardError(
+            f"fragment for {unit} cites no linux-ci run in {expected_slug or 'this repository'}"
         )
 
     if not verify_ci:
         return f"head {claimed_head}, run {candidates[0][0]}"
 
+    cited = frozenset(valid_heads)
     reasons: list[str] = []
+    verified: list[str] = []
     for run_id, _slug in candidates:
         try:
-            verify_ci_run(expected_slug, run_id, claimed_head)
+            verify_ci_run(expected_slug, run_id, cited)
         except GuardError as exc:
             reasons.append(str(exc))
             continue
-        return f"head {claimed_head}, run {run_id}"
-    raise GuardError(
-        f"fragment for {unit} cites no real successful linux-ci run for its head: "
-        + "; ".join(reasons)
-    )
+        verified.append(run_id)
+    if reasons:
+        raise GuardError(
+            f"fragment for {unit} cites a CI run that does not prove its head: "
+            + "; ".join(reasons)
+        )
+    return f"head {claimed_head}, run {', '.join(verified)}"
 
 
-def verify_ci_run(repo_slug: str, run_id: str, expected_head: str) -> None:
-    """Verify a linux-ci run through the read-only GitHub API, failing closed."""
+def _github_api_base() -> str:
+    """Return the Actions API base; ``GITHUB_API_URL`` is the Actions default."""
+
+    base = os.environ.get("GITHUB_API_URL", "https://api.github.com").strip().rstrip("/")
+    parsed = urllib.parse.urlparse(base)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        raise GuardError(f"GITHUB_API_URL must be an http(s) URL, got {base!r}")
+    return base
+
+
+def verify_ci_run(repo_slug: str, run_id: str, expected_heads: frozenset[str]) -> str:
+    """Verify a run through the read-only GitHub API, failing closed.
+
+    The run must exist in ``repo_slug``, be a completed successful ``linux-ci``
+    run, and report a ``head_sha`` equal to one of the heads the fragment cites.
+    A 404, a foreign repository, a pending or failed run, an API error or an
+    unreachable service is an error, never a skipped or cached success.
+    """
 
     if not repo_slug:
         raise GuardError("cannot verify a CI run without a repository slug")
-    url = f"https://api.github.com/repos/{repo_slug}/actions/runs/{run_id}"
+    if not expected_heads:
+        raise GuardError(f"cannot verify run {run_id} without a cited head")
+    url = f"{_github_api_base()}/repos/{repo_slug}/actions/runs/{run_id}"
     headers = {
         "Accept": "application/vnd.github+json",
         "X-GitHub-Api-Version": "2022-11-28",
@@ -1285,15 +1332,31 @@ def verify_ci_run(repo_slug: str, run_id: str, expected_head: str) -> None:
         with urllib.request.urlopen(request, timeout=20) as response:
             payload = json.load(response)
     except urllib.error.HTTPError as exc:
-        raise GuardError(f"GitHub API rejected run {run_id}: HTTP {exc.code}") from exc
-    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as exc:
-        raise GuardError(f"cannot verify run {run_id}: {exc}") from exc
-
-    head = str(payload.get("head_sha", "")).lower()
-    if head != expected_head:
+        if exc.code == 404:
+            raise GuardError(
+                f"run {run_id} does not exist in {repo_slug} (GitHub API HTTP 404)"
+            ) from exc
         raise GuardError(
-            f"run {run_id} was executed on {head or 'an unknown commit'}, "
-            f"not the fragment head {expected_head}"
+            f"cannot verify run {run_id} in {repo_slug}: GitHub API HTTP {exc.code}"
+        ) from exc
+    except (urllib.error.URLError, TimeoutError, OSError, ValueError) as exc:
+        raise GuardError(
+            f"cannot verify run {run_id} in {repo_slug}: the GitHub API is "
+            f"unreachable or returned invalid JSON ({exc})"
+        ) from exc
+
+    if not isinstance(payload, dict):
+        raise GuardError(f"run {run_id} returned an unexpected API payload")
+    head = str(payload.get("head_sha", "")).strip().lower()
+    if not re.fullmatch(r"[0-9a-f]{40}", head):
+        raise GuardError(
+            f"run {run_id} reported no full head_sha; cannot prove the commit it ran on"
+        )
+    if head not in expected_heads:
+        cited = ", ".join(sorted(expected_heads))
+        raise GuardError(
+            f"run {run_id} was executed on head {head}, not the cited head "
+            f"({cited}); the fragment's run id and head SHA must agree with the API"
         )
     if payload.get("status") != "completed":
         raise GuardError(f"run {run_id} is not completed")
@@ -1305,11 +1368,20 @@ def verify_ci_run(repo_slug: str, run_id: str, expected_head: str) -> None:
     path = str(payload.get("path", ""))
     if name != "linux-ci" and "linux-ci" not in path:
         raise GuardError(f"run {run_id} is not the linux-ci workflow")
-    repository = str(payload.get("repository", {}).get("full_name", "")).lower()
-    if repository and repository != repo_slug:
+    repository = payload.get("repository")
+    full_name = ""
+    if isinstance(repository, dict):
+        full_name = str(repository.get("full_name") or "").strip().lower()
+    if not full_name:
         raise GuardError(
-            f"run {run_id} belongs to {repository}, not {repo_slug}"
+            f"run {run_id} did not report its repository; cannot prove it belongs "
+            f"to {repo_slug}"
         )
+    if full_name != repo_slug:
+        raise GuardError(
+            f"run {run_id} belongs to {full_name}, not {repo_slug}"
+        )
+    return head
 
 
 def repository_slug(repo: Path, explicit: str | None) -> str | None:

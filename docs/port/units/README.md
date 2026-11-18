@@ -120,6 +120,19 @@ fragment describes. A run from an unrelated base-branch ancestor, from a main co
 after the branch point, or from the event base itself is rejected, so a rebased or
 fast-forwarded branch cannot borrow a main commit's CI.
 
+Every cited head must also resolve to a commit in the repository. A mistyped, abbreviated
+beyond reach, or invented SHA fails; it is never skipped in favour of another citation.
+
+The fragment's run id and head SHA must agree with the GitHub Actions API. The unit-evidence
+job always passes `--verify-ci`, which resolves every cited run id through the read-only
+Actions API using `GITHUB_TOKEN` from the environment, a bounded timeout and no cache. The
+run must exist in this repository, be the completed `linux-ci` workflow with conclusion
+`success`, and report a `head_sha` equal to a head the fragment cites. A missing run id, a
+run from another repository, an unfinished or failed run, a `head_sha` that names a different
+commit, or an unreachable API fails the check with a named reason instead of passing. Write
+the fragment from the run's own page and copy both values exactly; do not transcribe a SHA by
+hand or shorten one.
+
 The negative proofs themselves are protected by `scripts/port/check_guard_tests.py`, run by
 plan-guards' dedicated `guard-inventory` job. That job materialises the checker from the pull
 request's **event base** into `$RUNNER_TEMP` and runs that copy before `inventory-and-parity`,
