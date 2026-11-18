@@ -34,7 +34,8 @@ try
     }
 
     var reporting = new ReportingHost();
-    var host = new ConsentProcessHost(reporting, allowLaunch, allowStop);    var initial = await host.SnapshotAsync(CancellationToken.None);
+    var host = new ConsentProcessHost(reporting, allowLaunch, allowStop);
+    var initial = await host.SnapshotAsync(CancellationToken.None);
     var clients = initial.Processes.Where(row => row.Process.IsRunning && SteamProcessAttribution.IsSteamClient(row.Executable))
         .Select(row => row.Process.Identity).ToArray();
     if (allowLaunch && (!initial.IsComplete || clients.Length == 0))
@@ -101,13 +102,11 @@ try
             // lands in that teardown and produces no process at all. Wait for Steam readiness.
             await WaitForSteamReadyAsync(host, clients, previous, settle, readiness);
             Console.WriteLine($"Launching {label} app={appId} for {flow} acceptance; Steam ready: previous identities gone, clients retained, settle {settle.TotalSeconds:F0}s.");
-            var candidateSeen = false;
             var progress = new InlineProgress<SteamAttributionProgress>(value =>
             {
-                candidateSeen |= value.Decision.Contains("candidates=", StringComparison.Ordinal)
-                    && !value.Decision.Contains("candidates=0", StringComparison.Ordinal);
                 Console.WriteLine($"ATTRIBUTION elapsed={value.Elapsed.TotalSeconds:F1}s window={value.Window.TotalSeconds:F0}s {value.Decision}");
             });
+            reporting.ResetRequest();
             var launcher = new SteamProcessLauncher(host, target, new()
             {
                 SteamExecutable = steam, ProtocolOpener = opener, Progress = progress,
@@ -121,6 +120,7 @@ try
             {
                 await launcher.DisposeAsync();
                 failed = true;
+                var candidateSeen = launcher.CandidateObserved;
                 var reason = reporting.LastRequestExit is { } exit
                     ? $"Steam request exit={exit}"
                     : "Steam request did not complete";
@@ -134,6 +134,16 @@ try
                 }
 
                 Console.WriteLine($"FAIL {label} {flow}: no accepted game identity; nothing was signalled.");
+                var afterUnknown = await host.SnapshotAsync(CancellationToken.None);
+                var live = afterUnknown.Processes.Where(row => row.Process.IsRunning
+                    && (SteamProcessAttribution.Matches(target, row.Executable)
+                        || SteamProcessAttribution.IsGame(target, row))).ToArray();
+                if (!afterUnknown.IsComplete || live.Length > 0)
+                {
+                    throw new InvalidOperationException(
+                        $"A failed launch may still be running ({(live.Length == 0 ? "snapshot incomplete" : string.Join(", ", live.Select(row => $"pid={row.Process.Identity.ProcessId} exe={row.Executable}")))}); refusing to launch again. Use Steam's Stop and inspect manually.");
+                }
+
                 continue;
             }
 
@@ -319,9 +329,11 @@ sealed class ReportingHost : IExternalProcessHost
 {
     private readonly LinuxExternalProcessHost host = new();
     public int? LastRequestExit { get; private set; }
+    public void ResetRequest() => LastRequestExit = null;
     public Task<ExternalProcessSnapshot> SnapshotAsync(CancellationToken cancellationToken) => host.SnapshotAsync(cancellationToken);
     public async Task<int> RunAsync(LaunchRequest request, CancellationToken cancellationToken)
     {
+        LastRequestExit = null;
         Console.WriteLine($"REQUEST {request.Executable}: [{string.Join(", ", request.Arguments)}]");
         LastRequestExit = await host.RunAsync(request, cancellationToken);
         Console.WriteLine($"REQUEST EXIT {LastRequestExit}");

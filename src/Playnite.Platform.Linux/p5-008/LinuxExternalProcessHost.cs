@@ -146,7 +146,8 @@ public sealed class LinuxExternalProcessHost : IExternalProcessHost
         }
 
         // A Wine/Proton game's host executable stays the runtime preloader across execve of the
-        // Windows image, so the exact argv entry is the last evidence read. An exec changes it.
+        // Windows image, so the exact argv[0] image token is the last evidence read. An exec
+        // changes it; a game path at any other position is not image evidence.
         if (expectedCommandLineArgument is not null)
         {
             string[]? commandLine;
@@ -159,7 +160,8 @@ public sealed class LinuxExternalProcessHost : IExternalProcessHost
                 return;
             }
 
-            if (commandLine is null || !commandLine.Contains(expectedCommandLineArgument, StringComparer.Ordinal))
+            if (commandLine is not { Length: > 0 }
+                || !string.Equals(commandLine[0], expectedCommandLineArgument, StringComparison.Ordinal))
             {
                 return;
             }

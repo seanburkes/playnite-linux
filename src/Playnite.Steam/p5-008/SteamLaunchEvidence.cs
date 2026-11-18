@@ -319,7 +319,7 @@ public static class SteamProcessAttribution
         {
             if (!row.Process.IsRunning
                 || before.Processes.Any(old => SameProcess(old.Process.Identity, row.Process.Identity))
-                || !TryGetGamePath(target, row, out var gamePath, out var windowsArgument))
+                || !TryGetGame(target, row, out var gamePath, out var windowsArgument))
             {
                 continue;
             }
@@ -358,25 +358,25 @@ public static class SteamProcessAttribution
     /// A wrapper identity is never accepted even when its argv names the game.
     /// </summary>
     public static bool IsGame(SteamLaunchTarget target, ExternalProcessEntry row) =>
-        TryGetGamePath(target, row, out _, out _);
-
-    public static string? WindowsArgument(SteamLaunchTarget target, ExternalProcessEntry row) =>
-        TryGetGamePath(target, row, out _, out var windowsArgument) ? windowsArgument : null;
+        TryGetGame(target, row, out _, out _);
 
     /// <summary>
     /// A live tracked identity whose evidence cannot be read at all is unverifiable, never an
-    /// exit and never a changed executable. For a Proton identity the argv read is the evidence,
-    /// so an unreadable command line is torn proof, not a contradiction.
+    /// exit and never a changed executable. For a Proton identity argv is the evidence, so an
+    /// unreadable or empty command line is torn proof, not a contradiction.
     /// </summary>
     public static bool IsUnverifiableEvidence(SteamLaunchTarget target, ExternalProcessEntry row) =>
         row.Executable is null
-        || (target.ProtonPrefix is not null && row.CommandLine is null && !Matches(target, row.Executable));
+        || (target.ProtonPrefix is not null && row.CommandLine is not { Count: > 0 }
+            && !Matches(target, row.Executable));
 
-    private static bool TryGetGamePath(SteamLaunchTarget target, ExternalProcessEntry row,
+    /// <summary>The accepted game identity and its exact argv evidence, if any.</summary>
+    public static bool TryGetGame(SteamLaunchTarget target, ExternalProcessEntry row,
         out string gamePath, out string? windowsArgument)
     {
         windowsArgument = null;
-        if (row.Executable is { } executable && Matches(target, executable))
+        if (row.Executable is { } executable && Matches(target, executable)
+            && !IsProtonWrapper(executable) && !IsSteamClient(executable))
         {
             gamePath = executable;
             return true;

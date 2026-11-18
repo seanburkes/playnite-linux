@@ -50,9 +50,21 @@ public sealed class LinuxPidFdSignalTests
         const string argument = "S:\\steamapps\\common\\Hades\\x64\\Hades.exe";
         var state = new FakeState();
         var host = new LinuxExternalProcessHost(state, state, _ => "/proton/wine64-preloader",
-            _ => ["/proton/wine64-preloader", argument]);
+            _ => [argument, "--later-arg"]);
         await host.SignalAsync(new(22, 1, 20), "/proton/wine64-preloader", argument, CancellationToken.None);
         Assert.Equal([1L], state.SignalledGenerations);
+        Assert.Equal(1, state.Disposals);
+    }
+
+    [Fact]
+    public async Task Scoped_signal_rejects_the_game_path_outside_argv0()
+    {
+        const string argument = "S:\\steamapps\\common\\Hades\\x64\\Hades.exe";
+        var state = new FakeState();
+        var host = new LinuxExternalProcessHost(state, state, _ => "/proton/wine64-preloader",
+            _ => ["C:\\windows\\system32\\services.exe", argument]);
+        await host.SignalAsync(new(22, 1, 20), "/proton/wine64-preloader", argument, CancellationToken.None);
+        Assert.Empty(state.SignalledGenerations);
         Assert.Equal(1, state.Disposals);
     }
 

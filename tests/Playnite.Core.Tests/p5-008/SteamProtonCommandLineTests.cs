@@ -57,12 +57,12 @@ public sealed class SteamProtonCommandLineTests
 
         string[] outside =
         [
-            "S:\\steamapps\\common\\Other\\Other.exe",                     // sibling installdir
-            "Z:\\etc\\hostname",                                            // drive mapped outside the library
-            "Q:\\steamapps\\common\\Hades\\x64\\Hades.exe",                 // no dosdevices link
-            "S:\\..\\..\\..\\..\\etc\\hostname",                            // traversal out of the drive
-            "steamapps\\common\\Hades\\x64\\Hades.exe",                     // relative, not drive-absolute
-            "\\\\server\\share\\Hades.exe",                                 // UNC is not resolved
+            "S:\\steamapps\\common\\Other\\Other.exe",  // sibling installdir
+            "Z:\\etc\\hostname",                         // drive mapped outside the library
+            "Q:\\steamapps\\common\\Hades\\x64\\Hades.exe", // no dosdevices link
+            "S:\\..\\hostroot\\etc\\hostname",            // traversal out of the drive
+            "steamapps\\common\\Hades\\x64\\Hades.exe",  // relative, not drive-absolute
+            "\\\\server\\share\\Hades.exe",              // UNC is not resolved
         ];
 
         foreach (var argument in outside)
@@ -79,13 +79,42 @@ public sealed class SteamProtonCommandLineTests
     {
         using var library = new ProtonLibrary();
         var escape = Path.Combine(library.Install, "x64", "escape.exe");
-        File.CreateSymbolicLink(escape, "/etc/hostname");
+        File.CreateSymbolicLink(escape, Path.Combine(library.HostRoot, "etc", "hostname"));
 
         var decision = SteamProcessAttribution.Evaluate(library.Target, Before,
             new([Client, Row(22, ["S:\\steamapps\\common\\Hades\\x64\\escape.exe"])], true));
 
         Assert.Empty(decision.Candidates);
         Assert.Null(decision.Identity);
+    }
+
+    [Fact]
+    public void Resolved_image_that_is_a_wrapper_is_rejected_even_when_the_argument_name_is_not()
+    {
+        using var library = new ProtonLibrary();
+        library.CreatePrefixFile("drive_c/windows/system32/services.exe");
+        var link = Path.Combine(library.Install, "x64", "innocent.exe");
+        File.CreateSymbolicLink(link, Path.Combine(library.Prefix, "drive_c/windows/system32/services.exe"));
+
+        var decision = SteamProcessAttribution.Evaluate(library.Target, Before,
+            new([Client, Row(22, ["S:\\steamapps\\common\\Hades\\x64\\innocent.exe"])], true));
+
+        Assert.Empty(decision.Candidates);
+        Assert.Null(decision.Identity);
+    }
+
+    [Fact]
+    public void Relative_dosdevices_link_maps_an_image_under_the_prefix()
+    {
+        using var library = new ProtonLibrary();
+        library.CreatePrefixFile("drive_c/games/Hades.exe");
+
+        var decision = SteamProcessAttribution.Evaluate(library.Target, Before,
+            new([Client, Row(22, ["C:/games/Hades.exe"])], true));
+
+        Assert.Null(decision.Rejection);
+        var candidate = Assert.Single(decision.Candidates);
+        Assert.Equal(Path.Combine(library.Prefix, "drive_c", "games", "Hades.exe"), candidate.GamePath);
     }
 
     [Theory]
@@ -96,6 +125,11 @@ public sealed class SteamProtonCommandLineTests
     [InlineData("/steam/winedevice.exe")]
     [InlineData("/steam/explorer.exe")]
     [InlineData("/steam/services.exe")]
+    [InlineData("/steam/steamwebhelper")]
+    [InlineData("/steam/reaper")]
+    [InlineData("/steam/srt-bwrap")]
+    [InlineData("/steam/bwrap")]
+    [InlineData("/steam/proton")]
     public void Proton_wrapper_process_is_never_the_game_even_when_its_argv_names_the_game(string wrapper)
     {
         using var library = new ProtonLibrary();
@@ -206,7 +240,39 @@ public sealed class SteamProtonCommandLineTests
         await launcher.StopAsync(game, CancellationToken.None);
         Assert.Equal([22], host.Signalled.Select(identity => identity.ProcessId));
         Assert.Equal([WindowsGame], host.SignalArguments);
-        Assert.True(launcher.StopReport!.IsDegraded); // pv-adverb survives unidentified-unreadable
+        Assert.True(launcher.StopReport!.IsDegraded); // pv-adverb is an identified helper survivor
+        Assert.Equal([20], launcher.StopReport.HelperSurvivors.Select(identity => identity.ProcessId));
+    }
+
+    [Fact]
+    public async Task Proton_identity_with_unreadable_argv_mid_stop_is_unverifiable_not_changed()
+    {
+        using var library = new ProtonLibrary();
+        var host = new ProtonHost();
+        var launcher = new SteamProcessLauncher(host, library.Target, new()
+        {
+            SteamExecutable = "/usr/bin/steam", ProtocolOpener = "/usr/bin/xdg-open",
+            PollInterval = TimeSpan.FromMilliseconds(1), AttributionWindow = TimeSpan.FromSeconds(1),
+            StopTimeout = TimeSpan.FromMilliseconds(30),
+        });
+        try
+        {
+            var game = await launcher.StartAsync(launcher.CreateRequest(), CancellationToken.None);
+            var row = host.Rows.Single(candidate => candidate.Process.Identity.ProcessId == 22);
+            host.Rows.Remove(row);
+            host.Rows.Add(row with { CommandLine = [] });
+
+            var error = await Assert.ThrowsAsync<ProcessSurvivorException>(
+                () => launcher.StopAsync(game, CancellationToken.None));
+            Assert.Contains("stayed unreadable", error.Message);
+            Assert.Empty(host.Signalled);
+            Assert.Null(launcher.StopReport);
+        }
+        finally
+        {
+            host.Rows.Clear();
+            await launcher.DisposeAsync();
+        }
     }
 
     private static ExternalProcessEntry Row(int pid, string[] argv,
@@ -247,6 +313,7 @@ public sealed class SteamProtonCommandLineTests
             string? expectedCommandLineArgument, CancellationToken cancellationToken)
         {
             Assert.Equal(Preloader, expectedExecutable);
+            Assert.Equal(WindowsGame, expectedCommandLineArgument);
             Signalled.Add(identity);
             SignalArguments.Add(expectedCommandLineArgument);
             Rows.RemoveAll(row => row.Process.Identity == identity);

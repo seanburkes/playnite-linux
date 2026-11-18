@@ -29,6 +29,12 @@ public sealed class SteamProcessLauncher : IProcessLauncher, IProcessObserver
     /// <summary>The accepted executable evidence for this session, for the acceptance report.</summary>
     public IReadOnlyList<SteamAttributionCandidate> AttributedGames { get; private set; } = [];
 
+    /// <summary>
+    /// True once any attribution snapshot held a candidate. Diagnostics only: the acceptance
+    /// harness distinguishes a launch that never produced a process from an attribution UNKNOWN.
+    /// </summary>
+    public bool CandidateObserved { get; private set; }
+
     public IReadOnlyCollection<ProcessIdentity> AttributedIdentities => known.Keys.ToArray();
     public IReadOnlyCollection<ProcessIdentity> ObservedDescendants => descendants.Keys.ToArray();
 
@@ -149,6 +155,7 @@ public sealed class SteamProcessLauncher : IProcessLauncher, IProcessObserver
             {
                 var sample = await host.SnapshotAsync(linked.Token).ConfigureAwait(false);
                 var decision = SteamProcessAttribution.Evaluate(target, baseline, sample);
+                CandidateObserved |= decision.Candidates.Count > 0;
                 if (decision.Identity is { } match)
                 {
                     game = new Game(match, time.GetUtcNow());
@@ -246,6 +253,16 @@ public sealed class SteamProcessLauncher : IProcessLauncher, IProcessObserver
                 "A tracked game identity's evidence is unreadable; its exit cannot be proven");
         }
 
+        // A tracked game identity that is still live but no longer presents game evidence is a
+        // contradiction, not an exit. Only a complete sample with readable, non-game evidence can
+        // reach this branch, so the group is not proven gone.
+        if (sample.Processes.Any(row => row.Process.IsRunning && known.ContainsKey(row.Process.Identity)
+            && !SteamProcessAttribution.IsGame(target, row)))
+        {
+            return new([], false,
+                "A tracked game identity's evidence changed; its exit cannot be proven; stop manually in Steam if necessary");
+        }
+
         var tolerated = new List<string>();
         var rejection = SteamProcessAttribution.GroupRejection(target, baseline!, sample,
             active.Identity.ProcessGroupId, tolerated);
@@ -276,6 +293,9 @@ public sealed class SteamProcessLauncher : IProcessLauncher, IProcessObserver
             // Tracker input is not authority to signal arbitrary identities. Only policy-verified
             // games observed with continuity in our fresh group enter the allowlist below.
             StopReport = null;
+            // One SIGTERM per identity: re-sending is not more graceful, and a stop that keeps
+            // signalling the same live process must still end in ProcessSurvivorException.
+            var signalled = new HashSet<ProcessIdentity>();
             var deadline = time.GetTimestamp();
             while (true)
             {
@@ -358,9 +378,22 @@ public sealed class SteamProcessLauncher : IProcessLauncher, IProcessObserver
 
                 foreach (var row in games)
                 {
+                    // Re-derive the exact evidence for this row. A Proton identity that cannot
+                    // re-present its argv here is not signalled: exe-only evidence is not what
+                    // was accepted, so fail closed and let the loop classify the contradiction.
+                    if (!SteamProcessAttribution.TryGetGame(target, row, out _, out var windowsArgument))
+                    {
+                        continue;
+                    }
+
                     known.TryAdd(row.Process.Identity, 0);
-                    await host.SignalAsync(row.Process.Identity, row.Executable!,
-                        SteamProcessAttribution.WindowsArgument(target, row), CancellationToken.None).ConfigureAwait(false);
+                    if (!signalled.Add(row.Process.Identity))
+                    {
+                        continue;
+                    }
+
+                    await host.SignalAsync(row.Process.Identity, row.Executable!, windowsArgument,
+                        CancellationToken.None).ConfigureAwait(false);
                 }
 
                 if (time.GetElapsedTime(deadline) >= options.StopTimeout)
