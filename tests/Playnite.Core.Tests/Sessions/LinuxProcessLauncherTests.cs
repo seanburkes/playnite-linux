@@ -69,6 +69,43 @@ public sealed class LinuxProcessLauncherTests
     }
 
     [Fact]
+    public async Task Real_stop_during_starting_leaves_no_child()
+    {
+        Assert.True(File.Exists(SleepPath), "The lifecycle tests require a real sleep binary.");
+        await using var launcher = new LinuxProcessLauncher();
+        var process = await launcher.StartAsync(new LaunchRequest(SleepPath, ["30"]), CancellationToken.None);
+        await using var tracker = new GameSessionTracker(launcher, new LinuxProcessObserver());
+        using var starting = new ManualResetEventSlim(false);
+        using var release = new ManualResetEventSlim(false);
+        tracker.StateChanged += (_, change) =>
+        {
+            if (change.State == GameSessionState.Starting)
+            {
+                starting.Set();
+                release.Wait(TimeSpan.FromSeconds(5));
+            }
+        };
+
+        var tracking = Task.Run(() => tracker.TrackAsync(
+            process,
+            new SessionOptions { PollInterval = TimeSpan.FromMilliseconds(10) },
+            CancellationToken.None));
+        Assert.True(starting.Wait(TimeSpan.FromSeconds(5)));
+        try
+        {
+            Assert.True(await tracker.StopAsync(CancellationToken.None));
+        }
+        finally
+        {
+            release.Set();
+        }
+
+        await tracking;
+        Assert.Equal(GameSessionState.Stopped, tracker.State);
+        await AssertProcessGoneAsync(process.Identity);
+    }
+
+    [Fact]
     public async Task Real_cancel_leaves_no_child()
     {
         Assert.True(File.Exists(SleepPath), "The lifecycle tests require a real sleep binary.");

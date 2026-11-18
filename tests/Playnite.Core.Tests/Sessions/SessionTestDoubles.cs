@@ -26,6 +26,8 @@ internal sealed class FakeProcessLauncher : IProcessLauncher, IAsyncDisposable
 
     public bool BlockFirstStopUntilCancelled { get; set; }
 
+    public bool FailSecondStop { get; set; }
+
     public TaskCompletionSource StopEntered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
     public int StopCalls => stopCalls;
@@ -45,6 +47,11 @@ internal sealed class FakeProcessLauncher : IProcessLauncher, IAsyncDisposable
         if (call == 1 && BlockFirstStopUntilCancelled)
         {
             await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+        }
+
+        if (call == 2 && FailSecondStop)
+        {
+            throw new InvalidOperationException("the cancelled-stop retry failed");
         }
 
         Process.Running = false;

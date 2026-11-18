@@ -164,6 +164,82 @@ public sealed class GameSessionTrackerTests
     }
 
     [Fact]
+    public async Task Stop_during_starting_reaches_stopped_and_stops_the_process()
+    {
+        var process = new FakeGameProcess(Root.ProcessId, Root.StartTimeTicks);
+        var launcher = new FakeProcessLauncher(process);
+        var observer = new ScriptedProcessObserver(_ => ProcessSnapshots.Running(Root));
+        await using var tracker = new GameSessionTracker(launcher, observer, new GatedSessionDelay());
+        using var recorder = new SessionEventRecorder(tracker);
+        using var starting = new ManualResetEventSlim(false);
+        using var release = new ManualResetEventSlim(false);
+        tracker.StateChanged += (_, change) =>
+        {
+            if (change.State == GameSessionState.Starting)
+            {
+                starting.Set();
+                release.Wait(TimeSpan.FromSeconds(5));
+            }
+        };
+
+        var tracking = Task.Run(() => tracker.TrackAsync(process, new SessionOptions(), CancellationToken.None));
+        Assert.True(starting.Wait(TimeSpan.FromSeconds(5)));
+        Assert.Equal(GameSessionState.Starting, tracker.State);
+        try
+        {
+            Assert.True(await tracker.StopAsync(CancellationToken.None));
+        }
+        finally
+        {
+            release.Set();
+        }
+
+        await tracking;
+        Assert.Equal(GameSessionState.Stopped, tracker.State);
+        Assert.False(process.Running);
+        Assert.True(launcher.StopCalls >= 1);
+        Assert.Contains(recorder.Events, change => change.State == GameSessionState.Stopped);
+        Assert.DoesNotContain(recorder.Events, change => change.State == GameSessionState.Running);
+    }
+
+    [Fact]
+    public async Task Cancelled_stop_reaps_before_reporting_failed()
+    {
+        var process = new FakeGameProcess(Root.ProcessId, Root.StartTimeTicks);
+        var launcher = new FakeProcessLauncher(process)
+        {
+            BlockFirstStopUntilCancelled = true,
+            FailSecondStop = true,
+        };
+        var observer = new ScriptedProcessObserver(_ => ProcessSnapshots.Running(Root));
+        await using var tracker = new GameSessionTracker(launcher, observer, new SystemSessionDelay());
+        using var recorder = new SessionEventRecorder(tracker);
+        using var cancellation = new CancellationTokenSource();
+        var failedWhileRunning = false;
+        tracker.StateChanged += (_, change) =>
+        {
+            if (change.State == GameSessionState.Failed && process.Running)
+            {
+                failedWhileRunning = true;
+            }
+        };
+
+        var tracking = tracker.TrackAsync(process, new SessionOptions { PollInterval = TimeSpan.FromMilliseconds(5) }, CancellationToken.None);
+        await recorder.WaitForAsync(change => change.State == GameSessionState.Running);
+        var stop = tracker.StopAsync(cancellation.Token);
+        await launcher.StopEntered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        cancellation.Cancel();
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => stop);
+        await tracking;
+        Assert.Equal(GameSessionState.Failed, tracker.State);
+        Assert.False(process.Running);
+        Assert.False(failedWhileRunning);
+        Assert.True(launcher.StopCalls >= 3);
+        Assert.Contains(recorder.Events, change => change.State == GameSessionState.Failed);
+    }
+
+    [Fact]
     public async Task Observer_failure_reports_failed_and_stops_the_process()
     {
         var process = new FakeGameProcess(Root.ProcessId, Root.StartTimeTicks);

@@ -67,7 +67,7 @@ The state names are exactly the `GameSession` model's set: `Idle`, `Starting`, `
 | Formal action | Implementation |
 | --- | --- |
 | `Start` / `LaunchOk` | `TrackAsync` emits `Starting` then `Running` for the successfully launched handle. |
-| `Stop` / `StopOk` | Manual `StopAsync`, or an observed complete empty tree, emits `Stopping` then `Stopped`. |
+| `Stop` / `StopOk` | Manual `StopAsync` (including during `Starting`), or an observed complete empty tree, emits `Stopping` then `Stopped`. |
 | `CancelLaunch` / cancellation | Caller cancellation or tracker disposal emits `Cancelled`; the owned process is signalled and reaped before the terminal event returns. |
 | `Crash` | An observer or stop failure emits `Failed`; the owned process is still signalled and reaped. |
 | `NoOrphanProcess` | Every terminal path calls `IProcessLauncher.StopAsync`; `LinuxProcessLauncher.DisposeAsync` terminates every process it launched. |
@@ -109,6 +109,8 @@ state and, where a process exists, that it is gone.
 | launcher stop inside manual stop | `GameSessionTracker.StopAsync` | `Cancelling_manual_stop_still_signals_and_reports_stopped_without_an_orphan` |
 | track completion wait in disposal | `GameSessionTracker.DisposeAsync` | `Disposing_while_running_cancels_the_session_and_stops_the_process` |
 | pre-cancelled launch observation | `GameSessionTracker.TrackAsync` | `Cancelling_before_the_first_observation_terminates_the_launched_process_as_cancelled` |
+| stop requested while still `Starting` | `GameSessionTracker.StopAsync` | `Stop_during_starting_reaches_stopped_and_stops_the_process`; `Real_stop_during_starting_leaves_no_child` |
+| cancelled-stop retry failure | `GameSessionTracker.StopAsync` | `Cancelled_stop_reaps_before_reporting_failed` |
 | no-exit-observation wait | `GameSessionTracker.TrackAsync` | `Manual_stop_is_required_and_reported_when_exit_observation_is_unavailable` |
 
 The stop path deliberately does not take the caller's token for the identity check or the
@@ -122,6 +124,8 @@ The logic tests use a fake launcher/process and observer. The no-orphan proof ad
 a real, short-lived child (`/usr/bin/sleep 30`, falling back to `/bin/sleep`) launched through
 `LinuxProcessLauncher`, and an actual `/proc` check by `(pid, start ticks)`:
 
+- `Real_stop_during_starting_leaves_no_child` — a manual stop raced while the tracker is still
+  `Starting` reaches `Stopped` and the child is gone;
 - `Real_stop_leaves_no_child` — manual stop reaches `Stopped`, `IsRunningAsync` is false, and
   `/proc/<pid>/stat` is absent or has different start ticks;
 - `Real_cancel_leaves_no_child` — cancelling `TrackAsync` reaches `Cancelled` and the child is
@@ -151,7 +155,7 @@ exited; a killed start is reaped by the launcher before the exception propagates
 
 Local Release, warnings as errors:
 
-- `Playnite.Core.Tests`: 2048 passed, 0 failed, 0 skipped (37 new session tests).
+- `Playnite.Core.Tests`: 2051 passed, 0 failed, 0 skipped (40 new session tests).
 - `Playnite.Architecture.Tests`: 188 passed, 0 failed, 0 skipped.
 - `build_port_index.py check --shards-only --against origin/main` is run before delivery.
 

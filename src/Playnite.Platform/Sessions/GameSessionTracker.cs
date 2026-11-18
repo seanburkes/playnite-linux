@@ -123,6 +123,11 @@ public sealed class GameSessionTracker : IGameSessionTracker
                 return;
             }
 
+            if (StoppingOrTerminal())
+            {
+                return;
+            }
+
             Raise(TryTransition(GameSessionState.Running, "process observed"));
             if (!options.ExitObservationSupported)
             {
@@ -170,8 +175,8 @@ public sealed class GameSessionTracker : IGameSessionTracker
         }
         catch (Exception exception)
         {
-            Raise(TryTransition(GameSessionState.Failed, exception.Message));
             await EnsureStoppedAsync().ConfigureAwait(false);
+            Raise(TryTransition(GameSessionState.Failed, exception.Message));
             stopSignal.TrySetResult();
         }
         finally
@@ -215,14 +220,15 @@ public sealed class GameSessionTracker : IGameSessionTracker
             }
             catch (Exception exception)
             {
+                await EnsureStoppedAsync().ConfigureAwait(false);
                 Raise(TryTransition(GameSessionState.Failed, exception.Message));
                 throw;
             }
         }
         catch (Exception exception)
         {
-            Raise(TryTransition(GameSessionState.Failed, exception.Message));
             await EnsureStoppedAsync().ConfigureAwait(false);
+            Raise(TryTransition(GameSessionState.Failed, exception.Message));
             throw;
         }
 
@@ -380,6 +386,12 @@ public sealed class GameSessionTracker : IGameSessionTracker
 
     private void NotifyDegraded(bool value, string? reason)
     {
+        var current = State;
+        if (current.IsTerminal() || current == GameSessionState.Stopping)
+        {
+            return;
+        }
+
         lock (gate)
         {
             if (degraded == value && string.Equals(degradationReason, reason, StringComparison.Ordinal))
@@ -388,7 +400,7 @@ public sealed class GameSessionTracker : IGameSessionTracker
             }
         }
 
-        Raise(TryTransition(State, reason, value));
+        Raise(TryTransition(current, reason, value));
     }
 
     private bool StoppingOrTerminal()
@@ -448,6 +460,8 @@ public sealed class GameSessionTracker : IGameSessionTracker
     {
         (GameSessionState.Idle, GameSessionState.Starting) => true,
         (GameSessionState.Starting, GameSessionState.Running) => true,
+        (GameSessionState.Starting, GameSessionState.Stopping) => true,
+        (GameSessionState.Starting, GameSessionState.Stopped) => true,
         (GameSessionState.Starting, GameSessionState.Cancelled) => true,
         (GameSessionState.Starting, GameSessionState.Failed) => true,
         (GameSessionState.Running, GameSessionState.Stopping) => true,
