@@ -27,7 +27,7 @@ src/Playnite.Core/Extensions/EnumExtensions.cs	*	29f665a47aa385cafbf87538c4465a8
 src/Playnite.Core/Extensions/StringExtensions.cs	*	29f665a47aa385cafbf87538c4465a8ee70badef	pull/67
 src/Playnite.Core/IEnvironment.cs	*	d6401f1f07c69474d0ce395797ab694bedf019e7	pull/68
 src/Playnite.Core/IFileSystem.cs	*	d6401f1f07c69474d0ce395797ab694bedf019e7	pull/68
-src/Playnite.Core/IPaths.cs	*	d6401f1f07c69474d0ce395797ab694bedf019e7	pull/68
+src/Playnite.Core/IPaths.cs	p5-002	a37890f33110c70b8411bac4457d16e0aa41822f	pull/116
 src/Playnite.Core/Import/AssetCopy.cs	p4-005	f12a4325c58cf66d47b93c5768e46861696d3052	pull/96
 src/Playnite.Core/Import/LibraryMigration.cs	p4-002	9f81d30b3cc4a6beb0e15f39610ecd219ebc19f7	pull/94
 src/Playnite.Core/Import/LibraryMigration.cs	p4-003	8ff04700cf62708a5dbf3fbbc9dae08016fed9f5	pull/97
@@ -73,7 +73,7 @@ src/Playnite.Core/Models/Series.cs	p3-004	f4855e114c4eeb1dc375e2c695e7f042aef0fb
 src/Playnite.Core/Models/Tag.cs	p3-004	f4855e114c4eeb1dc375e2c695e7f042aef0fbcd	pull/72
 src/Playnite.Core/Paths.cs	*	d6401f1f07c69474d0ce395797ab694bedf019e7	pull/68
 src/Playnite.Core/PlayTimeFormatter.cs	*	29f665a47aa385cafbf87538c4465a8ee70badef	pull/67
-src/Playnite.Core/PlaynitePaths.cs	*	d6401f1f07c69474d0ce395797ab694bedf019e7	pull/68
+src/Playnite.Core/PlaynitePaths.cs	p5-002	a37890f33110c70b8411bac4457d16e0aa41822f	pull/116
 src/Playnite.Core/Queries/ComparableDbItemList.cs	p3-006	e4b2fdf6869496d1615d8cbe8f867833cfd47b70	pull/76
 src/Playnite.Core/Queries/DateSegments.cs	p3-006	e4b2fdf6869496d1615d8cbe8f867833cfd47b70	pull/76
 src/Playnite.Core/Queries/FilterMatcher.cs	p3-006	e4b2fdf6869496d1615d8cbe8f867833cfd47b70	pull/76
@@ -111,7 +111,7 @@ src/Playnite.Platform.Linux/AssemblyMarker.cs	p2-002	abdb82bedd0bcadfe93c1fc6f11
 src/Playnite.Platform.Linux/LinuxBoundedFileReader.cs	p5-002	c057be0f3e548ac31ac515b6da7ad4c606d17916	pull/115
 src/Playnite.Platform.Linux/LinuxEnvironment.cs	*	d6401f1f07c69474d0ce395797ab694bedf019e7	pull/68
 src/Playnite.Platform.Linux/LinuxFileSystem.cs	*	d6401f1f07c69474d0ce395797ab694bedf019e7	pull/68
-src/Playnite.Platform.Linux/LinuxPaths.cs	*	d6401f1f07c69474d0ce395797ab694bedf019e7	pull/68
+src/Playnite.Platform.Linux/LinuxPaths.cs	p5-002	a37890f33110c70b8411bac4457d16e0aa41822f	pull/116
 src/Playnite.Platform/AssemblyMarker.cs	p2-001	9afd818ae8a695e921bb98f386bfceb83d0059db	pull/29
 src/Playnite.Platform/AssemblyMarker.cs	p2-002	abdb82bedd0bcadfe93c1fc6f11937c55b116b7c	pull/37
 src/Playnite.Platform/IBoundedFileReader.cs	p5-002	c057be0f3e548ac31ac515b6da7ad4c606d17916	pull/115
@@ -193,7 +193,7 @@ tests/Playnite.Core.Tests/Import/LibraryMigrationTests.cs	p4-005	b9d12a55679934f
 tests/Playnite.Core.Tests/Import/LibraryReplacementTests.cs	p4-003	8ff04700cf62708a5dbf3fbbc9dae08016fed9f5	pull/97
 tests/Playnite.Core.Tests/Import/LibraryReplacementTests.cs	p4-005	b9d12a55679934ffd2e72ff65063aa27e03758de	pull/100
 tests/Playnite.Core.Tests/LinuxEnvironmentTests.cs	*	d6401f1f07c69474d0ce395797ab694bedf019e7	pull/68
-tests/Playnite.Core.Tests/LinuxPathsTests.cs	*	d6401f1f07c69474d0ce395797ab694bedf019e7	pull/68
+tests/Playnite.Core.Tests/LinuxPathsTests.cs	p5-002	a37890f33110c70b8411bac4457d16e0aa41822f	pull/116
 tests/Playnite.Core.Tests/LocalizationCoverageTests.cs	p3-loc-coverage-ds	37a3a37dbd9818692e5030bac2dcfcb625589009	pull/82
 tests/Playnite.Core.Tests/LocalizationKeyTests.cs	p3-007b	d6935c7ccef9672178bf647c9f412d7a47116ded	pull/78
 tests/Playnite.Core.Tests/LocalizationMigrationTests.cs	p3-009	1bddab6a428ff44f35c1f738e1f54a0903cda11b	pull/81
