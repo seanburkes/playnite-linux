@@ -54,6 +54,14 @@ public static class SteamDiscovery
             }
         }
 
+        if (file is null)
+        {
+            // Report absence only when neither copy was selected. A missing primary copy with a
+            // usable config copy is not a missing library file, and a reference that exists but
+            // cannot be resolved was already reported as unreadable with its path selected.
+            issues.Add(new(Path.GetFileName(primary), "libraryfolders", "library-file-missing", null, 0));
+        }
+
         // Unknown root fields are intentionally discarded here; only typed discovery state escapes.
         var seen = new Dictionary<string, string>(StringComparer.Ordinal);
         foreach (var declared in parsed?.Libraries ?? [])
@@ -83,7 +91,17 @@ public static class SteamDiscovery
             var real = fileSystem.GetRealPath(file);
             if (real is null)
             {
-                issues.Add(new(name, "libraryfolders", "library-file-missing", null, 0));
+                // realpath is null for an absent entry and for one that cannot be resolved (a
+                // dangling link, or an unreadable parent). Only an absent entry is missing;
+                // anything else is a reference that exists but cannot be read, and
+                // LibraryFilePath still names it.
+                if (!fileSystem.EntryExists(file))
+                {
+                    return null;
+                }
+
+                observed = true;
+                issues.Add(new(name, "libraryfolders", "unreadable-library-file", null, 0));
                 return null;
             }
 
@@ -113,8 +131,10 @@ public static class SteamDiscovery
             issues.AddRange(result.Issues);
             return result.Value;
         }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or PlatformNotSupportedException)
         {
+            // The injected reader rejects non-Linux hosts explicitly; contain that failure here so
+            // discovery reports a skipped file instead of leaking an unhandled platform exception.
             observed = true;
             issues.Add(new(name, "libraryfolders", "unreadable-library-file", null, 0));
             return null;

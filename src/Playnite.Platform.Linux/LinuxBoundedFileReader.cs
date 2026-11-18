@@ -13,6 +13,7 @@ public sealed class LinuxBoundedFileReader : IBoundedFileReader
     private const int DirectoryOnly = 0x10000;
     private const int PathOnly = 0x200000;
     private const int NonBlock = 0x800;
+    private const int NoControllingTerminal = 0x100;
 
     public BoundedFileRead Read(string path, int maxBytes) => Read(path, maxBytes, null);
 
@@ -51,9 +52,11 @@ public sealed class LinuxBoundedFileReader : IBoundedFileReader
                 directory = next;
             }
 
-            // NonBlock prevents a replacement FIFO from blocking even before the handle stat.
+            // NonBlock prevents a replacement FIFO from blocking even before the handle stat;
+            // NoControllingTerminal keeps a device leaf (a TTY) from becoming this process's
+            // controlling terminal.
             using var handle = Open(directory.DangerousGetHandle().ToInt32(), parts[^1],
-                NoFollow | NonBlock | CloseOnExec);
+                NoFollow | NonBlock | NoControllingTerminal | CloseOnExec);
             if (Statx(handle, "", 0x1000, 0x201, out var stat) != 0)
             {
                 throw Error();

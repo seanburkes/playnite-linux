@@ -59,7 +59,19 @@ public class PlaynitePaths : IPaths
         State = RequireAbsolute(state);
         Documents = RequireAbsolute(documents);
         Logs = Path.Combine(State, "logs");
-        SteamRootCandidates = Array.AsReadOnly(steamRootCandidates.Select(RequireAbsolute).Distinct(StringComparer.Ordinal).ToArray());
+        SteamRootCandidates = Array.AsReadOnly(steamRootCandidates.Select(NormalizeCandidate).Distinct(StringComparer.Ordinal).ToArray());
+    }
+
+    // A non-absolute candidate is the explicit override discovery must report as invalid; it is
+    // never resolved against the working directory and never dropped here.
+    private static string NormalizeCandidate(string path)
+    {
+        if (string.IsNullOrEmpty(path))
+        {
+            throw new ArgumentException("A nonempty path is required.", nameof(path));
+        }
+
+        return Paths.IsFullPath(path) ? Paths.Normalize(path, "/") : path;
     }
 
     private static string RequireAbsolute(string path)

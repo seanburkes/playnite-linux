@@ -1,10 +1,12 @@
 using System.Diagnostics;
 using System.Globalization;
+using System.Net.Sockets;
 using System.Security.Cryptography;
 using Playnite.Core;
 using Playnite.Core.Tests.Serialization;
 using Playnite.Core.Tests.TestDoubles;
 using Playnite.Fuzz;
+using Playnite.Platform;
 using Playnite.Platform.Linux;
 using Playnite.Steam;
 using Xunit;
@@ -181,15 +183,25 @@ public sealed class SteamDiscoveryTests : IDisposable
         CreateRoot(Path.Combine(home, ".local", "share", "Steam"));
         var paths = Paths();
 
-        // LinuxPaths deliberately omits a relative override from its own probe list; discovery
-        // still receives the captured variable and must report it rather than lose it silently.
-        Assert.DoesNotContain("relative/steam", paths.SteamRootCandidates);
+        // LinuxPaths keeps a relative override in its own probe list so discovery reports it
+        // invalid instead of losing it silently.
+        Assert.Equal("relative/steam", paths.SteamRootCandidates[0]);
         var result = SteamRootResolver.Discover(environment, paths, fileSystem);
 
         Assert.Equal(SteamRootKind.Override, result.Candidates[0].Kind);
         Assert.Equal("relative/steam", result.Candidates[0].Path);
         Assert.Equal(SteamRootState.InvalidPath, result.Candidates[0].State);
         Assert.Equal(SteamRootState.Accepted, result.Candidates[^2].State);
+    }
+
+    [Fact]
+    public void Production_paths_expose_the_same_ordered_candidates_discovery_probes()
+    {
+        environment.Variables["STEAM_ROOT"] = "relative/steam";
+        var paths = Paths();
+
+        Assert.Equal(paths.SteamRootCandidates,
+            SteamRootResolver.Candidates(environment, paths).Select(candidate => candidate.Path));
     }
 
     [Fact]
@@ -322,6 +334,33 @@ public sealed class SteamDiscoveryTests : IDisposable
     }
 
     [Fact]
+    public void Dotdot_candidate_prefix_swap_after_resolution_cannot_redirect_the_read()
+    {
+        var root = CreateRoot(Path.Combine(home, "root"));
+        var first = CreateRoot(Path.Combine(home, "first"));
+        var second = CreateRoot(Path.Combine(home, "second"));
+        WriteLibraries(Path.Combine(root, "steamapps"), "libraryfolders.legacy.vdf",
+            ("${ROOT}", first), ("${SECOND}", second));
+        var preceding = Path.Combine(home, "preceding");
+        Directory.CreateDirectory(preceding);
+        var outside = CreateRoot(Path.Combine(home, "outside", "deep", "dir"));
+        File.WriteAllText(Path.Combine(outside, "steamapps", "libraryfolders.vdf"),
+            "libraryfolders { \"9\" \"" + CreateRoot(Path.Combine(home, "escaped")) + "\" }");
+        environment.Variables["STEAM_ROOT"] = preceding + "/../root";
+        var racing = new BeforeReadFileSystem(fileSystem, () =>
+        {
+            Directory.Move(preceding, Path.Combine(home, "preceding-saved"));
+            Directory.CreateSymbolicLink(preceding, outside);
+        });
+
+        var result = SteamDiscovery.Discover(environment, Paths(), racing);
+
+        Assert.Equal(RealPath(root), result.Root);
+        Assert.Equal([SteamDiscovery.RootLibraryIndex, "0", "1"], result.Libraries.Select(l => l.Index));
+        Assert.Empty(result.Issues);
+    }
+
+    [Fact]
     public void Candidate_order_includes_xdg_and_reports_realpaths_even_when_not_accepted()
     {
         var bare = Path.Combine(home, "bare");
@@ -344,6 +383,7 @@ public sealed class SteamDiscoveryTests : IDisposable
     public void Whitespace_override_is_reported_invalid_not_dropped()
     {
         environment.Variables["STEAM_ROOT"] = " \t ";
+        Assert.Equal(" \t ", Paths().SteamRootCandidates[0]);
         var result = ResolveRoots();
         Assert.Equal(SteamRootKind.Override, result.Candidates[0].Kind);
         Assert.Equal(" \t ", result.Candidates[0].Path);
@@ -646,6 +686,21 @@ public sealed class SteamDiscoveryTests : IDisposable
     }
 
     [Fact]
+    public void Dangling_library_file_reference_is_selected_and_reported_unreadable()
+    {
+        var root = CreateRoot(Path.Combine(home, ".local", "share", "Steam"));
+        var file = Path.Combine(root, "steamapps", "libraryfolders.vdf");
+        File.CreateSymbolicLink(file, Path.Combine(home, "missing-libraryfolders.vdf"));
+
+        var result = Discover();
+
+        Assert.Equal(SteamDiscovery.RootLibraryIndex, Assert.Single(result.Libraries).Index);
+        Assert.Equal(file, result.LibraryFilePath);
+        Assert.Contains(result.Issues, issue => issue is { File: "libraryfolders.vdf", Identity: "libraryfolders", Reason: "unreadable-library-file" });
+        Assert.DoesNotContain(result.Issues, issue => issue.Reason == "library-file-missing");
+    }
+
+    [Fact]
     public void Missing_library_file_keeps_the_root_library_and_reports_it()
     {
         CreateRoot(Path.Combine(home, ".local", "share", "Steam"));
@@ -701,6 +756,8 @@ public sealed class SteamDiscoveryTests : IDisposable
 
         Assert.Equal(file, result.LibraryFilePath);
         Assert.Equal(2, result.Libraries.Count);
+        // The primary copy is absent, but the selected config copy is not a missing library file.
+        Assert.DoesNotContain(result.Issues, issue => issue.Reason == "library-file-missing");
     }
 
     [Fact]
@@ -766,6 +823,43 @@ public sealed class SteamDiscoveryTests : IDisposable
         Assert.Equal(SteamDiscovery.RootLibraryIndex, Assert.Single(result.Libraries).Index);
         Assert.Equal(file, result.LibraryFilePath);
         Assert.Contains(result.Issues, issue => issue is { File: "libraryfolders.vdf", Reason: "not-a-regular-file" });
+    }
+
+    [Fact]
+    public void Socket_library_file_is_reported_unreadable_not_not_regular()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        var root = CreateRoot(Path.Combine(home, ".local", "share", "Steam"));
+        var file = Path.Combine(root, "steamapps", "libraryfolders.vdf");
+        using var socket = new Socket(AddressFamily.Unix, SocketType.Stream, ProtocolType.Unspecified);
+        socket.Bind(new UnixDomainSocketEndPoint(file));
+
+        Assert.Equal(file, fileSystem.GetRealPath(file));
+        var result = Discover();
+
+        Assert.Equal(SteamDiscovery.RootLibraryIndex, Assert.Single(result.Libraries).Index);
+        Assert.Equal(file, result.LibraryFilePath);
+        Assert.Contains(result.Issues, issue => issue is { File: "libraryfolders.vdf", Identity: "libraryfolders", Reason: "unreadable-library-file" });
+        Assert.DoesNotContain(result.Issues, issue => issue.Reason == "not-a-regular-file");
+    }
+
+    [Fact]
+    public void Unsupported_platform_reader_failure_is_contained_as_an_unreadable_issue()
+    {
+        var root = CreateRoot(Path.Combine(home, ".local", "share", "Steam"));
+        var file = Path.Combine(root, "steamapps", "libraryfolders.vdf");
+        File.WriteAllText(file, "libraryfolders { }");
+        var unsupported = new SteamFileSystem(new UnsupportedBoundedFileReader());
+
+        var result = SteamDiscovery.Discover(environment, Paths(), unsupported);
+
+        Assert.Equal(SteamDiscovery.RootLibraryIndex, Assert.Single(result.Libraries).Index);
+        Assert.Equal(file, result.LibraryFilePath);
+        Assert.Contains(result.Issues, issue => issue is { File: "libraryfolders.vdf", Identity: "libraryfolders", Reason: "unreadable-library-file" });
     }
 
     [Fact]
@@ -924,6 +1018,21 @@ public sealed class SteamDiscoveryTests : IDisposable
         Assert.Contains("STEAM DISCOVERY FUZZ COMPLETE", log.ToString(), StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void Discovery_fuzz_target_rejects_an_oversized_input_budget_before_allocation()
+    {
+        using var log = new StringWriter(CultureInfo.InvariantCulture);
+        Assert.Throws<ArgumentOutOfRangeException>(() => SteamDiscoveryFuzzTarget.Run(new FuzzOptions
+        {
+            CorpusRoot = Corpus,
+            Seconds = FuzzOptions.MinimumWallClockSeconds,
+            Iterations = FuzzOptions.MinimumIterations,
+            MaxInputBytes = Array.MaxLength,
+            CaseTimeoutMilliseconds = 1000,
+            MaxManagedBytes = 1024,
+        }, log));
+    }
+
     // ---- helpers --------------------------------------------------------------------------
 
     private IPaths Paths() => new LinuxPaths(environment, new LinuxFileSystem());
@@ -1010,6 +1119,7 @@ public sealed class SteamDiscoveryTests : IDisposable
         public int Reads { get; private set; }
         public bool DirectoryExists(string path) => inner.DirectoryExists(path);
         public bool FileExists(string path) => inner.FileExists(path);
+        public bool EntryExists(string path) => inner.EntryExists(path);
         public SteamFileRead ReadFile(string path, int maxBytes)
         {
             Reads++;
@@ -1024,6 +1134,7 @@ public sealed class SteamDiscoveryTests : IDisposable
     {
         public bool DirectoryExists(string path) => inner.DirectoryExists(path);
         public bool FileExists(string path) => inner.FileExists(path);
+        public bool EntryExists(string path) => inner.EntryExists(path);
         public SteamFileRead ReadFile(string path, int maxBytes)
         {
             beforeRead();
@@ -1037,6 +1148,7 @@ public sealed class SteamDiscoveryTests : IDisposable
     {
         public bool DirectoryExists(string path) => inner.DirectoryExists(path);
         public bool FileExists(string path) => inner.FileExists(path);
+        public bool EntryExists(string path) => inner.EntryExists(path);
         public SteamFileRead ReadFile(string path, int maxBytes)
         {
             Assert.NotEqual(declaredLink, path);
@@ -1053,9 +1165,16 @@ public sealed class SteamDiscoveryTests : IDisposable
     {
         public bool DirectoryExists(string path) => inner.DirectoryExists(path);
         public bool FileExists(string path) => inner.FileExists(path);
+        public bool EntryExists(string path) => inner.EntryExists(path);
         public SteamFileRead ReadFile(string path, int maxBytes) =>
             failReads ? throw new IOException("synthetic read failure") : inner.ReadFile(path, maxBytes);
         public string? GetRealPath(string path) => inner.GetRealPath(path);
         public bool IsMountPoint(string path) => mountPoint || inner.IsMountPoint(path);
+    }
+
+    private sealed class UnsupportedBoundedFileReader : IBoundedFileReader
+    {
+        public BoundedFileRead Read(string path, int maxBytes) =>
+            throw new PlatformNotSupportedException("synthetic unsupported platform");
     }
 }
