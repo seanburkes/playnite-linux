@@ -87,12 +87,12 @@ dispose runs.
   `/bin/sleep` and `/bin/false` for the stdin lifeline and command timeout/cancel paths; no test
   requires a desktop session, D-Bus, logind or a tray host.
 
-## Architecture guard correction
+## Process dependency note
 
-`System.Diagnostics.Process` is the approved argument-list process API, but its framework metadata
-references `Microsoft.Win32.Primitives` as a shim. The product-dependency guard in
-`tests/Playnite.Architecture.Tests/DependencyTests.cs` treated that assembly reference as a Win32
-API use. The guard now excludes exactly that shim, keeps Registry as a negative control, and the
-compiled-type scan, SourcePolicy and BannedSymbols still reject every `Microsoft.Win32` type.
-No product project gains a Win32 package reference.
+`System.Diagnostics.Process` is the approved argument-list process API. This unit deliberately
+does not reference `System.ComponentModel.Win32Exception` (which lives in
+`Microsoft.Win32.Primitives`): process-start and best-effort-kill failures are caught with a
+filtered `Exception` instead. The product dependency closure therefore stays free of the Win32
+shim without changing any architecture guard.
+
 

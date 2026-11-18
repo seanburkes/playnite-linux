@@ -1,4 +1,3 @@
-using System.ComponentModel;
 using System.Diagnostics;
 using Playnite.Platform.DesktopIntegration;
 
@@ -58,12 +57,7 @@ internal sealed class StdinHold : ISleepInhibitorHandle
                 return null;
             }
         }
-        catch (Win32Exception)
-        {
-            process.Dispose();
-            return null;
-        }
-        catch (InvalidOperationException)
+        catch (Exception exception) when (exception is not OperationCanceledException)
         {
             process.Dispose();
             return null;
@@ -172,11 +166,7 @@ internal sealed class StdinHold : ISleepInhibitorHandle
                 process.Kill(entireProcessTree: true);
             }
         }
-        catch (InvalidOperationException)
-        {
-            return;
-        }
-        catch (Win32Exception)
+        catch (Exception exception) when (exception is not OperationCanceledException)
         {
             return;
         }

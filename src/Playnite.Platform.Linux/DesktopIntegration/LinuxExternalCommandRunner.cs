@@ -1,4 +1,3 @@
-using System.ComponentModel;
 using System.Diagnostics;
 using System.Globalization;
 using System.Runtime.CompilerServices;
@@ -37,11 +36,7 @@ public sealed class LinuxExternalCommandRunner : IExternalCommandRunner
                 return ExternalCommandResult.NotStarted("the process did not start");
             }
         }
-        catch (Win32Exception exception)
-        {
-            return ExternalCommandResult.NotStarted(exception.Message);
-        }
-        catch (InvalidOperationException exception)
+        catch (Exception exception) when (exception is not OperationCanceledException)
         {
             return ExternalCommandResult.NotStarted(exception.Message);
         }
@@ -117,11 +112,7 @@ public sealed class LinuxExternalCommandRunner : IExternalCommandRunner
                 process.Kill(entireProcessTree: true);
             }
         }
-        catch (InvalidOperationException)
-        {
-            return;
-        }
-        catch (Win32Exception)
+        catch (Exception exception) when (exception is not OperationCanceledException)
         {
             return;
         }
