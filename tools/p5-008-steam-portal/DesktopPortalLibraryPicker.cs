@@ -188,12 +188,12 @@ internal sealed class DesktopPortalLibraryPicker : ISteamLibraryPortal, IAsyncDi
                 if (Environment.GetEnvironmentVariable("PLAYNITE_PORTAL_DEBUG") == "1")
                 {
                     Console.Error.WriteLine(
-                        $"portal: handler type={notification.Type} hasValue={notification.HasValue} completion={notification.IsCompletion} exception={notification.Exception?.GetType().Name ?? "none"}");
+                        $"portal: handler type={notification.Type} hasValue={notification.HasValue} completion={notification.IsCompletion}");
                 }
 
-                if (notification.Exception is not null)
+                if (notification.IsCompletion)
                 {
-                    completion.TrySetException(notification.Exception);
+                    completion.TrySetException(notification.CompletionReason);
                 }
                 else if (notification.HasValue && notification.Value is not null)
                 {
