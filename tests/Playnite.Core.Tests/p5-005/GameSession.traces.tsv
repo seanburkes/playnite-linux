@@ -1,0 +1,7 @@
+ce983cda8b874bc0f44c3e1d68286665b2f44a798cd9ecb8c48fbdb984aa4740	10f82073a29ebbd2ec974d8e3c30fc4c51a1b26034a277a06ea5a8bd370c022c
+Idle/FALSE/0	Start	Starting/TRUE/0	CancelLaunch	Cancelled/FALSE/0
+Idle/FALSE/0	Start	Starting/TRUE/0	Crash	Failed/FALSE/0
+Idle/FALSE/0	Start	Starting/TRUE/0	LaunchFail	Failed/FALSE/0
+Idle/FALSE/0	Start	Starting/TRUE/0	LaunchOk	Running/TRUE/0	Crash	Failed/FALSE/0
+Idle/FALSE/0	Start	Starting/TRUE/0	LaunchOk	Running/TRUE/0	Stop	Stopping/TRUE/0	Crash	Failed/FALSE/0
+Idle/FALSE/0	Start	Starting/TRUE/0	LaunchOk	Running/TRUE/0	Stop	Stopping/TRUE/0	StopOk	Stopped/FALSE/1
