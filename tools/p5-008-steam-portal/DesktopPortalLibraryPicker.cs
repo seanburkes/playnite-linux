@@ -86,6 +86,7 @@ internal sealed class DesktopPortalLibraryPicker : ISteamLibraryPortal, IAsyncDi
 
             if (debug)
             {
+                Console.Error.WriteLine("portal: response awaited");
                 Console.Error.WriteLine($"portal: disposing {subscriptions.Count} match subscriptions");
             }
 
@@ -186,10 +187,20 @@ internal sealed class DesktopPortalLibraryPicker : ISteamLibraryPortal, IAsyncDi
             {
                 if (notification.Exception is not null)
                 {
+                    if (Environment.GetEnvironmentVariable("PLAYNITE_PORTAL_DEBUG") == "1")
+                    {
+                        Console.Error.WriteLine($"portal: notification exception={notification.Exception.GetType().Name}");
+                    }
+
                     completion.TrySetException(notification.Exception);
                 }
                 else if (notification.HasValue && notification.Value is not null)
                 {
+                    if (Environment.GetEnvironmentVariable("PLAYNITE_PORTAL_DEBUG") == "1")
+                    {
+                        Console.Error.WriteLine("portal: notification value");
+                    }
+
                     completion.TrySetResult(notification.Value);
                 }
             },
@@ -295,19 +306,27 @@ internal sealed class DesktopPortalLibraryPicker : ISteamLibraryPortal, IAsyncDi
 
     private static PortalResponse? ReadResponse(Message message, string token)
     {
-        if (Environment.GetEnvironmentVariable("PLAYNITE_PORTAL_DEBUG") == "1")
+        var debug = Environment.GetEnvironmentVariable("PLAYNITE_PORTAL_DEBUG") == "1";
+        var path = message.PathAsString ?? string.Empty;
+        if (debug)
         {
-            Console.Error.WriteLine($"portal: response path={message.PathAsString}");
+            Console.Error.WriteLine($"portal: response path={path} token={token}");
         }
 
-        if (!(message.PathAsString ?? string.Empty).EndsWith("/" + token, StringComparison.Ordinal))
+        if (!path.EndsWith("/" + token, StringComparison.Ordinal))
         {
             return null;
         }
 
         var reader = message.GetBodyReader();
         var code = reader.ReadUInt32();
-        return new PortalResponse(code, reader.ReadDictionaryOfStringToVariantValue());
+        var results = reader.ReadDictionaryOfStringToVariantValue();
+        if (debug)
+        {
+            Console.Error.WriteLine($"portal: response code={code} results={results.Count}");
+        }
+
+        return new PortalResponse(code, results);
     }
 
     private sealed record PortalResponse(uint Code, Dictionary<string, VariantValue> Results);
