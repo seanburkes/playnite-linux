@@ -21,6 +21,64 @@ public sealed record ArtworkIdentity(uint AppId, ArtworkKind Kind)
     public string RelativePath => Kind == ArtworkKind.Achievements
         ? Path.Combine("config", "librarycache", FileName)
         : Path.Combine("appcache", "librarycache", AppId.ToString(CultureInfo.InvariantCulture), FileName);
+
+    private static readonly Dictionary<string, ArtworkKind> NamedCacheFiles = new(StringComparer.Ordinal)
+    {
+        ["library_600x900.jpg"] = ArtworkKind.Portrait,
+        ["header.jpg"] = ArtworkKind.Header,
+        ["library_hero.jpg"] = ArtworkKind.Hero,
+        ["logo.png"] = ArtworkKind.Logo,
+        ["library_hero_blur.jpg"] = ArtworkKind.HeroBlur,
+    };
+
+    // Reads one path relative to the Steam root. A documented canonical name yields an
+    // identity. An observed content-addressed entry yields true with a null identity: its
+    // kind and remote id are UNKNOWN and are never inferred. Unknown app ids, names and
+    // malformed paths are rejected. Separators are '/' as in the recorded Linux layout.
+    public static bool TryReadCachePath(string relativePath, IReadOnlySet<uint> knownAppIds,
+        out ArtworkIdentity? identity)
+    {
+        ArgumentNullException.ThrowIfNull(knownAppIds);
+        identity = null;
+        if (string.IsNullOrEmpty(relativePath) || relativePath.Contains('\\')) return false;
+        string[] parts = relativePath.Split('/');
+        if (parts.Length < 4 || parts[0] != "appcache" || parts[1] != "librarycache") return false;
+
+        string appText = parts[2];
+        if (appText.Length == 0 || (appText.Length > 1 && appText[0] == '0')) return false;
+        foreach (char c in appText) if (!char.IsAsciiDigit(c)) return false;
+        if (!uint.TryParse(appText, NumberStyles.None, CultureInfo.InvariantCulture, out uint appId)) return false;
+        if (appId == 0 || !knownAppIds.Contains(appId)) return false;
+
+        string[] name = parts[3..];
+        foreach (string segment in name)
+            if (segment.Length == 0 || segment == "." || segment == "..") return false;
+
+        if (name.Length == 1 && NamedCacheFiles.TryGetValue(name[0], out ArtworkKind kind))
+        {
+            identity = new ArtworkIdentity(appId, kind);
+            return true;
+        }
+        // Observed hashed forms only: <40 lowercase hex>.jpg, or <40 lowercase hex>/<child>.
+        // Any other depth is unobserved and rejected.
+        return name.Length switch
+        {
+            1 => IsContentAddressedJpegFileName(name[0]),
+            2 => IsContentAddressedDirectory(name[0]),
+            _ => false,
+        };
+    }
+
+    private static bool IsContentAddressedJpegFileName(string name) =>
+        name.EndsWith(".jpg", StringComparison.Ordinal) &&
+        IsContentAddressedDirectory(name[..^".jpg".Length]);
+
+    private static bool IsContentAddressedDirectory(string name)
+    {
+        if (name.Length != 40) return false;
+        foreach (char c in name) if (!(c is >= '0' and <= '9' or >= 'a' and <= 'f')) return false;
+        return true;
+    }
 }
 
 // Resolve must be local/pure; offline calls may resolve identity but must not perform discovery HTTP.

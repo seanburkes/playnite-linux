@@ -20,7 +20,11 @@ For decimal uint app id `A`, relative to the explicit Steam root:
 | HeroBlur | `appcache/librarycache/A/library_hero_blur.jpg` |
 
 All are optional. The spec records names/layout, **not per-title availability or remote ids**.
-There is no `A_library_600x900.jpg` identity in the recorded layout. Hashed files are opaque.
+There is no `A_library_600x900.jpg` identity in the recorded layout. Hashed files are opaque:
+`ArtworkIdentity.TryReadCachePath` recognises the captured `<40 lowercase hex>.jpg` and
+`<40 lowercase hex>/<child>` forms as content-addressed entries, but never infers a kind or
+remote id from them. The captured real-cache evidence is in
+`tests/fixtures/steam/real-artwork/`; image bytes and the CDN mapping remain UNKNOWN.
 Achievements are separate optional metadata: `config/librarycache/A.json` relative to an
 **explicitly selected account's userdata directory**, as observed in §8.2. No account id is
 logged or inferred. Title exclusion/unconfigured mapping is a reported result, not a drop.
