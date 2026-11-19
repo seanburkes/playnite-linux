@@ -84,9 +84,19 @@ internal sealed class DesktopPortalLibraryPicker : ISteamLibraryPortal, IAsyncDi
                 throw;
             }
 
+            if (debug)
+            {
+                Console.Error.WriteLine($"portal: disposing {subscriptions.Count} match subscriptions");
+            }
+
             foreach (var subscription in subscriptions)
             {
                 subscription.Dispose();
+            }
+
+            if (debug)
+            {
+                Console.Error.WriteLine("portal: matches disposed");
             }
 
             if (response is null)
