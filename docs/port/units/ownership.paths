@@ -184,8 +184,8 @@ src/Playnite.SDK/AssemblyMarker.cs	p2-001	9afd818ae8a695e921bb98f386bfceb83d0059
 src/Playnite.SDK/AssemblyMarker.cs	p2-002	abdb82bedd0bcadfe93c1fc6f11937c55b116b7c	pull/37
 src/Playnite.Steam/Artwork/ArtworkCache.cs	p5-003	22f051a92b6b5a82566fd382a04f9848c30ed756	pull/118
 src/Playnite.Steam/Artwork/ArtworkFetcher.cs	p5-003	22f051a92b6b5a82566fd382a04f9848c30ed756	pull/118
-src/Playnite.Steam/Artwork/ArtworkIdentity.cs	p5-003	22f051a92b6b5a82566fd382a04f9848c30ed756	pull/118
-src/Playnite.Steam/Artwork/README.md	p5-003	22f051a92b6b5a82566fd382a04f9848c30ed756	pull/118
+src/Playnite.Steam/Artwork/ArtworkIdentity.cs	p5-003	74475aef9353c4a7459ca838d9c3736b1be5a189	pull/152
+src/Playnite.Steam/Artwork/README.md	p5-003	74475aef9353c4a7459ca838d9c3736b1be5a189	pull/152
 src/Playnite.Steam/AssemblyMarker.cs	p2-001	9afd818ae8a695e921bb98f386bfceb83d0059db	pull/29
 src/Playnite.Steam/AssemblyMarker.cs	p2-002	abdb82bedd0bcadfe93c1fc6f11937c55b116b7c	pull/37
 src/Playnite.Steam/KeyValues.cs	p5-001	777578cc81efb0130b41924c282542f0b346836c	pull/109
@@ -230,6 +230,7 @@ tests/Playnite.Architecture.Tests/SourcePolicyTests.cs	p2-002	df9d089fd82efb1456
 tests/Playnite.Core.Tests/ArchiveTestData.cs	p3-008b	e71ad0db1445f0e382485eaa2a4624d5ec8eb88a	pull/79
 tests/Playnite.Core.Tests/ArchiveTests.cs	p3-008b	e71ad0db1445f0e382485eaa2a4624d5ec8eb88a	pull/79
 tests/Playnite.Core.Tests/Artwork/ArtworkTests.cs	p5-003	22f051a92b6b5a82566fd382a04f9848c30ed756	pull/118
+tests/Playnite.Core.Tests/Artwork/RealArtworkIdentityTests.cs	p5-003	74475aef9353c4a7459ca838d9c3736b1be5a189	pull/152
 tests/Playnite.Core.Tests/AssemblyMarker.cs	p2-001	9afd818ae8a695e921bb98f386bfceb83d0059db	pull/29
 tests/Playnite.Core.Tests/BackupTests.cs	p3-008b	e71ad0db1445f0e382485eaa2a4624d5ec8eb88a	pull/79
 tests/Playnite.Core.Tests/ChecksumTests.cs	p3-crc-ds	ee3ab1db11ef44cb5b489c8bce80f5eeb88416f1	pull/83
@@ -374,6 +375,9 @@ tests/fixtures/steam/basic/steamapps/appmanifest_570.acf	*	fa2630ea1a2c17cbf1e16
 tests/fixtures/steam/basic/steamapps/libraryfolders.vdf	*	fa2630ea1a2c17cbf1e16958902b3e5c7bc82e83	-
 tests/fixtures/steam/broken/steamapps/appmanifest_999.acf	*	fa2630ea1a2c17cbf1e16958902b3e5c7bc82e83	-
 tests/fixtures/steam/broken/steamapps/libraryfolders.vdf	*	fa2630ea1a2c17cbf1e16958902b3e5c7bc82e83	-
+tests/fixtures/steam/real-artwork/README.md	p5-003	74475aef9353c4a7459ca838d9c3736b1be5a189	pull/152
+tests/fixtures/steam/real-artwork/manifest.sha256	p5-003	74475aef9353c4a7459ca838d9c3736b1be5a189	pull/152
+tests/fixtures/steam/real-artwork/manifest.tsv	p5-003	74475aef9353c4a7459ca838d9c3736b1be5a189	pull/152
 tests/fixtures/steam/real/README.md	p1-009	204569730242896abb60259bc0471f112ee1c1b9	pull/26
 tests/fixtures/steam/real/SHA256SUMS	p1-009	204569730242896abb60259bc0471f112ee1c1b9	pull/26
 tests/fixtures/steam/real/steamapps/appmanifest_105600.acf	p1-009	204569730242896abb60259bc0471f112ee1c1b9	pull/26
