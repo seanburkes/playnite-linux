@@ -8,11 +8,6 @@ internal static class Program
     [STAThread]
     private static int Main(string[] args)
     {
-        if (SteamLaunchCommand.IsRequested(args))
-        {
-            return SteamLaunchCommand.RunAsync(args).GetAwaiter().GetResult();
-        }
-
         var builder = AppBuilder.Configure<App>();
         builder = args.Contains("--headless", StringComparer.Ordinal)
             ? builder.UseHeadless(new AvaloniaHeadlessPlatformOptions())

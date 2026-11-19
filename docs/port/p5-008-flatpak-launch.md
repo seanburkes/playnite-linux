@@ -36,8 +36,9 @@ host and no shell is started.
 - Cancellation propagates and releases only our waiter. A request that may have become a game
   is never signalled; the user stops it in Steam.
 
-Native and AppImage keep the unchanged tracked path. The packaged `steam-launch` command
-refuses to run on a non-Flatpak host instead of inventing a second, untracked native launch.
+Native and AppImage keep the unchanged tracked path. The packaged
+`steam-library-import --flatpak-launch` command refuses to run on a non-Flatpak host instead of
+inventing a second, untracked native launch.
 
 ## Tests
 
@@ -54,13 +55,14 @@ refuses to run on a non-Flatpak host instead of inventing a second, untracked na
 - a non-Flatpak host selects `Tracked` and `SteamProcessLauncher.CreateRequest()` still returns
   `steam -applaunch <appid>`.
 
-The packaged route is the existing wrapper fallback to the desktop binary, so no packaging
-change is needed and the existing packaging tests are untouched.
+The packaged route is the existing `playnite steam-library-import` entry, which already ships
+in the Flatpak payload: `--flatpak-launch <appid>` is handled before the import modes. No
+packaging, manifest or permission file changes, and the existing packaging tests are untouched.
 
 ## Packaging
 
-The existing packaged `playnite` wrapper sends unknown arguments to the desktop binary, so
-`playnite steam-launch <appid>` is a desktop entry (`SteamLaunchCommand`). No packaging,
+The packaged `playnite steam-library-import` entry already ships in the Flatpak payload. A
+`--flatpak-launch <appid>` argument is handled before the import modes, so no packaging,
 manifest or permission file changes are needed: the Flatpak manifest and
 `packaging/verify-flatpak.py` stay untouched, and the allowlist stays exactly `wayland`,
 `fallback-x11`, `ipc` and `dri` with no `filesystem` or `talk-name` grant.
@@ -69,8 +71,8 @@ manifest or permission file changes are needed: the Flatpak manifest and
 
 The real-machine acceptance ran from clean code head
 `2a507118e7680e1688846e37cc11212e33accd83` on 2026-11-19. The packaged
-`playnite steam-launch` entry is the desktop binary (the existing wrapper fallback), so no
-packaging, manifest or permission file changed.
+`playnite steam-library-import --flatpak-launch` entry already ships in the Flatpak payload, so
+no packaging, manifest or permission file changed.
 
 ### Packaged Flatpak — launch-only
 
@@ -100,8 +102,8 @@ and `flatpak-spawn --host true` fails with
 Commands and results:
 
 ```sh
-flatpak run --user io.github.playnite_linux.Playnite steam-launch 770100
-flatpak run --user io.github.playnite_linux.Playnite steam-launch 1145360
+flatpak run --user io.github.playnite_linux.Playnite steam-library-import --flatpak-launch 770100
+flatpak run --user io.github.playnite_linux.Playnite steam-library-import --flatpak-launch 1145360
 ```
 
 Both printed `status: RequestAccepted`, `tracking: unknown`, `stop: manual-steam`. The JSON

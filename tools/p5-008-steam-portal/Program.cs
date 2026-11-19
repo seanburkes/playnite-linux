@@ -1,5 +1,7 @@
+using System.Diagnostics;
 using System.Text.Json;
 using Playnite.Platform.Linux;
+using Playnite.Platform.Sessions;
 using Playnite.Steam;
 
 namespace Playnite.Steam.Import;
@@ -7,7 +9,9 @@ namespace Playnite.Steam.Import;
 /// <summary>
 /// Read-only Steam library import for one packaged format. <c>--direct</c> reads the visible
 /// filesystem (AppImage); <c>--portal</c> reads only directories the user grants through the
-/// desktop portal (Flatpak). Both print the same JSON shape so the evidence can compare app sets.
+/// desktop portal (Flatpak). <c>--flatpak-launch</c> is the launch-only OpenURI entry: it
+/// reports tracking UNKNOWN and has no stop or signal path. Import modes print the same JSON
+/// shape so the evidence can compare app sets.
 /// </summary>
 internal static class Program
 {
@@ -19,6 +23,11 @@ internal static class Program
 
     private static async Task<int> Main(string[] args)
     {
+        if (args.Length == 2 && string.Equals(args[0], "--flatpak-launch", StringComparison.Ordinal))
+        {
+            return await FlatpakLaunchAsync(args[1]).ConfigureAwait(false);
+        }
+
         Options options;
         try
         {
@@ -36,6 +45,35 @@ internal static class Program
             : DirectAsync(fileSystem);
         Console.Out.WriteLine(JsonSerializer.Serialize(report, Json));
         return report.Status is "complete" or "partial" ? 0 : 2;
+    }
+
+    private static async Task<int> FlatpakLaunchAsync(string text)
+    {
+        if (!FlatpakSteamLauncher.TryParseAppId(text, out var appId))
+        {
+            Console.Error.WriteLine("The app id must be a decimal uint without a sign, whitespace, prefix or fraction.");
+            return 2;
+        }
+
+        if (SteamLaunchModes.Select(new LinuxSteamHostFormat()) != SteamLaunchMode.FlatpakLaunchOnly)
+        {
+            Console.Error.WriteLine("This host is not a Flatpak sandbox. The native/AppImage launch-plus-tracking path is unchanged; use the tracked acceptance entry instead of inventing an untracked launch.");
+            return 2;
+        }
+
+        var launcher = new FlatpakSteamLauncher(new HostUriOpener());
+        var result = await launcher.LaunchAsync(appId, CancellationToken.None).ConfigureAwait(false);
+        Console.Out.WriteLine(JsonSerializer.Serialize(new
+        {
+            mode = "flatpak-launch-only",
+            status = result.Status.ToString(),
+            appId = result.AppId,
+            uri = result.Uri,
+            tracking = result.Tracking == SteamLaunchTracking.Unknown ? "unknown" : "tracked",
+            stop = "manual-steam",
+            detail = result.Detail,
+        }, Json));
+        return result.Status == FlatpakLaunchStatus.RequestAccepted ? 0 : 1;
     }
 
     private static ImportReport DirectAsync(SteamFileSystem fileSystem)
@@ -130,7 +168,7 @@ internal static class Program
                         break;
                     default:
                         throw new ArgumentException(
-                            "Usage: playnite-steam-import [--direct|--portal] [--grants PATH] [--json]");
+                            "Usage: playnite-steam-import [--direct|--portal] [--grants PATH] [--json] | --flatpak-launch APPID");
                 }
             }
 
@@ -177,5 +215,43 @@ internal static class Program
     {
         public static ImportReport Failed(string mode, string status, string detail) =>
             new(mode, status, [], [], [], detail, null);
+    }
+
+    /// <summary>The packaged argv-only OpenURI request. It opens one URI and never signals.</summary>
+    private sealed class HostUriOpener : ISteamUriOpener
+    {
+        public async Task<int> OpenAsync(Playnite.Platform.Sessions.LaunchRequest request,
+            CancellationToken cancellationToken)
+        {
+            var startInfo = new ProcessStartInfo(request.Executable) { UseShellExecute = false };
+            foreach (var argument in request.Arguments)
+            {
+                startInfo.ArgumentList.Add(argument);
+            }
+
+            if (request.WorkingDirectory is not null)
+            {
+                startInfo.WorkingDirectory = request.WorkingDirectory;
+            }
+
+            Process process;
+            try
+            {
+                process = Process.Start(startInfo)
+                    ?? throw new IOException("The OpenURI opener did not start.");
+            }
+            catch (Exception exception) when (exception is not OperationCanceledException)
+            {
+                // The exec boundary is the only place a missing opener can surface; report it
+                // as an unavailable request, never as a launch.
+                throw new IOException("The OpenURI opener could not be started.", exception);
+            }
+
+            using (process)
+            {
+                await process.WaitForExitAsync(cancellationToken).ConfigureAwait(false);
+                return process.ExitCode;
+            }
+        }
     }
 }
