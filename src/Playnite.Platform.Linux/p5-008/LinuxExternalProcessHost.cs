@@ -5,8 +5,8 @@ using Playnite.Platform.Sessions;
 namespace Playnite.Platform.Linux;
 
 /// <summary>
-/// Same-namespace host adapter. Reads only argv, never the environment. A Wine/Proton game's
-/// executable is the runtime preloader, so argv is the only place its Windows binary appears.
+/// Same-namespace host adapter. Reads process metadata without reading its environment.
+/// A Wine/Proton game's executable is the runtime preloader, so argv supplies its Windows image.
 /// </summary>
 public sealed class LinuxExternalProcessHost : IExternalProcessHost
 {
@@ -15,15 +15,18 @@ public sealed class LinuxExternalProcessHost : IExternalProcessHost
     private readonly IProcessSignalHandles signals;
     private readonly Func<int, string?> readExecutable;
     private readonly Func<int, string[]?> readCommandLine;
+    private readonly bool captureProcessNames;
 
     public LinuxExternalProcessHost(IProcStatReader? statReader = null, IProcessSignalHandles? signalHandles = null,
-        Func<int, string?>? executableReader = null, Func<int, string[]?>? commandLineReader = null)
+        Func<int, string?>? executableReader = null, Func<int, string[]?>? commandLineReader = null,
+        bool captureProcessNames = false)
     {
         stats = statReader ?? new LinuxProcStatReader();
         observer = new LinuxProcessObserver(stats);
         signals = signalHandles ?? new LinuxPidFd();
         readExecutable = executableReader ?? ReadExecutable;
         readCommandLine = commandLineReader ?? ReadCommandLine;
+        this.captureProcessNames = captureProcessNames;
     }
 
     public async Task<ExternalProcessSnapshot> SnapshotAsync(CancellationToken cancellationToken)
@@ -37,6 +40,7 @@ public sealed class LinuxExternalProcessHost : IExternalProcessHost
             cancellationToken.ThrowIfCancellationRequested();
             string? executable = null;
             string[]? commandLine = null;
+            string? processName = null;
             if (entry.IsRunning)
             {
                 try
@@ -55,6 +59,11 @@ public sealed class LinuxExternalProcessHost : IExternalProcessHost
                 catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
                 {
                     _ = exception;
+                }
+
+                if (captureProcessNames)
+                {
+                    processName = ReadProcessName(entry.Identity.ProcessId);
                 }
             }
 
@@ -92,11 +101,12 @@ public sealed class LinuxExternalProcessHost : IExternalProcessHost
                     row.ProcessGroupId);
                 moved.Add(movedIdentity);
                 entries.Add(new(entry with { Identity = movedIdentity, IsRunning = row.IsRunning },
-                    executable, commandLine));
+                    executable, commandLine) { ProcessName = processName });
                 continue;
             }
 
-            entries.Add(new(entry with { IsRunning = row.IsRunning }, executable, commandLine));
+            entries.Add(new(entry with { IsRunning = row.IsRunning }, executable, commandLine)
+                { ProcessName = processName });
         }
 
         return new(entries, complete, moved);
@@ -200,6 +210,18 @@ public sealed class LinuxExternalProcessHost : IExternalProcessHost
         var executable = File.ResolveLinkTarget($"/proc/{pid}/exe", true)?.FullName;
         executable = executable is null ? null : File.ResolveLinkTarget(executable, true)?.FullName ?? executable;
         return File.Exists(executable) ? executable : null;
+    }
+
+    private static string? ReadProcessName(int pid)
+    {
+        try
+        {
+            return File.ReadAllText($"/proc/{pid}/comm").TrimEnd('\n');
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            return null;
+        }
     }
 
     private static string[]? ReadCommandLine(int pid)

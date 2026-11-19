@@ -5,7 +5,11 @@ namespace Playnite.Platform.Sessions;
 /// <see cref="CommandLine"/> is argv only when the host can read it; null means unreadable.
 /// </summary>
 public sealed record ExternalProcessEntry(ProcessEntry Process, string? Executable,
-    IReadOnlyList<string>? CommandLine = null);
+    IReadOnlyList<string>? CommandLine = null)
+{
+    /// <summary>The optional kernel process name, which may be truncated or set by the process.</summary>
+    public string? ProcessName { get; init; }
+}
 
 /// <summary>
 /// One process-table sample. <paramref name="MovedIdentities"/> lists rows whose process group

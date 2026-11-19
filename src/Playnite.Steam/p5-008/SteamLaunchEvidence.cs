@@ -134,19 +134,19 @@ public static class ProtonCommandLine
     {
         gamePath = string.Empty;
         windowsArgument = null;
-        if (target.ProtonPrefix is not { } prefix || commandLine is not { Count: > 0 })
+        if (target.ProtonPrefix is null || commandLine is not { Count: > 0 })
         {
             return false;
         }
 
         var argument = commandLine[0];
-        if (!TryParseDrivePath(argument, out var drive, out var relative) || IsWrapper(argument))
+        if (IsWrapper(argument))
         {
             return false;
         }
 
-        var mapped = Map(prefix, drive, relative);
-        if (mapped is null || IsWrapper(mapped) || !SteamProcessAttribution.Matches(target, mapped))
+        var mapped = ResolveDrivePath(target, argument);
+        if (mapped is null || !File.Exists(mapped) || IsWrapper(mapped) || !SteamProcessAttribution.Matches(target, mapped))
         {
             return false;
         }
@@ -155,6 +155,24 @@ public static class ProtonCommandLine
         windowsArgument = argument;
         return true;
     }
+
+    /// <summary>
+    /// Resolve an argument through the target's drive map for read-only process checks.
+    /// The result can identify infrastructure within the app's roots.
+    /// </summary>
+    public static string? ResolveAppPath(SteamLaunchTarget target, string argument)
+    {
+        var path = ResolveDrivePath(target, argument);
+        return path is not null && (File.Exists(path) || Directory.Exists(path))
+            && (path == target.App.InstallPath || path == target.ProtonPrefix
+                || SteamProcessAttribution.Under(path, target.App.InstallPath)
+                || SteamProcessAttribution.Under(path, target.ProtonPrefix)) ? path : null;
+    }
+
+    private static string? ResolveDrivePath(SteamLaunchTarget target, string argument) =>
+        target.ProtonPrefix is { } prefix && TryParseDrivePath(argument, out var drive, out var relative)
+            ? Map(prefix, drive, relative)
+            : null;
 
     private static string? Map(string prefix, char drive, string relative)
     {
@@ -187,10 +205,7 @@ public static class ProtonCommandLine
             combined = Path.Combine(combined, part);
         }
 
-        // Only a real, canonical host file is evidence. A drive mapped to "/" must not let a
-        // Windows path escape into the host once resolved.
-        var canonical = Canonical(combined);
-        return canonical is not null && File.Exists(canonical) ? canonical : null;
+        return Canonical(combined);
     }
 
     /// <summary>Absolute drive-letter path with either separator, e.g. <c>S:\a\b.exe</c>.</summary>
