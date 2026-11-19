@@ -193,7 +193,8 @@ internal sealed class DesktopPortalLibraryPicker : ISteamLibraryPortal, IAsyncDi
 
                 if (notification.IsCompletion)
                 {
-                    completion.TrySetException(notification.CompletionReason);
+                    // Notification<T>.Exception is only valid (and only non-null) on a completion.
+                    completion.TrySetException(notification.Exception);
                 }
                 else if (notification.HasValue && notification.Value is not null)
                 {
