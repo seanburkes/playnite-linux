@@ -99,3 +99,60 @@ AUDIT post-teardown app=1145360 group=1954090 app_or_group_rows=0 fresh_runtime_
 AUDIT post-teardown app=1145360 group=1964019 app_or_group_rows=0 fresh_runtime_rows=0 original_steam_clients=1/1
 AUDIT final packaged_exit=0 flows=4 clean_tables=True
 ```
+
+## Rerun with escaped Wine survivor detection
+
+A review found that the original packaged scan could miss a wineserver that
+entered its own group before the tracker observed its ancestry. The updated
+harness compares PID and start ticks with a complete pre-launch snapshot for
+each flow. Its post-disposal scan checks the game group, known identities,
+executables and argument paths under the selected install or prefix, and fresh
+Wine process names from kernel metadata, executables or the first argument.
+A fresh Wine process with an ambiguous prefix also fails the isolated acceptance
+run. The scan only observes and reports. A synthetic test covers a daemonized
+wineserver in another group with no observed ancestry.
+
+The rerun used a mounted `Playnite-Linux-x86_64.AppImage` assembled with the
+commands above from clean commit `264554eb0670719e81e169eee6b5a3c4c0a99ddc`.
+The artifact was 46,471,672 bytes with SHA-256
+`7da405857ac0794755c7fb8705ee19f338968471abfbfcd75ad02922144b4bab`.
+Version `1.0.0.0`, headless smoke, and dry-run manifest inspection passed.
+The four real Steam launches then ran on the same signed-in Linux desktop
+without a login, prompt, or window interaction.
+
+| Flow | Terminal state | PID / start ticks / PGID | Observed executable | Elapsed |
+| --- | --- | --- | --- | ---: |
+| Native `770100` stop | `Stopped` | `2498098 / 234998905 / 2497957` | `steamapps/common/One Deck Dungeon/OneDeckDungeon.x86_64` | 7.1 s |
+| Native `770100` cancel | `Cancelled` | `2514771 / 235001373 / 2514734` | `steamapps/common/One Deck Dungeon/OneDeckDungeon.x86_64` | 3.7 s |
+| Proton `1145360` stop | `Stopped` | `2525220 / 235004487 / 2525220` | `steamapps/common/Proton - Experimental/files/lib/wine/i386-unix/wine64-preloader` | 10.2 s |
+| Proton `1145360` cancel | `Cancelled` | `2532900 / 235007192 / 2532900` | `steamapps/common/Proton - Experimental/files/lib/wine/i386-unix/wine64-preloader` | 6.0 s |
+
+The independent host observer saw wineserver in a separate group during both
+Hades launches. Its PID/start ticks/PGID were
+`2524814 / 235004332 / 2524814` for stop and
+`2532530 / 235007052 / 2532530` for cancel. All four packaged scans finished
+with no survivors. The packaged harness retained all 11 original Steam
+identities after each flow and made one scoped game-identity pidfd `SIGTERM`
+request per flow. No group, Steam client, or helper received a signal.
+
+The relevant lines follow in flow order.
+
+```text
+SURVIVOR SCAN baseline_live=491 post_live=490 complete=True survivors=0
+STOP REPORT degraded=False reason=Attributed game identities gone; observed group empty
+AUDIT post-teardown app=770100 group=2497957 app_or_group_rows=0 fresh_runtime_rows=0 original_steam_clients=1/1
+
+SURVIVOR SCAN baseline_live=487 post_live=495 complete=True survivors=0
+STOP REPORT degraded=False reason=Attributed game identities gone; observed group empty
+AUDIT post-teardown app=770100 group=2514734 app_or_group_rows=0 fresh_runtime_rows=0 original_steam_clients=1/1
+
+SURVIVOR SCAN baseline_live=494 post_live=497 complete=True survivors=0
+STOP REPORT degraded=False reason=Attributed game identities gone; observed group empty
+AUDIT post-teardown app=1145360 group=2525220 app_or_group_rows=0 fresh_runtime_rows=0 original_steam_clients=1/1
+
+SURVIVOR SCAN baseline_live=494 post_live=496 complete=True survivors=0
+STOP REPORT degraded=False reason=Attributed game identities gone; observed group empty
+AUDIT post-teardown app=1145360 group=2532900 app_or_group_rows=0 fresh_runtime_rows=0 original_steam_clients=1/1
+
+AUDIT final packaged_exit=0 flows=4 clean_tables=True
+```
