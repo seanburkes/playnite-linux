@@ -189,6 +189,10 @@ src/Playnite.Steam/Artwork/README.md	p5-003	74475aef9353c4a7459ca838d9c3736b1be5
 src/Playnite.Steam/AssemblyMarker.cs	p2-001	9afd818ae8a695e921bb98f386bfceb83d0059db	pull/29
 src/Playnite.Steam/AssemblyMarker.cs	p2-002	abdb82bedd0bcadfe93c1fc6f11937c55b116b7c	pull/37
 src/Playnite.Steam/KeyValues.cs	p5-001	777578cc81efb0130b41924c282542f0b346836c	pull/109
+src/Playnite.Steam/Portal/PortalSteamLibraryImporter.cs	p5-008	c72614dda10fc9fa89995c2b58b41c37cecf2441	pull/156
+src/Playnite.Steam/Portal/SteamManifestSet.cs	p5-008	c72614dda10fc9fa89995c2b58b41c37cecf2441	pull/156
+src/Playnite.Steam/Portal/SteamPortalContracts.cs	p5-008	c72614dda10fc9fa89995c2b58b41c37cecf2441	pull/156
+src/Playnite.Steam/Portal/SteamPortalGrantStore.cs	p5-008	c72614dda10fc9fa89995c2b58b41c37cecf2441	pull/156
 src/Playnite.Steam/SteamDiscovery.cs	p5-002	f8aed2fe6b29918fbe6bc29dd5f3b54a7af6fcee	pull/112
 src/Playnite.Steam/SteamDiscoveryModels.cs	p5-002	f8aed2fe6b29918fbe6bc29dd5f3b54a7af6fcee	pull/112
 src/Playnite.Steam/SteamFileSystem.cs	p5-002	f8aed2fe6b29918fbe6bc29dd5f3b54a7af6fcee	pull/112
@@ -289,6 +293,7 @@ tests/Playnite.Core.Tests/Sessions/SessionTestDoubles.cs	p5-004	064e261b5bffa6c4
 tests/Playnite.Core.Tests/SettingsMigrationTests.cs	p4-004	a6f8bfc7e3cf94a37c5c043da6f2e90609b2ba6b	pull/91
 tests/Playnite.Core.Tests/Steam/SteamDiscoveryTests.cs	p5-002	f8aed2fe6b29918fbe6bc29dd5f3b54a7af6fcee	pull/112
 tests/Playnite.Core.Tests/Steam/SteamParserTests.cs	p5-001	777578cc81efb0130b41924c282542f0b346836c	pull/109
+tests/Playnite.Core.Tests/Steam/SteamPortalTests.cs	p5-008	c72614dda10fc9fa89995c2b58b41c37cecf2441	pull/156
 tests/Playnite.Core.Tests/Steam/SteamRealCorpusDiscoveryTests.cs	p5-002	f82c3d46ae122098228dc34349fbd955cafa8177	pull/146
 tests/Playnite.Core.Tests/TestDoubles/MemoryEnvironment.cs	*	d6401f1f07c69474d0ce395797ab694bedf019e7	pull/68
 tests/Playnite.Core.Tests/TestDoubles/MemoryFileSystem.cs	*	d6401f1f07c69474d0ce395797ab694bedf019e7	pull/68
