@@ -25,32 +25,16 @@ internal sealed class DesktopPortalLibraryPicker : ISteamLibraryPortal, IAsyncDi
     {
         ArgumentException.ThrowIfNullOrEmpty(title);
         await pick.WaitAsync(cancellationToken).ConfigureAwait(false);
+        var subscriptions = new List<IDisposable>();
         try
         {
             var current = await ConnectionAsync(cancellationToken).ConfigureAwait(false);
             var token = "playnite_" + Guid.NewGuid().ToString("N");
+            var sender = (current.UniqueName ?? throw new InvalidOperationException("The session bus connection has no unique name."))
+                .TrimStart(':').Replace('.', '_');
+            var expectedPath = $"/org/freedesktop/portal/desktop/request/{sender}/{token}";
             var completion = new TaskCompletionSource<PortalResponse?>(TaskCreationOptions.RunContinuationsAsynchronously);
-            using var subscription = await current.AddMatchAsync(
-                new MatchRule
-                {
-                    Type = MessageType.Signal,
-                    PathNamespace = "/org/freedesktop/portal/desktop/request",
-                    Interface = Request,
-                    Member = "Response",
-                },
-                static (Message message, object? state) => ReadResponse(message, (string)state!),
-                (Notification<PortalResponse?> notification) =>
-                {
-                    if (notification.Exception is not null)
-                    {
-                        completion.TrySetException(notification.Exception);
-                    }
-                    else if (notification.HasValue && notification.Value is not null)
-                    {
-                        completion.TrySetResult(notification.Value);
-                    }
-                },
-                false, ObserverFlags.None, token).ConfigureAwait(false);
+            subscriptions.Add(await WatchAsync(current, expectedPath, token, completion).ConfigureAwait(false));
 
             var writer = current.GetMessageWriter();
             writer.WriteMethodCallHeader(Destination, DesktopPath, FileChooser, "OpenFile", "ssa{sv}");
@@ -67,6 +51,11 @@ internal sealed class DesktopPortalLibraryPicker : ISteamLibraryPortal, IAsyncDi
             var handle = await current.CallMethodAsync(writer.CreateMessage(),
                 static (Message message, object? _) => message.GetBodyReader().ReadObjectPathAsString(),
                 null).ConfigureAwait(false);
+            if (!string.Equals(handle, expectedPath, StringComparison.Ordinal))
+            {
+                subscriptions.Add(await WatchAsync(current, handle, token, completion).ConfigureAwait(false));
+            }
+
             PortalResponse? response;
             try
             {
@@ -76,6 +65,11 @@ internal sealed class DesktopPortalLibraryPicker : ISteamLibraryPortal, IAsyncDi
             {
                 await CloseRequestAsync(current, handle).ConfigureAwait(false);
                 throw;
+            }
+
+            foreach (var subscription in subscriptions)
+            {
+                subscription.Dispose();
             }
 
             if (response is null)
@@ -117,6 +111,11 @@ internal sealed class DesktopPortalLibraryPicker : ISteamLibraryPortal, IAsyncDi
         }
         finally
         {
+            foreach (var subscription in subscriptions)
+            {
+                subscription.Dispose();
+            }
+
             pick.Release();
         }
     }
@@ -131,6 +130,30 @@ internal sealed class DesktopPortalLibraryPicker : ISteamLibraryPortal, IAsyncDi
 
         await ValueTask.CompletedTask.ConfigureAwait(false);
     }
+
+    private static ValueTask<IDisposable> WatchAsync(DBusConnection connection, string path, string token,
+        TaskCompletionSource<PortalResponse?> completion) =>
+        connection.AddMatchAsync(
+            new MatchRule
+            {
+                Type = MessageType.Signal,
+                Path = path,
+                Interface = Request,
+                Member = "Response",
+            },
+            static (Message message, object? state) => ReadResponse(message, (string)state!),
+            (Notification<PortalResponse?> notification) =>
+            {
+                if (notification.Exception is not null)
+                {
+                    completion.TrySetException(notification.Exception);
+                }
+                else if (notification.HasValue && notification.Value is not null)
+                {
+                    completion.TrySetResult(notification.Value);
+                }
+            },
+            false, ObserverFlags.None, token);
 
     private static async Task CloseRequestAsync(DBusConnection connection, string handle)
     {
