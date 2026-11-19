@@ -460,30 +460,57 @@ path from the manifest: that bypasses Steam and its runtime contract. **[decisio
 
 - Open via the desktop opener (`xdg-open`) only as a fallback when the `steam` executable is
   not available. Argument-list spawning still applies.
+- Inside the Playnite Flatpak the opener is the only route and delegates to the desktop
+  `org.freedesktop.portal.OpenURI` portal (ADR-020 amendment). The `steam` executable is not on
+  `PATH` and is not resolved. This is a launch-only request: process tracking is deferred.
 - The frozen v10 oracle opens Steam URIs through `ProcessStarter.StartUrl`
   (`legacy/source/Playnite/Common/ProcessStarter.cs:70`) and has no Steam library logic;
   this is a process-launch reference only, not Steam behaviour parity. **[v10]**
 - Other URI routes (for example a `run` or `launch` path) are **UNKNOWN**; do not use them
   without a probe.
 
-### 6.4 Host Steam launch and tracking from Flatpak [deferred to v1.1]
+### 6.4 Launch from Flatpak — launch-only through OpenURI [decision]
 
-ADR-020 defers Steam launch and session tracking from the Playnite Flatpak to v1.1. No general
-host-command authority is granted and no host helper service is built for v1. The capture
-host lacked Flatpak. The historical probe candidates were:
+Inside the Playnite Flatpak, v1 launches a selected game by opening the §6.3 Steam
+rungameid URI through the desktop OpenURI portal with the sandbox `xdg-open`:
+
+```
+/usr/bin/xdg-open <the §6.3 steam rungameid URI for the decimal app id>
+```
+
+The executable and the single URI argument are passed as an argv vector, never a shell string.
+The app id is validated as a strict decimal `uint` before the URI is built; signs, whitespace,
+hex, exponents, fractions, overflow and any injected text are rejected. A zero opener exit means
+the portal accepted the request, not that the game started.
+
+The v1 product surface is the shipped CLI command `playnite launch <appid>`. It selects the
+launch mode from the host: Flatpak uses this OpenURI path, native/AppImage keeps the tracked
+launcher with a minimal console reporter. The desktop GUI play action is **deferred**; it is not
+claimed by this section.
+
+This mode is deliberately **launch-only**:
+
+- Tracking is **UNKNOWN**. Steam owns the game process, and the sandbox cannot observe host
+  PIDs. Playnite reports no start confirmation, no exit, no playtime and no tracked stop.
+- The user stops the game manually in Steam. The launch-only surface has no stop or signal
+  method, so it cannot signal a host process.
+- No `flatpak-spawn`, host command, filesystem grant, `talk-name` or manifest change is used.
+  The allowlist remains exactly `wayland`, `fallback-x11`, `ipc` and `dri`.
+
+Native and AppImage keep the existing launch-plus-tracking path in §§6.2 and 7 unchanged.
+Process tracking from Flatpak is **deferred to v1.1**; a companion service would be considered
+only if demand exists and would need its own minimal, audited host surface. The historical
+`flatpak-spawn --host` candidates were never executed and are not the v1 route:
 
 ```
 flatpak-spawn --host flatpak run com.valvesoftware.Steam -applaunch <appid>
-```
-
-and, for a native install reachable from inside a sandbox:
-
-```
 flatpak-spawn --host steam -applaunch <appid>
 ```
 
-Neither was executed. The p1-010 Flatpak spike concluded **inconclusive** for host launch and
-host PID visibility. Both require v1.1 validation before any Flatpak acceptance claim.
+Both are recorded only as rejected historical probes. No Flatpak host-tracking acceptance is
+claimed. The shipped CLI `playnite launch <appid>` command is the v1 product surface; the
+desktop GUI play action is deferred. Criterion 3 is closable only as this adjusted launch-only
+scope, not as `flatpak-spawn` host tracking.
 
 ### 6.5 Launch options [host/unknown]
 
@@ -541,7 +568,8 @@ implied.
   alive after the game process is gone, and must not start a session on its own.
 - **DECISION**: a session starts only when a matching process is observed, ends after a
   debounce (for example 5 s) of confirmed absence, and can always be stopped manually.
-- Flatpak host PID visibility is **UNKNOWN** (p1-010 inconclusive) and deferred to v1.1.
+- Flatpak host PID visibility is **UNKNOWN** (p1-010 inconclusive). ADR-020's launch amendment
+  makes Flatpak launch-only through OpenURI; tracking from the sandbox is deferred to v1.1.
 
 ## 8. Artwork and metadata caches
 
@@ -615,7 +643,7 @@ artwork, despite the `librarycache` name.
 | Steam not running / stale `steam.pid` | `steam -applaunch` may start the client (**UNVERIFIED** on this host); if launch does not produce a session, surface the error. Do not treat the pid file as liveness. |
 | Launch command exits 0 | Not proof of start; the tracker decides. |
 | Game exits immediately | Session ends; report a short-session warning. |
-| Host Steam from the Playnite Flatpak | **DEFERRED to v1.1** by ADR-020. Host launch, host PID visibility, and narrow host-library access remain unverified. |
+| Host Steam from the Playnite Flatpak | **Launch-only** by ADR-020's OpenURI amendment: open the §6.3 Steam rungameid URI through the desktop portal and report tracking **UNKNOWN**; the user stops the game in Steam. Host PID visibility and tracking remain **DEFERRED to v1.1**; no host command or `flatpak-spawn`. |
 | Multiple accounts | See §9.1. |
 | Offline mode | See §9.2. |
 | Duplicate appid across libraries | First library in file order wins; report the duplicate. |
@@ -670,19 +698,25 @@ empty-achievement `librarycache` JSON.
 - Fixture app set matches the expected list exactly, including `StateFlags 6` and the broken
   entries.
 - Real install launches and stops a native title and a Proton title.
-- AppImage is the only Steam-integrated package for v1. A packaged AppImage host-library read
-  still needs evidence.
+- AppImage keeps the launch-plus-tracking integration. The Flatpak **launch-only** path through
+  OpenURI is the shipped CLI `playnite launch <appid>` and reports tracking UNKNOWN;
+  host-library read uses the portal described in
+  [`p5-008-host-library-portal.md`](p5-008-host-library-portal.md).
+- A packaged AppImage host-library read and a packaged Flatpak OpenURI launch need evidence.
 - No orphan processes after cancel/teardown on the v1 AppImage native and Proton paths.
-- ADR-020 defers Flatpak host Steam launch, tracking, and host-library reads to v1.1. The
-  Phase 5 criteria remain recorded in [the pending assessment](gates/P5-pending.md).
+- ADR-020 defers Flatpak process tracking to v1.1. The Phase 5 criteria remain recorded in
+  [the pending assessment](gates/P5-pending.md); criterion 3 is closable only as the adjusted
+  launch-only scope, not as `flatpak-spawn` host tracking. The desktop GUI play action is
+  deferred.
 - No network on the UI thread.
 - No protected path changes without the declared `oracle-change` route through the
   protected-path gate.
 
 ## 11. Unknowns still open
 
-1. Flatpak Steam directory layout, `flatpak-spawn` behaviour, host PID visibility, and narrow
-   host-library access. Steam integration from the Playnite Flatpak is deferred to v1.1.
+1. Steam directory layout inside the Flatpak and host PID visibility. The v1 Flatpak reads a
+   user-granted library through the portal and launches through OpenURI with tracking UNKNOWN;
+   host process tracking remains deferred to v1.1.
 2. Legacy `libraryfolders.vdf` index form (accepted by policy, not observed here).
 3. Steam's own duplicate-key and escape semantics remain unobserved; the launcher's parser
    policy is resolved and tested in §3.2, not claimed as host evidence.

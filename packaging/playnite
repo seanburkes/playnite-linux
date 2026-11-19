@@ -8,4 +8,8 @@ if [ "${1:-}" = steam-library-import ]; then
     shift
     exec "$root/steam-import/Playnite.Steam.Import" "$@"
 fi
+if [ "${1:-}" = launch ]; then
+    shift
+    exec "$root/launch/Playnite.Launch" "$@"
+fi
 exec "$root/desktop/Playnite.Desktop" "$@"

@@ -21,6 +21,10 @@ dotnet publish "$out/source/tools/p5-008-steam-portal/Playnite.Steam.Import.cspr
     -c Release -r linux-x64 --self-contained true \
     -p:RuntimeFrameworkVersion=11.0.0 -p:RestoreLockedMode=false \
     -o "$out/payload/lib/playnite/steam-import"
+dotnet publish "$out/source/tools/p5-008-launch/Playnite.Launch.csproj" \
+    -c Release -r linux-x64 --self-contained true \
+    -p:RuntimeFrameworkVersion=11.0.0 -p:RestoreLockedMode=false \
+    -o "$out/payload/lib/playnite/launch"
 install -Dm755 "$inputs/playnite" "$out/payload/bin/playnite"
 id=io.github.playnite_linux.Playnite
 install -Dm644 "$inputs/$id.desktop" "$out/payload/share/applications/$id.desktop"

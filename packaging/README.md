@@ -5,7 +5,8 @@ not the real application payload. No signing, update channel, or ARM64 support i
 The icon is a packaging-only shell mark, not a final product asset.
 
 `playnite --version` dispatches to the packaged CLI (expected `1.0.0.0`);
-other arguments dispatch to the packaged desktop shell. Both are self-contained
+`playnite launch <appid>` dispatches to the packaged launch command; other arguments
+dispatch to the packaged desktop shell. All are self-contained
 .NET **11.0.0**, published with the **11.0.100** SDK from `global.json`.
 RID-specific restore happens in a source export, never in the tracked lockfiles.
 Assembly rejects dirty checkouts and reads both product and packaging inputs from
