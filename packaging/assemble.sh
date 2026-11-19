@@ -17,6 +17,10 @@ for project in Cli Desktop; do
         -p:RuntimeFrameworkVersion=11.0.0 -p:RestoreLockedMode=false \
         -o "$out/payload/lib/playnite/${project,,}"
 done
+dotnet publish "$out/source/tools/p5-008-steam-portal/Playnite.Steam.Import.csproj" \
+    -c Release -r linux-x64 --self-contained true \
+    -p:RuntimeFrameworkVersion=11.0.0 -p:RestoreLockedMode=false \
+    -o "$out/payload/lib/playnite/steam-import"
 install -Dm755 "$inputs/playnite" "$out/payload/bin/playnite"
 id=io.github.playnite_linux.Playnite
 install -Dm644 "$inputs/$id.desktop" "$out/payload/share/applications/$id.desktop"
