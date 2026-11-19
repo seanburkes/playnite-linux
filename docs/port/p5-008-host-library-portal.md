@@ -87,6 +87,9 @@ that override itself.
 
 ## Evidence
 
-Recorded in `docs/port/units/p5-008.ledger.d/` and in the pull request body: packaged artifact
-names, sha256, real linux-ci run, effective permissions, the pre-grant negative control and the
-post-grant app set.
+Recorded in `docs/port/units/p5-008.ledger.d/156-host-library-portal.tsv`, in the pull request
+body, and under `/home/sean/src/firstmate/data/p5-008-portal/evidence/`: packaged artifact names,
+sha256, the real linux-ci run of the final head, effective permissions, the pre-grant negative
+control and the post-grant app set. The run is made from the packaged AppImage and the installed
+Flatpak bundle built from the same head; the Flatpak sandbox is left without any filesystem or
+talk-name grant.
