@@ -191,7 +191,7 @@ internal sealed class DesktopPortalLibraryPicker : ISteamLibraryPortal, IAsyncDi
     private static async Task CloseRequestAsync(DBusConnection connection, string handle)
     {
         var writer = connection.GetMessageWriter();
-        writer.WriteMethodCallHeader(Destination, handle, Request, "Close", string.Empty);
+        writer.WriteMethodCallHeader(Destination, handle, Request, "Close");
         await connection.CallMethodAsync(writer.CreateMessage()).ConfigureAwait(false);
     }
 
@@ -263,9 +263,14 @@ internal sealed class DesktopPortalLibraryPicker : ISteamLibraryPortal, IAsyncDi
         string objectPath, string @interface, string member, string signature, string? argument = null)
     {
         var writer = connection.GetMessageWriter();
-        writer.WriteMethodCallHeader(destination, objectPath, @interface, member, signature);
-        if (signature.Length != 0)
+        if (signature.Length == 0)
         {
+            // An empty signature header is invalid D-Bus; omit the header entirely.
+            writer.WriteMethodCallHeader(destination, objectPath, @interface, member);
+        }
+        else
+        {
+            writer.WriteMethodCallHeader(destination, objectPath, @interface, member, signature);
             writer.WriteString(argument ?? throw new ArgumentException("A string argument is required.", nameof(argument)));
         }
 
