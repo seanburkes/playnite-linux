@@ -70,7 +70,7 @@ manifest or permission file changes are needed: the Flatpak manifest and
 ## Acceptance
 
 The real-machine acceptance ran from clean code head
-`2a507118e7680e1688846e37cc11212e33accd83` on 2026-11-19. The packaged
+`d169fe719a4f2e493ca5db039c4be9c0b713dcc8` on 2026-11-19. The packaged
 `playnite steam-library-import --flatpak-launch` entry already ships in the Flatpak payload, so
 no packaging, manifest or permission file changed.
 
@@ -80,8 +80,8 @@ Artifacts:
 
 | Artifact | Size | SHA-256 / id |
 | --- | ---: | --- |
-| `Playnite-Linux-x86_64-final.flatpak` | 36,343,352 bytes | `50df0f27aadb4889e1f57cd2335e66f5ae77866d20496207a3e9bc14d9b4fc15` |
-| installed Flatpak OSTree commit | — | `2345876d88a7c28faaa0edafe800c77cafcbfe87a1937e4cd635ccbe5626b62f` |
+| `Playnite-Linux-x86_64-route-final.flatpak` | 36,338,640 bytes | `f9e8928444e59bffbffe34d1104d4133f9dbf6a0ad2cba4fa67060cd861283e8` |
+| installed Flatpak OSTree commit | — | `fed6accb17bd1625257c2ae7405084b857e678fce37e51e72bc9148dfe88c4c7` |
 
 The installed sandbox reported exactly:
 
@@ -111,8 +111,8 @@ detail said game start and playtime are UNKNOWN and that the user must stop the 
 
 | Title | Selection | Launch evidence | Playnite tracking |
 | --- | --- | --- | --- |
-| native `770100` One Deck Dungeon | native/unknown (Steam owns selection) | host PID `1809098` started as `steamapps/common/One Deck Dungeon/OneDeckDungeon.x86_64` | UNKNOWN; no Playnite process or handle remained |
-| Proton `1145360` Hades | Proton (account override and prefix markers) | Steam showed its three-way launch-options dialog (owner action); host PID `1857373` ran `S:\steamapps\common\Hades\x64Vk\Hades.exe` under Proton Experimental | UNKNOWN; no Playnite process or handle remained |
+| native `770100` One Deck Dungeon | native/unknown (Steam owns selection) | host PID `2152718` started as `steamapps/common/One Deck Dungeon/OneDeckDungeon.x86_64` | UNKNOWN; no Playnite process or handle remained |
+| Proton `1145360` Hades | Proton (account override and prefix markers) | host PID `2165414` ran `S:\steamapps\common\Hades\x64Vk\Hades.exe` under Proton Experimental; Steam log recorded `gameID 1145360` | UNKNOWN; no Playnite process or handle remained |
 
 The owner stopped each title outside Playnite with a manual `SIGTERM` to the game/runtime
 process; the Flatpak mode sent no signal. Post-stop process tables contained no title or Wine
@@ -123,17 +123,17 @@ sandbox.
 
 | Artifact | Size | SHA-256 |
 | --- | ---: | --- |
-| `Playnite-Linux-x86_64-final.AppImage` | 46,316,024 bytes | `c4be64e09c36c981b824175fba6cee9b91a67e223947bc172af1455c417e5741` |
+| `Playnite-Linux-x86_64-route-final.AppImage` | 46,311,928 bytes | `4a15bd315dd074dbf41be08929bb5aab9f5e90a71726a22d9078d02fde4f9e26` |
 
 The AppImage reported `1.0.0.0`, passed headless smoke and dry-run inspection, then ran the
 unchanged tracked acceptance for native `770100` and Proton `1145360`:
 
 | Flow | Terminal state | Attributed identity | Result |
 | --- | --- | --- | --- |
-| native stop | `Stopped` | pid `1893452`, start ticks `242335433`, pgid `1893287` | PASS, survivors 0, non-degraded |
-| native cancel | `Cancelled` | pid `1902510`, start ticks `242338076`, pgid `1902477` | PASS, survivors 0, non-degraded |
-| Proton stop | `Stopped` | pid `1913803`, start ticks `242340885`, pgid `1913803`; `Hades.exe` through Proton | PASS, survivors 0, non-degraded |
-| Proton cancel | `Cancelled` | pid `1923266`, start ticks `242343636`, pgid `1923266`; `Hades.exe` through Proton | PASS, survivors 0, non-degraded |
+| native stop | `Stopped` | pid `2198956`, start ticks `242414285`, pgid `2198923` | PASS, survivors 0, non-degraded |
+| native cancel | `Cancelled` | pid `2207232`, start ticks `242416656`, pgid `2207199` | PASS, survivors 0, non-degraded |
+| Proton stop | `Stopped` | pid `2218882`, start ticks `242419445`, pgid `2218882`; `Hades.exe` through Proton | PASS, survivors 0, non-degraded |
+| Proton cancel | `Cancelled` | pid `2229580`, start ticks `242422227`, pgid `2229580`; `Hades.exe` through Proton | PASS, survivors 0, non-degraded |
 
 Every flow printed `POST-TEARDOWN complete=True survivors=0 tracked=1
 original_clients_retained=11/11` and `STOP REPORT degraded=False`. The tracked path therefore
