@@ -94,6 +94,66 @@ public sealed class SteamAcceptanceSurvivorTests
     }
 
     [Fact]
+    public async Task Detached_worker_whose_relative_argv_target_was_unlinked_is_a_survivor()
+    {
+        var library = Directory.CreateTempSubdirectory();
+        try
+        {
+            var target = Target(library.FullName);
+            Directory.CreateDirectory(target.App.InstallPath);
+            var script = Path.Combine(target.App.InstallPath, "worker.py");
+            await File.WriteAllTextAsync(script, """
+                import os, select, sys
+                os.setsid()
+                print("ready", flush=True)
+                select.select([sys.stdin], [], [], 30)
+                """, TestContext.Current.CancellationToken);
+            var start = new ProcessStartInfo("/usr/bin/python3")
+            {
+                UseShellExecute = false,
+                WorkingDirectory = target.App.InstallPath,
+                RedirectStandardInput = true,
+                RedirectStandardOutput = true,
+                ArgumentList = { "./worker.py" },
+            };
+            using var worker = Assert.IsType<Process>(Process.Start(start));
+            try
+            {
+                Assert.Equal("ready", await worker.StandardOutput.ReadLineAsync().WaitAsync(TimeSpan.FromSeconds(5)));
+                File.Delete(script);
+                Assert.False(File.Exists(script));
+
+                var host = new LinuxExternalProcessHost();
+                var after = await host.SnapshotAsync(captureWorkingDirectories: true, TestContext.Current.CancellationToken);
+                var row = Assert.Single(after.Processes, entry => entry.Process.Identity.ProcessId == worker.Id);
+                Assert.Equal(["/usr/bin/python3", "./worker.py"], row.CommandLine);
+                Assert.Equal(Path.Combine(target.App.InstallPath, "worker.py"), Path.GetFullPath(Path.Combine(row.WorkingDirectory!, "./worker.py")));
+
+                // The pre-fix scan combined the relative argument with the worker's own cwd
+                // and then required realpath to resolve it. With the script unlinked, realpath
+                // fails and that scan returns no app-path evidence, so the worker survives
+                // unreported. The fixed scan judges the lexical cwd-relative path instead.
+                Assert.False(PreFixScanFindsAppArg(target, Files, row));
+
+                var survivors = SteamAcceptanceSurvivorScan.Find(target, Files, new([], true),
+                    after with { Processes = [row] }, Environment.ProcessId, []);
+
+                Assert.Same(row, Assert.Single(survivors).Entry);
+                Assert.False(worker.HasExited);
+            }
+            finally
+            {
+                worker.StandardInput.Close();
+                await worker.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(5));
+            }
+        }
+        finally
+        {
+            library.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
     public void Executable_and_argv_paths_under_the_app_roots_count_even_for_wrappers()
     {
         var library = Directory.CreateTempSubdirectory();
@@ -138,4 +198,48 @@ public sealed class SteamAcceptanceSurvivorTests
 
     private static ExternalProcessEntry Entry(ProcessIdentity identity, string? name, string? executable, string? argv0) =>
         new(new(identity, 1, true), executable, argv0 is null ? null : [argv0]) { ProcessName = name };
+
+    // The pre-fix argv predicate, kept only for the unlinked-target regression: a relative
+    // argument was combined with the process cwd and then had to survive realpath, so a
+    // missing target produced null and no survivor.
+    private static bool PreFixScanFindsAppArg(SteamLaunchTarget target, ISteamFileSystem files, ExternalProcessEntry row)
+    {
+        foreach (var argument in row.CommandLine ?? [])
+        {
+            var separator = argument.IndexOf('=');
+            var path = separator > 2 && argument.StartsWith("--", StringComparison.Ordinal)
+                ? argument[(separator + 1)..]
+                : argument;
+            if (string.IsNullOrEmpty(path))
+            {
+                continue;
+            }
+
+            var absolute = Path.IsPathFullyQualified(path);
+            if (!absolute)
+            {
+                if (ProtonCommandLine.ResolveAppPath(target, path) is not null)
+                {
+                    return true;
+                }
+
+                if (row.WorkingDirectory is null)
+                {
+                    continue;
+                }
+
+                path = Path.Combine(row.WorkingDirectory, path);
+            }
+
+            var resolved = files.GetRealPath(path);
+            if (resolved is not null && (resolved == target.App.InstallPath || resolved == target.ProtonPrefix
+                || SteamProcessAttribution.Under(resolved, target.App.InstallPath)
+                || SteamProcessAttribution.Under(resolved, target.ProtonPrefix)))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
 }

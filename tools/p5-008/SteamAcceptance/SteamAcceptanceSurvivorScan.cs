@@ -65,7 +65,9 @@ public static class SteamAcceptanceSurvivorScan
                     return false;
                 }
 
-                path = Path.Combine(workingDirectory, path);
+                // The target may already be gone, so realpath cannot resolve it. Judge the
+                // lexical path under the process's own cwd instead of dropping the candidate.
+                return InAppRoots(Path.GetFullPath(Path.Combine(workingDirectory, path)));
             }
 
             string? resolved;
