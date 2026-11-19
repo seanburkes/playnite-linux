@@ -156,3 +156,41 @@ AUDIT post-teardown app=1145360 group=2532900 app_or_group_rows=0 fresh_runtime_
 
 AUDIT final packaged_exit=0 flows=4 clean_tables=True
 ```
+
+## Rerun with relative Linux argv detection
+
+The survivor scan reads `/proc/PID/cwd` alongside argv in the post-teardown
+snapshot. It resolves relative Linux arguments from that process's working
+directory and reports paths under the selected game's install directory or
+prefix. The regression test starts `/usr/bin/python3 ./worker.py` in its own
+session with the install directory as its cwd. The old scan returned an empty
+survivor list. The fixed scan reported the worker and it stayed alive.
+
+On November 18, 2026, the mounted CI AppImage passed version `1.0.0.0`, headless
+smoke, and dry-run manifest inspection. GitHub built the artifact from merge
+checkout `215801ae341891f41cac4a801a9496e84c2d1adb` for head
+`4eaf177752143f9346d0b797d3ffb10fb231fbc2`. It was 46,246,392 bytes with SHA-256
+`6501054052ade0d066d1db1002896988037aedc9565b9ec58027903b079f45b3`.
+[AppImage packaging run](https://github.com/seanburkes/playnite-linux/actions/runs/44441401765)
+
+The live command above exited 0 on the signed-in Steam desktop. The harness
+issued one pidfd `SIGTERM` request for the attributed game identity per flow.
+All four stop reports were non-degraded and all 11 original Steam identities
+were present after each flow. Game paths are relative to the Steam library.
+
+| Flow | Terminal state | PID / start ticks / PGID | Attributed game path | Elapsed |
+| --- | --- | --- | --- | ---: |
+| Native `770100` stop | `Stopped` | `2981486 / 235122189 / 2981399` | `steamapps/common/One Deck Dungeon/OneDeckDungeon.x86_64` | 6.5 s |
+| Native `770100` cancel | `Cancelled` | `2994909 / 235124594 / 2994784` | `steamapps/common/One Deck Dungeon/OneDeckDungeon.x86_64` | 2.8 s |
+| Proton `1145360` stop | `Stopped` | `3008122 / 235127627 / 3008122` | `steamapps/common/Hades/x64/Hades.exe` | 9.4 s |
+| Proton `1145360` cancel | `Cancelled` | `3017182 / 235130481 / 3017182` | `steamapps/common/Hades/x64/Hades.exe` | 7.4 s |
+
+```text
+SURVIVOR SCAN baseline_live=487 post_live=489 complete=True survivors=0
+SURVIVOR SCAN baseline_live=489 post_live=499 complete=True survivors=0
+SURVIVOR SCAN baseline_live=496 post_live=497 complete=True survivors=0
+SURVIVOR SCAN baseline_live=498 post_live=497 complete=True survivors=0
+```
+
+Linux CI for the packaged code head passed 2,629 tests with zero failures and
+zero skips. [Linux CI run](https://github.com/seanburkes/playnite-linux/actions/runs/44441401426)
