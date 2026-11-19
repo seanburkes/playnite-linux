@@ -526,6 +526,27 @@ for v1.
 - *Assume `/proc` works inside the sandbox.* It does not for host processes.
 - *Require `--filesystem=home`.* Broad permission, Flathub review risk.
 
+**Amendment (2026-11-19) — criterion 6 un-deferred via the portal route.** This supersedes the
+read half of the decision above and the corresponding consequence. Phase 5 criterion 6 (AppImage
+and Flatpak read of a host Steam library with narrow permissions) is **un-deferred and PROVEN**
+by merged [#156](https://github.com/seanburkes/playnite-linux/pull/156) at
+`c72614dda10fc9fa89995c2b58b41c37cecf2441`. The **portal scope** is discovery only:
+
+- The **Flatpak** reads one `steamapps` directory at a time that the user grants through
+  `xdg-desktop-portal` `FileChooser`/`Documents`. It has no filesystem access of its own.
+- The **narrow-permission guarantee** is that the manifest allowlist stays exactly `wayland`,
+  `fallback-x11`, `ipc` and `dri`, enforced by the unchanged `packaging/verify-flatpak.py`.
+  There is no `filesystem` grant and no `org.freedesktop.Flatpak` talk-name, so the app can run
+  no host command. Effective permissions are identical before and after a grant.
+- The **AppImage** is unsandboxed and reads the visible host library directly.
+- **No launch, no session tracking and no host helper.** Those remain v1.1 work, and Phase 5
+  criterion 3 (Flatpak host launch through `flatpak-spawn`) stays **deferred to v1.1**. The
+  Phase 5 gate is therefore not blocked on criterion 6; it remains pending only on that
+  owner-decided deferral.
+
+Any v1.1 host helper for launch and tracking still adds a security surface and must be minimal
+and audited; the portal read alone grants no process or command authority.
+
 ---
 
 ## ADR-021 — The importer is a separate process; v1 has an explicit transport story
