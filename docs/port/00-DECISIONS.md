@@ -553,10 +553,14 @@ The user stops the game in Steam. The app id is validated as a strict decimal `u
 one argv element, and no shell parses it. No `flatpak-spawn`, host command, filesystem grant,
 `talk-name` or manifest change is introduced; the allowlist stays exactly `wayland`,
 `fallback-x11`, `ipc` and `dri`. Native and AppImage keep the existing launch-plus-tracking path
-unchanged. Phase 5 criterion 3 is closable as this **adjusted launch-only scope** (owner/captain
-call), explicitly **not** as the original `flatpak-spawn` host-tracking scope. Process tracking
-from Flatpak is deferred to v1.1 and would require a minimal audited companion service only if
-demanded; no such service is built for v1.
+unchanged. This amendment records the launch-only contract but does not by itself close Phase 5
+criterion 3: p5-008 delivers the **launch-only primitive**, reachable only from its acceptance
+harness, not a shipped product path. The shipped CLI `playnite launch <appid>` command lands in
+a follow-up PR under the CLI owning unit `p4-002`, and the desktop GUI play action is deferred;
+criterion 3 stays **not closable** until that follow-up supplies gate evidence. It must not be
+closed as the original `flatpak-spawn` host-tracking scope. Process tracking from Flatpak is
+deferred to v1.1 and would require a minimal audited companion service only if demanded; no
+such service is built for v1.
 
 Any v1.1 host helper for launch and tracking still adds a security surface and must be minimal
 and audited; the portal read alone grants no process or command authority.

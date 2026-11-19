@@ -503,7 +503,11 @@ flatpak-spawn --host steam -applaunch <appid>
 ```
 
 Both are recorded only as rejected historical probes. No Flatpak host-tracking acceptance is
-claimed, and Phase 5 criterion 3 is closable only as this adjusted launch-only scope.
+claimed. This section defines the launch-only **primitive**; p5-008 does not wire a shipped
+product surface and cannot close Phase 5 criterion 3. The shipped CLI `playnite launch <appid>`
+command lands in a follow-up under the CLI owning unit `p4-002`, the desktop GUI play action is
+deferred, and criterion 3 and its gate evidence follow that follow-up. It must not be closed as
+`flatpak-spawn` host tracking.
 
 ### 6.5 Launch options [host/unknown]
 
@@ -691,14 +695,16 @@ empty-achievement `librarycache` JSON.
 - Fixture app set matches the expected list exactly, including `StateFlags 6` and the broken
   entries.
 - Real install launches and stops a native title and a Proton title.
-- AppImage keeps the launch-plus-tracking integration. The Flatpak is **launch-only** through
-  OpenURI and reports tracking UNKNOWN; host-library read uses the portal described in
-  [`p5-008-host-library-portal.md`](p5-008-host-library-portal.md).
+- AppImage keeps the launch-plus-tracking integration. The Flatpak has a **launch-only
+  primitive** through OpenURI that reports tracking UNKNOWN; host-library read uses the portal
+  described in [`p5-008-host-library-portal.md`](p5-008-host-library-portal.md).
 - A packaged AppImage host-library read and a packaged Flatpak OpenURI launch need evidence.
 - No orphan processes after cancel/teardown on the v1 AppImage native and Proton paths.
 - ADR-020 defers Flatpak process tracking to v1.1. The Phase 5 criteria remain recorded in
-  [the pending assessment](gates/P5-pending.md); criterion 3 is closable only as the adjusted
-  launch-only scope, not as `flatpak-spawn` host tracking.
+  [the pending assessment](gates/P5-pending.md); p5-008 does not close criterion 3. The shipped
+  CLI `playnite launch <appid>` command is a follow-up under the CLI owning unit `p4-002` with
+  its own gate evidence, and the desktop GUI play action is deferred. Criterion 3 must not be
+  closed as `flatpak-spawn` host tracking.
 - No network on the UI thread.
 - No protected path changes without the declared `oracle-change` route through the
   protected-path gate.

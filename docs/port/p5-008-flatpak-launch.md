@@ -36,9 +36,16 @@ host and no shell is started.
 - Cancellation propagates and releases only our waiter. A request that may have become a game
   is never signalled; the user stops it in Steam.
 
-Native and AppImage keep the unchanged tracked path. The packaged
-`steam-library-import --flatpak-launch` command refuses to run on a non-Flatpak host instead of
-inventing a second, untracked native launch.
+Native and AppImage keep the unchanged tracked path. The acceptance harness
+(`tools/p5-008-steam-portal`, packaged as `playnite steam-library-import --flatpak-launch`)
+refuses to run on a non-Flatpak host instead of inventing a second, untracked native launch.
+
+This PR delivers the **primitive only**. `--flatpak-launch` is an acceptance-harness flag, not
+a shipped product launch surface, and the primitive has no product consumer yet. The shipped
+CLI command `playnite launch <appid>` lands in a follow-up PR under the CLI owning unit
+`p4-002`, with its own gate evidence; the desktop GUI play action is deferred. Phase 5
+criterion 3 is therefore **not closable by this PR**, and nothing here claims that the shipped
+product can launch a Flatpak Steam game.
 
 ## Tests
 
@@ -48,24 +55,28 @@ inventing a second, untracked native launch.
 - exact URI construction for `0`, `42` and `uint.MaxValue`;
 - invalid ids: empty/whitespace, signs, leading/trailing spaces, hex, exponent, fraction,
   overflow, newline and injection strings;
-- one absolute opener plus one URI argument, and shell interpreter rejection;
+- one absolute opener plus one URI argument, and `/bin/sh` rejection through the production
+  `CreateRequest`/`LaunchAsync` path with the opener never consulted (the constructor accepts
+  an absolute `/bin/sh`; `LaunchRequest` carries the shell guard);
 - accepted, nonzero and unavailable opener outcomes all report UNKNOWN and a manual Steam stop;
 - cancellation propagates with no stop/signal claim;
 - the launch-only type exposes no stop, signal, track or playtime surface;
 - a non-Flatpak host selects `Tracked` and `SteamProcessLauncher.CreateRequest()` still returns
   `steam -applaunch <appid>`.
 
-The packaged route is the existing `playnite steam-library-import` entry, which already ships
-in the Flatpak payload: `--flatpak-launch <appid>` is handled before the import modes. No
-packaging, manifest or permission file changes, and the existing packaging tests are untouched.
+The acceptance route is the existing `playnite steam-library-import` harness, which already
+ships in the Flatpak payload: `--flatpak-launch <appid>` is handled before the import modes.
+No packaging, manifest or permission file changes, and the existing packaging tests are
+untouched. That flag is evidence tooling, not a product command.
 
 ## Packaging
 
-The packaged `playnite steam-library-import` entry already ships in the Flatpak payload. A
+The p5-008 acceptance harness rides the existing `steam-import` payload binary. A
 `--flatpak-launch <appid>` argument is handled before the import modes, so no packaging,
 manifest or permission file changes are needed: the Flatpak manifest and
 `packaging/verify-flatpak.py` stay untouched, and the allowlist stays exactly `wayland`,
-`fallback-x11`, `ipc` and `dri` with no `filesystem` or `talk-name` grant.
+`fallback-x11`, `ipc` and `dri` with no `filesystem` or `talk-name` grant. No product entry
+point is added by this PR.
 
 ## Acceptance
 

@@ -89,8 +89,25 @@ public sealed class FlatpakSteamLaunchTests
     public void A_shell_opener_is_rejected_when_the_request_is_built()
     {
         var shell = new FlatpakSteamLauncher(new RecordingOpener(), "/bin/sh");
-        Assert.Throws<ArgumentException>(() => shell.CreateRequest(42));
+        var rejection = Assert.Throws<ArgumentException>(() => shell.CreateRequest(42));
+        Assert.Contains("shell", rejection.Message, StringComparison.OrdinalIgnoreCase);
         Assert.Throws<ArgumentException>(() => new FlatpakSteamLauncher(new RecordingOpener(), "xdg-open"));
+    }
+
+    [Fact]
+    public async Task A_shell_opener_is_rejected_on_the_production_launch_path()
+    {
+        // The constructor accepts any absolute path, so the /bin/sh guard must come from the
+        // production request path (CreateRequest -> LaunchRequest) and must run before the
+        // opener is consulted. LaunchAsync is the path the packaged entry uses.
+        var opener = new RecordingOpener();
+        var shell = new FlatpakSteamLauncher(opener, "/bin/sh");
+
+        var rejection = await Assert.ThrowsAsync<ArgumentException>(
+            () => shell.LaunchAsync(42, CancellationToken.None));
+
+        Assert.Contains("shell", rejection.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Null(opener.Request);
     }
 
     [Fact]
