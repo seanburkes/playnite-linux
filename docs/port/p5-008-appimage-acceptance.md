@@ -1,0 +1,101 @@
+# Packaged AppImage Steam teardown evidence
+
+On November 18, 2026, the mounted x86-64 AppImage launched, stopped, and cancelled
+One Deck Dungeon and Hades through an existing signed-in Steam client. Both games
+were installed in the host Steam library. All four flows ended with complete
+post-teardown process observations, zero matching live processes, and every
+original Steam client identity retained. The harness and host observer both
+exited successfully.
+
+This run supplies the packaged no-orphan evidence for criterion 4 of the pending
+Phase 5 gate. It records the outcomes for these two installed games on one
+Linux host. [Phase 5 gate](gates/P5-pending.md)
+
+## AppImage provenance
+
+| Artifact | Source commit | Bytes | SHA-256 |
+| --- | --- | ---: | --- |
+| CI artifact `Playnite-Linux-x86_64-AppImage`, run 44431326813 | `55076999fb21590e34d970e48ea70851eabfc5d7` | 46,131,704 | `7b0425c44df7342200b2db007160ee21ac638050440ba680d7dc45b36f7a88d2` |
+| Local `Playnite-Linux-x86_64.AppImage` | `3eca0aa407eca749ecd8b0a5a57fb55198d10552` | 46,467,576 | `7f0a9fad198d993840c6731448a76ba82e77503f1512cbac3c7ed105507188f3` |
+
+The downloaded CI artifact reported version `1.0.0.0` and passed
+`--headless --smoke` with `--appimage-extract-and-run`. The local image was
+built from a clean Git checkout with `packaging/assemble.sh`, .NET SDK 11.0.100
+and the self-contained .NET 11.0.0 linux-x64 runtime. The following commands
+used the same appimagetool 1.9.1 and type2-runtime 20251108 binaries as CI, with
+both files verified against the workflow SHA-256 pins.
+[Baseline packaging run](https://github.com/seanburkes/playnite-linux/actions/runs/44431326813)
+
+```sh
+bash packaging/assemble.sh "$build"
+mkdir "$build/artifacts"
+ARCH=x86_64 "$appimagetool" --appimage-extract-and-run --no-appstream \
+  --runtime-file "$runtime" "$build/AppDir" "$build/artifacts/Playnite-Linux-x86_64.AppImage"
+image="$build/artifacts/Playnite-Linux-x86_64.AppImage"
+"$image" --version
+"$image" --headless --smoke
+"$image" --steam-acceptance "$steam_library" 770100 "$steam_library" 1145360
+"$image" --steam-acceptance "$steam_library" 770100 "$steam_library" 1145360 \
+  --allow-launch --allow-stop
+```
+
+Here `build` is a new absolute directory and `steam_library` is the local Steam
+library root. The local image reported version `1.0.0.0` and opened and closed
+the headless smoke window. The first `--steam-acceptance` invocation read both
+installed manifests and exited in dry-run mode. Both consent flags enabled the
+live sequence shown below.
+
+## Live results
+
+The real-machine steps were reading the installed Steam library from the
+AppImage, launching the two games in the logged-in Linux desktop session, and
+observing and checking teardown in the host PID namespace. The test ran with
+`DISPLAY=:0`, `WAYLAND_DISPLAY=wayland-1`, and the user's XDG runtime directory.
+No login, prompt, or window interaction was required during the run.
+
+The attribution window was 240 seconds. Elapsed time is the time to
+attribution. The harness held each game in `Running` for five seconds before
+calling tracker stop or cancelling the tracking token. Executable paths are
+relative to the Steam library.
+
+| Flow | Terminal state | PID / start ticks / PGID | Observed executable | Elapsed | Post-teardown live rows |
+| --- | --- | --- | --- | ---: | --- |
+| Native `770100` stop | `Stopped` | `1929730 / 234844122 / 1929692` | `steamapps/common/One Deck Dungeon/OneDeckDungeon.x86_64` | 4.5 s | 0 |
+| Native `770100` cancel | `Cancelled` | `1939067 / 234846550 / 1938632` | `steamapps/common/One Deck Dungeon/OneDeckDungeon.x86_64` | 3.4 s | 0 |
+| Proton `1145360` stop | `Stopped` | `1954090 / 234849537 / 1954090` | 9.2 s | 0 |
+| Proton `1145360` cancel | `Cancelled` | `1964019 / 234852404 / 1964019` | 7.8 s | 0 |
+
+For both Proton launches, the harness resolved Wine's Windows image argument
+`S:\steamapps\common\Hades\x64\Hades.exe` through the game's own prefix
+to `steamapps/common/Hades/x64/Hades.exe`. Steam selected the game runtime.
+
+The packaged harness made one scoped pidfd `SIGTERM` request per flow for the
+game identity above. No group, Steam client, or helper signal was issued. Both
+native groups included a pressure-vessel wrapper. The host observer also saw
+Proton's wineserver in a distinct group before each Hades teardown, with
+PID/start ticks/PGID `1953705 / 234849393 / 1953705` for stop and
+`1963627 / 234852262 / 1963627` for cancel.
+
+After tracker and launcher disposal, the packaged harness checked the game
+group, known identities, observed descendants and game executable evidence in
+a fresh process-table snapshot. All four flows printed the same pair of lines.
+
+```text
+POST-TEARDOWN complete=True survivors=0 tracked=1 original_clients_retained=11/11
+STOP REPORT degraded=False reason=Attributed game identities gone; observed group empty
+```
+
+An independent same-user `/proc` observer also checked the game PGID, app IDs and
+install/prefix paths visible in process metadata, and fresh Steam runtime and
+Wine executable rows relative to the baseline. It saw the wrappers and the
+Wine prefix processes before stop/cancel, then printed the following filtered
+post-teardown process-table counts. The original Steam client remained
+`122666 / 6590265 / 121295` in every sample.
+
+```text
+AUDIT post-teardown app=770100 group=1929692 app_or_group_rows=0 fresh_runtime_rows=0 original_steam_clients=1/1
+AUDIT post-teardown app=770100 group=1938632 app_or_group_rows=0 fresh_runtime_rows=0 original_steam_clients=1/1
+AUDIT post-teardown app=1145360 group=1954090 app_or_group_rows=0 fresh_runtime_rows=0 original_steam_clients=1/1
+AUDIT post-teardown app=1145360 group=1964019 app_or_group_rows=0 fresh_runtime_rows=0 original_steam_clients=1/1
+AUDIT final packaged_exit=0 flows=4 clean_tables=True
+```
