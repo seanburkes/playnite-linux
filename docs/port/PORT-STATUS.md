@@ -5,6 +5,11 @@
 <!-- port-status:narrative:start -->
 ## Hand-written narrative
 
+**Phase state:** Phase 5 accepted 2026-11-19 on the owner-approved launch-only Flatpak scope;
+Phase 6 (Core services and SDK v7) is next. The acceptance record is
+[`gates/P5-accepted.md`](gates/P5-accepted.md); the supporting evidence assessment is
+[`gates/P5-pending.md`](gates/P5-pending.md).
+
 ## Deferred / known limitations
 
 - **D1 — Wayland accessibility (accepted v1 deferral).** Avalonia 12.1.6 exposes no AT-SPI

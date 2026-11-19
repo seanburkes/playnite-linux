@@ -1,19 +1,24 @@
-# Gate P5 — Steam and Linux platform (pending assessment)
+# Gate P5 — Steam and Linux platform (final assessment)
 
 - Date: 2026-11-19
-- Base: `c72614dda10fc9fa89995c2b58b41c37cecf2441` (`main`); earlier revisions of this
-  assessment were based on `7f28065`, `49302a4`, `1b9af6e`, `8e5984e` and `7c4498c`.
-- Owner: `p5-shards` (2026-11-19 update; initial assessment by `p5-shards2`)
-- Result: **PENDING — NOT AN ACCEPTANCE.** Criteria 1, 2, 4 and 5 are proven by the merged
-  evidence recorded below, and criterion 6 is proven by the merged portal host-library evidence
-  ([#156](https://github.com/seanburkes/playnite-linux/pull/156) at `c72614d`). Criterion 3 is
-  **DEFERRED BY OWNER DECISION** to v1.1 per ADR-020. v1 scope is satisfied **on the
-  owner-decided scope**; **Phase 5 exit is the captain's call**, and this file neither announces
-  exit nor writes acceptance. AppImage is the only Steam-integrated packaging target for v1; the
-  Flatpak does not launch or track Steam and reads only a user-granted host library through the
-  desktop portal.
+- Base: `c31b8a96d63da58921a0448f08295229cf2914d9` (`main`, merged #158); earlier revisions of
+  this assessment were based on `c72614d`, `7f28065`, `49302a4`, `1b9af6e`, `8e5984e` and
+  `7c4498c`.
+- Owner: `p5-shards` (final assessment for the 2026-11-19 acceptance; initial assessment by
+  `p5-shards2`)
+- Result: **6 PROVEN / 0 PARTIAL / 0 DEFERRED on the v1 scope.** Criteria 1, 2, 4, 5 and 6 are
+  proven by the merged evidence recorded below, and criterion 3 is proven on the
+  **owner-approved launch-only scope** by merged
+  [#158](https://github.com/seanburkes/playnite-linux/pull/158) at `c31b8a9`. This file remains
+  the evidence assessment, not the acceptance record: the captain's acceptance is
+  [`P5-accepted.md`](P5-accepted.md), decision date 2026-11-19. AppImage is the only
+  Steam-integrated packaging target for v1; inside the Flatpak, the shipped
+  `playnite launch <appid>` opens Steam through the desktop OpenURI portal, reports tracking
+  **UNKNOWN** and leaves process tracking to v1.1. No host-command authority and no host service
+  exist.
 - Review basis: worker diff-only self-assessment of merged artifacts and unit shards. No
-  independent approval and **no owner acceptance** is claimed.
+  independent approval is claimed; the acceptance itself is the captain's decision recorded in
+  [`P5-accepted.md`](P5-accepted.md), not an agent claim.
 - Addendum (follow-up to merged #123): the unit evidence table cites main-push linux-ci runs on
   the merged heads, not pull-request head runs. No criterion status changed.
 - Addendum (PR #151): criterion 4 moves to **PROVEN** on the packaged AppImage evidence merged
@@ -57,6 +62,24 @@
   v1.1. The summary is now **5 PROVEN / 0 PARTIAL / 1 DEFERRED**. v1 scope is satisfied **on the
   owner-decided scope**; **Phase 5 exit is the captain's call**, and no acceptance is written
   here.
+- Addendum (follow-up to merged #158): criterion 3 moves to **PROVEN** on the owner-approved
+  **launch-only** scope. Merged
+  [#158](https://github.com/seanburkes/playnite-linux/pull/158) at
+  `c31b8a96d63da58921a0448f08295229cf2914d9` (final head
+  `161882d5a5c4f1be747bd5c3c23ff1e7400a069f`, evidence head
+  `ca96207604ba4831842344212f66f24c33b533a2`, executable head
+  `ddc86161683ffd1aae707cb675c9dcf475dea0cc`, 8/8 checks) ships
+  `playnite launch <appid>`. Inside the packaged Flatpak the command opens the validated Steam
+  rungameid URI through the sandbox `xdg-open` and the desktop `org.freedesktop.portal.OpenURI`
+  route, reports `tracking: unknown` with `stop: manual-steam`, and exposes no playtime, stop or
+  signal surface. The packaged AppImage ran the same `playnite launch` route and the unchanged
+  tracked native and Proton flows. The manifest allowlist is unchanged at `wayland`,
+  `fallback-x11`, `ipc` and `dri`, with no filesystem or `talk-name` grant, and
+  `flatpak-spawn --host` fails in the sandbox and is never called. The original
+  `flatpak-spawn --host` host-tracking wording is **not** proven: process tracking from Flatpak
+  is deferred to v1.1, and v1 has no host-command authority and no host service. The summary is
+  now **6 PROVEN / 0 PARTIAL / 0 DEFERRED on the v1 scope**. The acceptance is the captain's
+  decision recorded in [`P5-accepted.md`](P5-accepted.md).
 - Earlier p5-008 assessment: the launch implementation merged at
   `1e842c075aeb3412323fcd467ca93aaaef03b8cb`. The first owner-authorized run of 2026-11-18
   (`data/p5-008-real-acceptance-2026-11-18.md`; logs `data/p5-008-acceptance-2026*`) left
@@ -73,19 +96,24 @@ reachable from merged `main`.
 | --- | --- | --- | --- |
 | 1 | Synthetic + redacted real fixture yields the expected app set, paths and artwork ids | **PROVEN** | Merged [#152](https://github.com/seanburkes/playnite-linux/pull/152) at `74475aef9353c4a7459ca838d9c3736b1be5a189` (final head `8e4de0b916d071c11e38811edeed771b8d0b173d`, 9/9 checks, unfiltered Core suite 2460 passed with zero skipped, two reviews clean after the P2 classifier fix) adds a real-cache artwork identity manifest. `tests/fixtures/steam/real-artwork/manifest.tsv` records 31 files across app ids 219150, 770100, 975370, 1091500 and 1145360: 15 canonical identities (app id plus one of the five documented names) and 16 hashed-name entries. The manifest self-check is `d561743a972469c6dcd10e5a7a70ffce35297cffc6ae4723d5e6ee3eff16ac25`; no image bytes or thumbnails are committed. `RealArtworkIdentityTests` verifies the manifest and self-check, materialises an empty-file tree, asserts exactly the recorded 15 canonical identities and accepts the 16 hashed entries as untyped. The classifier requires the `.jpg` suffix on the content-addressed file form and exactly two segments on the content-addressed directory form. The synthetic and redacted-real evidence previously recorded under this criterion (`SteamDiscoveryTests`, `SteamRealCorpusDiscoveryTests`, `ArtworkTests`) remains in place. **Scope:** local identity only. Image bytes, artwork availability, byte equality and the Steam CDN/remote artwork mapping remain **UNKNOWN** and out of v1 scope. |
 | 2 | A real Steam install launches and stops a native and a Proton game | **PROVEN** | The owner-authorized real Steam run recorded below launched and stopped native One Deck Dungeon (`770100`) and Proton Hades (`1145360`), and repeated both launches with cancellation. All four flows passed with a non-degraded stop report. The run's accepted head `649d25f` has the same tree as merged `d54e897`. |
-| 3 | Inside Flatpak, `flatpak-spawn --host` launches Steam and tracking observes the game process | **DEFERRED BY OWNER DECISION** | ADR-020 defers Flatpak launch and tracking to v1.1. The criterion is neither proven nor failed. No `flatpak-spawn` implementation exists in `src/`, neither historical probe in Steam spec §6.4 was executed, and the p1-010 Flatpak spike was **inconclusive** for host launch and host PID visibility. No Flatpak acceptance run exists. |
+| 3 | Inside Flatpak, `flatpak-spawn --host` launches Steam and tracking observes the game process | **PROVEN (owner-approved launch-only scope)** | Merged [#158](https://github.com/seanburkes/playnite-linux/pull/158) at `c31b8a96d63da58921a0448f08295229cf2914d9` (final head `161882d5a5c4f1be747bd5c3c23ff1e7400a069f`, evidence head `ca96207604ba4831842344212f66f24c33b533a2`, executable head `ddc86161683ffd1aae707cb675c9dcf475dea0cc`, 8/8 checks) proves the adjusted scope: the shipped `playnite launch <appid>` opens the validated Steam rungameid URI through the sandbox `xdg-open` and the desktop `org.freedesktop.portal.OpenURI` route, and reports tracking UNKNOWN with manual Steam stop. The packaged Flatpak launched native One Deck Dungeon (`770100`) and Proton Hades (`1145360`); the packaged AppImage ran the same product command and the unchanged four-flow tracked acceptance. The manifest allowlist is unchanged at `wayland`, `fallback-x11`, `ipc` and `dri`; effective permissions are `[Context] shared=ipc; sockets=fallback-x11;wayland; devices=dri;` with no `filesystem` and no `talk-name` grant. The sandbox has no `org.freedesktop.Flatpak` talk-name, `flatpak-spawn --host true` fails with `org.freedesktop.DBus.Error.ServiceUnknown`, and the app never calls it. **The original `flatpak-spawn --host` host-tracking wording is NOT proven.** Process tracking from Flatpak is deferred to v1.1; there is no host-command authority and no host service. See "Criterion 3 packaged Flatpak launch-only evidence" below. |
 | 4 | No orphaned processes after cancel/teardown on the v1 AppImage native and Proton paths | **PROVEN** | p5-004 (`064e261b`) provides real-process proofs through `LinuxProcessLauncher`: `Real_stop_leaves_no_child`, `Real_cancel_leaves_no_child`, `Real_tracker_disposal_leaves_no_child`, `Real_launcher_shutdown_leaves_no_child`, `Real_stop_during_starting_leaves_no_child`, plus process-group containment (`setsid` launch, group kill and verification) and explicit `ProcessSurvivorException` for tracked escapees. The reparent-before-first-snapshot test is on `main` (`5c4d11a`). p5-008 merged at `1e842c0` adds group-empty proof and per-identity pidfd signalling for its attributed group (`SteamLaunchTests`: stop/cancel/disposal reaping, escaped/unrelated groups never signalled, group reuse rejected). **Packaged proof:** merged #148 at `71f4578b2d574d345e08a6ac0045c47feeb40e2f` (final head `03ca0e930d2ec8adf2c08f263f05eae1b4bd7e8a`, 8/8 checks) mounted the v1 AppImage and ran four live flows: native One Deck Dungeon (`770100`) and Proton Hades (`1145360`), each stopped and each cancelled. Every flow ended `POST-TEARDOWN complete=True survivors=0 tracked=1 original_clients_retained=11/11`, `STOP REPORT degraded=False reason=Attributed game identities gone; observed group empty`, and an independent same-user `/proc` observer printed zero app/group and fresh-runtime rows with the original Steam client still running. The harness issued one scoped game-identity pidfd `SIGTERM` per flow. No group, Steam client or helper signal was issued, and no orphan remained. The evidence is in `docs/port/p5-008-appimage-acceptance.md`; the mounted AppImage was built from clean `fa443d9730419758173a1e1033820b650b40f813` (46,471,672 bytes, SHA-256 `c216c50b8b809f9c810f879bcfb9f67840feedb9378f87135594dc52ad80317e`), with the CI AppImage at packaging run 44441401765, packaged-code linux-ci 44441401426, final-head linux-ci 44446797838 and merged-head main-push linux-ci 44449314928. The exact survivor-scan scope and its documented residual are stated under "Criterion 4 packaged AppImage evidence". |
 | 5 | Session state on the v1 AppImage native and Proton paths matches the formal model's terminal states | **PROVEN** | The written terminal-state claim, accepted by the captain ruling, is that the terminal set is exactly `Stopped`, `Cancelled` and `Failed`, that no terminal state is emitted without a proven reap, and that the observed terminals match the formal model. `docs/formal/GameSession.tla` defines the state machine; the P4 gate records the TLC run (GameSession 1401 generated / 400 distinct / depth 27, log-backed in run 43998974777). Evidence merged as [#154](https://github.com/seanburkes/playnite-linux/pull/154) at `49302a43a1a366b56b6e576a0c3bd5e8a3c9b3dc`: bounded TLC replay over the frozen model produced **two complete matching paths** and **15 positive executions** across at most five snapshots each, including the observer-failure `Failed` path after a verified reap. A mutation control changes only the `StopKind.Failure` arm from `Failed` to `Stopped`; the replay rejects it at tuple 4 (exit 2), so a wrong terminal cannot pass. `GameSessionRefinementTests` runs in the required unfiltered Core suite. The real Steam rerun on the host observed non-degraded `Running` through `Stopping` to `Stopped` or `Cancelled`; the packaged AppImage native and Proton flows also ended `Stopped` or `Cancelled`. Four intermediate-edge divergences are **ACCEPTED, DOCUMENTED IMPLEMENTATION EXTENSIONS**: cancel emits `Stopping` before `Cancelled`; cancel during running is `Stopping -> Cancelled`; a failed reap retries `Stopping -> Running`; and a zero-duration natural exit emits `Stopped` at playtime 0. The model was **not weakened** to accommodate them. **Residual:** bounded replay does not cover unbounded behaviour, and there is no packaged `Failed` witness. [Mapping, bounds and counterexamples](../p5-004-session-refinement.md). |
-| 6 | AppImage and Flatpak can read a host Steam library with narrow permissions | **PROVEN** | Merged [#156](https://github.com/seanburkes/playnite-linux/pull/156) at `c72614dda10fc9fa89995c2b58b41c37cecf2441` (final head `97b1fec46eae1df865019e289fb076384a6af45f`, 8/8 checks, both reviews clean) proves the read on both packaged formats. The packaged AppImage read the real host library directly: one library, 83 apps, root `~/.local/share/Steam`, with the expected 83-app set asserted. The installed Flatpak had no filesystem access and read the same 83 apps only through a user-granted `xdg-desktop-portal` `FileChooser`/`Documents` document. The manifest allowlist is unchanged at `wayland`, `fallback-x11`, `ipc` and `dri`; `packaging/verify-flatpak.py` is unchanged and accepts it exactly in CI. Effective permissions before and after the grant are `[Context] shared=ipc; sockets=fallback-x11;wayland; devices=dri;`: no `filesystem` grant and no `talk-name` grant. The pre-grant negative control fails: the sandbox reports `HIDDEN ~/.local/share/Steam` and `HIDDEN .../steamapps`, the direct read exits 2 with `status=unavailable`, and no grant file exists. The grant persists by document id in `steam-portal-grants.json` (0600, atomic replace) and is revalidated every run, so a revoked or deleted document is dropped and prompted for again. **Scope:** read/discovery only. No Steam launch, no session tracking and no host command; `flatpak-spawn --host` is not used. The unmounted external library `/run/media/bazzite/My Passport/SteamLibrary` was dismissed and recorded as `skipped (selection cancelled)`, contributing no apps and no grant. Criterion 3 is separate and stays deferred. |
+| 6 | AppImage and Flatpak can read a host Steam library with narrow permissions | **PROVEN** | Merged [#156](https://github.com/seanburkes/playnite-linux/pull/156) at `c72614dda10fc9fa89995c2b58b41c37cecf2441` (final head `97b1fec46eae1df865019e289fb076384a6af45f`, 8/8 checks, both reviews clean) proves the read on both packaged formats. The packaged AppImage read the real host library directly: one library, 83 apps, root `~/.local/share/Steam`, with the expected 83-app set asserted. The installed Flatpak had no filesystem access and read the same 83 apps only through a user-granted `xdg-desktop-portal` `FileChooser`/`Documents` document. The manifest allowlist is unchanged at `wayland`, `fallback-x11`, `ipc` and `dri`; `packaging/verify-flatpak.py` is unchanged and accepts it exactly in CI. Effective permissions before and after the grant are `[Context] shared=ipc; sockets=fallback-x11;wayland; devices=dri;`: no `filesystem` grant and no `talk-name` grant. The pre-grant negative control fails: the sandbox reports `HIDDEN ~/.local/share/Steam` and `HIDDEN .../steamapps`, the direct read exits 2 with `status=unavailable`, and no grant file exists. The grant persists by document id in `steam-portal-grants.json` (0600, atomic replace) and is revalidated every run, so a revoked or deleted document is dropped and prompted for again. **Scope:** read/discovery only. No Steam launch, no session tracking and no host command; `flatpak-spawn --host` is not used. The unmounted external library `/run/media/bazzite/My Passport/SteamLibrary` was dismissed and recorded as `skipped (selection cancelled)`, contributing no apps and no grant. Criterion 3 is separate and is PROVEN on the owner-approved launch-only scope above. |
 
-Summary: **5 PROVEN / 0 PARTIAL / 1 DEFERRED.** Criteria 1, 2, 4, 5 and 6 are PROVEN. Criterion 3
-is **DEFERRED BY OWNER DECISION** to v1.1. v1 scope is satisfied **on the owner-decided scope**.
-**Phase 5 exit is the captain's call**: this assessment does not announce exit and writes no
-acceptance. Criterion 1 is claimed for local artwork identity only; image bytes and the Steam
-CDN/remote mapping remain UNKNOWN. The real Steam launch evidence applies to the host install.
-Criterion 6 is a packaged read/discovery claim only: no Steam launch, no session tracking and no
-host command from Flatpak. Criterion 5 is bounded: unbounded behaviour is not covered by bounded
-replay, and there is no packaged `Failed` witness. No criterion is silently dropped.
+Summary: **6 PROVEN / 0 PARTIAL / 0 DEFERRED on the v1 scope.** Criteria 1, 2, 4, 5 and 6 are
+PROVEN by merged evidence. Criterion 3 is **PROVEN on the owner-approved launch-only scope**:
+the shipped `playnite launch <appid>` opens Steam through the desktop OpenURI portal from the
+packaged Flatpak, and the packaged AppImage keeps the tracked path. The original
+`flatpak-spawn --host` host-tracking wording is **not** proven; Flatpak process tracking is
+deferred to v1.1, and v1 has no host-command authority and no host service. Phase 5 exit is the
+captain's decision recorded in [`P5-accepted.md`](P5-accepted.md) (2026-11-19); this assessment
+does not itself write acceptance. Criterion 1 is claimed for local artwork identity only; image
+bytes and the Steam CDN/remote mapping remain UNKNOWN and out of v1 scope. The real Steam launch
+evidence applies to the host install. Criterion 6 is a packaged read/discovery claim only: no
+Steam launch, no session tracking and no host command from Flatpak. Criterion 5 is bounded:
+unbounded behaviour is not covered by bounded replay, and there is no packaged `Failed` witness.
+No criterion is silently dropped.
 
 ## Criterion 1 real artwork identity evidence
 
@@ -161,6 +189,73 @@ on disposal. Terraria `105600` exceeded the 60 s attribution window and stayed
 UNKNOWN. Hotline Miami `219150` crashed in its SDL platform plugin before attribution.
 Individual graceful SIGTERM cleanup emptied the observed game group and tree, leaving
 the Steam client alive with no orphan, group kill, client kill, or SIGKILL.
+
+## Criterion 3 packaged Flatpak launch-only evidence
+
+Merged [#158](https://github.com/seanburkes/playnite-linux/pull/158) at squash commit
+`c31b8a96d63da58921a0448f08295229cf2914d9` is the adjustment the captain accepted for
+criterion 3: Flatpak launch through the desktop OpenURI portal, with tracking explicitly left
+UNKNOWN and deferred to v1.1. The PR's final head `161882d5a5c4f1be747bd5c3c23ff1e7400a069f`
+passed all eight checks; its linux-ci run
+[44634422169](https://github.com/seanburkes/playnite-linux/actions/runs/44634422169) succeeded on
+that exact head. The evidence head `ca96207604ba4831842344212f66f24c33b533a2` passed linux-ci
+[44633395898](https://github.com/seanburkes/playnite-linux/actions/runs/44633395898), and the
+last executable head `ddc86161683ffd1aae707cb675c9dcf475dea0cc` passed linux-ci
+[44631847661](https://github.com/seanburkes/playnite-linux/actions/runs/44631847661) with Core
+2518/2518, Architecture 199/199, Smoke 4/4, zero failures and zero skips. The ADR-020 amendment
+of 2026-11-19 records the owner decision: the original `flatpak-spawn --host` tracking scope is
+**not** claimed, and no host-command authority or host service is built for v1.
+
+The shipped product surface is `playnite launch <appid>`. `/.flatpak-info` selects the
+launch-only mode, the app id is validated as a strict decimal `uint`, and the request is one
+absolute opener plus one URI argument, `/usr/bin/xdg-open steam:&#47;&#47;rungameid/<appid>`, with
+no shell parsing. The sandbox `xdg-open` forwards to `org.freedesktop.portal.OpenURI`. Every result
+reports `tracking: unknown` and `stop: manual-steam` and exposes no playtime, stop or signal
+surface. Native and AppImage select the unchanged tracked path.
+
+Packaged Flatpak artifacts and results:
+
+| Artifact | Size | SHA-256 / id |
+| --- | ---: | --- |
+| `Playnite-Linux-x86_64-launch2.flatpak` | 36,597,712 bytes | `5d9f0fbf7d9d1f4bc8a554e27e2a3af42fc11bedd1b8d74f4aff7939e8f60eda` |
+| installed Flatpak OSTree commit | — | `3043e0dbc767cf27c45c8f3e362214e7444e8ff5ffcef41b0df59cb8867e00aa` |
+
+Effective permissions before and after both launches were identical and exact:
+
+```ini
+[Context]
+shared=ipc;
+sockets=fallback-x11;wayland;
+devices=dri;
+```
+
+There is no `filesystems` section and no `talk-name` grant. Inside the sandbox `/.flatpak-info`
+exists, the host Steam directory is hidden, and `flatpak-spawn --host true` fails with
+`org.freedesktop.DBus.Error.ServiceUnknown`; the app never invokes it. Both packaged launches
+were run through the shipped command:
+
+| Title | Launch evidence | Playnite report |
+| --- | --- | --- |
+| native `770100` One Deck Dungeon | host PID `3274643` as `steamapps/common/One Deck Dungeon/OneDeckDungeon.x86_64` | `status=RequestAccepted`, `tracking=unknown`, `stop=manual-steam` |
+| Proton `1145360` Hades | host PID `3290060` as `S:\steamapps\common\Hades\x64Vk\Hades.exe` under Proton Experimental | `status=RequestAccepted`, `tracking=unknown`, `stop=manual-steam` |
+
+The owner stopped each title manually outside Playnite; the Flatpak mode sent no signal, and
+post-stop process tables contained no title or Wine row. This is the product contract:
+Playnite cannot observe or stop the host game from the sandbox.
+
+The packaged AppImage `Playnite-Linux-x86_64-launch2.AppImage` (46,602,744 bytes, SHA-256
+`6a08893ace54832067b42b208f587780c5db060d924ea7dccf87c354e8d52929`) verified the unchanged
+tracked path. The shipped `playnite launch 770100` attributed pid `3310235`, start ticks
+`242650085`, pgid `3310202`, reported `TRACK Running` then `TRACK Stopped degraded=False`, and
+the four-flow tracked acceptance for native `770100` and Proton `1145360` passed with
+`POST-TEARDOWN complete=True survivors=0 tracked=1 original_clients_retained=11/11` and
+`STOP REPORT degraded=False` in every flow.
+
+**Residual:** Flatpak process tracking, playtime and stop/signal from the sandbox are **deferred
+to v1.1**; the original `flatpak-spawn --host` criterion wording is not proven. v1 Flatpak has
+no host-command authority, no `org.freedesktop.Flatpak` `talk-name` and no host helper service.
+The desktop GUI play action remains deferred; the shipped CLI `playnite launch <appid>` is the
+v1 Flatpak launch surface.
 
 ## Criterion 4 packaged AppImage evidence
 
@@ -338,8 +433,8 @@ only: no session bus, no network and no skips. Design and non-claims are in
 **Residual:** this is a discovery claim for the Steam library selected on one host: the 83-app
 set, the persisted grant and the negative control are recorded for that install, and the
 unmounted external library was skipped rather than read. Criterion 6 says nothing about launching
-Steam or tracking a game process; criterion 3 remains deferred and no `flatpak-spawn --host` or
-host-command authority is present.
+Steam or tracking a game process; criterion 3 is a separate launch-only claim above, and no
+`flatpak-spawn --host` or host-command authority is present.
 
 ## Unit evidence relied on
 
@@ -372,8 +467,14 @@ documentation change and are not Phase 5 exit evidence by themselves.
    Steam CDN/remote mapping remain unknown and are out of v1 scope.
 2. Proven by the native and Proton launches, stops, cancellations, and process-to-session
    attribution recorded above.
-3. In v1.1, a Flatpak acceptance run that launches host Steam and observes the game process in
-   the host PID namespace, using a transport whose authority is explicitly approved.
+3. **Closed by the merged launch-only evidence above on the owner-approved adjusted scope.**
+   The packaged Flatpak launched native and Proton titles through the shipped
+   `playnite launch <appid>` and the desktop OpenURI portal with the allowlist unchanged, and the
+   packaged AppImage kept the tracked path. The original `flatpak-spawn --host` host-tracking
+   requirement is **not** closed: in v1.1 it would need a Flatpak acceptance run that launches
+   host Steam and observes the game process in the host PID namespace, using a transport whose
+   authority is explicitly approved. No such host tracking, host command or host service exists
+   in v1.
 4. **Closed by the packaged evidence above.** The mounted AppImage proved no orphan after
    native and Proton stop and cancel, with a post-teardown process table showing no remaining
    game, group, fresh runtime or prefix process and the original Steam client still running.
@@ -391,14 +492,21 @@ documentation change and are not Phase 5 exit evidence by themselves.
    through a user-granted `xdg-desktop-portal` document with the manifest allowlist unchanged at
    `wayland`, `fallback-x11`, `ipc` and `dri`, no filesystem or talk-name grant, and a pre-grant
    negative control that fails. The read is discovery only: no host launch, no session tracking
-   and no host command. Criterion 3 remains deferred and is unaffected by this evidence.
+   and no host command. Criterion 3 is separate and is closed on its owner-approved launch-only
+   scope; this evidence does not add Flatpak tracking.
 
 ## Non-claims
 
-- Phase 5 is not accepted. Criterion 3 is deferred by owner decision, and Phase 5 exit is the
-  captain's call. Criterion 5 is PROVEN only on the written terminal-state claim accepted by the
-  captain ruling; its four intermediate-edge extensions are documented, and the model was not
-  weakened for them. No acceptance is written here.
+- This file is the evidence assessment, not the acceptance record. The captain's acceptance is
+  [`P5-accepted.md`](P5-accepted.md), decision date 2026-11-19. Criterion 3 is PROVEN only on the
+  owner-approved launch-only scope: Flatpak process tracking, playtime and stop/signal are
+  deferred to v1.1, and v1 has no host-command authority and no host service. Criterion 5 is
+  PROVEN only on the written terminal-state claim accepted by the captain ruling; its four
+  intermediate-edge extensions are documented, and the model was not weakened for them.
+- Criterion 3's launch-outcome wording is honest: `RequestAccepted` means the portal opener
+  exited 0, not that the game started. The Flatpak branch reports no tracked start, no tracked
+  stop and no playtime, and the user stops the game in Steam. The AppImage evidence covers the
+  tracked path; it does not make the Flatpak path tracked.
 - Criterion 6 is a packaged read/discovery claim only. It records the 83-app set of the selected
   host Steam library, the portal-granted Flatpak read with the narrow allowlist, and the failing
   pre-grant negative control. It claims no Flatpak Steam launch, no session tracking, no host
