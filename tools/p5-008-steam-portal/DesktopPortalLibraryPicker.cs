@@ -27,7 +27,6 @@ internal sealed class DesktopPortalLibraryPicker : ISteamLibraryPortal, IAsyncDi
     {
         ArgumentException.ThrowIfNullOrEmpty(title);
         await pick.WaitAsync(cancellationToken).ConfigureAwait(false);
-        var subscriptions = new List<IDisposable>();
         try
         {
             var current = await ConnectionAsync(cancellationToken).ConfigureAwait(false);
@@ -41,7 +40,7 @@ internal sealed class DesktopPortalLibraryPicker : ISteamLibraryPortal, IAsyncDi
                 Console.Error.WriteLine($"portal: unique={current.UniqueName} expected={expectedPath}");
             }
             var completion = new TaskCompletionSource<PortalResponse?>(TaskCreationOptions.RunContinuationsAsynchronously);
-            subscriptions.Add(await WatchAsync(current, expectedPath, token, completion, pathFilter: true).ConfigureAwait(false));
+            _ = await WatchAsync(current, expectedPath, token, completion, pathFilter: true).ConfigureAwait(false);
 
             var writer = current.GetMessageWriter();
             writer.WriteMethodCallHeader(Destination, DesktopPath, FileChooser, "OpenFile", "ssa{sv}");
@@ -65,13 +64,15 @@ internal sealed class DesktopPortalLibraryPicker : ISteamLibraryPortal, IAsyncDi
 
             if (!string.Equals(handle, expectedPath, StringComparison.Ordinal))
             {
-                subscriptions.Add(await WatchAsync(current, handle, token, completion, pathFilter: true).ConfigureAwait(false));
+                _ = await WatchAsync(current, handle, token, completion, pathFilter: true).ConfigureAwait(false);
             }
 
             // The sandboxed session bus is a proxy; a path-scoped match can be rewritten or
             // dropped there. A second match on interface+member only is cheap and still filters
-            // by the exact token in the reader.
-            subscriptions.Add(await WatchAsync(current, null, token, completion, pathFilter: false).ConfigureAwait(false));
+            // by the exact token in the reader. The matches are left registered until the
+            // connection is disposed: removing a match through the sandbox proxy closes the
+            // connection before the document portal calls that follow the response.
+            _ = await WatchAsync(current, null, token, completion, pathFilter: false).ConfigureAwait(false);
 
             PortalResponse? response;
             try
@@ -87,17 +88,6 @@ internal sealed class DesktopPortalLibraryPicker : ISteamLibraryPortal, IAsyncDi
             if (debug)
             {
                 Console.Error.WriteLine("portal: response awaited");
-                Console.Error.WriteLine($"portal: disposing {subscriptions.Count} match subscriptions");
-            }
-
-            foreach (var subscription in subscriptions)
-            {
-                subscription.Dispose();
-            }
-
-            if (debug)
-            {
-                Console.Error.WriteLine("portal: matches disposed");
             }
 
             if (response is null)
@@ -145,11 +135,6 @@ internal sealed class DesktopPortalLibraryPicker : ISteamLibraryPortal, IAsyncDi
         }
         finally
         {
-            foreach (var subscription in subscriptions)
-            {
-                subscription.Dispose();
-            }
-
             pick.Release();
         }
     }
