@@ -84,6 +84,26 @@ public sealed class SteamPortalTests : IDisposable
     }
 
     [Fact]
+    public async Task A_declared_library_path_with_a_trailing_slash_maps_to_its_steamapps()
+    {
+        var primary = SteamApps("steam", (100, "Primary Game"));
+        var second = SteamApps("second", (200, "Second Game"));
+        WriteLibraryFile(primary, ("/host/steam", [100]), ("/host/second/", [200]));
+        var store = new JsonSteamPortalGrantStore(GrantsPath);
+
+        var result = await new PortalSteamLibraryImporter(
+            new ScriptedPortal(
+                Selected(primary, "/host/steam/steamapps", "doc-primary"),
+                Selected(second, "/host/second/steamapps", "doc-second")),
+            store, fileSystem).ImportAsync();
+
+        Assert.True(result.Status == SteamPortalImportStatus.Complete, result.Detail);
+        var grant = Assert.Single(store.Load(), grant => grant.DocumentId == "doc-second");
+        Assert.Equal("/host/second/steamapps", grant.SteamAppsHostPath);
+        Assert.Equal("/host/second", grant.HostLibraryPath);
+    }
+
+    [Fact]
     public async Task A_cancelled_additional_library_is_skipped_and_the_rest_is_imported()
     {
         var primary = SteamApps("steam", (100, "Primary Game"));
@@ -186,6 +206,7 @@ public sealed class SteamPortalTests : IDisposable
         store.Save([grant]);
 
         Assert.Equal([grant], store.Load());
+        Assert.DoesNotContain("isConsistent", File.ReadAllText(GrantsPath), StringComparison.Ordinal);
         if (!OperatingSystem.IsWindows())
         {
             Assert.Equal(UnixFileMode.UserRead | UnixFileMode.UserWrite, File.GetUnixFileMode(GrantsPath));

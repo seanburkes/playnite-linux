@@ -85,11 +85,6 @@ internal sealed class DesktopPortalLibraryPicker : ISteamLibraryPortal, IAsyncDi
                 throw;
             }
 
-            if (debug)
-            {
-                Console.Error.WriteLine("portal: response awaited");
-            }
-
             if (response is null)
             {
                 return SteamPortalSelection.Unavailable("The desktop portal did not answer the file chooser.");
@@ -170,12 +165,6 @@ internal sealed class DesktopPortalLibraryPicker : ISteamLibraryPortal, IAsyncDi
             static (Message message, object? state) => ReadResponse(message, (string)state!),
             (Notification<PortalResponse?> notification) =>
             {
-                if (Environment.GetEnvironmentVariable("PLAYNITE_PORTAL_DEBUG") == "1")
-                {
-                    Console.Error.WriteLine(
-                        $"portal: handler type={notification.Type} hasValue={notification.HasValue} completion={notification.IsCompletion}");
-                }
-
                 if (notification.IsCompletion)
                 {
                     // Notification<T>.Exception is only valid (and only non-null) on a completion.
@@ -340,14 +329,7 @@ internal sealed class DesktopPortalLibraryPicker : ISteamLibraryPortal, IAsyncDi
 
     private static PortalResponse? ReadResponse(Message message, string token)
     {
-        var debug = Environment.GetEnvironmentVariable("PLAYNITE_PORTAL_DEBUG") == "1";
-        var path = message.PathAsString ?? string.Empty;
-        if (debug)
-        {
-            Console.Error.WriteLine($"portal: response path={path} token={token}");
-        }
-
-        if (!path.EndsWith("/" + token, StringComparison.Ordinal))
+        if (!(message.PathAsString ?? string.Empty).EndsWith("/" + token, StringComparison.Ordinal))
         {
             return null;
         }
@@ -355,11 +337,6 @@ internal sealed class DesktopPortalLibraryPicker : ISteamLibraryPortal, IAsyncDi
         var reader = message.GetBodyReader();
         var code = reader.ReadUInt32();
         var results = reader.ReadDictionaryOfStringToVariantValue();
-        if (debug)
-        {
-            Console.Error.WriteLine($"portal: response code={code} results={results.Count}");
-        }
-
         return new PortalResponse(code, results);
     }
 

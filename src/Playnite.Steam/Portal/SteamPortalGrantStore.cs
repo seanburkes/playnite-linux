@@ -12,6 +12,7 @@ namespace Playnite.Steam;
 public sealed record SteamPortalGrant(string HostLibraryPath, string SteamAppsHostPath, string DocumentId, string PortalPath)
 {
     /// <summary><see cref="HostLibraryPath"/> is the Steam root; the grant is exactly its steamapps.</summary>
+    [JsonIgnore]
     public bool IsConsistent =>
         Paths.IsFullPath(HostLibraryPath) &&
         Paths.IsFullPath(SteamAppsHostPath) &&
