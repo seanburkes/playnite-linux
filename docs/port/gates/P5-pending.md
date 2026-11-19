@@ -1,15 +1,23 @@
 # Gate P5 — Steam and Linux platform (pending assessment)
 
 - Date: 2026-11-18
-- Base: `7c4498c5f14c029ad8fafdbf545773066836c155` (`main`)
+- Base: `1b9af6e213a4ff25a8df96033f10624b4a5dd4aa` (`main`); earlier revisions of this
+  assessment were based on `8e5984e` and `7c4498c`.
 - Owner: `p5-shards` (2026-11-18 update; initial assessment by `p5-shards2`)
-- Result: **PENDING — NOT AN ACCEPTANCE.** The 2026-11-18 real Steam rerun proves criterion 2.
-  ADR-020 records the owner decision to defer criteria 3 and 6 to v1.1. AppImage is the only
-  Steam-integrated packaging target for v1. Flatpak ships the app shell only.
+- Result: **PENDING — NOT AN ACCEPTANCE.** The 2026-11-18 real Steam rerun proves criterion 2,
+  and the packaged AppImage teardown run merged as [#148](https://github.com/seanburkes/playnite-linux/pull/148)
+  proves criterion 4. ADR-020 records the owner decision to defer criteria 3 and 6 to v1.1.
+  AppImage is the only Steam-integrated packaging target for v1. Flatpak ships the app shell
+  only.
 - Review basis: worker diff-only self-assessment of merged artifacts and unit shards. No
   independent approval and **no owner acceptance** is claimed.
 - Addendum (follow-up to merged #123): the unit evidence table cites main-push linux-ci runs on
   the merged heads, not pull-request head runs. No criterion status changed.
+- Addendum (PR #149): criterion 4 moves to **PROVEN** on the packaged AppImage evidence merged
+  as [#148](https://github.com/seanburkes/playnite-linux/pull/148). Criteria 1 and 5 stay
+  **PARTIAL**; criteria 3 and 6 stay **DEFERRED BY OWNER DECISION**. The summary is now
+  **2 PROVEN / 2 PARTIAL / 2 DEFERRED**. **Phase 5 is still not exited** while criteria 1 and
+  5 are partial and criteria 3 and 6 are deferred.
 - Earlier p5-008 assessment: the launch implementation merged at
   `1e842c075aeb3412323fcd467ca93aaaef03b8cb`. The first owner-authorized run of 2026-11-18
   (`data/p5-008-real-acceptance-2026-11-18.md`; logs `data/p5-008-acceptance-2026*`) left
@@ -27,14 +35,16 @@ reachable from merged `main`.
 | 1 | Synthetic + redacted real fixture yields the expected app set, paths and artwork ids | **PARTIAL** | `SteamDiscoveryTests` exercises synthetic app/library paths, unavailable libraries and broken VDF in `tests/fixtures/steam/basic`, `second-library`, `broken` and `tools/Playnite.Fuzz/Corpus/p5-002`. `SteamRealCorpusDiscoveryTests` (`f82c3d46`) verifies the committed `tests/fixtures/steam/real` hashes and proves the full recorded app set (83 root, 25 external), library paths and achievement JSON identity over the redacted real corpus, including recorded install paths. `ArtworkTests.Recorded_metadata_corpus_is_read_without_modification` also reads the real achievement JSON. **Gap:** the corpus contains no artwork. The five observed `appcache/librarycache/<appid>/<name>` identities are asserted only on synthetic fixtures by `ArtworkTests.Identity_uses_only_observed_names`. Steam CDN/remote artwork mapping remains **UNKNOWN**. |
 | 2 | A real Steam install launches and stops a native and a Proton game | **PROVEN** | The owner-authorized real Steam run recorded below launched and stopped native One Deck Dungeon (`770100`) and Proton Hades (`1145360`), and repeated both launches with cancellation. All four flows passed with a non-degraded stop report. The run's accepted head `649d25f` has the same tree as merged `d54e897`. |
 | 3 | Inside Flatpak, `flatpak-spawn --host` launches Steam and tracking observes the game process | **DEFERRED BY OWNER DECISION** | ADR-020 defers Flatpak launch and tracking to v1.1. The criterion is neither proven nor failed. No `flatpak-spawn` implementation exists in `src/`, neither historical probe in Steam spec §6.4 was executed, and the p1-010 Flatpak spike was **inconclusive** for host launch and host PID visibility. No Flatpak acceptance run exists. |
-| 4 | No orphaned processes after cancel/teardown on the v1 AppImage native and Proton paths | **PARTIAL** | p5-004 provides real-process proofs through `LinuxProcessLauncher`: `Real_stop_leaves_no_child`, `Real_cancel_leaves_no_child`, `Real_tracker_disposal_leaves_no_child`, `Real_launcher_shutdown_leaves_no_child`, `Real_stop_during_starting_leaves_no_child`, plus process-group containment (`setsid` launch, group kill and verification) and explicit `ProcessSurvivorException` for tracked escapees. The reparent-before-first-snapshot test is on `main` (`5c4d11a`). p5-008 merged at `1e842c0` adds group-empty proof and per-identity pidfd signalling for its attributed group (`SteamLaunchTests`: stop/cancel/disposal reaping, escaped/unrelated groups never signalled, group reuse rejected). The real Steam rerun passed the no-orphan check after every observed stop and cancel on the host. **Gap:** no end-to-end packaged AppImage cancel/teardown proof is recorded. The unexercised Flatpak host path is deferred under criterion 3. |
+| 4 | No orphaned processes after cancel/teardown on the v1 AppImage native and Proton paths | **PROVEN** | p5-004 (`064e261b`) provides real-process proofs through `LinuxProcessLauncher`: `Real_stop_leaves_no_child`, `Real_cancel_leaves_no_child`, `Real_tracker_disposal_leaves_no_child`, `Real_launcher_shutdown_leaves_no_child`, `Real_stop_during_starting_leaves_no_child`, plus process-group containment (`setsid` launch, group kill and verification) and explicit `ProcessSurvivorException` for tracked escapees. The reparent-before-first-snapshot test is on `main` (`5c4d11a`). p5-008 merged at `1e842c0` adds group-empty proof and per-identity pidfd signalling for its attributed group (`SteamLaunchTests`: stop/cancel/disposal reaping, escaped/unrelated groups never signalled, group reuse rejected). **Packaged proof:** merged #148 at `71f4578b2d574d345e08a6ac0045c47feeb40e2f` (final head `03ca0e930d2ec8adf2c08f263f05eae1b4bd7e8a`, 8/8 checks) mounted the v1 AppImage and ran four live flows: native One Deck Dungeon (`770100`) and Proton Hades (`1145360`), each stopped and each cancelled. Every flow ended `POST-TEARDOWN complete=True survivors=0 tracked=1 original_clients_retained=11/11`, `STOP REPORT degraded=False reason=Attributed game identities gone; observed group empty`, and an independent same-user `/proc` observer printed zero app/group and fresh-runtime rows with the original Steam client still running. The harness issued one scoped game-identity pidfd `SIGTERM` per flow. No group, Steam client or helper signal was issued, and no orphan remained. The evidence is in `docs/port/p5-008-appimage-acceptance.md`; the mounted AppImage was built from clean `fa443d9730419758173a1e1033820b650b40f813` (46,471,672 bytes, SHA-256 `c216c50b8b809f9c810f879bcfb9f67840feedb9378f87135594dc52ad80317e`), with the CI AppImage at packaging run 44441401765, packaged-code linux-ci 44441401426, final-head linux-ci 44446797838 and merged-head main-push linux-ci 44449314928. The exact survivor-scan scope and its documented residual are stated under "Criterion 4 packaged AppImage evidence". |
 | 5 | Session state on the v1 AppImage native and Proton paths matches the formal model's terminal states | **PARTIAL** | `docs/formal/GameSession.tla` defines the state machine. The P4 gate records the TLC run (GameSession 1401 generated / 400 distinct / depth 27, log-backed in run 43998974777). `docs/port/p5-004-process-sessions.md` maps every formal action to the implementation and states that the terminal set is exactly `Stopped`, `Cancelled`, `Failed`. `GameSessionTrackerTests` assert terminal transitions and that no terminal state is emitted without a proven reap. The real Steam rerun on the host observed non-degraded `Running` through `Stopping` to `Stopped` or `Cancelled`. **Gap:** the two observed paths and unit tests leave formal refinement unchecked, and the real run did not exercise `Failed`. |
 | 6 | AppImage and Flatpak can read a host Steam library with narrow permissions | **DEFERRED BY OWNER DECISION** | ADR-020 defers the Flatpak portion of this combined criterion to v1.1. The criterion is neither proven nor failed. The Flatpak manifest grants only `wayland`, `fallback-x11`, `ipc` and `dri`. `packaging/README.md` states it has no home or host-filesystem access, and `packaging/verify-flatpak.py` enforces that narrow allowlist. No narrow Steam-library `--filesystem` entry or portal path is implemented or tested. The packaging smoke jobs run the version CLI and a headless desktop shell, so they provide no Steam-library read evidence. AppImage is unsandboxed and remains the v1 Steam-integrated target. It still has no recorded packaged-build Steam-library read. |
 
-Summary: **1 PROVEN / 3 PARTIAL / 2 DEFERRED.** Phase 5 exit remains pending. The gate cannot
-be claimed as fully satisfied while two criteria are deferred, and no criterion may be silently
-dropped. The real Steam launch evidence applies to the host install. Flatpak and packaged
-host-library permissions remain unproven.
+Summary: **2 PROVEN / 2 PARTIAL / 2 DEFERRED.** Criteria 2 and 4 are PROVEN. Criteria 1 and 5
+remain PARTIAL, and criteria 3 and 6 are **DEFERRED BY OWNER DECISION**. **Phase 5 is still
+not exited**: it cannot be claimed as fully satisfied while criteria 1 and 5 are partial and
+criteria 3 and 6 are deferred, and no criterion may be silently dropped. The real Steam launch
+evidence applies to the host install. Flatpak and packaged host-library permissions remain
+unproven.
 
 ## Criterion 2 real-machine evidence
 
@@ -78,6 +88,84 @@ UNKNOWN. Hotline Miami `219150` crashed in its SDL platform plugin before attrib
 Individual graceful SIGTERM cleanup emptied the observed game group and tree, leaving
 the Steam client alive with no orphan, group kill, client kill, or SIGKILL.
 
+## Criterion 4 packaged AppImage evidence
+
+Merged [#148](https://github.com/seanburkes/playnite-linux/pull/148) squash commit
+`71f4578b2d574d345e08a6ac0045c47feeb40e2f` exposed the existing p5-008 acceptance harness
+through the AppImage's explicit `--steam-acceptance` flag. The final reviewed head
+`03ca0e930d2ec8adf2c08f263f05eae1b4bd7e8a` passed all eight checks, and the merged commit's
+main-push linux-ci run [44449314928](https://github.com/seanburkes/playnite-linux/actions/runs/44449314928)
+succeeded on that exact head. The packaged-code head `4eaf1777` passed linux-ci
+[44441401426](https://github.com/seanburkes/playnite-linux/actions/runs/44441401426); the
+final head's pull-request linux-ci run
+[44446797838](https://github.com/seanburkes/playnite-linux/actions/runs/44446797838) passed.
+The earlier relative-argv packaged rerun used the CI AppImage from packaging run
+[44441401765](https://github.com/seanburkes/playnite-linux/actions/runs/44441401765); the
+downloaded CI artifact was produced by packaging run
+[44431326813](https://github.com/seanburkes/playnite-linux/actions/runs/44431326813). The
+mounted image behind the final four flows was built locally from clean
+`fa443d9730419758173a1e1033820b650b40f813` with `packaging/assemble.sh` and the same pinned
+appimagetool and type2-runtime as CI: 46,471,672 bytes, SHA-256
+`c216c50b8b809f9c810f879bcfb9f67840feedb9378f87135594dc52ad80317e`. It reported version
+`1.0.0.0` and passed headless smoke and dry-run manifest inspection before the live run.
+Provenance, build commands and per-flow observations are in
+`docs/port/p5-008-appimage-acceptance.md`.
+
+The live command exited 0 on the signed-in Steam desktop with no login, prompt or window
+interaction. Executable paths are relative to the Steam library.
+
+| Flow | Terminal state | PID / start ticks / PGID | Attributed game path | Elapsed |
+| --- | --- | --- | --- | ---: |
+| Native `770100` stop | `Stopped` | `3438401 / 235240530 / 3438368` | `steamapps/common/One Deck Dungeon/OneDeckDungeon.x86_64` | 4.6 s |
+| Native `770100` cancel | `Cancelled` | `3449100 / 235242962 / 3449067` | `steamapps/common/One Deck Dungeon/OneDeckDungeon.x86_64` | 3.1 s |
+| Proton `1145360` stop | `Stopped` | `3459391 / 235245795 / 3459391` | `steamapps/common/Hades/x64/Hades.exe` | 7.4 s |
+| Proton `1145360` cancel | `Cancelled` | `3470661 / 235248553 / 3470661` | `steamapps/common/Hades/x64/Hades.exe` | 6.6 s |
+
+Each flow produced one complete post-teardown scan with zero survivors and a non-degraded
+stop report, and retained all 11 original Steam identities:
+
+```text
+SURVIVOR SCAN baseline_live=488 post_live=497 complete=True survivors=0
+SURVIVOR SCAN baseline_live=495 post_live=496 complete=True survivors=0
+SURVIVOR SCAN baseline_live=494 post_live=495 complete=True survivors=0
+SURVIVOR SCAN baseline_live=495 post_live=495 complete=True survivors=0
+
+AUDIT post-teardown app=770100 group=3438368 app_or_group_rows=0 fresh_runtime_rows=0 original_steam_clients=1/1
+AUDIT post-teardown app=770100 group=3449067 app_or_group_rows=0 fresh_runtime_rows=0 original_steam_clients=1/1
+AUDIT post-teardown app=1145360 group=3459391 app_or_group_rows=0 fresh_runtime_rows=0 original_steam_clients=1/1
+AUDIT post-teardown app=1145360 group=3470661 app_or_group_rows=0 fresh_runtime_rows=0 original_steam_clients=1/1
+AUDIT final packaged_exit=0 flows=4 clean_tables=True
+```
+
+The harness sent exactly one pidfd `SIGTERM` per flow to the attributed game identity. No
+group, Steam client, or helper process received a signal. The independent same-user `/proc`
+observer retained the original Steam client `122666 / 6590265 / 121295` in every sample and
+printed the filtered post-teardown row counts above.
+
+### Survivor-scan scope and residual
+
+The claim rests on the read-only `SteamAcceptanceSurvivorScan`, which classifies a live
+process from a complete post-disposal process-table snapshot as a survivor only when it is
+one of:
+
+1. in the attributed game's process group, or a tracked game identity (PID plus start ticks);
+2. a process whose executable path or any argv path resolves under the selected game's
+   install directory or Proton prefix. Absolute paths go through `realpath`; Windows drive
+   paths go through the game's own `pfx/dosdevices/<drive>:` mapping; relative paths are
+   resolved lexically against that process's own `/proc/PID/cwd`, including when the target
+   no longer exists;
+3. a process absent from the complete pre-launch snapshot whose name, executable or
+   `argv[0]` is a rule-based Wine/Proton helper name (`wine`, `wine64`, `wine-preloader`,
+   `wine64-preloader`, `wineserver`, `wineserver64`, `winedevice`, `services`, `explorer`,
+   `rpcss`, `plugplay`, `conhost`, `rundll32`, with or without an `.exe` suffix).
+
+**Residual:** a live process that leaves the game group, is not a tracked identity, carries no
+install-directory or prefix path in its executable or argv, and has a name outside that
+helper list is outside the scan's scope and is **not claimed** to have been detected. The
+scan observes and reports only; it has no signalling path. The regression tests cover a
+daemonized wineserver in its own group with no observed ancestry, PID reuse, executable and
+argv path evidence, and a detached worker whose relative argv target was unlinked.
+
 ## Unit evidence relied on
 
 | Unit | Merged commit | Merged-head linux-ci (main push) |
@@ -89,7 +177,7 @@ the Steam client alive with no orphan, group kill, client kill, or SIGKILL.
 | p5-005a | `785b89200666ab63f07ca2fd1af4e757c3ef1e36` (#119) | [44344964418](https://github.com/seanburkes/playnite-linux/actions/runs/44344964418) on `785b892`, success. |
 | p5-004 | `064e261b5bffa6c434515b9851160a21fd0e317d` (#120) | [44345002684](https://github.com/seanburkes/playnite-linux/actions/runs/44345002684) on `064e261`, success. |
 | p5-007a | `60e71ca950a21b72a08165e60c0e8066905ffed3` (#121) | [44345049906](https://github.com/seanburkes/playnite-linux/actions/runs/44345049906) on `60e71ca`, success. |
-| p5-008 | `1e842c075aeb3412323fcd467ca93aaaef03b8cb` (#126) | [44366637238](https://github.com/seanburkes/playnite-linux/actions/runs/44366637238) on `1e842c0`, success. The pull-request run [44365780060](https://github.com/seanburkes/playnite-linux/actions/runs/44365780060) also succeeded on the verified pre-merge head `23e0797b`. |
+| p5-008 | `1e842c075aeb3412323fcd467ca93aaaef03b8cb` (#126) | [44366637238](https://github.com/seanburkes/playnite-linux/actions/runs/44366637238) on `1e842c0`, success. The pull-request run [44365780060](https://github.com/seanburkes/playnite-linux/actions/runs/44365780060) also succeeded on the verified pre-merge head `23e0797b`. The packaged AppImage follow-up merged at `71f4578b2d574d345e08a6ac0045c47feeb40e2f` (#148, final head `03ca0e93`); its main-push run [44449314928](https://github.com/seanburkes/playnite-linux/actions/runs/44449314928) succeeded on `71f4578`. |
 
 The tooling row #122 (`p2-evidence2`, merge `7ea3a3752dca413fae3aac8e2e869678d2375c37`) had a
 successful main-push linux-ci run [44345093914](https://github.com/seanburkes/playnite-linux/actions/runs/44345093914);
@@ -107,10 +195,11 @@ documentation change and are not Phase 5 exit evidence by themselves.
    attribution recorded above.
 3. In v1.1, a Flatpak acceptance run that launches host Steam and observes the game process in
    the host PID namespace, using a transport whose authority is explicitly approved.
-4. A packaged AppImage no-orphan proof for native and Proton cancel/teardown, including a
-   post-teardown process table showing no remaining game, wrapper, wineserver, or prefix process
-   and the Steam client still running. Reparent-before-first-snapshot coverage is already merged
-   (`5c4d11a`).
+4. **Closed by the packaged evidence above.** The mounted AppImage proved no orphan after
+   native and Proton stop and cancel, with a post-teardown process table showing no remaining
+   game, group, fresh runtime or prefix process and the original Steam client still running.
+   The claim is limited to the survivor-scan scope stated above; a process outside that scope
+   is not claimed.
 5. A machine-checked refinement of the implementation against `GameSession.tla`, or recorded
    AppImage native and Proton session traces demonstrating the model's terminal states,
    including `Failed`.
@@ -120,8 +209,13 @@ documentation change and are not Phase 5 exit evidence by themselves.
 
 ## Non-claims
 
-- Phase 5 is not accepted.
+- Phase 5 is not accepted. Criteria 1 and 5 remain partial and criteria 3 and 6 are deferred by
+  owner decision.
 - The 2026-11-18 real-machine run is evidence for criterion 2. This assessment records no
   owner acceptance of the install or either game, Flatpak host launch/tracking, or packaged
   host-library access.
+- Criterion 4 is claimed only within the survivor-scan scope stated above: game group and
+  tracked identities, install-directory or prefix paths (relative argv resolved lexically
+  against the process cwd even when the target is gone), and rule-based Wine/Proton helper
+  names. A process outside that scope is not claimed.
 - No protected oracle, baseline, aggregate or product file is changed by this assessment.
