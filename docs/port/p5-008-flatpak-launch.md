@@ -72,9 +72,10 @@ The packaged `playnite launch <appid>` command dispatches to `Playnite.Launch` (
 ## Acceptance
 
 The real-machine acceptance ran from clean code head
-`d169fe719a4f2e493ca5db039c4be9c0b713dcc8` on 2026-11-19; the product launch surface was then
-routed through the shipped `playnite launch <appid>` command. The packaged `Playnite.Launch` tool
-reuses the same launch library, and the final head/run and packaged results are recorded below.
+`ddc86161683ffd1aae707cb675c9dcf475dea0cc` on 2026-11-19 through the shipped
+`playnite launch <appid>` command. The evidence-only commits after that head change no code, so
+the packaged artifacts below are the tree that ships. The final-head linux-ci run is cited in
+the PR body.
 
 ### Packaged Flatpak — launch-only
 
@@ -82,8 +83,8 @@ Artifacts:
 
 | Artifact | Size | SHA-256 / id |
 | --- | ---: | --- |
-| `Playnite-Linux-x86_64-route-final.flatpak` | 36,338,640 bytes | `f9e8928444e59bffbffe34d1104d4133f9dbf6a0ad2cba4fa67060cd861283e8` |
-| installed Flatpak OSTree commit | — | `fed6accb17bd1625257c2ae7405084b857e678fce37e51e72bc9148dfe88c4c7` |
+| `Playnite-Linux-x86_64-product.flatpak` | 36,346,080 bytes | `9511347bba0e236046d7400c0524859d3eb415c1f6f3ee6a4470fd08513eda8b` |
+| installed Flatpak OSTree commit | — | `a5cd30fb1372015c00948fa8fdc14aeb9f00054944554008860d23234ee7c310` |
 
 The installed sandbox reported exactly:
 
@@ -113,33 +114,30 @@ detail said game start and playtime are UNKNOWN and that the user must stop the 
 
 | Title | Selection | Launch evidence | Playnite tracking |
 | --- | --- | --- | --- |
-| native `770100` One Deck Dungeon | native/unknown (Steam owns selection) | host PID `2152718` started as `steamapps/common/One Deck Dungeon/OneDeckDungeon.x86_64` | UNKNOWN; no Playnite process or handle remained |
-| Proton `1145360` Hades | Proton (account override and prefix markers) | host PID `2165414` ran `S:\steamapps\common\Hades\x64Vk\Hades.exe` under Proton Experimental; Steam log recorded `gameID 1145360` | UNKNOWN; no Playnite process or handle remained |
+| native `770100` One Deck Dungeon | native/unknown (Steam owns selection) | host PID `3025570` started as `steamapps/common/One Deck Dungeon/OneDeckDungeon.x86_64` | UNKNOWN; no Playnite process or handle remained |
+| Proton `1145360` Hades | Proton (account override and prefix markers) | host PID `3039187` ran `S:\steamapps\common\Hades\x64Vk\Hades.exe` under Proton Experimental | UNKNOWN; no Playnite process or handle remained |
 
-The owner stopped each title outside Playnite with a manual `SIGTERM` to the game/runtime
-process; the Flatpak mode sent no signal. Post-stop process tables contained no title or Wine
-row. This is the product behaviour: Playnite cannot observe or stop the host game from the
-sandbox.
+The owner stopped each title outside Playnite with a manual `SIGTERM` to the game process; the
+Flatpak mode sent no signal. Post-stop process tables contained no title or Wine row. This is
+the product behaviour: Playnite cannot observe or stop the host game from the sandbox.
 
 ### Packaged AppImage — tracked path unchanged
 
 | Artifact | Size | SHA-256 |
 | --- | ---: | --- |
-| `Playnite-Linux-x86_64-route-final.AppImage` | 46,311,928 bytes | `4a15bd315dd074dbf41be08929bb5aab9f5e90a71726a22d9078d02fde4f9e26` |
+| `Playnite-Linux-x86_64-product.AppImage` | 46,352,888 bytes | `3265c548c421f33b54deb7664d265f1fa099fd1ad9e9d227f7f180f661191a1e` |
 
 The AppImage reported `1.0.0.0`, passed headless smoke and dry-run inspection, then ran the
-unchanged tracked acceptance for native `770100` and Proton `1145360`:
+shipped `playnite launch <appid>` tracked path for native `770100` and Proton `1145360`:
 
 | Flow | Terminal state | Attributed identity | Result |
 | --- | --- | --- | --- |
-| native stop | `Stopped` | pid `2198956`, start ticks `242414285`, pgid `2198923` | PASS, survivors 0, non-degraded |
-| native cancel | `Cancelled` | pid `2207232`, start ticks `242416656`, pgid `2207199` | PASS, survivors 0, non-degraded |
-| Proton stop | `Stopped` | pid `2218882`, start ticks `242419445`, pgid `2218882`; `Hades.exe` through Proton | PASS, survivors 0, non-degraded |
-| Proton cancel | `Cancelled` | pid `2229580`, start ticks `242422227`, pgid `2229580`; `Hades.exe` through Proton | PASS, survivors 0, non-degraded |
+| native tracked launch | `Stopped` | pid `3096089`, start ticks `242600915`, pgid `3096056` | PASS, non-degraded; owner ended the game and the tracker reported natural stop |
+| Proton tracked launch | `Stopped` | pid `3104113`, start ticks `242602875`, pgid `3104113`; `Hades.exe` through Proton | PASS, non-degraded; owner ended the game and the tracker reported natural stop |
 
-Every flow printed `POST-TEARDOWN complete=True survivors=0 tracked=1
-original_clients_retained=11/11` and `STOP REPORT degraded=False`. The tracked path therefore
-still attributes, tracks and stops exactly as before; only the Flatpak branch changed.
+Both sessions printed `TRACK Starting`, `TRACK Running`, `TRACK Stopping` and `TRACK Stopped`
+with `degraded=False`. The tracked path therefore still attributes, tracks and stops exactly as
+before; only the Flatpak branch changed. No Playnite process signalled the game in either run.
 
-The final `linux-ci` run for this PR head and the packaging workflow artifacts are cited in the
-PR body and the unit ledger fragment. This unit does not claim Phase 5 exit.
+This unit does not claim Phase 5 exit; criterion 3 is closable only as this adjusted
+launch-only product scope, not as `flatpak-spawn` host tracking.
