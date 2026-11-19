@@ -295,6 +295,7 @@ tests/Playnite.Core.Tests/UtilsGoldenTests.cs	*	29f665a47aa385cafbf87538c4465a8e
 tests/Playnite.Core.Tests/p5-008/LinuxPidFdSignalTests.cs	p5-008	d82758baa26eecf25801e982a8fa32bfb98396c5	pull/137
 tests/Playnite.Core.Tests/p5-008/ManualSteamTime.cs	p5-008	d82758baa26eecf25801e982a8fa32bfb98396c5	pull/137
 tests/Playnite.Core.Tests/p5-008/SteamAcceptanceConsentTests.cs	p5-008	d82758baa26eecf25801e982a8fa32bfb98396c5	pull/137
+tests/Playnite.Core.Tests/p5-008/SteamAcceptanceSurvivorTests.cs	p5-008	71f4578b2d574d345e08a6ac0045c47feeb40e2f	pull/148
 tests/Playnite.Core.Tests/p5-008/SteamLaunchTests.cs	p5-008	d82758baa26eecf25801e982a8fa32bfb98396c5	pull/137
 tests/Playnite.Core.Tests/p5-008/SteamProtonCommandLineTests.cs	p5-008	612e193c28b4a046a7edb7affb134865e8575f5c	pull/140
 tests/Playnite.Core.Tests/p5-008/SteamRealDiscoveryTests.cs	p5-008	1e842c075aeb3412323fcd467ca93aaaef03b8cb	pull/126

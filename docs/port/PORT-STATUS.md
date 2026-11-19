@@ -66,8 +66,8 @@
 
 | Metric | Value |
 | --- | ---: |
-| Ledger rows | 284 |
-| Ledger fragments | 57 |
+| Ledger rows | 290 |
+| Ledger fragments | 63 |
 
 ## Units
 
@@ -149,7 +149,7 @@
 | p5-006 | W5 | platform | WebView service | todo | `units/p5-006.*`; 0 ledger rows |
 | p5-007 | W5 | platform | Tray/notifications/sleep | todo | `units/p5-007.*`; 0 ledger rows |
 | p5-007a | W5 | platform | Tray/notifications/sleep inhibition | done | `units/p5-007a.*`; 3 ledger rows |
-| p5-008 | W5 | steam | Launch native/Proton | in-progress | `units/p5-008.*`; 7 ledger rows |
+| p5-008 | W5 | steam | Launch native/Proton | in-progress | `units/p5-008.*`; 13 ledger rows |
 | p5-shards | W5 | repo | Phase 5 shard board reconciliation | done | `units/p5-shards.*`; 6 ledger rows |
 | p5-shards2 | W5 | repo | Phase 5 exit assessment and merged-wave reconciliation | done | `units/p5-shards2.*`; 4 ledger rows |
 | p6-001 | W6 | core | Library service | todo | `units/p6-001.*`; 0 ledger rows |
