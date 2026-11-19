@@ -71,8 +71,8 @@ Phase 6 (Core services and SDK v7) is next. The acceptance record is
 
 | Metric | Value |
 | --- | ---: |
-| Ledger rows | 304 |
-| Ledger fragments | 77 |
+| Ledger rows | 307 |
+| Ledger fragments | 80 |
 
 ## Units
 
@@ -155,7 +155,7 @@ Phase 6 (Core services and SDK v7) is next. The acceptance record is
 | p5-007 | W5 | platform | Tray/notifications/sleep | todo | `units/p5-007.*`; 0 ledger rows |
 | p5-007a | W5 | platform | Tray/notifications/sleep inhibition | done | `units/p5-007a.*`; 3 ledger rows |
 | p5-008 | W5 | steam | Launch native/Proton | in-progress | `units/p5-008.*`; 15 ledger rows |
-| p5-shards | W5 | repo | Phase 5 shard board reconciliation | done | `units/p5-shards.*`; 12 ledger rows |
+| p5-shards | W5 | repo | Phase 5 shard board reconciliation | done | `units/p5-shards.*`; 15 ledger rows |
 | p5-shards2 | W5 | repo | Phase 5 exit assessment and merged-wave reconciliation | done | `units/p5-shards2.*`; 4 ledger rows |
 | p6-001 | W6 | core | Library service | todo | `units/p6-001.*`; 0 ledger rows |
 | p6-002 | W6 | core | Import/sync service | todo | `units/p6-002.*`; 0 ledger rows |
