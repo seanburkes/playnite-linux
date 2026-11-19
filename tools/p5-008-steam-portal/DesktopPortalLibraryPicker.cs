@@ -119,9 +119,9 @@ internal sealed class DesktopPortalLibraryPicker : ISteamLibraryPortal, IAsyncDi
                 Console.Error.WriteLine($"portal: selected={selected} local={portalPath}");
             }
 
-            var (documentId, hostPath) = await ResolveDocumentAsync(current, portalPath, cancellationToken)
+            var (documentId, hostPath, readablePath) = await ResolveDocumentAsync(current, portalPath, cancellationToken)
                 .ConfigureAwait(false);
-            return SteamPortalSelection.Selected(portalPath, hostPath, documentId);
+            return SteamPortalSelection.Selected(readablePath, hostPath, documentId);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -214,8 +214,8 @@ internal sealed class DesktopPortalLibraryPicker : ISteamLibraryPortal, IAsyncDi
     /// Map a portal-visible path to its document id and host path. A path outside the document
     /// portal mount is not sandboxed: it is both the portal path and the host path.
     /// </summary>
-    private static async Task<(string? DocumentId, string? HostPath)> ResolveDocumentAsync(DBusConnection connection,
-        string portalPath, CancellationToken cancellationToken)
+    private static async Task<(string? DocumentId, string? HostPath, string ReadablePath)> ResolveDocumentAsync(
+        DBusConnection connection, string portalPath, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
         var debug = Environment.GetEnvironmentVariable("PLAYNITE_PORTAL_DEBUG") == "1";
@@ -233,7 +233,7 @@ internal sealed class DesktopPortalLibraryPicker : ISteamLibraryPortal, IAsyncDi
 
         if (mount is null || !portalPath.StartsWith(mount + "/", StringComparison.Ordinal))
         {
-            return (null, portalPath);
+            return (null, portalPath, portalPath);
         }
 
         var relative = portalPath[(mount.Length + 1)..];
@@ -241,7 +241,17 @@ internal sealed class DesktopPortalLibraryPicker : ISteamLibraryPortal, IAsyncDi
         var documentId = separator < 0 ? relative : relative[..separator];
         if (documentId.Length == 0)
         {
-            return (null, null);
+            return (null, null, portalPath);
+        }
+
+        // Flatpak exposes the document mount as a symlink (/run/user/<uid>/doc ->
+        // ../../flatpak/doc). The bounded reader refuses symlink components, so store the
+        // resolved mount and leave the document-id subtree untouched.
+        var readableMount = ResolveMount(mount);
+        var readablePath = readableMount + portalPath[mount.Length..];
+        if (debug)
+        {
+            Console.Error.WriteLine($"portal: readable={readablePath}");
         }
 
         if (debug)
@@ -257,7 +267,19 @@ internal sealed class DesktopPortalLibraryPicker : ISteamLibraryPortal, IAsyncDi
             Console.Error.WriteLine($"portal: host={host}");
         }
 
-        return (documentId, host);
+        return (documentId, host, readablePath);
+    }
+
+    private static string ResolveMount(string mount)
+    {
+        try
+        {
+            return new DirectoryInfo(mount).ResolveLinkTarget(returnFinalTarget: true)?.FullName ?? mount;
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            return mount;
+        }
     }
 
     private static async Task<string?> GetHostPathAsync(DBusConnection connection, string documentId)

@@ -16,7 +16,9 @@ portal:
    `steamapps` directory. The dialog is the host's own chooser; the app is not granted the home
    directory or any other path.
 2. The portal returns a document URI (`/run/user/<uid>/doc/<document-id>`). Only that directory is
-   readable from inside the sandbox, and only by this app id.
+   readable from inside the sandbox, and only by this app id. Flatpak exposes the mount as a
+   symlink (`/run/user/<uid>/doc` -> `../../flatpak/doc`); the app stores the resolved mount
+   (`/run/flatpak/doc/<document-id>/...`) because the bounded reader refuses symlink components.
 3. The app reads `libraryfolders.vdf` from the selected directory. Each declared library path in
    that file is a *host* Steam root; its `steamapps` directory is the path the user must select
    next. The app prompts once per declared library and rejects a selection whose
