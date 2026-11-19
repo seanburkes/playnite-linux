@@ -1,2 +1,2 @@
 id	wave	area	unit	depends	status	owner	oracle	test	notes
-p5-005	W5	platform	XDG/single-instance/protocol	p3-001	todo	platform	smoke	test:platform	
+p5-005	W5	platform	XDG/single-instance/protocol	p3-001	in-progress	fm/p5-005b	smoke; formal:GameSession	test:platform; GameSessionRefinementTests	Phase 5 criterion 5 checked by bounded TLC trace replay. Concrete counterexamples and coverage in docs/port/p5-005-session-refinement.md.
