@@ -157,6 +157,8 @@ public sealed class RealArtworkIdentityTests
     [InlineData("appcache/librarycache/219150/F2590E71D4B5C48C200ECC4D8B6E0EDDB60EFF20.jpg")]
     [InlineData("appcache/librarycache/219150/f2590e71d4b5c48c200ecc4d8b6e0eddb60eff2.jpg")]
     [InlineData("appcache/librarycache/219150/f2590e71d4b5c48c200ecc4d8b6e0eddb60eff200.jpg")]
+    [InlineData("appcache/librarycache/219150/f2590e71d4b5c48c200ecc4d8b6e0eddb60eff20")]
+    [InlineData("appcache/librarycache/1091500/cf8cec802dc47d0f24b75f9eee135e96812e2652/library_hero.jpg/extra")]
     [InlineData("appcache/librarycache/219150/header.jpg/extra")]
     [InlineData("appcache/librarycache/219150/../header.jpg")]
     [InlineData("appcache/librarycache/219150/")]

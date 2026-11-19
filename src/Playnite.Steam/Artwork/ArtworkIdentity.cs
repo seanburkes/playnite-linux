@@ -59,15 +59,19 @@ public sealed record ArtworkIdentity(uint AppId, ArtworkKind Kind)
             identity = new ArtworkIdentity(appId, kind);
             return true;
         }
-        // Observed hashed forms: <40 lowercase hex>.jpg, or <40 lowercase hex>/<child>.
-        return name.Length == 1 ? IsContentAddressedFileName(name[0]) : IsContentAddressedDirectory(name[0]);
+        // Observed hashed forms only: <40 lowercase hex>.jpg, or <40 lowercase hex>/<child>.
+        // Any other depth is unobserved and rejected.
+        return name.Length switch
+        {
+            1 => IsContentAddressedJpegFileName(name[0]),
+            2 => IsContentAddressedDirectory(name[0]),
+            _ => false,
+        };
     }
 
-    private static bool IsContentAddressedFileName(string name)
-    {
-        string stem = name.EndsWith(".jpg", StringComparison.Ordinal) ? name[..^".jpg".Length] : name;
-        return IsContentAddressedDirectory(stem);
-    }
+    private static bool IsContentAddressedJpegFileName(string name) =>
+        name.EndsWith(".jpg", StringComparison.Ordinal) &&
+        IsContentAddressedDirectory(name[..^".jpg".Length]);
 
     private static bool IsContentAddressedDirectory(string name)
     {
