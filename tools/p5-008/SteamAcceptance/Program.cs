@@ -6,7 +6,7 @@ using Playnite.Steam;
 if (args.Length < 4)
 {
     Console.Error.WriteLine("Default: read-only inspection; no launch or signal. Save data before explicitly consenting to launch and graceful stop.");
-    Console.Error.WriteLine("Usage: steam-acceptance.sh NATIVE_LIBRARY NATIVE_APPID PROTON_LIBRARY PROTON_APPID [--allow-launch --allow-stop] [--uri] [--native-exe ABS_PATH] [--proton-exe ABS_PATH]");
+    Console.Error.WriteLine("Usage: steam-acceptance.sh (or Playnite AppImage --steam-acceptance) NATIVE_LIBRARY NATIVE_APPID PROTON_LIBRARY PROTON_APPID [--allow-launch --allow-stop] [--uri] [--native-exe ABS_PATH] [--proton-exe ABS_PATH]");
     return 2;
 }
 
@@ -195,18 +195,19 @@ try
             await launcher.DisposeAsync();
             previous = launcher.AttributedIdentities.Concat(launcher.ObservedDescendants).ToArray();
             var after = await host.SnapshotAsync(CancellationToken.None);
-            if (!after.IsComplete || after.Processes.Any(row => row.Process.IsRunning
-                && (SteamProcessAttribution.Matches(target, row.Executable)
+            var survivors = after.Processes.Where(row => row.Process.IsRunning
+                && (row.Process.Identity.ProcessGroupId == process.Identity.ProcessGroupId
+                    || SteamProcessAttribution.Matches(target, row.Executable)
                     || SteamProcessAttribution.IsGame(target, row)
-                    || launcher.AttributedIdentities.Concat(launcher.ObservedDescendants)
-                        .Any(identity => SteamProcessAttribution.SameProcess(identity, row.Process.Identity)))))
+                    || previous.Any(identity => SteamProcessAttribution.SameProcess(identity, row.Process.Identity))))
+                .ToArray();
+            var retainedClients = clients.Count(client =>
+                after.Processes.Any(row => row.Process.IsRunning && row.Process.Identity == client));
+            Console.WriteLine($"POST-TEARDOWN complete={after.IsComplete} survivors={survivors.Length} tracked={previous.Length} original_clients_retained={retainedClients}/{clients.Length}");
+            foreach (var survivor in survivors)
             {
-                throw new InvalidOperationException("No-orphan assertion failed: game identity remains live or unverifiable.");
-            }
-
-            if (clients.Any(client => !after.Processes.Any(row => row.Process.IsRunning && row.Process.Identity == client)))
-            {
-                throw new InvalidOperationException("An original Steam client/helper identity disappeared; inspect before proceeding.");
+                var identity = survivor.Process.Identity;
+                Console.WriteLine($"POST-TEARDOWN SURVIVOR pid={identity.ProcessId} start_ticks={identity.StartTimeTicks} pgid={identity.ProcessGroupId} exe={survivor.Executable ?? "<unreadable>"}");
             }
 
             var report = launcher.StopReport ?? throw new InvalidOperationException("Missing game-exit proof.");
@@ -219,6 +220,16 @@ try
             foreach (var survivor in report.UnidentifiedSurvivors)
             {
                 Console.WriteLine($"UNIDENTIFIED SURVIVOR pid={survivor.ProcessId} start_ticks={survivor.StartTimeTicks} pgid={survivor.ProcessGroupId}; no evidence of Steam ownership; unsignalled; inspect manually");
+            }
+
+            if (!after.IsComplete || survivors.Length > 0)
+            {
+                throw new InvalidOperationException("No-orphan assertion failed: game identity remains live or unverifiable.");
+            }
+
+            if (retainedClients != clients.Length)
+            {
+                throw new InvalidOperationException("An original Steam client/helper identity disappeared; inspect before proceeding.");
             }
 
             if (report.IsDegraded)
