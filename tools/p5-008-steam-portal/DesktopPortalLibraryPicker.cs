@@ -113,6 +113,11 @@ internal sealed class DesktopPortalLibraryPicker : ISteamLibraryPortal, IAsyncDi
             }
 
             var portalPath = Path.TrimEndingDirectorySeparator(selected.LocalPath);
+            if (debug)
+            {
+                Console.Error.WriteLine($"portal: selected={selected} local={portalPath}");
+            }
+
             var (documentId, hostPath) = await ResolveDocumentAsync(current, portalPath, cancellationToken)
                 .ConfigureAwait(false);
             return SteamPortalSelection.Selected(portalPath, hostPath, documentId);
@@ -210,8 +215,19 @@ internal sealed class DesktopPortalLibraryPicker : ISteamLibraryPortal, IAsyncDi
         string portalPath, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
+        var debug = Environment.GetEnvironmentVariable("PLAYNITE_PORTAL_DEBUG") == "1";
+        if (debug)
+        {
+            Console.Error.WriteLine($"portal: resolve mount for {portalPath}");
+        }
+
         var mount = await CallForPathAsync(connection, DocumentsDestination, DocumentsPath, "GetMountPoint",
             string.Empty, string.Empty).ConfigureAwait(false);
+        if (debug)
+        {
+            Console.Error.WriteLine($"portal: mount={mount}");
+        }
+
         if (mount is null || !portalPath.StartsWith(mount + "/", StringComparison.Ordinal))
         {
             return (null, portalPath);
@@ -225,8 +241,18 @@ internal sealed class DesktopPortalLibraryPicker : ISteamLibraryPortal, IAsyncDi
             return (null, null);
         }
 
+        if (debug)
+        {
+            Console.Error.WriteLine($"portal: document={documentId}");
+        }
+
         var host = await CallForPathAsync(connection, DocumentsDestination, DocumentsPath, "Info", "s", documentId)
             .ConfigureAwait(false);
+        if (debug)
+        {
+            Console.Error.WriteLine($"portal: host={host}");
+        }
+
         return (documentId, host);
     }
 
