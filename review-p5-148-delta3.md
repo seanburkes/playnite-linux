@@ -11,7 +11,7 @@ Scope: only `083e2439..11597a9` — 5 files, 161 insertions, 2 deletions: the Ap
 
 ## P2 (blocking at `11597a9`) — the delta adds a second per-PR ledger fragment
 
-File: `docs/port/units/p5-008.ledger.d/149-appimage-acceptance.tsv:1` (new fragment; row at `:2`). The sibling `148-appimage-acceptance.tsv` is already in the PR base, and `docs/port/units/p5-008.queue.tsv:2` is the one allowed queue shard.
+File: `docs/port/units/p5-008.ledger.d/149-appimage-acceptance.tsv:1` (new fragment; row at `:2`). The sibling `148-appimage-acceptance.tsv` is already present at the delta base `083e2439` (but not on `main`), and `docs/port/units/p5-008.queue.tsv:2` is the one allowed queue shard.
 
 Concrete failure: relative to the fork point `5507699`, PR #148 adds both `148-appimage-acceptance.tsv` and `149-appimage-acceptance.tsv`. The pull-request gate allows exactly one new `<its-pr>-<short-slug>.tsv` fragment per PR. Reproduced with the exact CI command at `11597a9`:
 
