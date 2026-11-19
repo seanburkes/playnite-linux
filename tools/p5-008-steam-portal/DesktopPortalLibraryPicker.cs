@@ -14,6 +14,8 @@ internal sealed class DesktopPortalLibraryPicker : ISteamLibraryPortal, IAsyncDi
     private const string Destination = "org.freedesktop.portal.Desktop";
     private const string DesktopPath = "/org/freedesktop/portal/desktop";
     private const string FileChooser = "org.freedesktop.portal.FileChooser";
+    private const string DocumentsDestination = "org.freedesktop.portal.Documents";
+    private const string DocumentsPath = "/org/freedesktop/portal/documents";
     private const string Documents = "org.freedesktop.portal.Documents";
     private const string Request = "org.freedesktop.portal.Request";
 
@@ -105,7 +107,8 @@ internal sealed class DesktopPortalLibraryPicker : ISteamLibraryPortal, IAsyncDi
             throw;
         }
         catch (Exception exception) when (exception is DBusConnectionClosedException or DBusConnectionException
-                                               or TimeoutException or InvalidOperationException or UriFormatException)
+                                               or DBusErrorReplyException or TimeoutException or InvalidOperationException
+                                               or UriFormatException)
         {
             return SteamPortalSelection.Unavailable(exception.Message);
         }
@@ -185,8 +188,8 @@ internal sealed class DesktopPortalLibraryPicker : ISteamLibraryPortal, IAsyncDi
         string portalPath, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        var mount = await CallForPathAsync(connection, Documents, "GetMountPoint", string.Empty, string.Empty)
-            .ConfigureAwait(false);
+        var mount = await CallForPathAsync(connection, DocumentsDestination, DocumentsPath, "GetMountPoint",
+            string.Empty, string.Empty).ConfigureAwait(false);
         if (mount is null || !portalPath.StartsWith(mount + "/", StringComparison.Ordinal))
         {
             return (null, portalPath);
@@ -200,18 +203,19 @@ internal sealed class DesktopPortalLibraryPicker : ISteamLibraryPortal, IAsyncDi
             return (null, null);
         }
 
-        var host = await CallForPathAsync(connection, Documents, "Info", "s", documentId).ConfigureAwait(false);
+        var host = await CallForPathAsync(connection, DocumentsDestination, DocumentsPath, "Info", "s", documentId)
+            .ConfigureAwait(false);
         return (documentId, host);
     }
 
-    private static async Task<string?> CallForPathAsync(DBusConnection connection, string @interface, string member,
-        string signature, string argument)
+    private static async Task<string?> CallForPathAsync(DBusConnection connection, string destination,
+        string objectPath, string @interface, string member, string signature, string? argument = null)
     {
         var writer = connection.GetMessageWriter();
-        writer.WriteMethodCallHeader(Destination, DesktopPath, @interface, member, signature);
+        writer.WriteMethodCallHeader(destination, objectPath, @interface, member, signature);
         if (signature.Length != 0)
         {
-            writer.WriteString(argument);
+            writer.WriteString(argument ?? throw new ArgumentException("A string argument is required.", nameof(argument)));
         }
 
         var bytes = await connection.CallMethodAsync(writer.CreateMessage(),
