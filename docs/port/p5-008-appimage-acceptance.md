@@ -194,3 +194,54 @@ SURVIVOR SCAN baseline_live=498 post_live=497 complete=True survivors=0
 
 Linux CI for the packaged code head passed 2,629 tests with zero failures and
 zero skips. [Linux CI run](https://github.com/seanburkes/playnite-linux/actions/runs/44441401426)
+
+## Rerun with lexically resolved unlinked argv
+
+A relative argument can name a target that no longer exists: a detached worker
+may unlink its own script after loading. The pre-fix scan combined the argument
+with the process's cwd and then required realpath to resolve it, so a missing
+target produced no app-path evidence and the surviving worker was not reported.
+The scan now normalises the cwd-relative path lexically, without requiring the
+target to exist, and reports it when it is under the selected game's install
+directory or prefix. Absolute arguments still use realpath, and Windows drive
+resolution is unchanged. The regression starts `/usr/bin/python3 ./worker.py`
+in its own session, deletes `worker.py` after the worker prints `ready`, proves
+the pre-fix predicate misses the live row, and asserts the fixed scan reports
+it.
+
+On November 18, 2026, a local mounted AppImage was assembled from clean commit
+`fa443d9730419758173a1e1033820b650b40f813` with `packaging/assemble.sh`, .NET
+SDK 11.0.100 and the self-contained .NET 11.0.0 linux-x64 runtime. The same
+appimagetool 1.9.1 and type2-runtime binaries verified in the CI workflow packaged
+it. The artifact was 46,471,672 bytes with SHA-256
+`c216c50b8b809f9c810f879bcfb9f67840feedb9378f87135594dc52ad80317e`.
+Version `1.0.0.0`, headless smoke, and dry-run manifest inspection passed.
+
+The live command above exited 0 on the same signed-in Steam desktop. The harness
+issued one pidfd `SIGTERM` request for the attributed game identity per flow.
+All four stop reports were non-degraded and all 11 original Steam identities
+were present after each flow. Game paths are relative to the Steam library.
+
+| Flow | Terminal state | PID / start ticks / PGID | Attributed game path | Elapsed |
+| --- | --- | --- | --- | ---: |
+| Native `770100` stop | `Stopped` | `3438401 / 235240530 / 3438368` | `steamapps/common/One Deck Dungeon/OneDeckDungeon.x86_64` | 4.6 s |
+| Native `770100` cancel | `Cancelled` | `3449100 / 235242962 / 3449067` | `steamapps/common/One Deck Dungeon/OneDeckDungeon.x86_64` | 3.1 s |
+| Proton `1145360` stop | `Stopped` | `3459391 / 235245795 / 3459391` | `steamapps/common/Hades/x64/Hades.exe` | 7.4 s |
+| Proton `1145360` cancel | `Cancelled` | `3470661 / 235248553 / 3470661` | `steamapps/common/Hades/x64/Hades.exe` | 6.6 s |
+
+```text
+SURVIVOR SCAN baseline_live=488 post_live=497 complete=True survivors=0
+SURVIVOR SCAN baseline_live=495 post_live=496 complete=True survivors=0
+SURVIVOR SCAN baseline_live=494 post_live=495 complete=True survivors=0
+SURVIVOR SCAN baseline_live=495 post_live=495 complete=True survivors=0
+
+AUDIT post-teardown app=770100 group=3438368 app_or_group_rows=0 fresh_runtime_rows=0 original_steam_clients=1/1
+AUDIT post-teardown app=770100 group=3449067 app_or_group_rows=0 fresh_runtime_rows=0 original_steam_clients=1/1
+AUDIT post-teardown app=1145360 group=3459391 app_or_group_rows=0 fresh_runtime_rows=0 original_steam_clients=1/1
+AUDIT post-teardown app=1145360 group=3470661 app_or_group_rows=0 fresh_runtime_rows=0 original_steam_clients=1/1
+AUDIT final packaged_exit=0 flows=4 clean_tables=True
+```
+
+The independent host observer retained the original Steam client
+`122666 / 6590265 / 121295` throughout and printed the filtered post-teardown
+row counts above.
