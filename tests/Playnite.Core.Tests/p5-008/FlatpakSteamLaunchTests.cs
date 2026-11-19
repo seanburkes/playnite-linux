@@ -86,11 +86,13 @@ public sealed class FlatpakSteamLaunchTests
     }
 
     [Fact]
-    public void A_shell_opener_is_rejected_when_the_request_is_built()
+    public async Task A_shell_opener_is_rejected_when_the_request_is_built()
     {
         var shell = new FlatpakSteamLauncher(new RecordingOpener(), "/bin/sh");
         var rejection = Assert.Throws<ArgumentException>(() => shell.CreateRequest(42));
         Assert.Contains("shell", rejection.Message, StringComparison.OrdinalIgnoreCase);
+        await Assert.ThrowsAsync<ArgumentException>(() => shell.LaunchAsync(42, CancellationToken.None));
+        Assert.Throws<ArgumentException>(() => new LaunchRequest("/bin/sh", ["steam://rungameid/42"]));
         Assert.Throws<ArgumentException>(() => new FlatpakSteamLauncher(new RecordingOpener(), "xdg-open"));
     }
 

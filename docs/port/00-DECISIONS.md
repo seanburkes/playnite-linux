@@ -547,7 +547,9 @@ by merged [#156](https://github.com/seanburkes/playnite-linux/pull/156) at
 **Amendment (2026-11-19) — Flatpak launch is launch-only through OpenURI.** This supersedes the
 launch half of the decision above while leaving process tracking deferred. Inside the sandbox
 Playnite opens the §6.3 Steam rungameid URI (`steam:&#47;&#47;rungameid/<appid>`) through the desktop `org.freedesktop.portal.OpenURI`
-route (the sandbox `xdg-open`) and reports the session as **UNKNOWN**: Steam owns the game,
+route (the sandbox `xdg-open`). The v1 product surface is the shipped CLI command
+`playnite launch <appid>`; the desktop GUI play action is **deferred** and is not claimed by this
+amendment. In Flatpak the session is reported as **UNKNOWN**: Steam owns the game,
 Playnite cannot observe host PIDs, reports no playtime, and exposes no stop or signal surface.
 The user stops the game in Steam. The app id is validated as a strict decimal `uint`, the URI is
 one argv element, and no shell parses it. No `flatpak-spawn`, host command, filesystem grant,

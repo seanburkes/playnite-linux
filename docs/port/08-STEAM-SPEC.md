@@ -483,6 +483,11 @@ The app id is validated as a strict decimal `uint` before the URI is built; sign
 hex, exponents, fractions, overflow and any injected text are rejected. A zero opener exit means
 the portal accepted the request, not that the game started.
 
+The v1 product surface is the shipped CLI command `playnite launch <appid>`. It selects the
+launch mode from the host: Flatpak uses this OpenURI path, native/AppImage keeps the tracked
+launcher with a minimal console reporter. The desktop GUI play action is **deferred**; it is not
+claimed by this section.
+
 This mode is deliberately **launch-only**:
 
 - Tracking is **UNKNOWN**. Steam owns the game process, and the sandbox cannot observe host
