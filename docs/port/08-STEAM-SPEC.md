@@ -58,9 +58,12 @@ and four when neither is.
 `steam.pid`, `steam.pipe`, and `steam.token` are not proof of a live client; treat a stale
 `steam.pid` as a normal state. **[decision]**
 
-Flatpak candidate: **UNKNOWN**. The capture host has no `flatpak` binary, no `flatpak-spawn`,
-and no `~/.var/app/com.valvesoftware.Steam`, so the Flatpak layout and host transport were
-not verified. The path above is the planned v1 probe, not observed fact.
+Candidate 6 is a host-side discovery probe for a Steam installation packaged as Flatpak. Its
+layout remains **UNKNOWN** on the capture host, which had no `flatpak` or `flatpak-spawn`
+binary and no per-user Steam Flatpak data directory. AppImage is the only
+Steam-integrated packaging target for v1. Reading host Steam libraries from the Playnite
+Flatpak is **deferred to v1.1** by ADR-020. Narrow library permissions and packaged-read
+evidence remain open. The v1 Flatpak ships the app shell only.
 
 ### 1.3 Discovery decisions [decision]
 
@@ -463,9 +466,11 @@ path from the manifest: that bypasses Steam and its runtime contract. **[decisio
 - Other URI routes (for example a `run` or `launch` path) are **UNKNOWN**; do not use them
   without a probe.
 
-### 6.4 Flatpak-hosted Steam [unknown]
+### 6.4 Host Steam launch and tracking from Flatpak [deferred to v1.1]
 
-Not present on the capture host. Planned fallbacks for Phase 2 validation:
+ADR-020 defers Steam launch and session tracking from the Playnite Flatpak to v1.1. No general
+host-command authority is granted and no host helper service is built for v1. The capture
+host lacked Flatpak. The historical probe candidates were:
 
 ```
 flatpak-spawn --host flatpak run com.valvesoftware.Steam -applaunch <appid>
@@ -478,7 +483,7 @@ flatpak-spawn --host steam -applaunch <appid>
 ```
 
 Neither was executed. The p1-010 Flatpak spike concluded **inconclusive** for host launch and
-host PID visibility. Do not report Flatpak acceptance until it is actually run.
+host PID visibility. Both require v1.1 validation before any Flatpak acceptance claim.
 
 ### 6.5 Launch options [host/unknown]
 
@@ -520,9 +525,10 @@ fresh PID/start-time identity with a canonical executable under that app's insta
 Proton prefix, only in a fresh, verified group separate from Steam. Never attribute a Steam
 client/helper/runtime wrapper as the game. Shared, multiple, absent or unverifiable candidates
 are UNKNOWN and require owner Steam Stop/explicit attachment, not guessed automatic control.
-The detailed adapter, executable-override heuristic, group-stop boundary, real acceptance
-script and outstanding Flatpak host-helper/permission plan are in
-[`p5-008-steam-launch.md`](p5-008-steam-launch.md). No real-machine acceptance is implied.
+The detailed adapter, executable-override heuristic, group-stop boundary and real acceptance
+script are in [`p5-008-steam-launch.md`](p5-008-steam-launch.md). The Flatpak helper and
+permission discussion there predates the ADR-020 deferral. No real-machine acceptance is
+implied.
 
 - The `steam -applaunch` process is a request, not the game. Do not use its exit as the
   session end.
@@ -535,7 +541,7 @@ script and outstanding Flatpak host-helper/permission plan are in
   alive after the game process is gone, and must not start a session on its own.
 - **DECISION**: a session starts only when a matching process is observed, ends after a
   debounce (for example 5 s) of confirmed absence, and can always be stopped manually.
-- Flatpak host PID visibility is **UNKNOWN** (p1-010 inconclusive).
+- Flatpak host PID visibility is **UNKNOWN** (p1-010 inconclusive) and deferred to v1.1.
 
 ## 8. Artwork and metadata caches
 
@@ -609,7 +615,7 @@ artwork, despite the `librarycache` name.
 | Steam not running / stale `steam.pid` | `steam -applaunch` may start the client (**UNVERIFIED** on this host); if launch does not produce a session, surface the error. Do not treat the pid file as liveness. |
 | Launch command exits 0 | Not proof of start; the tracker decides. |
 | Game exits immediately | Session ends; report a short-session warning. |
-| Flatpak-hosted Steam | **UNKNOWN**; probe `flatpak-spawn --host` forms, report inconclusive until accepted. |
+| Host Steam from the Playnite Flatpak | **DEFERRED to v1.1** by ADR-020. Host launch, host PID visibility, and narrow host-library access remain unverified. |
 | Multiple accounts | See §9.1. |
 | Offline mode | See §9.2. |
 | Duplicate appid across libraries | First library in file order wins; report the duplicate. |
@@ -664,15 +670,19 @@ empty-achievement `librarycache` JSON.
 - Fixture app set matches the expected list exactly, including `StateFlags 6` and the broken
   entries.
 - Real install launches and stops a native title and a Proton title.
-- Flatpak build launches and tracks a host Steam game (**pending**, not proven).
-- No orphan processes after cancel/teardown.
+- AppImage is the only Steam-integrated package for v1. A packaged AppImage host-library read
+  still needs evidence.
+- No orphan processes after cancel/teardown on the v1 AppImage native and Proton paths.
+- ADR-020 defers Flatpak host Steam launch, tracking, and host-library reads to v1.1. The
+  Phase 5 criteria remain recorded in [the pending assessment](gates/P5-pending.md).
 - No network on the UI thread.
 - No protected path changes without the declared `oracle-change` route through the
   protected-path gate.
 
 ## 11. Unknowns still open
 
-1. Flatpak directory layout, `flatpak-spawn` behaviour, and host PID visibility.
+1. Flatpak Steam directory layout, `flatpak-spawn` behaviour, host PID visibility, and narrow
+   host-library access. Steam integration from the Playnite Flatpak is deferred to v1.1.
 2. Legacy `libraryfolders.vdf` index form (accepted by policy, not observed here).
 3. Steam's own duplicate-key and escape semantics remain unobserved; the launcher's parser
    policy is resolved and tested in §3.2, not claimed as host evidence.

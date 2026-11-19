@@ -188,13 +188,13 @@ once would make the first release unbounded.
 
 **Decision.** v1 ships:
 - Avalonia **desktop** shell.
-- **Steam** library discovery and launch (native + Proton via Steam).
+- **Steam** library discovery and launch (native + Proton via Steam) in AppImage.
 - v10 library import (Steam games and user metadata preserved).
 - Settings, search, filters, grid/list/details, game edit, game launch, notifications, tray.
 - v10 library import with a clear transport/fresh-install path (ADR-021).
 - Localisation key reuse and a partial-locale report (ADR-022).
 - New SDK Abstractions + UI preview + one sample plugin.
-- x64 + ARM64 AppImage + Flatpak (Flatpak must launch and track Steam; ADR-020).
+- x64 + ARM64 AppImage + Flatpak (Flatpak ships the app shell only in v1; ADR-020).
 
 Out of v1: fullscreen shell, emulation, non-Steam launchers (Heroic/Lutris/itch), add-on
 store, metadata provider plugins, controller-first/gamepad UI, WebView/JavaScript metadata
@@ -502,27 +502,25 @@ plugins can target it later.
 
 ---
 
-## ADR-020 — Flatpak launches and observes Steam through the host
+## ADR-020 — Flatpak Steam integration deferred to v1.1
 
 **Context.** A Flatpak sandbox cannot see the host's `steam` binary on `PATH` or observe host
 processes as children. The plan originally granted filesystem access and assumed `/proc`
 tracking would work. That is false, and `--filesystem=home` is also a Flathub review problem.
 
-**Decision.**
-- Launch host Steam with `flatpak-spawn --host steam -applaunch <appid>` (and
-  `flatpak-spawn --host xdg-open` for URLs).
-- Session tracking uses the host PID namespace via `flatpak-spawn --host` probes, or a small
-  host-side helper if PID visibility is insufficient. The decision is recorded as part of the
-  Phase 5 spike.
-- Request the narrowest filesystem permissions that work: Steam library paths via
-  `--filesystem` entries or portals, not `home` by default.
-- Gate 5 requires launch **and** session tracking to work inside the Flatpak build, not just
-  reading the library.
+**Decision.** The owner **DEFERS Flatpak Steam integration to v1.1**. Flatpak ships the app
+shell only in v1. No general host-command authority is granted and no host helper service
+is built for v1. Steam launch and session tracking from Flatpak, and reads of host Steam
+libraries from Flatpak, are v1.1 work. AppImage is the only Steam-integrated packaging target
+for v1.
 
 **Consequences.**
-- Flatpak is a first-class target, not an afterthought.
-- The host helper is an extra binary and a security surface; it must be minimal and audited.
-- AppImage remains the simplest path; Flatpak may ship slightly later if the helper is needed.
+- Phase 5 criteria 3 (Flatpak launch and tracking) and 6 (packaged host-library access) stay
+  visible as deferred by owner decision. The Phase 5 gate cannot be claimed as fully satisfied
+  while both criteria are deferred. AppImage host-library access still needs a packaged read
+  to establish evidence.
+- The v1.1 design must establish launch, host PID visibility and narrow library access. Any
+  host helper considered then adds a security surface and must be minimal and audited.
 
 **Rejected.**
 - *Assume `/proc` works inside the sandbox.* It does not for host processes.
