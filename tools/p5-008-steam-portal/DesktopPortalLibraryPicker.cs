@@ -183,28 +183,23 @@ internal sealed class DesktopPortalLibraryPicker : ISteamLibraryPortal, IAsyncDi
                     Member = "Response",
                 },
             static (Message message, object? state) => ReadResponse(message, (string)state!),
-            (Notification<PortalResponse?> notification) =>
+            (Exception? exception, PortalResponse? response, object? readerState, object? handlerState) =>
             {
-                if (notification.Exception is not null)
+                if (Environment.GetEnvironmentVariable("PLAYNITE_PORTAL_DEBUG") == "1")
                 {
-                    if (Environment.GetEnvironmentVariable("PLAYNITE_PORTAL_DEBUG") == "1")
-                    {
-                        Console.Error.WriteLine($"portal: notification exception={notification.Exception.GetType().Name}");
-                    }
-
-                    completion.TrySetException(notification.Exception);
+                    Console.Error.WriteLine($"portal: handler exception={exception?.GetType().Name ?? "none"} value={(response is null ? "null" : response.Code.ToString())}");
                 }
-                else if (notification.HasValue && notification.Value is not null)
-                {
-                    if (Environment.GetEnvironmentVariable("PLAYNITE_PORTAL_DEBUG") == "1")
-                    {
-                        Console.Error.WriteLine("portal: notification value");
-                    }
 
-                    completion.TrySetResult(notification.Value);
+                if (exception is not null)
+                {
+                    completion.TrySetException(exception);
+                }
+                else if (response is not null)
+                {
+                    completion.TrySetResult(response);
                 }
             },
-            false, ObserverFlags.None, token);
+            ObserverFlags.None, token, null, false);
 
     private static async Task CloseRequestAsync(DBusConnection connection, string handle)
     {
