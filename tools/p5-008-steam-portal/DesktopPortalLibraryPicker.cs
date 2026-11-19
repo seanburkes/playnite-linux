@@ -249,14 +249,50 @@ internal sealed class DesktopPortalLibraryPicker : ISteamLibraryPortal, IAsyncDi
             Console.Error.WriteLine($"portal: document={documentId}");
         }
 
-        var host = await CallForPathAsync(connection, DocumentsDestination, DocumentsPath, Documents,
-            "Info", "s", documentId).ConfigureAwait(false);
+        // Documents.Info is refused for sandboxed callers ("Not allowed in sandbox");
+        // GetHostPaths is the method the document portal offers to the owning app.
+        var host = await GetHostPathAsync(connection, documentId).ConfigureAwait(false);
         if (debug)
         {
             Console.Error.WriteLine($"portal: host={host}");
         }
 
         return (documentId, host);
+    }
+
+    private static async Task<string?> GetHostPathAsync(DBusConnection connection, string documentId)
+    {
+        var writer = connection.GetMessageWriter();
+        writer.WriteMethodCallHeader(DocumentsDestination, DocumentsPath, Documents, "GetHostPaths", "as");
+        writer.WriteArray(new[] { documentId });
+        return await connection.CallMethodAsync(writer.CreateMessage(),
+            static (Message message, object? state) =>
+            {
+                var reader = message.GetBodyReader();
+                var end = reader.ReadDictionaryStart();
+                while (reader.HasNext(end))
+                {
+                    var id = reader.ReadString();
+                    var path = reader.ReadArrayOfByte();
+                    if (string.Equals(id, (string)state!, StringComparison.Ordinal))
+                    {
+                        return DecodePath(path);
+                    }
+                }
+
+                return null;
+            }, documentId).ConfigureAwait(false);
+    }
+
+    private static string? DecodePath(byte[] bytes)
+    {
+        var end = bytes.Length;
+        while (end > 0 && bytes[end - 1] == 0)
+        {
+            end--;
+        }
+
+        return end == 0 ? null : Encoding.UTF8.GetString(bytes, 0, end);
     }
 
     private static async Task<string?> CallForPathAsync(DBusConnection connection, string destination,
@@ -277,18 +313,7 @@ internal sealed class DesktopPortalLibraryPicker : ISteamLibraryPortal, IAsyncDi
         var bytes = await connection.CallMethodAsync(writer.CreateMessage(),
             static (Message message, object? _) => message.GetBodyReader().ReadArrayOfByte(),
             null).ConfigureAwait(false);
-        if (bytes.Length == 0)
-        {
-            return null;
-        }
-
-        var end = bytes.Length;
-        while (end > 0 && bytes[end - 1] == 0)
-        {
-            end--;
-        }
-
-        return Encoding.UTF8.GetString(bytes, 0, end);
+        return DecodePath(bytes);
     }
 
     private static PortalResponse? ReadResponse(Message message, string token)

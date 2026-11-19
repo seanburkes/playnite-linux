@@ -20,7 +20,9 @@ portal:
 3. The app reads `libraryfolders.vdf` from the selected directory. Each declared library path in
    that file is a *host* Steam root; its `steamapps` directory is the path the user must select
    next. The app prompts once per declared library and rejects a selection whose
-   `org.freedesktop.portal.Documents.Info` host path is not exactly `<declared root>/steamapps`.
+   `org.freedesktop.portal.Documents.GetHostPaths` host path is not exactly
+   `<declared root>/steamapps`. (`Documents.Info` is refused for sandboxed callers with
+   `org.freedesktop.portal.Error.NotAllowed`, so the owning app uses `GetHostPaths`.)
 4. Grants (`host path` ↔ `document id` ↔ portal path) are persisted in the app's own config
    directory (`steam-portal-grants.json`, mode 0600, atomic replace). The next run re-resolves the
    stored document paths and reads the app set without prompting.
