@@ -293,6 +293,8 @@ tests/Playnite.Core.Tests/Steam/SteamRealCorpusDiscoveryTests.cs	p5-002	f82c3d46
 tests/Playnite.Core.Tests/TestDoubles/MemoryEnvironment.cs	*	d6401f1f07c69474d0ce395797ab694bedf019e7	pull/68
 tests/Playnite.Core.Tests/TestDoubles/MemoryFileSystem.cs	*	d6401f1f07c69474d0ce395797ab694bedf019e7	pull/68
 tests/Playnite.Core.Tests/UtilsGoldenTests.cs	*	29f665a47aa385cafbf87538c4465a8ee70badef	pull/67
+tests/Playnite.Core.Tests/p5-005/GameSession.traces.tsv	p5-004	49302a43a1a366b56b6e576a0c3bd5e8a3c9b3dc	pull/154
+tests/Playnite.Core.Tests/p5-005/GameSessionRefinementTests.cs	p5-004	49302a43a1a366b56b6e576a0c3bd5e8a3c9b3dc	pull/154
 tests/Playnite.Core.Tests/p5-008/LinuxPidFdSignalTests.cs	p5-008	d82758baa26eecf25801e982a8fa32bfb98396c5	pull/137
 tests/Playnite.Core.Tests/p5-008/ManualSteamTime.cs	p5-008	d82758baa26eecf25801e982a8fa32bfb98396c5	pull/137
 tests/Playnite.Core.Tests/p5-008/SteamAcceptanceConsentTests.cs	p5-008	d82758baa26eecf25801e982a8fa32bfb98396c5	pull/137
