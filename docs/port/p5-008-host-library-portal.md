@@ -26,6 +26,11 @@ portal:
    stored document paths and reads the app set without prompting.
 5. The imported app set is the set of `appmanifest_<appid>.acf` manifests in every granted
    `steamapps` directory, parsed with the merged p5-001 manifest parser.
+6. A declared library can be an external drive that is not mounted. Dismissing that library's
+   chooser means "not available now": the import keeps the grants it already has, imports the
+   other libraries, reports `partial` and lists `<expected>/steamapps: skipped (selection
+   cancelled)`. Dismissing the *primary* chooser still cancels the whole import. Skipping never
+   invents access: a skipped library contributes no apps and no grant.
 
 The document portal keeps a granted document id only while the document exists. A deleted,
 unmounted or revoked grant no longer resolves to a readable directory; the importer drops it and

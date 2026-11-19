@@ -35,7 +35,7 @@ internal static class Program
             ? await PortalAsync(fileSystem, options, CancellationToken.None)
             : DirectAsync(fileSystem);
         Console.Out.WriteLine(JsonSerializer.Serialize(report, Json));
-        return report.Status == "complete" ? 0 : 2;
+        return report.Status is "complete" or "partial" ? 0 : 2;
     }
 
     private static ImportReport DirectAsync(SteamFileSystem fileSystem)
@@ -85,6 +85,7 @@ internal static class Program
     private static string Status(SteamPortalImportStatus status) => status switch
     {
         SteamPortalImportStatus.Complete => "complete",
+        SteamPortalImportStatus.Partial => "partial",
         SteamPortalImportStatus.Cancelled => "cancelled",
         SteamPortalImportStatus.Rejected => "rejected",
         SteamPortalImportStatus.Unavailable => "unavailable",

@@ -84,6 +84,26 @@ public sealed class SteamPortalTests : IDisposable
     }
 
     [Fact]
+    public async Task A_cancelled_additional_library_is_skipped_and_the_rest_is_imported()
+    {
+        var primary = SteamApps("steam", (100, "Primary Game"));
+        WriteLibraryFile(primary, ("/host/steam", [100]), ("/host/missing", [200]));
+        var store = new JsonSteamPortalGrantStore(GrantsPath);
+
+        var result = await new PortalSteamLibraryImporter(
+            new ScriptedPortal(
+                Selected(primary, "/host/steam/steamapps", "doc-primary"),
+                SteamPortalSelection.Cancelled()),
+            store, fileSystem).ImportAsync();
+
+        Assert.Equal(SteamPortalImportStatus.Partial, result.Status);
+        var library = Assert.Single(result.Libraries);
+        Assert.Equal(new uint[] { 100 }, library.Apps.Select(app => app.AppId));
+        Assert.Contains("/host/missing/steamapps", Assert.Single(result.Issues), StringComparison.Ordinal);
+        Assert.Single(store.Load());
+    }
+
+    [Fact]
     public async Task A_primary_selection_without_libraryfolders_is_rejected()
     {
         var empty = Directory.CreateDirectory(Path.Combine(root, "empty", "steamapps")).FullName;

@@ -7,7 +7,9 @@ public enum SteamPortalImportStatus
 {
     /// <summary>Every declared library was granted and its app set was read.</summary>
     Complete,
-    /// <summary>The user dismissed the chooser (or a later prompt).</summary>
+    /// <summary>Some declared libraries were skipped by the user, the rest were read.</summary>
+    Partial,
+    /// <summary>The user dismissed the primary chooser.</summary>
     Cancelled,
     /// <summary>The user selected something that is not the required <c>steamapps</c> directory.</summary>
     Rejected,
@@ -88,6 +90,7 @@ public sealed class PortalSteamLibraryImporter(
 
         var libraries = new List<SteamPortalLibrary>();
         var issues = new List<string>();
+        var skipped = 0;
         foreach (var library in declared.Libraries!)
         {
             var expected = SteamAppsPath(library.Path);
@@ -97,6 +100,16 @@ public sealed class PortalSteamLibraryImporter(
             {
                 var selection = await portal.SelectSteamAppsDirectoryAsync(
                     $"Select the steamapps directory for {library.Path}", cancellationToken).ConfigureAwait(false);
+                if (selection.Status == SteamPortalSelectionStatus.Cancelled)
+                {
+                    // A declared library can be an external drive that is not mounted. Dismissing
+                    // its chooser means "not available now": keep the grants already obtained and
+                    // import the other libraries. The primary library above is still mandatory.
+                    skipped++;
+                    issues.Add($"{expected}: skipped (selection cancelled)");
+                    continue;
+                }
+
                 if (Failure(selection) is { } failure)
                 {
                     return failure;
@@ -121,7 +134,8 @@ public sealed class PortalSteamLibraryImporter(
         }
 
         grantStore.Save(grants);
-        return new(SteamPortalImportStatus.Complete, libraries.AsReadOnly(), grants.AsReadOnly(), issues.AsReadOnly());
+        return new(skipped == 0 ? SteamPortalImportStatus.Complete : SteamPortalImportStatus.Partial,
+            libraries.AsReadOnly(), grants.AsReadOnly(), issues.AsReadOnly());
     }
 
     private bool IsUsable(SteamPortalGrant grant) =>
