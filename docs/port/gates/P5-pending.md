@@ -13,7 +13,7 @@
   independent approval and **no owner acceptance** is claimed.
 - Addendum (follow-up to merged #123): the unit evidence table cites main-push linux-ci runs on
   the merged heads, not pull-request head runs. No criterion status changed.
-- Addendum (PR #149): criterion 4 moves to **PROVEN** on the packaged AppImage evidence merged
+- Addendum (PR #151): criterion 4 moves to **PROVEN** on the packaged AppImage evidence merged
   as [#148](https://github.com/seanburkes/playnite-linux/pull/148). Criteria 1 and 5 stay
   **PARTIAL**; criteria 3 and 6 stay **DEFERRED BY OWNER DECISION**. The summary is now
   **2 PROVEN / 2 PARTIAL / 2 DEFERRED**. **Phase 5 is still not exited** while criteria 1 and
