@@ -224,8 +224,8 @@ internal sealed class DesktopPortalLibraryPicker : ISteamLibraryPortal, IAsyncDi
             Console.Error.WriteLine($"portal: resolve mount for {portalPath}");
         }
 
-        var mount = await CallForPathAsync(connection, DocumentsDestination, DocumentsPath, "GetMountPoint",
-            string.Empty, string.Empty).ConfigureAwait(false);
+        var mount = await CallForPathAsync(connection, DocumentsDestination, DocumentsPath, Documents,
+            "GetMountPoint", string.Empty).ConfigureAwait(false);
         if (debug)
         {
             Console.Error.WriteLine($"portal: mount={mount}");
@@ -249,8 +249,8 @@ internal sealed class DesktopPortalLibraryPicker : ISteamLibraryPortal, IAsyncDi
             Console.Error.WriteLine($"portal: document={documentId}");
         }
 
-        var host = await CallForPathAsync(connection, DocumentsDestination, DocumentsPath, "Info", "s", documentId)
-            .ConfigureAwait(false);
+        var host = await CallForPathAsync(connection, DocumentsDestination, DocumentsPath, Documents,
+            "Info", "s", documentId).ConfigureAwait(false);
         if (debug)
         {
             Console.Error.WriteLine($"portal: host={host}");
