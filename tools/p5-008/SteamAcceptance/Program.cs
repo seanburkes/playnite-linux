@@ -134,7 +134,7 @@ try
                 }
 
                 Console.WriteLine($"FAIL {label} {flow}: no accepted game identity; nothing was signalled.");
-                var afterUnknown = await host.SnapshotAsync(CancellationToken.None);
+                var afterUnknown = await reporting.SnapshotForSurvivorsAsync(CancellationToken.None);
                 var live = SteamAcceptanceSurvivorScan.Find(target, files, before, afterUnknown, null, []);
                 if (!afterUnknown.IsComplete || live.Count > 0)
                 {
@@ -192,7 +192,7 @@ try
             await tracker.DisposeAsync();
             await launcher.DisposeAsync();
             previous = launcher.AttributedIdentities.Concat(launcher.ObservedDescendants).ToArray();
-            var after = await host.SnapshotAsync(CancellationToken.None);
+            var after = await reporting.SnapshotForSurvivorsAsync(CancellationToken.None);
             var survivors = SteamAcceptanceSurvivorScan.Find(target, files, before, after,
                 process.Identity.ProcessGroupId, previous);
             var retainedClients = clients.Count(client =>
@@ -338,6 +338,8 @@ sealed class ReportingHost : IExternalProcessHost
     public int? LastRequestExit { get; private set; }
     public void ResetRequest() => LastRequestExit = null;
     public Task<ExternalProcessSnapshot> SnapshotAsync(CancellationToken cancellationToken) => host.SnapshotAsync(cancellationToken);
+    public Task<ExternalProcessSnapshot> SnapshotForSurvivorsAsync(CancellationToken cancellationToken) =>
+        host.SnapshotAsync(captureWorkingDirectories: true, cancellationToken);
     public async Task<int> RunAsync(LaunchRequest request, CancellationToken cancellationToken)
     {
         LastRequestExit = null;

@@ -29,7 +29,11 @@ public sealed class LinuxExternalProcessHost : IExternalProcessHost
         this.captureProcessNames = captureProcessNames;
     }
 
-    public async Task<ExternalProcessSnapshot> SnapshotAsync(CancellationToken cancellationToken)
+    public Task<ExternalProcessSnapshot> SnapshotAsync(CancellationToken cancellationToken) =>
+        SnapshotAsync(captureWorkingDirectories: false, cancellationToken);
+
+    public async Task<ExternalProcessSnapshot> SnapshotAsync(bool captureWorkingDirectories,
+        CancellationToken cancellationToken)
     {
         var sample = await observer.SnapshotAsync(cancellationToken).ConfigureAwait(false);
         var entries = new List<ExternalProcessEntry>();
@@ -41,6 +45,7 @@ public sealed class LinuxExternalProcessHost : IExternalProcessHost
             string? executable = null;
             string[]? commandLine = null;
             string? processName = null;
+            string? workingDirectory = null;
             if (entry.IsRunning)
             {
                 try
@@ -65,9 +70,14 @@ public sealed class LinuxExternalProcessHost : IExternalProcessHost
                 {
                     processName = ReadProcessName(entry.Identity.ProcessId);
                 }
+
+                if (captureWorkingDirectories && commandLine is { Length: > 0 })
+                {
+                    workingDirectory = ReadWorkingDirectory(entry.Identity.ProcessId);
+                }
             }
 
-            // Bind executable evidence to the exact stat identity, not a reused PID.
+            // Bind process metadata to the exact stat identity, not a reused PID.
             ProcStat? current;
             try
             {
@@ -101,12 +111,12 @@ public sealed class LinuxExternalProcessHost : IExternalProcessHost
                     row.ProcessGroupId);
                 moved.Add(movedIdentity);
                 entries.Add(new(entry with { Identity = movedIdentity, IsRunning = row.IsRunning },
-                    executable, commandLine) { ProcessName = processName });
+                    executable, commandLine) { ProcessName = processName, WorkingDirectory = workingDirectory });
                 continue;
             }
 
             entries.Add(new(entry with { IsRunning = row.IsRunning }, executable, commandLine)
-                { ProcessName = processName });
+                { ProcessName = processName, WorkingDirectory = workingDirectory });
         }
 
         return new(entries, complete, moved);
@@ -217,6 +227,19 @@ public sealed class LinuxExternalProcessHost : IExternalProcessHost
         try
         {
             return File.ReadAllText($"/proc/{pid}/comm").TrimEnd('\n');
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            return null;
+        }
+    }
+
+    private static string? ReadWorkingDirectory(int pid)
+    {
+        try
+        {
+            var path = new DirectoryInfo($"/proc/{pid}/cwd").LinkTarget;
+            return Path.IsPathFullyQualified(path ?? string.Empty) ? path : null;
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {

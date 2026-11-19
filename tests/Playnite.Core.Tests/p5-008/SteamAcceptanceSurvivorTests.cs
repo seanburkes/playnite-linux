@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Playnite.Platform.Linux;
 using Playnite.Platform.Sessions;
 using Playnite.Steam;
@@ -40,6 +41,56 @@ public sealed class SteamAcceptanceSurvivorTests
             new([replacement], true), 40, []);
 
         Assert.Same(replacement, Assert.Single(survivors).Entry);
+    }
+
+    [Fact]
+    public async Task Detached_worker_with_relative_argv_under_its_install_directory_is_a_survivor()
+    {
+        var library = Directory.CreateTempSubdirectory();
+        try
+        {
+            var target = Target(library.FullName);
+            Directory.CreateDirectory(target.App.InstallPath);
+            await File.WriteAllTextAsync(Path.Combine(target.App.InstallPath, "worker.py"), """
+                import os, select, sys
+                os.setsid()
+                print("ready", flush=True)
+                select.select([sys.stdin], [], [], 30)
+                """, TestContext.Current.CancellationToken);
+            var start = new ProcessStartInfo("/usr/bin/python3")
+            {
+                UseShellExecute = false,
+                WorkingDirectory = target.App.InstallPath,
+                RedirectStandardInput = true,
+                RedirectStandardOutput = true,
+                ArgumentList = { "./worker.py" },
+            };
+            using var worker = Assert.IsType<Process>(Process.Start(start));
+            try
+            {
+                Assert.Equal("ready", await worker.StandardOutput.ReadLineAsync().WaitAsync(TimeSpan.FromSeconds(5)));
+                var host = new LinuxExternalProcessHost();
+                var after = await host.SnapshotAsync(captureWorkingDirectories: true, TestContext.Current.CancellationToken);
+                var row = Assert.Single(after.Processes, entry => entry.Process.Identity.ProcessId == worker.Id);
+                Assert.Equal(worker.Id, row.Process.Identity.ProcessGroupId);
+                Assert.Equal(["/usr/bin/python3", "./worker.py"], row.CommandLine);
+
+                var survivors = SteamAcceptanceSurvivorScan.Find(target, Files, new([], true),
+                    after with { Processes = [row] }, Environment.ProcessId, []);
+
+                Assert.Same(row, Assert.Single(survivors).Entry);
+                Assert.False(worker.HasExited);
+            }
+            finally
+            {
+                worker.StandardInput.Close();
+                await worker.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(5));
+            }
+        }
+        finally
+        {
+            library.Delete(recursive: true);
+        }
     }
 
     [Fact]

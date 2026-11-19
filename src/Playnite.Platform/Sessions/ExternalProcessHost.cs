@@ -9,6 +9,9 @@ public sealed record ExternalProcessEntry(ProcessEntry Process, string? Executab
 {
     /// <summary>The optional kernel process name, which may be truncated or set by the process.</summary>
     public string? ProcessName { get; init; }
+
+    /// <summary>The process's working directory when captured and readable.</summary>
+    public string? WorkingDirectory { get; init; }
 }
 
 /// <summary>

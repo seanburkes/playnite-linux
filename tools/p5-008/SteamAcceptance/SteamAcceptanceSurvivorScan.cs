@@ -30,7 +30,7 @@ public static class SteamAcceptanceSurvivorScan
                 survivors.Add(new(row, "game group or tracked identity"));
             }
             else if (HasAppPath(row.Executable)
-                || row.CommandLine?.Any(argument => HasAppPath(ArgumentValue(argument))) == true)
+                || row.CommandLine?.Any(argument => HasAppPath(ArgumentValue(argument), row.WorkingDirectory)) == true)
             {
                 survivors.Add(new(row, "process with app install or prefix path"));
             }
@@ -45,30 +45,44 @@ public static class SteamAcceptanceSurvivorScan
 
         return survivors;
 
-        bool HasAppPath(string? path)
+        bool HasAppPath(string? path, string? workingDirectory = null)
         {
-            if (path is null)
+            if (string.IsNullOrEmpty(path))
             {
                 return false;
             }
 
-            if (!Path.IsPathFullyQualified(path))
+            var absolute = Path.IsPathFullyQualified(path);
+            if (!absolute)
             {
-                return ProtonCommandLine.ResolveAppPath(target, path) is not null;
+                if (ProtonCommandLine.ResolveAppPath(target, path) is not null)
+                {
+                    return true;
+                }
+
+                if (workingDirectory is null)
+                {
+                    return false;
+                }
+
+                path = Path.Combine(workingDirectory, path);
             }
 
+            string? resolved;
             try
             {
-                return InAppRoots(files.GetRealPath(path) ?? path);
+                resolved = files.GetRealPath(path);
             }
             catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
             {
-                return InAppRoots(path);
+                resolved = null;
             }
+
+            return InAppRoots(resolved ?? (absolute ? path : null));
         }
 
-        bool InAppRoots(string path) => path == install || path == target.ProtonPrefix
-            || SteamProcessAttribution.Under(path, install) || SteamProcessAttribution.Under(path, target.ProtonPrefix);
+        bool InAppRoots(string? path) => path is not null && (path == install || path == target.ProtonPrefix
+            || SteamProcessAttribution.Under(path, install) || SteamProcessAttribution.Under(path, target.ProtonPrefix));
     }
 
     private static (int Pid, long StartTicks) Key(ProcessIdentity identity) => (identity.ProcessId, identity.StartTimeTicks);
