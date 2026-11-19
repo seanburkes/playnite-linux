@@ -32,7 +32,7 @@ For a graph independent of the tracker, reproduce the committed trace table
 from the repository root with the same jar digest as the formal CI job.
 
 ```sh
-python3 tools/p5-005/generate_session_traces.py "$TLA2TOOLS_JAR" > /tmp/session-traces.tsv
+python3 tools/p5-004/generate_session_traces.py "$TLA2TOOLS_JAR" > /tmp/session-traces.tsv
 cmp tests/Playnite.Core.Tests/p5-005/GameSession.traces.tsv /tmp/session-traces.tsv
 ```
 
