@@ -35,8 +35,13 @@ internal sealed class DesktopPortalLibraryPicker : ISteamLibraryPortal, IAsyncDi
             var sender = (current.UniqueName ?? throw new InvalidOperationException("The session bus connection has no unique name."))
                 .TrimStart(':').Replace('.', '_');
             var expectedPath = $"/org/freedesktop/portal/desktop/request/{sender}/{token}";
+            var debug = Environment.GetEnvironmentVariable("PLAYNITE_PORTAL_DEBUG") == "1";
+            if (debug)
+            {
+                Console.Error.WriteLine($"portal: unique={current.UniqueName} expected={expectedPath}");
+            }
             var completion = new TaskCompletionSource<PortalResponse?>(TaskCreationOptions.RunContinuationsAsynchronously);
-            subscriptions.Add(await WatchAsync(current, expectedPath, token, completion).ConfigureAwait(false));
+            subscriptions.Add(await WatchAsync(current, expectedPath, token, completion, pathFilter: true).ConfigureAwait(false));
 
             var writer = current.GetMessageWriter();
             writer.WriteMethodCallHeader(Destination, DesktopPath, FileChooser, "OpenFile", "ssa{sv}");
@@ -53,10 +58,20 @@ internal sealed class DesktopPortalLibraryPicker : ISteamLibraryPortal, IAsyncDi
             var handle = await current.CallMethodAsync(writer.CreateMessage(),
                 static (Message message, object? _) => message.GetBodyReader().ReadObjectPathAsString(),
                 null).ConfigureAwait(false);
+            if (debug)
+            {
+                Console.Error.WriteLine($"portal: handle={handle}");
+            }
+
             if (!string.Equals(handle, expectedPath, StringComparison.Ordinal))
             {
-                subscriptions.Add(await WatchAsync(current, handle, token, completion).ConfigureAwait(false));
+                subscriptions.Add(await WatchAsync(current, handle, token, completion, pathFilter: true).ConfigureAwait(false));
             }
+
+            // The sandboxed session bus is a proxy; a path-scoped match can be rewritten or
+            // dropped there. A second match on interface+member only is cheap and still filters
+            // by the exact token in the reader.
+            subscriptions.Add(await WatchAsync(current, null, token, completion, pathFilter: false).ConfigureAwait(false));
 
             PortalResponse? response;
             try
@@ -134,16 +149,23 @@ internal sealed class DesktopPortalLibraryPicker : ISteamLibraryPortal, IAsyncDi
         await ValueTask.CompletedTask.ConfigureAwait(false);
     }
 
-    private static ValueTask<IDisposable> WatchAsync(DBusConnection connection, string path, string token,
-        TaskCompletionSource<PortalResponse?> completion) =>
-        connection.AddMatchAsync(
-            new MatchRule
-            {
-                Type = MessageType.Signal,
-                Path = path,
-                Interface = Request,
-                Member = "Response",
-            },
+    private static ValueTask<IDisposable> WatchAsync(DBusConnection connection, string? path, string token,
+        TaskCompletionSource<PortalResponse?> completion, bool pathFilter)
+        => connection.AddMatchAsync(
+            pathFilter
+                ? new MatchRule
+                {
+                    Type = MessageType.Signal,
+                    Path = path,
+                    Interface = Request,
+                    Member = "Response",
+                }
+                : new MatchRule
+                {
+                    Type = MessageType.Signal,
+                    Interface = Request,
+                    Member = "Response",
+                },
             static (Message message, object? state) => ReadResponse(message, (string)state!),
             (Notification<PortalResponse?> notification) =>
             {
@@ -237,6 +259,11 @@ internal sealed class DesktopPortalLibraryPicker : ISteamLibraryPortal, IAsyncDi
 
     private static PortalResponse? ReadResponse(Message message, string token)
     {
+        if (Environment.GetEnvironmentVariable("PLAYNITE_PORTAL_DEBUG") == "1")
+        {
+            Console.Error.WriteLine($"portal: response path={message.PathAsString}");
+        }
+
         if (!(message.PathAsString ?? string.Empty).EndsWith("/" + token, StringComparison.Ordinal))
         {
             return null;
