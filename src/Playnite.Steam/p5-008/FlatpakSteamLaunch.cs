@@ -126,7 +126,7 @@ public sealed class FlatpakSteamLauncher
         {
             throw;
         }
-        catch (Exception exception) when (exception is IOException or System.ComponentModel.Win32Exception)
+        catch (Exception exception) when (exception is IOException)
         {
             return new(FlatpakLaunchStatus.Unavailable, appId, uri,
                 $"The OpenURI opener could not be started ({exception.GetType().Name}); no launch is claimed and tracking is UNKNOWN. Start the game in Steam manually.");

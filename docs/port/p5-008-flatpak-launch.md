@@ -54,15 +54,16 @@ refuses to run on a non-Flatpak host instead of inventing a second, untracked na
 - a non-Flatpak host selects `Tracked` and `SteamProcessLauncher.CreateRequest()` still returns
   `steam -applaunch <appid>`.
 
-`packaging/test_packaging.py` covers the `playnite steam-launch` route in both the payload
-launcher and AppRun.
+The packaged route is the existing wrapper fallback to the desktop binary, so no packaging
+change is needed and the existing packaging tests are untouched.
 
 ## Packaging
 
-`packaging/assemble.sh` publishes `tools/p5-008-flatpak-launch` into
-`payload/lib/playnite/steam-launch`; `packaging/playnite` routes the `steam-launch` subcommand
-there. The Flatpak manifest and `packaging/verify-flatpak.py` are unchanged: the allowlist stays
-exactly `wayland`, `fallback-x11`, `ipc` and `dri`, with no `filesystem` or `talk-name` grant.
+The existing packaged `playnite` wrapper sends unknown arguments to the desktop binary, so
+`playnite steam-launch <appid>` is a desktop entry (`SteamLaunchCommand`). No packaging,
+manifest or permission file changes are needed: the Flatpak manifest and
+`packaging/verify-flatpak.py` stay untouched, and the allowlist stays exactly `wayland`,
+`fallback-x11`, `ipc` and `dri` with no `filesystem` or `talk-name` grant.
 
 ## Acceptance
 

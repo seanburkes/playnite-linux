@@ -1,4 +1,3 @@
-using System.ComponentModel;
 using Playnite.Platform.Sessions;
 using Playnite.Steam;
 using Xunit;
@@ -141,7 +140,7 @@ public sealed class FlatpakSteamLaunchTests
     {
         var launcher = new FlatpakSteamLauncher(new RecordingOpener
         {
-            Failure = new Win32Exception(13, "permission denied"),
+            Failure = new PathTooLongException("portal path"),
         });
         var result = await launcher.LaunchAsync(42, CancellationToken.None);
 

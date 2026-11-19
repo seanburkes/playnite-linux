@@ -19,8 +19,7 @@ class PackagingTests(unittest.TestCase):
         self.prefix = self.root / "files"
         for relative in ("bin/playnite", "lib/playnite/cli/Playnite.Cli",
                          "lib/playnite/desktop/Playnite.Desktop",
-                         "lib/playnite/steam-import/Playnite.Steam.Import",
-                         "lib/playnite/steam-launch/Playnite.Steam.Launch"):
+                         "lib/playnite/steam-import/Playnite.Steam.Import"):
             path = self.prefix / relative
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text("#!/bin/sh\nprintf '%s\\n' \"$0\" \"$@\"\n")
@@ -70,9 +69,7 @@ class PackagingTests(unittest.TestCase):
                 (["--headless", "an argument with spaces"], "desktop/Playnite.Desktop",
                  ["--headless", "an argument with spaces"]),
                 (["steam-library-import", "--portal"], "steam-import/Playnite.Steam.Import",
-                 ["--portal"]),
-                (["steam-launch", "770100"], "steam-launch/Playnite.Steam.Launch",
-                 ["770100"])):
+                 ["--portal"])):
             with self.subTest(args=args):
                 result = subprocess.run([str(launcher), *args], check=True,
                                         capture_output=True, text=True, cwd="/")
