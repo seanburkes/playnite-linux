@@ -23,6 +23,10 @@ install -Dm644 "$inputs/$id.desktop" "$out/payload/share/applications/$id.deskto
 install -Dm644 "$inputs/$id.svg" "$out/payload/share/icons/hicolor/scalable/apps/$id.svg"
 mkdir -p "$out/AppDir/usr"
 cp -a "$out/payload/." "$out/AppDir/usr/"
+dotnet publish "$out/source/tools/p5-008/SteamAcceptance/SteamAcceptance.csproj" \
+    -c Release -r linux-x64 --self-contained true \
+    -p:RuntimeFrameworkVersion=11.0.0 -p:RestoreLockedMode=false \
+    -o "$out/AppDir/usr/lib/playnite/steam-acceptance"
 install -m755 "$inputs/AppRun" "$out/AppDir/AppRun"
 ln -s "usr/share/applications/$id.desktop" "$out/AppDir/$id.desktop"
 ln -s "usr/share/icons/hicolor/scalable/apps/$id.svg" "$out/AppDir/$id.svg"

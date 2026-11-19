@@ -79,6 +79,30 @@ class PackagingTests(unittest.TestCase):
         result = subprocess.run([str(launcher), "--version"], env=os.environ.copy())
         self.assertEqual(result.returncode, 23)
 
+    def test_apprun_routes_explicit_steam_acceptance_and_preserves_default_routing(self):
+        appdir = self.prefix.parent
+        self.prefix.rename(appdir / "usr")
+        launcher = appdir / "usr/bin/playnite"
+        shutil.copyfile(PACKAGING / "playnite", launcher)
+        apprun = appdir / "AppRun"
+        shutil.copyfile(PACKAGING / "AppRun", apprun)
+        apprun.chmod(0o755)
+        harness = appdir / "usr/lib/playnite/steam-acceptance/SteamAcceptance"
+        harness.parent.mkdir()
+        harness.write_text("#!/bin/sh\nprintf '%s\\n' \"$0\" \"$@\"\nexit 23\n")
+        harness.chmod(0o755)
+        for args, target, forwarded, status in (
+            (["--steam-acceptance", "/library with spaces", "770100"],
+             harness, ["/library with spaces", "770100"], 23),
+            (["--version"], appdir / "usr/lib/playnite/cli/Playnite.Cli", ["--version"], 0),
+            ([], appdir / "usr/lib/playnite/desktop/Playnite.Desktop", [], 0),
+        ):
+            with self.subTest(args=args):
+                result = subprocess.run([str(apprun), *args], cwd="/",
+                                        capture_output=True, text=True)
+                self.assertEqual(result.returncode, status, result.stderr)
+                self.assertEqual(result.stdout.splitlines(), [str(target), *forwarded])
+
     def test_flatpak_permission_allowlist_rejects_broad_access(self):
         manifest = json.loads((PACKAGING / f"{APP_ID}.json").read_text())
         path = self.root / "manifest.json"

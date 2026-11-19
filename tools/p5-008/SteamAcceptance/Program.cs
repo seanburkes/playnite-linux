@@ -6,7 +6,7 @@ using Playnite.Steam;
 if (args.Length < 4)
 {
     Console.Error.WriteLine("Default: read-only inspection; no launch or signal. Save data before explicitly consenting to launch and graceful stop.");
-    Console.Error.WriteLine("Usage: steam-acceptance.sh NATIVE_LIBRARY NATIVE_APPID PROTON_LIBRARY PROTON_APPID [--allow-launch --allow-stop] [--uri] [--native-exe ABS_PATH] [--proton-exe ABS_PATH]");
+    Console.Error.WriteLine("Usage: steam-acceptance.sh (or Playnite AppImage --steam-acceptance) NATIVE_LIBRARY NATIVE_APPID PROTON_LIBRARY PROTON_APPID [--allow-launch --allow-stop] [--uri] [--native-exe ABS_PATH] [--proton-exe ABS_PATH]");
     return 2;
 }
 
@@ -100,7 +100,7 @@ try
             var flow = cancel ? "cancel" : "stop";
             // A new -applaunch issued while the previous reaper/game group is still tearing down
             // lands in that teardown and produces no process at all. Wait for Steam readiness.
-            await WaitForSteamReadyAsync(host, clients, previous, settle, readiness);
+            var before = await WaitForSteamReadyAsync(host, clients, previous, settle, readiness);
             Console.WriteLine($"Launching {label} app={appId} for {flow} acceptance; Steam ready: previous identities gone, clients retained, settle {settle.TotalSeconds:F0}s.");
             var progress = new InlineProgress<SteamAttributionProgress>(value =>
             {
@@ -134,14 +134,12 @@ try
                 }
 
                 Console.WriteLine($"FAIL {label} {flow}: no accepted game identity; nothing was signalled.");
-                var afterUnknown = await host.SnapshotAsync(CancellationToken.None);
-                var live = afterUnknown.Processes.Where(row => row.Process.IsRunning
-                    && (SteamProcessAttribution.Matches(target, row.Executable)
-                        || SteamProcessAttribution.IsGame(target, row))).ToArray();
-                if (!afterUnknown.IsComplete || live.Length > 0)
+                var afterUnknown = await reporting.SnapshotForSurvivorsAsync(CancellationToken.None);
+                var live = SteamAcceptanceSurvivorScan.Find(target, files, before, afterUnknown, null, []);
+                if (!afterUnknown.IsComplete || live.Count > 0)
                 {
                     throw new InvalidOperationException(
-                        $"A failed launch may still be running ({(live.Length == 0 ? "snapshot incomplete" : string.Join(", ", live.Select(row => $"pid={row.Process.Identity.ProcessId} exe={row.Executable}")))}); refusing to launch again. Use Steam's Stop and inspect manually.");
+                        $"A failed launch may still be running ({(live.Count == 0 ? "snapshot incomplete" : string.Join(", ", live.Select(row => $"pid={row.Entry.Process.Identity.ProcessId} {row.Reason}")))}); refusing to launch again. Use Steam's Stop and inspect manually.");
                 }
 
                 continue;
@@ -194,19 +192,18 @@ try
             await tracker.DisposeAsync();
             await launcher.DisposeAsync();
             previous = launcher.AttributedIdentities.Concat(launcher.ObservedDescendants).ToArray();
-            var after = await host.SnapshotAsync(CancellationToken.None);
-            if (!after.IsComplete || after.Processes.Any(row => row.Process.IsRunning
-                && (SteamProcessAttribution.Matches(target, row.Executable)
-                    || SteamProcessAttribution.IsGame(target, row)
-                    || launcher.AttributedIdentities.Concat(launcher.ObservedDescendants)
-                        .Any(identity => SteamProcessAttribution.SameProcess(identity, row.Process.Identity)))))
+            var after = await reporting.SnapshotForSurvivorsAsync(CancellationToken.None);
+            var survivors = SteamAcceptanceSurvivorScan.Find(target, files, before, after,
+                process.Identity.ProcessGroupId, previous);
+            var retainedClients = clients.Count(client =>
+                after.Processes.Any(row => row.Process.IsRunning && row.Process.Identity == client));
+            Console.WriteLine($"SURVIVOR SCAN baseline_live={before.Processes.Count(row => row.Process.IsRunning)} post_live={after.Processes.Count(row => row.Process.IsRunning)} complete={after.IsComplete} survivors={survivors.Count}");
+            Console.WriteLine($"POST-TEARDOWN complete={after.IsComplete} survivors={survivors.Count} tracked={previous.Length} original_clients_retained={retainedClients}/{clients.Length}");
+            foreach (var survivor in survivors)
             {
-                throw new InvalidOperationException("No-orphan assertion failed: game identity remains live or unverifiable.");
-            }
-
-            if (clients.Any(client => !after.Processes.Any(row => row.Process.IsRunning && row.Process.Identity == client)))
-            {
-                throw new InvalidOperationException("An original Steam client/helper identity disappeared; inspect before proceeding.");
+                var row = survivor.Entry;
+                var identity = row.Process.Identity;
+                Console.WriteLine($"POST-TEARDOWN SURVIVOR pid={identity.ProcessId} start_ticks={identity.StartTimeTicks} pgid={identity.ProcessGroupId} comm={row.ProcessName ?? "<unreadable>"} exe={row.Executable ?? "<unreadable>"} reason={survivor.Reason}; unsignalled by the scan");
             }
 
             var report = launcher.StopReport ?? throw new InvalidOperationException("Missing game-exit proof.");
@@ -219,6 +216,16 @@ try
             foreach (var survivor in report.UnidentifiedSurvivors)
             {
                 Console.WriteLine($"UNIDENTIFIED SURVIVOR pid={survivor.ProcessId} start_ticks={survivor.StartTimeTicks} pgid={survivor.ProcessGroupId}; no evidence of Steam ownership; unsignalled; inspect manually");
+            }
+
+            if (!after.IsComplete || survivors.Count > 0)
+            {
+                throw new InvalidOperationException("No-orphan assertion failed: a game or runtime process may remain live.");
+            }
+
+            if (retainedClients != clients.Length)
+            {
+                throw new InvalidOperationException("An original Steam client/helper identity disappeared; inspect before proceeding.");
             }
 
             if (report.IsDegraded)
@@ -261,7 +268,7 @@ string? Optional(string option)
 // A launch issued while the previous game's reaper/runtime group is still tearing down can
 // produce no process at all. Require a complete, client-bearing snapshot with every previously
 // attributed identity gone for a settle window before the next -applaunch.
-async Task WaitForSteamReadyAsync(IExternalProcessHost host, ProcessIdentity[] clients,
+async Task<ExternalProcessSnapshot> WaitForSteamReadyAsync(IExternalProcessHost host, ProcessIdentity[] clients,
     IReadOnlyCollection<ProcessIdentity> previous, TimeSpan settle, TimeSpan timeout)
 {
     var started = DateTime.UtcNow;
@@ -278,7 +285,7 @@ async Task WaitForSteamReadyAsync(IExternalProcessHost host, ProcessIdentity[] c
             goneSince ??= DateTimeOffset.UtcNow;
             if (DateTimeOffset.UtcNow - goneSince >= settle)
             {
-                return;
+                return sample;
             }
         }
         else
@@ -327,10 +334,12 @@ static string? FindExecutable(string name) => (Environment.GetEnvironmentVariabl
 
 sealed class ReportingHost : IExternalProcessHost
 {
-    private readonly LinuxExternalProcessHost host = new();
+    private readonly LinuxExternalProcessHost host = new(captureProcessNames: true);
     public int? LastRequestExit { get; private set; }
     public void ResetRequest() => LastRequestExit = null;
     public Task<ExternalProcessSnapshot> SnapshotAsync(CancellationToken cancellationToken) => host.SnapshotAsync(cancellationToken);
+    public Task<ExternalProcessSnapshot> SnapshotForSurvivorsAsync(CancellationToken cancellationToken) =>
+        host.SnapshotAsync(captureWorkingDirectories: true, cancellationToken);
     public async Task<int> RunAsync(LaunchRequest request, CancellationToken cancellationToken)
     {
         LastRequestExit = null;

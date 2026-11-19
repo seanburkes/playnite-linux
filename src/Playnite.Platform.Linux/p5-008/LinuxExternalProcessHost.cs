@@ -5,8 +5,8 @@ using Playnite.Platform.Sessions;
 namespace Playnite.Platform.Linux;
 
 /// <summary>
-/// Same-namespace host adapter. Reads only argv, never the environment. A Wine/Proton game's
-/// executable is the runtime preloader, so argv is the only place its Windows binary appears.
+/// Same-namespace host adapter. Reads process metadata without reading its environment.
+/// A Wine/Proton game's executable is the runtime preloader, so argv supplies its Windows image.
 /// </summary>
 public sealed class LinuxExternalProcessHost : IExternalProcessHost
 {
@@ -15,18 +15,25 @@ public sealed class LinuxExternalProcessHost : IExternalProcessHost
     private readonly IProcessSignalHandles signals;
     private readonly Func<int, string?> readExecutable;
     private readonly Func<int, string[]?> readCommandLine;
+    private readonly bool captureProcessNames;
 
     public LinuxExternalProcessHost(IProcStatReader? statReader = null, IProcessSignalHandles? signalHandles = null,
-        Func<int, string?>? executableReader = null, Func<int, string[]?>? commandLineReader = null)
+        Func<int, string?>? executableReader = null, Func<int, string[]?>? commandLineReader = null,
+        bool captureProcessNames = false)
     {
         stats = statReader ?? new LinuxProcStatReader();
         observer = new LinuxProcessObserver(stats);
         signals = signalHandles ?? new LinuxPidFd();
         readExecutable = executableReader ?? ReadExecutable;
         readCommandLine = commandLineReader ?? ReadCommandLine;
+        this.captureProcessNames = captureProcessNames;
     }
 
-    public async Task<ExternalProcessSnapshot> SnapshotAsync(CancellationToken cancellationToken)
+    public Task<ExternalProcessSnapshot> SnapshotAsync(CancellationToken cancellationToken) =>
+        SnapshotAsync(captureWorkingDirectories: false, cancellationToken);
+
+    public async Task<ExternalProcessSnapshot> SnapshotAsync(bool captureWorkingDirectories,
+        CancellationToken cancellationToken)
     {
         var sample = await observer.SnapshotAsync(cancellationToken).ConfigureAwait(false);
         var entries = new List<ExternalProcessEntry>();
@@ -37,6 +44,8 @@ public sealed class LinuxExternalProcessHost : IExternalProcessHost
             cancellationToken.ThrowIfCancellationRequested();
             string? executable = null;
             string[]? commandLine = null;
+            string? processName = null;
+            string? workingDirectory = null;
             if (entry.IsRunning)
             {
                 try
@@ -56,9 +65,19 @@ public sealed class LinuxExternalProcessHost : IExternalProcessHost
                 {
                     _ = exception;
                 }
+
+                if (captureProcessNames)
+                {
+                    processName = ReadProcessName(entry.Identity.ProcessId);
+                }
+
+                if (captureWorkingDirectories && commandLine is { Length: > 0 })
+                {
+                    workingDirectory = ReadWorkingDirectory(entry.Identity.ProcessId);
+                }
             }
 
-            // Bind executable evidence to the exact stat identity, not a reused PID.
+            // Bind process metadata to the exact stat identity, not a reused PID.
             ProcStat? current;
             try
             {
@@ -92,11 +111,12 @@ public sealed class LinuxExternalProcessHost : IExternalProcessHost
                     row.ProcessGroupId);
                 moved.Add(movedIdentity);
                 entries.Add(new(entry with { Identity = movedIdentity, IsRunning = row.IsRunning },
-                    executable, commandLine));
+                    executable, commandLine) { ProcessName = processName, WorkingDirectory = workingDirectory });
                 continue;
             }
 
-            entries.Add(new(entry with { IsRunning = row.IsRunning }, executable, commandLine));
+            entries.Add(new(entry with { IsRunning = row.IsRunning }, executable, commandLine)
+                { ProcessName = processName, WorkingDirectory = workingDirectory });
         }
 
         return new(entries, complete, moved);
@@ -200,6 +220,31 @@ public sealed class LinuxExternalProcessHost : IExternalProcessHost
         var executable = File.ResolveLinkTarget($"/proc/{pid}/exe", true)?.FullName;
         executable = executable is null ? null : File.ResolveLinkTarget(executable, true)?.FullName ?? executable;
         return File.Exists(executable) ? executable : null;
+    }
+
+    private static string? ReadProcessName(int pid)
+    {
+        try
+        {
+            return File.ReadAllText($"/proc/{pid}/comm").TrimEnd('\n');
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            return null;
+        }
+    }
+
+    private static string? ReadWorkingDirectory(int pid)
+    {
+        try
+        {
+            var path = new DirectoryInfo($"/proc/{pid}/cwd").LinkTarget;
+            return Path.IsPathFullyQualified(path ?? string.Empty) ? path : null;
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            return null;
+        }
     }
 
     private static string[]? ReadCommandLine(int pid)
