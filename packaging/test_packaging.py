@@ -18,7 +18,8 @@ class PackagingTests(unittest.TestCase):
         self.root = Path(self.temp.name)
         self.prefix = self.root / "files"
         for relative in ("bin/playnite", "lib/playnite/cli/Playnite.Cli",
-                         "lib/playnite/desktop/Playnite.Desktop"):
+                         "lib/playnite/desktop/Playnite.Desktop",
+                         "lib/playnite/steam-import/Playnite.Steam.Import"):
             path = self.prefix / relative
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text("#!/bin/sh\nprintf '%s\\n' \"$0\" \"$@\"\n")
@@ -63,14 +64,18 @@ class PackagingTests(unittest.TestCase):
     def test_launcher_routes_version_and_preserves_desktop_arguments(self):
         launcher = self.prefix / "bin/playnite"
         shutil.copyfile(PACKAGING / "playnite", launcher)
-        for args, target in ((["--version"], "cli/Playnite.Cli"),
-                             (["--headless", "an argument with spaces"], "desktop/Playnite.Desktop")):
+        for args, target, forwarded in (
+                (["--version"], "cli/Playnite.Cli", ["--version"]),
+                (["--headless", "an argument with spaces"], "desktop/Playnite.Desktop",
+                 ["--headless", "an argument with spaces"]),
+                (["steam-library-import", "--portal"], "steam-import/Playnite.Steam.Import",
+                 ["--portal"])):
             with self.subTest(args=args):
                 result = subprocess.run([str(launcher), *args], check=True,
                                         capture_output=True, text=True, cwd="/")
                 lines = result.stdout.splitlines()
                 self.assertTrue(lines[0].endswith(target), lines)
-                self.assertEqual(lines[1:], args)
+                self.assertEqual(lines[1:], forwarded)
 
     def test_launcher_propagates_payload_failure(self):
         launcher = self.prefix / "bin/playnite"

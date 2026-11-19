@@ -4,4 +4,8 @@ root=$(CDPATH= cd -- "$(dirname -- "$0")/../lib/playnite" && pwd)
 if [ "${1:-}" = --version ]; then
     exec "$root/cli/Playnite.Cli" "$@"
 fi
+if [ "${1:-}" = steam-library-import ]; then
+    shift
+    exec "$root/steam-import/Playnite.Steam.Import" "$@"
+fi
 exec "$root/desktop/Playnite.Desktop" "$@"

@@ -21,6 +21,7 @@ require(desktop["Exec"] == "playnite", f"Unexpected Exec: {desktop['Exec']}")
 require(desktop["Icon"] == app_id, f"Unexpected Icon: {desktop['Icon']}")
 paths = [base / "bin/playnite", base / "lib/playnite/cli/Playnite.Cli",
          base / "lib/playnite/desktop/Playnite.Desktop",
+         base / "lib/playnite/steam-import/Playnite.Steam.Import",
          base / f"share/icons/hicolor/scalable/apps/{app_id}.svg"]
 for path in paths:
     resolved = path.resolve(strict=True)
