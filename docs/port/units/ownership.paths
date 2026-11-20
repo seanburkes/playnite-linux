@@ -223,13 +223,16 @@ src/Playnite.SDK.Abstractions/UriHandling/PlayniteUriRoute.cs	p6-007	b80847be88f
 src/Playnite.SDK.Abstractions/UriHandling/UriHandlerAPI.cs	p6-007	b80847be88f268b4b72bb34a92b8fba08a7623cb	pull/201
 src/Playnite.SDK.Abstractions/api-baseline/Playnite.SDK.Abstractions.dll	p2-006	7c31729c5d61d1a45edf5a41fee4c119ae7437d6	pull/45
 src/Playnite.SDK.Abstractions/api-baseline/Playnite.SDK.Abstractions.dll	p6-007	b80847be88f268b4b72bb34a92b8fba08a7623cb	pull/201
+src/Playnite.SDK.Abstractions/api-baseline/Playnite.SDK.Abstractions.dll	p6-008	98f7391ff469b72eb2a2ff40571a6cd7c791073a	pull/208
 src/Playnite.SDK.Abstractions/api-baseline/Playnite.SDK.Abstractions.sha256	p2-006-harden	9d27f7a5689dd4c981f3b5695a689aee87a00282	pull/48
 src/Playnite.SDK.Abstractions/api-baseline/Playnite.SDK.Abstractions.sha256	p6-007	b80847be88f268b4b72bb34a92b8fba08a7623cb	pull/201
+src/Playnite.SDK.Abstractions/api-baseline/Playnite.SDK.Abstractions.sha256	p6-008	98f7391ff469b72eb2a2ff40571a6cd7c791073a	pull/208
 src/Playnite.SDK.Abstractions/api-baseline/PublicAPI.Shipped.sha256	p2-006-harden	9d27f7a5689dd4c981f3b5695a689aee87a00282	pull/48
 src/Playnite.SDK.Abstractions/api-baseline/README.md	p2-006	7c31729c5d61d1a45edf5a41fee4c119ae7437d6	pull/45
 src/Playnite.SDK.Abstractions/api-baseline/README.md	p2-006-harden	9d27f7a5689dd4c981f3b5695a689aee87a00282	pull/48
 src/Playnite.SDK.Abstractions/api-baseline/README.md	p2-guard-wording2	9a4c79f7a91644063f1eb8a5a496968b54b63c20	pull/55
 src/Playnite.SDK.Abstractions/api-baseline/README.md	p6-007	b80847be88f268b4b72bb34a92b8fba08a7623cb	pull/201
+src/Playnite.SDK.Abstractions/api-baseline/README.md	p6-008	98f7391ff469b72eb2a2ff40571a6cd7c791073a	pull/208
 src/Playnite.SDK/AssemblyMarker.cs	p2-001	9afd818ae8a695e921bb98f386bfceb83d0059db	pull/29
 src/Playnite.SDK/AssemblyMarker.cs	p2-002	abdb82bedd0bcadfe93c1fc6f11937c55b116b7c	pull/37
 src/Playnite.Steam/Artwork/ArtworkCache.cs	p5-003	22f051a92b6b5a82566fd382a04f9848c30ed756	pull/118
@@ -280,6 +283,7 @@ tests/Playnite.Architecture.Tests/SdkBoundaryPolicy.cs	p2-006	7c31729c5d61d1a45e
 tests/Playnite.Architecture.Tests/SdkBoundaryPolicy.cs	p2-006-harden	9d27f7a5689dd4c981f3b5695a689aee87a00282	pull/48
 tests/Playnite.Architecture.Tests/SdkBoundaryTests.cs	p2-006	7c31729c5d61d1a45edf5a41fee4c119ae7437d6	pull/45
 tests/Playnite.Architecture.Tests/SdkBoundaryTests.cs	p2-006-harden	9d27f7a5689dd4c981f3b5695a689aee87a00282	pull/48
+tests/Playnite.Architecture.Tests/SdkFreezeTests.cs	p6-008	98f7391ff469b72eb2a2ff40571a6cd7c791073a	pull/208
 tests/Playnite.Architecture.Tests/SdkHostSurfaceTests.cs	p6-006	d1d57be20f50e1832e0b0c59835358b727b369f7	pull/202
 tests/Playnite.Architecture.Tests/SdkUriHtmlSurfaceTests.cs	p6-007	b80847be88f268b4b72bb34a92b8fba08a7623cb	pull/201
 tests/Playnite.Architecture.Tests/SourcePolicy.cs	p2-002	df9d089fd82efb1456f751f51a43c2a4aee56681	pull/32
@@ -358,6 +362,7 @@ tests/Playnite.Core.Tests/PathsTests.cs	*	d6401f1f07c69474d0ce395797ab694bedf019
 tests/Playnite.Core.Tests/QueryDateAndFilterTests.cs	p3-006	e4b2fdf6869496d1615d8cbe8f867833cfd47b70	pull/76
 tests/Playnite.Core.Tests/QueryPropertyTests.cs	p3-006	e4b2fdf6869496d1615d8cbe8f867833cfd47b70	pull/76
 tests/Playnite.Core.Tests/SdkContracts/SdkHostContractTests.cs	p6-006	d1d57be20f50e1832e0b0c59835358b727b369f7	pull/202
+tests/Playnite.Core.Tests/SdkContracts/SdkInterfaceContractTests.cs	p6-008	98f7391ff469b72eb2a2ff40571a6cd7c791073a	pull/208
 tests/Playnite.Core.Tests/SdkContracts/UriHtmlContractTests.cs	p6-007	b80847be88f268b4b72bb34a92b8fba08a7623cb	pull/201
 tests/Playnite.Core.Tests/Serialization/FuzzTargetTests.cs	p3-fuzz-ds	e7a49d922e5786f72686907f49a8e25ab29f6d75	pull/84
 tests/Playnite.Core.Tests/Serialization/IniParserTests.cs	p3-003c	0f1c774400a829cd45e1647245bf0a802e237ebb	pull/69
