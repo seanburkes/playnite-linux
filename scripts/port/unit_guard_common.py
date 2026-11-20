@@ -54,6 +54,18 @@ and its ``head_sha`` must equal a head the fragment cites.  A run id from anothe
 repository, a missing run, an unfinished or failed run, an unreachable API or a
 disagreeing head fails closed; the check never caches an API result.
 
+Shared SDK baseline
+-------------------
+``SHARED_BASELINE`` is the single reviewed allowance behind both guards.  It
+names exactly two files, ``src/Playnite.SDK.Abstractions/PublicAPI.Shipped.txt``
+and ``src/Playnite.SDK.Abstractions/PublicAPI.Unshipped.txt``, plus the one
+``src/Playnite.SDK.Abstractions/api-baseline/`` directory.  Any declared unit
+may add or modify them without foreign-ownership or foreign-evidence failures;
+a delete (or type change) still fails.  Nothing else under that project is
+shared, so product code remains ownership-checked.  The paths stay protected
+for the separate ``oracle-change`` gate; this allowance only removes the unit
+ownership charge, it never removes that gate.
+
 Cross-unit moves
 ----------------
 A pull request that moves a path out of another unit's ownership may carry a
@@ -178,6 +190,32 @@ class OwnershipMap:
 
     def owners(self, path: str) -> tuple[OwnershipClaim, ...]:
         return self.claims.get(path, ())
+
+
+@dataclass(frozen=True)
+class SharedBaseline:
+    """The only SDK bookkeeping every unit may change, reviewed as one unit.
+
+    ``files`` holds exact repository-relative paths and ``directory`` holds one
+    directory prefix with its trailing slash.  Nothing else under the SDK
+    Abstractions project is shared, so neither a glob nor a broader prefix can
+    hand out product code by accident.
+    """
+
+    files: frozenset[str]
+    directory: str
+
+    def matches(self, path: str) -> bool:
+        return path in self.files or path.startswith(self.directory)
+
+
+SHARED_BASELINE = SharedBaseline(
+    files=frozenset({
+        "src/Playnite.SDK.Abstractions/PublicAPI.Shipped.txt",
+        "src/Playnite.SDK.Abstractions/PublicAPI.Unshipped.txt",
+    }),
+    directory="src/Playnite.SDK.Abstractions/api-baseline/",
+)
 
 
 def git(repo: Path, *args: str) -> bytes:
@@ -597,11 +635,51 @@ def ownership_candidate(path: str, units: set[str]) -> bool:
 
 
 def product_paths(changes: list[Change], units: set[str]) -> list[str]:
+    """Return product/test/tool changes that need an owner and a declaration.
+
+    Shared SDK baseline bookkeeping is excluded: any unit may update it, so it
+    never demands a declaration or fails another unit's ownership check.
+    """
+
     return [
         change.path
         for change in changes
         if ownership_candidate(change.path, units)
+        and not is_shared_baseline_path(change.path)
     ]
+
+
+def is_shared_baseline_path(path: str) -> bool:
+    """True for exactly the shared SDK baseline bookkeeping paths."""
+
+    return SHARED_BASELINE.matches(path)
+
+
+def shared_baseline_paths(changes: list[Change]) -> frozenset[str]:
+    """Return the changed shared baseline paths, refusing a delete.
+
+    Any unit may add or modify these generated lists and the checked-in
+    baseline they describe.  A ``D`` (or a type change) would remove the shared
+    contract, so only ``A`` and ``M`` are allowed.  These paths remain
+    protected material for the separate ``oracle-change`` gate; this allowance
+    changes only unit ownership, never that gate.
+    """
+
+    allowed: set[str] = set()
+    errors: list[str] = []
+    for change in changes:
+        if not is_shared_baseline_path(change.path):
+            continue
+        if change.status in {"A", "M"}:
+            allowed.add(change.path)
+            continue
+        errors.append(
+            f"{change.path} is shared SDK baseline bookkeeping; a pull request "
+            f"may add or modify it but not {change.status} it"
+        )
+    if errors:
+        raise GuardError("\n".join(errors))
+    return frozenset(allowed)
 
 
 def ownership_map_exists(repo: Path, revision: str) -> bool:

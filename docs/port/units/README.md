@@ -114,6 +114,31 @@ must allow every claim in its subtree; mixed ownership is rejected rather than a
 one owner is permitted. The guard fails closed on duplicate map rows for the same owner,
 duplicate diff entries, and unresolvable symlinks.
 
+## Shared SDK baseline bookkeeping
+
+Two files and one directory are shared by every unit because every public-API change regenerates
+the same checked-in lists: `src/Playnite.SDK.Abstractions/PublicAPI.Shipped.txt`,
+`src/Playnite.SDK.Abstractions/PublicAPI.Unshipped.txt`, and everything under
+`src/Playnite.SDK.Abstractions/api-baseline/`. The allowance is the single
+`unit_guard_common.SHARED_BASELINE` constant: an exact file set plus that one directory prefix,
+with no glob or broader project prefix.
+
+Any declared unit may add or modify those paths. Both `unit-ownership` and `unit-evidence` read
+the constant through the shared helper, so an unrelated unit's baseline edit no longer fails
+foreign ownership or foreign unit evidence and does not by itself demand a product-path
+declaration. A delete, or any other status that is not `A` or `M`, still fails with a named
+reason: the checked-in baseline is shared, not disposable. Everything else under
+`src/Playnite.SDK.Abstractions/` stays product material and is still checked against the base
+ownership map, so this allowance cannot be used to edit `SdkVersions.cs` or another unit's
+source file.
+
+This is a unit-ownership allowance only. Those paths remain protected paths for the separate
+`oracle-change` gate, which is unchanged; a pull request still needs the captain's label and
+hand review before it can merge, and the allowance never authorises a broader SDK change.
+
+A test pins the constant to exactly the documented paths and fails if a product-code path or a
+broader directory is added.
+
 ## Approved cross-unit moves
 
 A pull request may move a path out of another unit's ownership only with an explicit manifest on

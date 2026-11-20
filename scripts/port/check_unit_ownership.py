@@ -63,6 +63,7 @@ from unit_guard_common import (  # noqa: E402
     read_ownership_map,
     repo_root,
     resolve_commit,
+    shared_baseline_paths,
     symlink_errors,
     touched_units,
 )
@@ -149,6 +150,7 @@ def main(argv: list[str]) -> int:
                     {}, False, "ownership.paths is missing at the base and merge base"
                 )
 
+        shared_baseline = shared_baseline_paths(changes)
         product = product_paths(changes, units)
         map_errors = bot_owned_errors(
             changes,
@@ -259,6 +261,7 @@ def main(argv: list[str]) -> int:
             for path, rows in owned.items()
             if not claim_is_allowed(rows, declared)
             and path not in allowed_foreign
+            and path not in shared_baseline
         }
         foreign_evidence = sorted(
             unit
@@ -272,7 +275,7 @@ def main(argv: list[str]) -> int:
             own_paths = list(touched.get(declared, [])) + [
                 path for path, rows in owned.items()
                 if claim_is_allowed(rows, declared)
-            ] + sorted(allowed_foreign)
+            ] + sorted(allowed_foreign) + sorted(shared_baseline)
             print(format_paths(sorted(set(own_paths))))
             print("offending paths:")
             for unit in foreign_evidence:
@@ -307,7 +310,7 @@ def main(argv: list[str]) -> int:
         own_paths = list(touched.get(declared, [])) + [
             path for path, rows in owned.items()
             if claim_is_allowed(rows, declared)
-        ] + sorted(allowed_foreign)
+        ] + sorted(allowed_foreign) + sorted(shared_baseline)
         print(format_paths(sorted(set(own_paths))))
         print("offending paths:")
         print("  (none)")
