@@ -60,9 +60,11 @@ A bounded unfiltered, ungrouped list never materialises the library: `PagedLibra
 issues `COUNT(*)` and one ordered `LIMIT`/`OFFSET` statement in the same snapshot, then loads
 only the window's game graphs. A null limit asks for the remainder; when that remainder fits
 the reader's 10,000-row page cap it is read as one window, and a larger remainder keeps the
-one-snapshot in-memory path so the "one snapshot per call" guarantee still holds. Text search,
-filters and grouping also keep the one-snapshot in-memory path, because the v10 matcher, filter
-helpers and group keys are not stored SQL expressions; their paging bounds are unchanged.
+one-snapshot in-memory path so the "one snapshot per call" guarantee still holds. A null,
+empty or whitespace-only search term takes the same paged window. Text search with a real
+term, filters and grouping keep the one-snapshot in-memory path, because the v10 matcher,
+filter helpers and group keys are not stored SQL expressions; their paging bounds are
+unchanged, and their order still uses the same NOCASE comparer.
 
 The grouping keys cover name, release year, installation status, playtime, user, critic
 and community score, install size, last and recent activity, added and modified. Plugin
@@ -94,12 +96,16 @@ criteria use the existing `{}` sentinel for missing values.
 - `LibraryServiceContractTests` uses a fake reader to cover list, ID lookup, search,
   strict filter binding, sort ties and nulls, grouping, paging and cancellation.
 - `LibraryServicePagingTests` proves through an instrumented paged-reader session that a
-  bounded unfiltered list requests only its window, that search and grouping stay on the
-  snapshot path, that a remainder beyond the page cap falls back once, and that bounds and
-  the group key still fail before any read. It also pins the NOCASE text order for mixed-case,
-  accented and numeric-prefixed titles against `PagedLibraryReader` and `PagedLibraryComparer`.
+  bounded unfiltered list requests only its window, that a blank or null search term reads the
+  same window, that a term, filter or grouping stays on the snapshot path, that a remainder
+  beyond the page cap falls back once, and that bounds and the group key still fail before any
+  read. It pins the NOCASE text order for mixed-case, accented and numeric-prefixed titles
+  against `PagedLibraryReader` and `PagedLibraryComparer` both on the paged path and on a
+  filtered in-memory query; reverting the comparer or the blank-term check fails those tests.
 - `LibraryCliPagingEqualityTests` runs the real `list` and `search` commands on a fixed
-  library and pins the first page and unpaged list to the pre-wiring output.
+  synthetic five-game library and pins the first page and unpaged list to the pre-wiring
+  output. The titles are ASCII, so the old and new orders agree; this is an equality check on
+  that dataset, not a run against the frozen v10 fixture.
 - `LibraryServiceImportTests` runs the existing `import-v10` command on the frozen
   `tests/fixtures/v10/library` oracle and queries the imported SQLite file. It verifies
   persisted IDs, graph detachment, Unicode search, hidden filtering, grouped pages

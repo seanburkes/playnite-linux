@@ -163,6 +163,79 @@ public sealed class LibraryServicePagingTests
         Assert.Equal(descending ? descendingOrder : ascending, Ids(fromService));
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Filtered_text_order_matches_the_paged_reader_for_mixed_case_accented_and_numeric_titles(bool descending)
+    {
+        using var files = new DatabaseTestDirectory();
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var games = TextGames();
+        var database = await SeedAsync(files, cancellationToken, games);
+        var service = new LibraryService(database);
+        var reader = new PagedLibraryReader(database);
+
+        // A non-null filter forces the one-snapshot in-memory path; the paged reader is the
+        // NOCASE oracle. If LibraryService falls back to GameComparer the two disagree.
+        var fromService = await service.ListAsync(
+            new(Filter: MatchAll(), SortBy: SortOrder.Name, Descending: descending, Limit: 20), cancellationToken);
+        var fromReader = await reader.ListAsync(
+            new PagedLibraryQuery(SortOrder.Name, descending, Limit: 20), cancellationToken);
+
+        Assert.Equal(Ids(fromReader), Ids(fromService));
+        Assert.Equal(9, fromService.TotalCount);
+
+        Guid[] ascending = [Id(14), Id(18), Id(16), Id(17), Id(10), Id(11), Id(15), Id(13), Id(12)];
+        Guid[] descendingOrder = [Id(12), Id(13), Id(10), Id(11), Id(15), Id(17), Id(16), Id(18), Id(14)];
+        Assert.Equal(descending ? descendingOrder : ascending, Ids(fromReader));
+        Assert.Equal(descending ? descendingOrder : ascending, Ids(fromService));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Filtered_in_memory_sort_keeps_the_nocase_order_without_reading_a_page(bool descending)
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var games = TextGames();
+        var snapshot = new FakeReader(games);
+        var session = new SpySession { Total = games.Length, Ids = games.Select(game => game.Value.Id).ToArray() };
+        var service = new LibraryService(snapshot, new PagedLibraryReader(new SpySessionFactory(session)));
+
+        var page = await service.ListAsync(
+            new(Filter: MatchAll(), SortBy: SortOrder.Name, Descending: descending, Limit: 20), cancellationToken);
+
+        Assert.Empty(session.PageReads);
+        Assert.Equal(1, snapshot.ListCalls);
+        var expected = games.Select(game => game.Value)
+            .OrderBy(game => game, new PagedLibraryComparer(SortOrder.Name, descending))
+            .Select(game => game.Id)
+            .ToArray();
+        Assert.Equal(expected, Ids(page));
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public async Task Blank_or_null_search_reads_the_paged_window(string? term)
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var ids = Enumerable.Range(1, 5).Select(Id).ToArray();
+        var session = new SpySession { Total = ids.Length, Ids = ids };
+        var snapshot = new FakeReader(ids.Select((_, index) => Game(index + 1, $"Game {index}")).ToArray());
+        var service = new LibraryService(snapshot, new PagedLibraryReader(new SpySessionFactory(session)));
+
+        var page = await service.SearchAsync(term, new(Offset: 1, Limit: 2), cancellationToken);
+
+        var read = Assert.Single(session.PageReads);
+        Assert.Equal(1, read.Offset);
+        Assert.Equal(2, read.Limit);
+        Assert.Equal(ids[1..3], session.GraphReads);
+        Assert.Equal(ids[1..3], Ids(page));
+        Assert.Equal(0, snapshot.ListCalls);
+    }
+
     [Fact]
     public async Task Non_name_order_matches_the_paged_reader_and_breaks_ties_by_nocase_name()
     {
@@ -188,6 +261,8 @@ public sealed class LibraryServicePagingTests
             Assert.Equal(expected, Ids(fromService).ToArray());
         }
     }
+
+    private static LibraryFilter MatchAll() => LibraryFilter.FromSettings(new FilterSettings());
 
     private static StoredGame[] TextGames() =>
     [
