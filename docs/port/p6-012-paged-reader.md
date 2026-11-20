@@ -1,8 +1,9 @@
 # p6-012 — bounded ordered paging
 
 `Playnite.Core.Library.PagedLibraryReader` reads one page of the stored library in a total
-order computed by SQLite. It is additive: `LibraryService` and `GameRepository` keep their
-existing contracts and are not edited by this unit.
+order computed by SQLite. The p6-001 follow-up wires it into `LibraryService` for an
+unfiltered, ungrouped list and a blank or null search term; `GameRepository` keeps its
+existing contract, and filters, v10 text search and grouping stay with p6-001/p6-011.
 
 ## Operations
 
@@ -36,8 +37,9 @@ ascending and last descending.
 Text columns (`Name`, `Version`, `InstallDirectory`, `RomList`) order with SQLite's NOCASE
 collation. `PagedLibraryComparer` is the in-memory mirror: it folds ASCII `A`-`Z` and compares
 code units, exactly matching NOCASE, so SQL and the comparer share one canonical text order.
-`GameComparer`/`LibraryService` in p6-001 keep current-culture text order; this unit does not
-change that comparator. Numeric, date and flag keys match `GameComparer`.
+The wired p6-001 `LibraryService` uses this canonical order for both the paged path and the
+filtered, term-bearing or grouped in-memory path, replacing the earlier current-culture text
+comparer. Numeric, date and flag keys match `GameComparer`.
 
 ## SQL and memory
 
@@ -64,10 +66,12 @@ cancelled call throws `OperationCanceledException` without a partial page.
 
 ## Boundary
 
-This unit is a paging primitive only; no production caller is wired in this PR. Wiring it into
-`LibraryService.ListAsync`/`SearchAsync` is a p6-001 follow-up and requires editing that
-p6-001-owned file, so list and search still read the full snapshot until then. Filters, v10
-text search and grouping stay with p6-001/p6-011.
+Wiring status: **wired via p6-001**. `LibraryService.ListAsync` delegates an unfiltered,
+ungrouped list to this reader, and `SearchAsync` does the same for a null, empty or
+whitespace-only term. A bounded page reads only its window; a null limit reads the remainder
+as one window while it fits the page cap. Filters, v10 text search with a real term and
+grouping stay with p6-001 and keep their one-snapshot in-memory path, using the same
+`PagedLibraryComparer` order.
 
 ## Tests
 
@@ -82,3 +86,8 @@ BINARY order; and a total-order test that reads the stored `Id` text and pins th
 final ordinal identity key. Every game in that test ties on the primary key and the name and is
 inserted in reverse text order, so dropping the identity key leaves the stable sort in insertion
 order and fails the test; the same holds for both directions.
+
+`LibraryServicePagingTests` covers the p6-001 adoption: an instrumented session proves a
+bounded list reads only its window and a blank or null search uses the same window; a filtered
+in-memory query compares its mixed-case, accented and numeric-prefixed order with
+`PagedLibraryReader`; and reverting the comparer or the blank-term check fails those tests.
