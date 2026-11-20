@@ -84,6 +84,6 @@ The fake hosts are in `Fakes.cs`; no test needs a desktop session, D-Bus, a wind
 - `dotnet build tests/Playnite.Core.Tests -c Release -warnaserror`: 0 warnings, 0 errors.
 - `dotnet test tests/Playnite.Core.Tests --filter-namespace Playnite.Core.Tests.Hosting`:
   55 passed, 0 failed, 0 skipped.
-- Full `Playnite.Core.Tests`: 2,846 passed, 0 failed, 0 skipped.
+- Full `Playnite.Core.Tests`: 2,864 passed, 0 failed, 0 skipped.
 - `Playnite.Architecture.Tests`: 199 passed, 0 failed, 0 skipped (banned constructs, SDK
   boundary and dependency graph unchanged).
