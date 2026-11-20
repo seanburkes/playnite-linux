@@ -71,8 +71,8 @@ Phase 6 (Core services and SDK v7) is next. The acceptance record is
 
 | Metric | Value |
 | --- | ---: |
-| Ledger rows | 327 |
-| Ledger fragments | 100 |
+| Ledger rows | 328 |
+| Ledger fragments | 101 |
 
 ## Units
 
@@ -165,7 +165,7 @@ Phase 6 (Core services and SDK v7) is next. The acceptance record is
 | p6-006 | W6 | sdk | Notifications, dialogs and main-view API | done | `units/p6-006.*`; 1 ledger rows |
 | p6-011 | W6 | core | CLI query surface | done | `units/p6-011.*`; 2 ledger rows |
 | p6-012 | W6 | core | Repository-level ordered paging for list/search | done | `units/p6-012.*`; 3 ledger rows |
-| p6-shards | W6 | repo | Phase 6 core services and SDK v7 board | done | `units/p6-shards.*`; 3 ledger rows |
+| p6-shards | W6 | repo | Phase 6 core services and SDK v7 board | done | `units/p6-shards.*`; 4 ledger rows |
 | p7-001 | W7 | ui | Bootstrap/DI/theme/localisation | todo | `units/p7-001.*`; 0 ledger rows |
 | p7-002 | W7 | ui | Shell/main window | todo | `units/p7-002.*`; 0 ledger rows |
 | p7-003 | W7 | ui | Library grid/list/details | todo | `units/p7-003.*`; 0 ledger rows |
