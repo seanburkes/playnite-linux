@@ -130,4 +130,5 @@ including a null-service guard (`:18`) and cancellation before and during the se
 ## Scope
 
 Read only PR 190's candidate diff and forge metadata for its head. PR 189 was reviewed first from its own
-candidate file; no other review output was read.
+candidate file; no review of either PR by another reviewer was read. Historical review files in this
+repository were inspected only to match the review-report layout.

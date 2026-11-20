@@ -113,4 +113,5 @@ output order and eviction order are stable for a given clock and key set. No UI,
 ## Scope
 
 Read only PR 189's candidate diff and forge metadata for its head. PR 190 was reviewed after this one, from
-its own candidate file; no other review output was read.
+its own candidate file; no review of either PR by another reviewer was read. Historical review files in
+this repository were inspected only to match the review-report layout.
