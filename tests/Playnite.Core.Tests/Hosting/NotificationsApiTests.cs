@@ -76,6 +76,41 @@ public sealed class NotificationsApiTests
     }
 
     [Fact]
+    public async Task ADuplicateJoinerCanCancelItsOwnWaitWithoutCancellingTheOwner()
+    {
+        var release = new TaskCompletionSource<NotificationHostResult>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var host = new FakeNotificationHost { PresentHandler = (_, _) => release.Task };
+        var api = new NotificationsApi(host);
+        using var source = new CancellationTokenSource();
+
+        var owner = api.PublishAsync(Message("update"));
+        var joiner = api.PublishAsync(Message("update"), source.Token);
+        source.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => joiner);
+        release.SetResult(new NotificationHostResult(NotificationHostStatus.Presented));
+        var ownerResult = await owner;
+
+        Assert.Equal(NotificationPublishStatus.Published, ownerResult.Status);
+        Assert.Single(api.Messages);
+    }
+
+    [Fact]
+    public async Task AThrowingChangedSubscriberIsNotMisreportedAsAHostFailure()
+    {
+        var host = new FakeNotificationHost();
+        var api = new NotificationsApi(host);
+        api.Changed += (_, _) => throw new InvalidOperationException("subscriber failed");
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => api.PublishAsync(Message()));
+
+        Assert.Single(api.Messages);
+        var retry = await api.PublishAsync(Message());
+        Assert.Equal(NotificationPublishStatus.Duplicate, retry.Status);
+    }
+
+    [Fact]
     public async Task MissingHostDegradesWithADiagnosticInsteadOfThrowing()
     {
         var api = new NotificationsApi();
@@ -162,6 +197,39 @@ public sealed class NotificationsApiTests
         host.PresentHandler = (_, _) => Task.FromResult(new NotificationHostResult(NotificationHostStatus.Presented));
         var retry = await api.PublishAsync(Message());
         Assert.Equal(NotificationPublishStatus.Published, retry.Status);
+        Assert.Single(api.Messages);
+    }
+
+    [Fact]
+    public async Task AHostThatIgnoresCancellationDoesNotPoisonTheId()
+    {
+        using var source = new CancellationTokenSource();
+        var never = new TaskCompletionSource<NotificationHostResult>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var calls = 0;
+        var host = new FakeNotificationHost
+        {
+            PresentHandler = (_, _) =>
+            {
+                calls++;
+                return never.Task;
+            },
+        };
+        var api = new NotificationsApi(host);
+
+        var first = api.PublishAsync(Message("stuck"), source.Token);
+        source.Cancel();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => first);
+
+        host.PresentHandler = (_, _) =>
+        {
+            calls++;
+            return Task.FromResult(new NotificationHostResult(NotificationHostStatus.Presented));
+        };
+        var retry = await api.PublishAsync(Message("stuck"));
+
+        Assert.Equal(NotificationPublishStatus.Published, retry.Status);
+        Assert.Equal(2, calls);
         Assert.Single(api.Messages);
     }
 
@@ -282,6 +350,64 @@ public sealed class NotificationsApiTests
         Assert.Equal(1, result.Dismissed);
         Assert.Contains("cannot dismiss", result.Diagnostic, StringComparison.Ordinal);
         Assert.Empty(api.Messages);
+    }
+
+    [Fact]
+    public async Task DismissAllReportsAHostThatCannotDismissWithoutThrowing()
+    {
+        var host = new FakeNotificationHost
+        {
+            DismissHandler = (_, _) => Task.FromResult(
+                new NotificationHostResult(NotificationHostStatus.Unavailable, "no dismiss surface")),
+        };
+        var api = new NotificationsApi(host);
+        await api.PublishAsync(Message("one"));
+
+        var result = await api.DismissAllAsync();
+
+        Assert.Equal(1, result.Dismissed);
+        Assert.Contains("no dismiss surface", result.Diagnostic, StringComparison.Ordinal);
+        Assert.Empty(api.Messages);
+    }
+
+    [Fact]
+    public async Task DismissAllCancellationThrowsAfterClearingTheLocalList()
+    {
+        using var source = new CancellationTokenSource();
+        var host = new FakeNotificationHost
+        {
+            DismissHandler = async (_, token) =>
+            {
+                source.Cancel();
+                await Task.Delay(Timeout.InfiniteTimeSpan, token);
+                return new NotificationHostResult(NotificationHostStatus.Presented);
+            },
+        };
+        var api = new NotificationsApi(host);
+        await api.PublishAsync(Message("one"));
+        await api.PublishAsync(Message("two"));
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => api.DismissAllAsync(source.Token));
+
+        Assert.Empty(api.Messages);
+    }
+
+    [Fact]
+    public async Task DismissDuringAnInFlightPublishReportsNotFoundAndThePublishStillCompletes()
+    {
+        var release = new TaskCompletionSource<NotificationHostResult>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var host = new FakeNotificationHost { PresentHandler = (_, _) => release.Task };
+        var api = new NotificationsApi(host);
+
+        var pending = api.PublishAsync(Message("late"));
+        var dismiss = await api.DismissAsync("late");
+        release.SetResult(new NotificationHostResult(NotificationHostStatus.Presented));
+        var published = await pending;
+
+        Assert.Equal(NotificationDismissStatus.NotFound, dismiss.Status);
+        Assert.Equal(NotificationPublishStatus.Published, published.Status);
+        Assert.Single(api.Messages);
     }
 
     [Fact]

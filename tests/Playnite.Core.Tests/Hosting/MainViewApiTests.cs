@@ -149,6 +149,24 @@ public sealed class MainViewApiTests
     }
 
     [Fact]
+    public async Task ANullHostGameListIsReportedAsFailed()
+    {
+        var host = new FakeMainViewHost
+        {
+            SelectedHandler = _ => Task.FromResult<IReadOnlyList<Game>>(null!),
+            FilteredHandler = _ => Task.FromResult<IReadOnlyList<Game>>(null!),
+        };
+        var api = new MainViewApi(host);
+
+        var selected = await api.GetSelectedGamesAsync();
+        var filtered = await api.GetFilteredGamesAsync();
+
+        Assert.Equal(HostOperationStatus.Failed, selected.Status);
+        Assert.Equal(HostOperationStatus.Failed, filtered.Status);
+        Assert.Contains("no game list", selected.Diagnostic, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task ResponsesCopyTheHostList()
     {
         var games = new List<Game> { Game("Portal 2") };

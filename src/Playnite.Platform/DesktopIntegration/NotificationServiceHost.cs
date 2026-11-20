@@ -51,6 +51,6 @@ public sealed class NotificationServiceHost : INotificationHost
         cancellationToken.ThrowIfCancellationRequested();
         return Task.FromResult(new NotificationHostResult(
             NotificationHostStatus.Unavailable,
-            "The desktop notification service does not expose dismissal; the tracked message was removed locally."));
+            "The desktop notification service does not expose dismissal."));
     }
 }

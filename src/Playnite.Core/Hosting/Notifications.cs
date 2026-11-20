@@ -153,6 +153,10 @@ public sealed class NotificationsApi : INotificationsAPI
     public const string MissingHostDiagnostic =
         "No notification host is registered; the notification was not published.";
 
+    /// <summary>Diagnostic recorded when a dismissal has no host to notify.</summary>
+    public const string MissingHostDismissDiagnostic =
+        "No notification host is registered; the tracked message was removed locally.";
+
     private readonly INotificationHost? host;
     private readonly object gate = new();
     private readonly List<NotificationMessage> messages = new();
@@ -234,31 +238,32 @@ public sealed class NotificationsApi : INotificationsAPI
                 new NotificationPublishResult(NotificationPublishStatus.Unavailable, MissingHostDiagnostic));
         }
 
+        NotificationPublishResult published;
         try
         {
-            var result = await host.PresentAsync(message, cancellationToken).ConfigureAwait(false);
-            if (result.WasPresented)
+            var result = await host.PresentAsync(message, cancellationToken)
+                .WaitAsync(cancellationToken)
+                .ConfigureAwait(false);
+            if (!result.WasPresented)
             {
-                lock (gate)
-                {
-                    inFlight.Remove(message.Id);
-                    messages.Add(message);
-                }
-
-                var published = new NotificationPublishResult(NotificationPublishStatus.Published, result.Diagnostic);
-                completion.TrySetResult(published);
-                RaiseChanged();
-                return published;
+                var degraded = result.Status == NotificationHostStatus.Unavailable
+                    ? new NotificationPublishResult(
+                        NotificationPublishStatus.Unavailable,
+                        result.Diagnostic ?? "The notification host cannot present notifications in this session.")
+                    : new NotificationPublishResult(
+                        NotificationPublishStatus.Failed,
+                        result.Diagnostic ?? "The notification host failed to present the notification.");
+                return Complete(message.Id, completion, degraded);
             }
 
-            var degraded = result.Status == NotificationHostStatus.Unavailable
-                ? new NotificationPublishResult(
-                    NotificationPublishStatus.Unavailable,
-                    result.Diagnostic ?? "The notification host cannot present notifications in this session.")
-                : new NotificationPublishResult(
-                    NotificationPublishStatus.Failed,
-                    result.Diagnostic ?? "The notification host failed to present the notification.");
-            return Complete(message.Id, completion, degraded);
+            lock (gate)
+            {
+                inFlight.Remove(message.Id);
+                messages.Add(message);
+            }
+
+            published = new NotificationPublishResult(NotificationPublishStatus.Published, result.Diagnostic);
+            completion.TrySetResult(published);
         }
         catch (OperationCanceledException)
         {
@@ -279,6 +284,10 @@ public sealed class NotificationsApi : INotificationsAPI
                     NotificationPublishStatus.Failed,
                     "The notification host failed: " + exception.Message));
         }
+
+        // Subscriber failures are caller bugs, not host results; never fold them into the outcome.
+        RaiseChanged();
+        return published;
     }
 
     /// <inheritdoc />
@@ -313,15 +322,20 @@ public sealed class NotificationsApi : INotificationsAPI
         RaiseChanged();
         if (host is null)
         {
-            return new NotificationDismissResult(NotificationDismissStatus.Dismissed, MissingHostDiagnostic);
+            return new NotificationDismissResult(NotificationDismissStatus.Dismissed, MissingHostDismissDiagnostic);
         }
 
         try
         {
             var result = await host.DismissAsync(id, cancellationToken).ConfigureAwait(false);
+            if (result.WasPresented)
+            {
+                return new NotificationDismissResult(NotificationDismissStatus.Dismissed, result.Diagnostic);
+            }
+
             return new NotificationDismissResult(
                 NotificationDismissStatus.Dismissed,
-                result.WasPresented ? result.Diagnostic : result.Diagnostic ?? "Removed locally; the host did not dismiss it.");
+                "Removed locally; " + (result.Diagnostic ?? "the host did not dismiss it."));
         }
         catch (OperationCanceledException)
         {
@@ -355,7 +369,7 @@ public sealed class NotificationsApi : INotificationsAPI
         RaiseChanged();
         if (host is null)
         {
-            return new NotificationDismissAllResult(ids.Length, MissingHostDiagnostic);
+            return new NotificationDismissAllResult(ids.Length, MissingHostDismissDiagnostic);
         }
 
         var failures = new List<string>();
@@ -364,7 +378,11 @@ public sealed class NotificationsApi : INotificationsAPI
             cancellationToken.ThrowIfCancellationRequested();
             try
             {
-                await host.DismissAsync(id, cancellationToken).ConfigureAwait(false);
+                var result = await host.DismissAsync(id, cancellationToken).ConfigureAwait(false);
+                if (!result.WasPresented)
+                {
+                    failures.Add($"{id}: {result.Diagnostic ?? "the host did not dismiss it"}");
+                }
             }
             catch (OperationCanceledException)
             {

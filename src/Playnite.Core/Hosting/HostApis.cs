@@ -43,17 +43,17 @@ public static class HostApis
         var diagnostics = new List<string>(3);
         if (notificationHost is null)
         {
-            diagnostics.Add(NotificationsApi.MissingHostDiagnostic);
+            diagnostics.Add(NotificationHostMissingDiagnostic);
         }
 
         if (dialogHost is null)
         {
-            diagnostics.Add(DialogsFactory.MissingHostDiagnostic);
+            diagnostics.Add(DialogHostMissingDiagnostic);
         }
 
         if (mainViewHost is null)
         {
-            diagnostics.Add(MainViewApi.MissingHostDiagnostic);
+            diagnostics.Add(MainViewHostMissingDiagnostic);
         }
 
         return new HostApiSet(
@@ -62,4 +62,16 @@ public static class HostApis
             new MainViewApi(mainViewHost),
             diagnostics.ToArray());
     }
+
+    /// <summary>Startup diagnostic for a missing notification host.</summary>
+    public const string NotificationHostMissingDiagnostic =
+        "No notification host is registered; notification publishing and dismissal are unavailable.";
+
+    /// <summary>Startup diagnostic for a missing dialog host.</summary>
+    public const string DialogHostMissingDiagnostic =
+        "No dialog host is registered; modal dialogs are unavailable.";
+
+    /// <summary>Startup diagnostic for a missing main-view host.</summary>
+    public const string MainViewHostMissingDiagnostic =
+        "No main-view host is registered; main-view queries are unavailable.";
 }

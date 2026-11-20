@@ -224,7 +224,11 @@ public sealed class MainViewApi : IMainViewAPI
         try
         {
             var games = await query(cancellationToken).ConfigureAwait(false);
-            return new MainViewGamesResponse(HostOperationStatus.Completed, games);
+            return games is null
+                ? new MainViewGamesResponse(
+                    HostOperationStatus.Failed,
+                    diagnostic: "The main-view host returned no game list.")
+                : new MainViewGamesResponse(HostOperationStatus.Completed, games);
         }
         catch (OperationCanceledException)
         {

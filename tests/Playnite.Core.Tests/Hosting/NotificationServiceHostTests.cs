@@ -74,7 +74,7 @@ public sealed class NotificationServiceHostTests
         var result = await host.DismissAsync("update");
 
         Assert.Equal(NotificationHostStatus.Unavailable, result.Status);
-        Assert.Contains("removed locally", result.Diagnostic, StringComparison.Ordinal);
+        Assert.Contains("does not expose dismissal", result.Diagnostic, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -108,6 +108,21 @@ public sealed class NotificationServiceHostTests
             () => host.PresentAsync(new NotificationMessage("update", "Ready"), source.Token));
 
         Assert.Empty(service.Requests);
+    }
+
+    [Fact]
+    public async Task DismissThroughTheApiReportsTheUnsupportedHostAndStillRemovesTheMessage()
+    {
+        var host = new NotificationServiceHost(new FakeNotificationService());
+        var api = new NotificationsApi(host);
+        await api.PublishAsync(new NotificationMessage("update", "Ready"));
+
+        var result = await api.DismissAsync("update");
+
+        Assert.Equal(NotificationDismissStatus.Dismissed, result.Status);
+        Assert.Contains("Removed locally", result.Diagnostic, StringComparison.Ordinal);
+        Assert.Contains("does not expose dismissal", result.Diagnostic, StringComparison.Ordinal);
+        Assert.Empty(api.Messages);
     }
 
     [Fact]

@@ -146,6 +146,26 @@ public sealed class DialogsFactoryTests
     }
 
     [Fact]
+    public async Task ANullHostResponseIsReportedAsFailed()
+    {
+        var host = new FakeDialogHost
+        {
+            MessageHandler = (_, _) => Task.FromResult<MessageDialogResponse>(null!),
+            FileHandler = (_, _) => Task.FromResult<FileDialogResponse>(null!),
+            StringHandler = (_, _) => Task.FromResult<TextInputDialogResponse>(null!),
+        };
+        var dialogs = new DialogsFactory(host);
+
+        var message = await dialogs.ShowMessageAsync(new MessageDialogRequest("Text"));
+        var file = await dialogs.SelectFileAsync(new FileDialogRequest(FileDialogKind.OpenFile));
+        var text = await dialogs.SelectStringAsync(new TextInputDialogRequest("Text"));
+
+        Assert.Equal(HostOperationStatus.Failed, message.Status);
+        Assert.Equal(HostOperationStatus.Failed, file.Status);
+        Assert.Equal(HostOperationStatus.Failed, text.Status);
+    }
+
+    [Fact]
     public async Task CancellationBeforeTheHostRunsThrowsWithoutCallingIt()
     {
         var host = new FakeDialogHost();
@@ -186,6 +206,7 @@ public sealed class DialogsFactoryTests
         await Assert.ThrowsAsync<ArgumentNullException>(() => dialogs.ShowMessageAsync(null!));
         await Assert.ThrowsAsync<ArgumentNullException>(() => dialogs.SelectFileAsync(null!));
         await Assert.ThrowsAsync<ArgumentNullException>(() => dialogs.SelectStringAsync(null!));
+        await Assert.ThrowsAsync<ArgumentNullException>(() => dialogs.ShowErrorAsync(null!));
         Assert.Throws<ArgumentOutOfRangeException>(
             () => new MessageDialogRequest("Text", buttons: (MessageDialogButton)99));
         Assert.Throws<ArgumentOutOfRangeException>(

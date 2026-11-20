@@ -305,7 +305,11 @@ public sealed class DialogsFactory : IDialogsFactory
 
         try
         {
-            return await host.ShowMessageAsync(request, cancellationToken).ConfigureAwait(false);
+            var response = await host.ShowMessageAsync(request, cancellationToken).ConfigureAwait(false);
+            return response ?? new MessageDialogResponse(
+                HostOperationStatus.Failed,
+                MessageDialogResult.None,
+                "The dialog host returned no response.");
         }
         catch (OperationCanceledException)
         {
@@ -344,7 +348,10 @@ public sealed class DialogsFactory : IDialogsFactory
 
         try
         {
-            return await host.SelectFileAsync(request, cancellationToken).ConfigureAwait(false);
+            var response = await host.SelectFileAsync(request, cancellationToken).ConfigureAwait(false);
+            return response ?? new FileDialogResponse(
+                HostOperationStatus.Failed,
+                diagnostic: "The dialog host returned no response.");
         }
         catch (OperationCanceledException)
         {
@@ -398,7 +405,10 @@ public sealed class DialogsFactory : IDialogsFactory
 
         try
         {
-            return await host.SelectStringAsync(request, cancellationToken).ConfigureAwait(false);
+            var response = await host.SelectStringAsync(request, cancellationToken).ConfigureAwait(false);
+            return response ?? new TextInputDialogResponse(
+                HostOperationStatus.Failed,
+                Diagnostic: "The dialog host returned no response.");
         }
         catch (OperationCanceledException)
         {
