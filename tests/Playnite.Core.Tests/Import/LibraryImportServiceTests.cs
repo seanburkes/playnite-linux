@@ -75,6 +75,23 @@ public sealed class LibraryImportServiceTests : IDisposable
         Assert.False(File.Exists(Path.Combine(temporary, "library.sqlite")));
     }
 
+    [Theory]
+    [InlineData("[]")]
+    [InlineData("{")]
+    public async Task Malformed_or_array_root_reader_output_is_source_rejected(string envelope)
+    {
+        var source = Path.Combine(temporary, "source");
+        Directory.CreateDirectory(source);
+        var service = new LibraryImportService(new FakeReader { Output = envelope }, new LibraryMigrator());
+
+        var exception = await Assert.ThrowsAsync<LibraryImportException>(() =>
+            service.ImportAsync(new(source, Path.Combine(temporary, "library.sqlite"))));
+
+        Assert.Equal(LibraryImportFailure.SourceRejected, exception.Failure);
+        Assert.IsAssignableFrom<Newtonsoft.Json.JsonException>(exception.InnerException);
+        Assert.False(File.Exists(Path.Combine(temporary, "library.sqlite")));
+    }
+
     [Fact]
     public async Task Migration_success_without_a_published_destination_is_a_publication_failure()
     {
@@ -112,14 +129,18 @@ public sealed class LibraryImportServiceTests : IDisposable
 
     [Theory]
     [InlineData("invalid-data", LibraryImportFailure.SourceRejected)]
+    [InlineData("json", LibraryImportFailure.SourceRejected)]
     [InlineData("argument", LibraryImportFailure.InvalidRequest)]
     [InlineData("io", LibraryImportFailure.DestinationUnavailable)]
+    [InlineData("access", LibraryImportFailure.DestinationUnavailable)]
     public async Task Migration_failures_keep_a_clear_failure_category(string failure, LibraryImportFailure expected)
     {
         Exception thrown = failure switch
         {
             "invalid-data" => new InvalidDataException("bad source"),
+            "json" => new Newtonsoft.Json.JsonReaderException("bad intermediate"),
             "argument" => new ArgumentException("bad path"),
+            "access" => new UnauthorizedAccessException("destination denied"),
             _ => new IOException("destination busy"),
         };
         var migrator = new FakeMigrator { Run = (_, _) => Task.FromException<MigrationReport>(thrown) };

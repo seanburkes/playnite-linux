@@ -189,11 +189,20 @@ public sealed class LibraryImportService
             throw new LibraryImportException(LibraryImportFailure.SourceRejected,
                 $"The v10 library failed migration validation: {exception.Message}", exception);
         }
+        catch (Newtonsoft.Json.JsonException exception)
+        {
+            throw new LibraryImportException(LibraryImportFailure.SourceRejected,
+                $"The v10 intermediate envelope is not valid JSON: {exception.Message}", exception);
+        }
         catch (ArgumentException exception)
         {
             throw new LibraryImportException(LibraryImportFailure.InvalidRequest, exception.Message, exception);
         }
         catch (IOException exception)
+        {
+            throw new LibraryImportException(LibraryImportFailure.DestinationUnavailable, exception.Message, exception);
+        }
+        catch (Exception exception) when (exception is UnauthorizedAccessException or System.Security.SecurityException)
         {
             throw new LibraryImportException(LibraryImportFailure.DestinationUnavailable, exception.Message, exception);
         }

@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Reflection;
+using System.Runtime.Versioning;
 using System.Security.Cryptography;
 using Playnite.Cli;
 using Playnite.Core.Database;
@@ -65,6 +66,28 @@ public sealed class LibraryImportServiceIntegrationTests : IDisposable
         Assert.Equal(0, result.Report.ImportedSteam);
         Assert.Empty(Directory.GetFileSystemEntries(output));
         Assert.Equal(sourceBefore, Snapshot(source));
+    }
+
+    [Fact]
+    [SupportedOSPlatform("linux")]
+    public async Task Unwritable_destination_is_reported_as_destination_unavailable()
+    {
+        var destination = Path.Combine(output, "library.sqlite");
+        File.SetUnixFileMode(output, UnixFileMode.UserRead | UnixFileMode.UserExecute |
+            UnixFileMode.GroupRead | UnixFileMode.GroupExecute | UnixFileMode.OtherRead | UnixFileMode.OtherExecute);
+        try
+        {
+            var exception = await Assert.ThrowsAsync<LibraryImportException>(() =>
+                Service().ImportAsync(new(source, destination)));
+
+            Assert.Equal(LibraryImportFailure.DestinationUnavailable, exception.Failure);
+            Assert.IsAssignableFrom<UnauthorizedAccessException>(exception.InnerException);
+            Assert.False(File.Exists(destination));
+        }
+        finally
+        {
+            File.SetUnixFileMode(output, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        }
     }
 
     [Fact]
