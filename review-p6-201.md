@@ -10,7 +10,7 @@ Review-only: no tracked product change was authored by this review.
 | Pull request | https://github.com/seanburkes/playnite-linux/pull/201 |
 | Reviewed head | `253d669f50919c044b7f62efc7e41e4a54b661c7` (`253d669`, merge of current main into the branch) |
 | Base / merge base | `0187b09fc7e85c25dcba64f9458f88769b2b1622` (`0187b09`, current `origin/main`) |
-| Candidate diff | `/home/sean/src/firstmate/data/p6-201/candidate.diff`, sha256 `c0aaca52d76a0c807f1e3db6d37eee423042b9f0365da35aaeb29c46adab1b0e` |
+| Candidate diff | task material `data/p6-201/candidate.diff`, sha256 `c0aaca52d76a0c807f1e3db6d37eee423042b9f0365da35aaeb29c46adab1b0e` |
 | Diff shape | 23 files, +639 / −189 (recomputed with `git diff --shortstat`; digest byte-identical to the artifact) |
 | Ledger-validated head | `7675b0455db6207cb69deae36f3a6ca94d6c0eda` (ancestor of the reviewed head; linux-ci run `44732565813`) |
 | PR state | open, not draft, merge state clean, `oracle-change` label present, 8/8 checks pass |
@@ -20,7 +20,7 @@ Review-only: no tracked product change was authored by this review.
 All commands were run after `git checkout --detach 253d669f…` in the disposable worktree.
 
 ```console
-$ sha256sum /home/sean/src/firstmate/data/p6-201/candidate.diff
+$ sha256sum data/p6-201/candidate.diff
 c0aaca52d76a0c807f1e3db6d37eee423042b9f0365da35aaeb29c46adab1b0e  …/candidate.diff
 
 $ git diff 0187b09fc7e85c25dcba64f9458f88769b2b1622 253d669f50919c044b7f62efc7e41e4a54b661c7 | sha256sum
