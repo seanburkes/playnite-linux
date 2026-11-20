@@ -29,6 +29,25 @@ public static class SteamSyncReasons
 
     public const string SteamRootMissing = "steam-root-missing";
     public const string LibraryEnumerationFailed = "library-enumeration-failed";
+
+    /// <summary>
+    /// The selected library file was not parsed, so the declared library list is unknown. p5-002
+    /// names a copy as selected even when the parser rejects it; the root library stays visible
+    /// but every other library may be missing from the observation.
+    /// </summary>
+    public const string LibraryFileRejected = "library-file-rejected";
+
+    /// <summary>
+    /// The parser dropped a declared library entry, so neither its path nor its app set reached
+    /// discovery. Removal is suppressed because those apps were never observed.
+    /// </summary>
+    public const string LibraryEntryDropped = "library-entry-dropped";
+
+    /// <summary>
+    /// An unavailable library did not declare its app set, so the apps that lived there are
+    /// unknown rather than absent.
+    /// </summary>
+    public const string LibraryAppsUnknown = "library-apps-unknown";
 }
 
 /// <summary>One app that was not written. The id is always the app the caller can act on.</summary>
@@ -40,8 +59,9 @@ public sealed record SteamSyncIssue(string Reason, uint? AppId = null, string? D
 /// <summary>
 /// One read-only discovery of the installed Steam library. <see cref="Skipped"/> covers every app
 /// found in a library manifest list that could not be projected. <see cref="CanReconcile"/> is
-/// false when the observation cannot prove which apps are absent (for example, no Steam root or
-/// an unreadable library directory), so the sync must not mark anything uninstalled.
+/// false when the observation cannot prove which apps are absent (for example, no Steam root, an
+/// unreadable library directory, or a library file that did not parse completely), so the sync
+/// must not mark anything uninstalled.
 /// </summary>
 public sealed record SteamSyncDiscovery(
     IReadOnlyList<SteamApp> Apps,

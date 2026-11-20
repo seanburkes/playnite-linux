@@ -113,6 +113,212 @@ public sealed class SteamLibrarySyncIntegrationTests
         }
     }
 
+    // A truncated library file loses the second library without saying so: the parser rejects the
+    // whole file, p5-002 still reports LibraryFilePath, and the root library is the only entry
+    // left. An app that lived in the lost library is now absent from the observation through no
+    // fault of the user, so the sync must not treat it as uninstalled.
+    [Fact]
+    public async Task Truncated_library_file_suppresses_removal_and_reports_a_degraded_sync()
+    {
+        var home = Directory.CreateTempSubdirectory("playnite-steam-truncated-").FullName;
+        try
+        {
+            var root = Path.Combine(home, ".local", "share", "Steam");
+            var external = Path.Combine(home, "mnt", "external", "SteamLibrary");
+            InstallManifest(root, 427520, "Factorio");
+            InstallManifest(external, 105600, "Terraria");
+            var libraryFile = Path.Combine(root, "steamapps", "libraryfolders.vdf");
+            var declaration = TwoLibraryDeclaration(root, external);
+            File.WriteAllText(libraryFile, declaration);
+
+            var host = ProductionHost(home);
+            using var files = new DatabaseTestDirectory();
+            var database = await LibraryDatabase.OpenAsync(files.PathFor());
+            var service = new SteamLibrarySyncService(host, new FixedTimeProvider());
+
+            var first = await service.SyncAsync(database, TestContext.Current.CancellationToken);
+            Assert.Equal(2, first.Added);
+            Assert.Equal(0, first.Removed);
+            Assert.True(first.Reconciled);
+            Assert.All(await ReadAll(database), game => Assert.True(game.Value.IsInstalled));
+
+            // Truncation still leaves the root library enumerable, so the external app would be
+            // the only removal a naive sync performs.
+            File.WriteAllText(libraryFile, declaration[..(declaration.Length / 2)]);
+
+            var snapshot = host.Discover(TestContext.Current.CancellationToken);
+            Assert.False(snapshot.CanReconcile);
+            Assert.Contains(snapshot.Issues, issue => issue.Reason == SteamSyncReasons.LibraryFileRejected);
+            Assert.DoesNotContain(snapshot.Apps, app => app.AppId == 105600);
+
+            var degraded = await service.SyncAsync(database, TestContext.Current.CancellationToken);
+
+            Assert.Equal(1, degraded.Unchanged);
+            Assert.Equal(0, degraded.Added);
+            Assert.Equal(0, degraded.Updated);
+            Assert.Equal(0, degraded.Removed);
+            Assert.Equal(0, degraded.Changes);
+            Assert.False(degraded.Reconciled);
+            Assert.Contains(degraded.Issues, issue => issue.Reason == SteamSyncReasons.LibraryFileRejected);
+            var stored = (await ReadAll(database)).OrderBy(game => uint.Parse(game.Value.GameId!)).ToArray();
+            Assert.Equal(["105600", "427520"], stored.Select(game => game.Value.GameId));
+            Assert.All(stored, game => Assert.True(game.Value.IsInstalled,
+                "a degraded discovery must not uninstall a game"));
+        }
+        finally
+        {
+            Directory.Delete(home, recursive: true);
+        }
+    }
+
+    // The parser drops a declared entry whose path is not absolute, so neither its path nor its
+    // apps reach discovery. Its games were never observed and must not be removed.
+    [Fact]
+    public async Task Dropped_library_entry_suppresses_removal_and_reports_a_degraded_sync()
+    {
+        var home = Directory.CreateTempSubdirectory("playnite-steam-dropped-").FullName;
+        try
+        {
+            var root = Path.Combine(home, ".local", "share", "Steam");
+            var external = Path.Combine(home, "mnt", "external", "SteamLibrary");
+            InstallManifest(root, 427520, "Factorio");
+            InstallManifest(external, 105600, "Terraria");
+            var libraryFile = Path.Combine(root, "steamapps", "libraryfolders.vdf");
+            File.WriteAllText(libraryFile, TwoLibraryDeclaration(root, external));
+
+            var host = ProductionHost(home);
+            using var files = new DatabaseTestDirectory();
+            var database = await LibraryDatabase.OpenAsync(files.PathFor());
+            var service = new SteamLibrarySyncService(host, new FixedTimeProvider());
+
+            var first = await service.SyncAsync(database, TestContext.Current.CancellationToken);
+            Assert.Equal(2, first.Added);
+            Assert.All(await ReadAll(database), game => Assert.True(game.Value.IsInstalled));
+
+            File.WriteAllText(libraryFile, TwoLibraryDeclaration(root, string.Empty));
+
+            var snapshot = host.Discover(TestContext.Current.CancellationToken);
+            Assert.False(snapshot.CanReconcile);
+            Assert.Contains(snapshot.Issues, issue => issue.Reason == SteamSyncReasons.LibraryEntryDropped);
+            Assert.DoesNotContain(snapshot.Apps, app => app.AppId == 105600);
+            Assert.DoesNotContain(snapshot.Skipped, skip => skip.AppId == 105600);
+
+            var degraded = await service.SyncAsync(database, TestContext.Current.CancellationToken);
+
+            Assert.Equal(0, degraded.Removed);
+            Assert.Equal(0, degraded.Changes);
+            Assert.False(degraded.Reconciled);
+            var stored = await ReadAll(database);
+            Assert.Equal(2, stored.Count);
+            Assert.All(stored, game => Assert.True(game.Value.IsInstalled));
+        }
+        finally
+        {
+            Directory.Delete(home, recursive: true);
+        }
+    }
+
+    // An unavailable library that declares no app set gives discovery nothing to report, so its
+    // stored games are unknown rather than absent. A declared app set (the real corpus case) is
+    // still safe, because every declared id is reported as skipped and stays observed.
+    [Fact]
+    public async Task Unavailable_library_without_a_declared_app_set_suppresses_removal()
+    {
+        var home = Directory.CreateTempSubdirectory("playnite-steam-no-apps-").FullName;
+        try
+        {
+            var root = Path.Combine(home, ".local", "share", "Steam");
+            var external = Path.Combine(home, "mnt", "external", "SteamLibrary");
+            InstallManifest(root, 427520, "Factorio");
+            InstallManifest(external, 105600, "Terraria");
+            var libraryFile = Path.Combine(root, "steamapps", "libraryfolders.vdf");
+            File.WriteAllText(libraryFile, TwoLibraryDeclaration(root, external));
+
+            var host = ProductionHost(home);
+            using var files = new DatabaseTestDirectory();
+            var database = await LibraryDatabase.OpenAsync(files.PathFor());
+            var service = new SteamLibrarySyncService(host, new FixedTimeProvider());
+
+            var first = await service.SyncAsync(database, TestContext.Current.CancellationToken);
+            Assert.Equal(2, first.Added);
+            Assert.All(await ReadAll(database), game => Assert.True(game.Value.IsInstalled));
+
+            // The drive is gone and the entry no longer declares which apps it held.
+            File.WriteAllText(libraryFile, TwoLibraryDeclaration(root,
+                Path.Combine(home, "mnt", "gone", "SteamLibrary"), declareExternalApps: false));
+
+            var snapshot = host.Discover(TestContext.Current.CancellationToken);
+            Assert.False(snapshot.CanReconcile);
+            Assert.Contains(snapshot.Issues, issue => issue.Reason == SteamSyncReasons.LibraryAppsUnknown);
+
+            var degraded = await service.SyncAsync(database, TestContext.Current.CancellationToken);
+
+            Assert.Equal(0, degraded.Removed);
+            Assert.Equal(0, degraded.Changes);
+            Assert.False(degraded.Reconciled);
+            var stored = await ReadAll(database);
+            Assert.Equal(2, stored.Count);
+            Assert.All(stored, game => Assert.True(game.Value.IsInstalled));
+        }
+        finally
+        {
+            Directory.Delete(home, recursive: true);
+        }
+    }
+
+    private static SteamDiscoverySource ProductionHost(string home)
+    {
+        var environment = new MemoryEnvironment { Home = home };
+        return new SteamDiscoverySource(environment,
+            new LinuxPaths(environment, new LinuxFileSystem()),
+            new SteamFileSystem(new LinuxBoundedFileReader()));
+    }
+
+    private static void CopyManifest(string libraryRoot, uint appId)
+    {
+        var target = Path.Combine(libraryRoot, "steamapps", $"appmanifest_{appId}.acf");
+        Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+        File.Copy(Path.Combine(Corpus, "steamapps", $"appmanifest_{appId}.acf"), target);
+    }
+
+    // A root library plus a second library. A non-absolute path is a declaration the parser
+    // rejects, and an omitted apps object leaves the second library's app set unknown.
+    private static string TwoLibraryDeclaration(string root, string externalPath, bool declareExternalApps = true)
+    {
+        var lines = new List<string>
+        {
+            "\"libraryfolders\"",
+            "{",
+            "\t\"0\"",
+            "\t{",
+            $"\t\t\"path\"\t\t\"{root}\"",
+            "\t}",
+            "\t\"1\"",
+            "\t{",
+            $"\t\t\"path\"\t\t\"{externalPath}\"",
+        };
+        if (declareExternalApps)
+        {
+            lines.Add("\t\t\"apps\"");
+            lines.Add("\t\t{");
+            lines.Add("\t\t\t\"105600\"\t\t\"831365954\"");
+            lines.Add("\t\t}");
+        }
+
+        lines.Add("\t}");
+        lines.Add("}");
+        return string.Join("\n", lines) + "\n";
+    }
+
+    private static void InstallManifest(string libraryRoot, uint appId, string installDir)
+    {
+        CopyManifest(libraryRoot, appId);
+        Directory.CreateDirectory(Path.Combine(libraryRoot, "steamapps", "common", installDir));
+    }
+
+    private static Task<IReadOnlyList<StoredGame>> ReadAll(LibraryDatabase database) =>
+        database.ReadAsync(session => session.Games.GetAllAsync());
+
     private static void CopyCorpus(string root)
     {
         var checksums = File.ReadAllLines(Path.Combine(Corpus, "SHA256SUMS"));

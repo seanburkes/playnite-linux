@@ -67,11 +67,25 @@ observed as installed before and is absent from a complete discovery is marked
 `IsInstalled = false`, its install path and every user field stay in place, and it is installed
 again if the app reappears.
 
-Removal runs only when the discovery is authoritative (`CanReconcile`). The production host
-sets that false when there is no Steam root or a declared library could not be enumerated. An
-unavailable library's apps are reported as skipped rather than treated as absent, so a detached
-drive cannot uninstall those games. The absent-app rule is applied after every declared app id
-in the discovery, including skipped ones, has been marked as observed.
+Removal runs only when the discovery is authoritative (`CanReconcile`), which the production
+host grants only for a complete observation: a Steam root, one parsed library file, every
+declared entry projected, and every available library enumerated. An unavailable library's apps
+are reported as skipped rather than treated as absent, so a detached drive cannot uninstall
+those games. The host withdraws authority and reports a degraded issue whenever the declared
+library set is not known to be complete:
+
+| Degraded issue | Cause |
+| --- | --- |
+| `library-file-rejected` | The library file was not parsed, so the declared library list is unknown. p5-002 names a copy as selected even when the parser rejects it; the root library is still enumerated, so its apps are observed while every other library may be missing. |
+| `library-entry-dropped` | The parser dropped a declared entry (its path is not absolute), so neither its path nor its declared apps reached discovery. |
+| `library-apps-unknown` | An unavailable library did not declare its app set, so the apps that lived there are unknown rather than absent. |
+
+A run that suppresses removal still adds and updates every observed app; it reports
+`Reconciled = false`, `Removed = 0` and the issue naming the cause. When a rejected primary copy
+is replaced by a usable `config/libraryfolders.vdf` the primary's diagnostic remains in the issue
+stream, so the host cannot tell it apart from a rejected-only copy and also withholds removal;
+that direction can only keep a game installed. The absent-app rule is applied after every
+declared app id in the discovery, including skipped ones, has been marked as observed.
 
 ### Skips and issues
 
@@ -86,6 +100,7 @@ Every app that is not written appears in `Skipped` with its numeric app id and a
 | `appid-duplicate` | The same app id was already projected from an earlier library. |
 | `invalid-install-path` | The parsed install directory does not produce a safe path under the library. |
 | `identity-conflict`, `duplicate-library-record` | Library reconciliation found an ambiguous record; see above. |
+| `library-file-rejected`, `library-entry-dropped`, `library-apps-unknown` | The observation is incomplete, so removal is suppressed; see Removal. |
 
 Global `Issues` carry discovery parse diagnostics, a missing Steam root, a library enumeration
 failure and their optional app id/detail. No skip is silent.
@@ -99,7 +114,9 @@ is `Added + Updated + Removed`; `Unchanged` counts records compared and left alo
 assert this at both the contract and real-corpus levels.
 
 `Reconciled` mirrors the discovery's `CanReconcile`: a false value means absent records were
-not marked uninstalled, not that the sync failed.
+not marked uninstalled, not that the sync failed. A degraded discovery (missing root, rejected
+or dropped library declaration, unknown app set, or a library that could not be enumerated)
+reports `Reconciled = false` together with an issue naming the cause.
 
 ## Tests
 
@@ -118,6 +135,9 @@ not marked uninstalled, not that the sync failed.
 | `SteamLibrarySyncServiceTests.Pre_cancelled_sync_writes_nothing` | Cancellation leaves the library untouched. |
 | `SteamLibrarySyncServiceTests.Game_identity_is_stable_and_distinct_per_app` | Deterministic identity. |
 | `SteamLibrarySyncIntegrationTests.Real_corpus_syncs_four_manifests_reports_every_other_declared_app_and_is_idempotent` | The redacted real corpus: 4 manifest apps added, every other declared app reported, unavailable external library preserved, second sync zero changes. |
+| `SteamLibrarySyncIntegrationTests.Truncated_library_file_suppresses_removal_and_reports_a_degraded_sync` | A truncated library file hides a second library: `Removed = 0`, the unobserved app stays installed, `Reconciled = false` and `library-file-rejected`. |
+| `SteamLibrarySyncIntegrationTests.Dropped_library_entry_suppresses_removal_and_reports_a_degraded_sync` | A declared entry the parser drops leaves its app unobserved: `Removed = 0` and `library-entry-dropped`. |
+| `SteamLibrarySyncIntegrationTests.Unavailable_library_without_a_declared_app_set_suppresses_removal` | A detached library that declares no app set: `Removed = 0` and `library-apps-unknown`. |
 
 The integration test copies `tests/fixtures/steam/real` into a temporary home, verifies every
 `SHA256SUMS` entry, remaps the two recorded library paths and runs the production discovery

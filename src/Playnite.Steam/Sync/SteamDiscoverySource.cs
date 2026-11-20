@@ -10,6 +10,11 @@ namespace Playnite.Steam.Sync;
 /// </summary>
 public sealed class SteamDiscoverySource : ISteamSyncDiscovery
 {
+    // The p5-002 file-level diagnostic identity and the p5-001 reason for a dropped entry are
+    // part of the merged discovery contract this host consumes, not new vocabulary.
+    private const string LibraryFileIdentity = "libraryfolders";
+    private const string InvalidLibraryPathReason = "invalid-library-path";
+
     private readonly IEnvironment environment;
     private readonly IPaths paths;
     private readonly ISteamFileSystem fileSystem;
@@ -40,10 +45,25 @@ public sealed class SteamDiscoverySource : ISteamSyncDiscovery
             return new(apps.AsReadOnly(), skipped.AsReadOnly(), issues.AsReadOnly(), false);
         }
 
-        // Without a selected library file the root is the only known library. That is still a
-        // complete observation of the root, so reconciliation is safe when every library that
-        // was declared could be enumerated.
+        // Removal is only safe when the observation can prove which apps are absent. p5-002 names
+        // a library file as selected as soon as a copy was seen, even when the parser rejected it,
+        // so a non-null LibraryFilePath is not proof that the declared library list is known. A
+        // rejected file, a dropped entry and an unavailable library whose declared app set is
+        // missing each leave libraries unobserved; an app missing from the result then proves
+        // nothing, so authority is withdrawn instead of treating it as absent.
         var canReconcile = result.LibraryFilePath is not null;
+        if (canReconcile && LibraryFileRejection(result.Issues) is { } rejection)
+        {
+            issues.Add(new(SteamSyncReasons.LibraryFileRejected, null, rejection.Reason));
+            canReconcile = false;
+        }
+
+        if (canReconcile && DroppedLibraryEntry(result.Issues) is { } dropped)
+        {
+            issues.Add(new(SteamSyncReasons.LibraryEntryDropped, null, dropped.Identity));
+            canReconcile = false;
+        }
+
         var seenApps = new HashSet<uint>();
         foreach (var library in result.Libraries)
         {
@@ -52,6 +72,12 @@ public sealed class SteamDiscoverySource : ISteamSyncDiscovery
             if (!library.IsAvailable)
             {
                 var reason = ReasonFor(library.Status);
+                if (library.Apps is null && canReconcile)
+                {
+                    issues.Add(new(SteamSyncReasons.LibraryAppsUnknown, null, library.Index));
+                    canReconcile = false;
+                }
+
                 foreach (var appId in declared)
                 {
                     skipped.Add(new(appId, reason));
@@ -236,6 +262,40 @@ public sealed class SteamDiscoverySource : ISteamSyncDiscovery
         }
 
         return uint.TryParse(digits, NumberStyles.None, CultureInfo.InvariantCulture, out var appId) ? appId : null;
+    }
+
+    // p5-002 reports a whole-file library problem with the file identity the parser uses for a
+    // rejected root, and entry-level diagnostics carry the entry index instead. A parsed entry
+    // never produces that identity, so its presence means no declared library list was trusted.
+    // Conservation note: when a rejected primary copy is replaced by a usable config copy the
+    // primary's diagnostic stays in the issue list, so this also withholds removal for a
+    // complete fallback list. That is the safe direction: it can only keep a game installed.
+    private static SteamParseIssue? LibraryFileRejection(IReadOnlyList<SteamParseIssue> issues)
+    {
+        foreach (var issue in issues)
+        {
+            if (string.Equals(issue.Identity, LibraryFileIdentity, StringComparison.Ordinal))
+            {
+                return issue;
+            }
+        }
+
+        return null;
+    }
+
+    // The p5-001 parser drops a declared entry whose path is not absolute instead of projecting
+    // it as an unavailable library, so its declared apps disappear from discovery entirely.
+    private static SteamParseIssue? DroppedLibraryEntry(IReadOnlyList<SteamParseIssue> issues)
+    {
+        foreach (var issue in issues)
+        {
+            if (string.Equals(issue.Reason, InvalidLibraryPathReason, StringComparison.Ordinal))
+            {
+                return issue;
+            }
+        }
+
+        return null;
     }
 
     private static uint? ParseIdentity(string identity)
