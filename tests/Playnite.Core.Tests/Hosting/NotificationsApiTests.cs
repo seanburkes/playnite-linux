@@ -282,6 +282,82 @@ public sealed class NotificationsApiTests
         Assert.Equal(1, result.Dismissed);
         Assert.Contains("cannot dismiss", result.Diagnostic, StringComparison.Ordinal);
         Assert.Empty(api.Messages);
+        var failure = Assert.Single(result.Failures);
+        Assert.Equal("one", failure.Id);
+        Assert.Equal(NotificationHostStatus.Failed, failure.Status);
+        Assert.True(failure.Threw);
+        Assert.Equal("cannot dismiss", failure.Diagnostic);
+    }
+
+    [Theory]
+    [InlineData(NotificationHostStatus.Failed)]
+    [InlineData(NotificationHostStatus.Unavailable)]
+    public async Task DismissAllSurfacesAHostFailureThatDoesNotThrow(NotificationHostStatus status)
+    {
+        var host = new FakeNotificationHost
+        {
+            DismissHandler = (_, _) => Task.FromResult(new NotificationHostResult(status, "host says no")),
+        };
+        var api = new NotificationsApi(host);
+        await api.PublishAsync(Message("one"));
+
+        var result = await api.DismissAllAsync();
+
+        Assert.Equal(1, result.Dismissed);
+        Assert.True(result.HasFailures);
+        Assert.Equal(1, result.FailedCount);
+        var failure = Assert.Single(result.Failures);
+        Assert.Equal("one", failure.Id);
+        Assert.Equal(status, failure.Status);
+        Assert.False(failure.Threw);
+        Assert.Equal("host says no", failure.Diagnostic);
+        Assert.Contains("host says no", result.Diagnostic, StringComparison.Ordinal);
+        Assert.Empty(api.Messages);
+    }
+
+    [Fact]
+    public async Task DismissAllReportsOnlyTheMessagesTheHostDidNotDismiss()
+    {
+        var host = new FakeNotificationHost
+        {
+            DismissHandler = (id, _) => Task.FromResult(id == "two"
+                ? new NotificationHostResult(NotificationHostStatus.Unavailable, "no transport")
+                : new NotificationHostResult(NotificationHostStatus.Presented)),
+        };
+        var api = new NotificationsApi(host);
+        await api.PublishAsync(Message("one"));
+        await api.PublishAsync(Message("two"));
+
+        var result = await api.DismissAllAsync();
+
+        Assert.Equal(2, result.Dismissed);
+        Assert.Equal(1, result.FailedCount);
+        var failure = Assert.Single(result.Failures);
+        Assert.Equal("two", failure.Id);
+        Assert.Equal(NotificationHostStatus.Unavailable, failure.Status);
+        Assert.Equal("no transport", failure.Diagnostic);
+        Assert.DoesNotContain(result.Failures, item => item.Id == "one");
+        Assert.Empty(api.Messages);
+        Assert.Equal(new[] { "one", "two" }, host.Dismissed);
+    }
+
+    [Fact]
+    public async Task DismissAllWithEveryHostSuccessReportsNoFailures()
+    {
+        var host = new FakeNotificationHost();
+        var api = new NotificationsApi(host);
+        await api.PublishAsync(Message("one"));
+        await api.PublishAsync(Message("two"));
+
+        var result = await api.DismissAllAsync();
+
+        Assert.Equal(2, result.Dismissed);
+        Assert.False(result.HasFailures);
+        Assert.Equal(0, result.FailedCount);
+        Assert.Empty(result.Failures);
+        Assert.Null(result.Diagnostic);
+        Assert.Empty(api.Messages);
+        Assert.Equal(2, host.Dismissed.Count);
     }
 
     [Fact]
