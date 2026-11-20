@@ -70,6 +70,11 @@ public sealed class CliQueryCommandsTests
         Assert.Equal("", badLimit.Output);
         Assert.Contains("--limit must be an integer from 1 to 10000", badLimit.Error);
 
+        var duplicateLimit = await RunCli("list", "--library", path, "--limit", "1", "--limit", "1");
+        Assert.Equal(2, duplicateLimit.ExitCode);
+        Assert.Equal("", duplicateLimit.Output);
+        Assert.Contains("--limit was specified more than once", duplicateLimit.Error);
+
         var missingTerm = await RunCli("search", "--library", path);
         Assert.Equal(2, missingTerm.ExitCode);
         Assert.Contains("Usage: Playnite.Cli search", missingTerm.Error);

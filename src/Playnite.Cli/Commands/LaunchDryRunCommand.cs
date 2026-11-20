@@ -137,14 +137,17 @@ internal sealed class LaunchDryRunCommand : ICliCommand
             Guid? id = null;
             string? name = null;
             var dryRun = false;
+            var seen = new HashSet<string>(StringComparer.Ordinal);
             for (var index = 0; index < args.Length; index++)
             {
                 switch (args[index])
                 {
                     case "--library":
+                        OptionGuard.Once(seen, "--library", usage);
                         library = Value(args, ref index, "--library", usage);
                         break;
                     case "--id":
+                        OptionGuard.Once(seen, "--id", usage);
                         var value = Value(args, ref index, "--id", usage);
                         if (!Guid.TryParse(value, out var parsed))
                         {
@@ -154,9 +157,11 @@ internal sealed class LaunchDryRunCommand : ICliCommand
                         id = parsed;
                         break;
                     case "--name":
+                        OptionGuard.Once(seen, "--name", usage);
                         name = Value(args, ref index, "--name", usage);
                         break;
                     case "--dry-run":
+                        OptionGuard.Once(seen, "--dry-run", usage);
                         dryRun = true;
                         break;
                     default:

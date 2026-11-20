@@ -99,6 +99,11 @@ public sealed class ListCommandTests
         { ["--library", "/tmp/library.sqlite", "--offset", "-1"], "--offset must be an integer from 0 to 1000000" },
         { ["--library", "/tmp/library.sqlite", "--offset", "1000001"], "--offset must be an integer from 0 to 1000000" },
         { ["--library", "/tmp/library.sqlite", "--sort", "bogus"], "Unknown sort key 'bogus'" },
+        { ["--library", "/tmp/library.sqlite", "--limit", "1", "--limit", "2"], "--limit was specified more than once" },
+        { ["--library", "/tmp/library.sqlite", "--offset", "1", "--offset", "2"], "--offset was specified more than once" },
+        { ["--library", "/tmp/library.sqlite", "--sort", "name", "--sort", "playtime"], "--sort was specified more than once" },
+        { ["--library", "/tmp/library.sqlite", "--descending", "--descending"], "--descending was specified more than once" },
+        { ["--library", "/tmp/library.sqlite", "--library", "/tmp/other.sqlite"], "--library was specified more than once" },
         { ["--library", "/tmp/library.sqlite", "extra"], "Usage: Playnite.Cli list" },
         { [], "Usage: Playnite.Cli list" }
     };

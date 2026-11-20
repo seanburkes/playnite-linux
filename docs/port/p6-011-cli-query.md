@@ -17,6 +17,10 @@ Playnite.Cli launch --dry-run --library <library.sqlite> (--id <game-guid> | --n
 `--library` is required and must name an existing SQLite library. A missing file is a
 service error; the command never creates a database.
 
+Every option is single-use. A repeated option is an invalid argument: the command names the
+option, prints `--limit was specified more than once.` (with the command's usage text) on
+stderr, writes no records and exits 2.
+
 `list` returns every stored game, including hidden and uninstalled games, in ascending
 name order by default. `search` applies the v10 text matcher to display names; a blank term
 behaves like `list`. `--offset` is 0 to 1,000,000 and `--limit` is 1 to 10,000, matching the
@@ -80,10 +84,10 @@ errors never print a stack trace.
 
 | File | Covers |
 | --- | --- |
-| `ListCommandTests.cs` | page and game records, name order, sort and bounded paging, every bad-argument class, missing library. |
-| `SearchCommandTests.cs` | v10 matching, blank term, unpaged total, paging, bad arguments, missing library. |
-| `LaunchDryRunCommandTests.cs` | resolve by id and exact name, file/URL actions, never started, missing executable, missing and ambiguous games, missing/plugin/emulator play actions, bad arguments, missing library. |
-| `CliQueryCommandsTests.cs` | spawns the real built CLI and exercises the discovered command path end to end: `list`, `search`, `launch --dry-run`, unknown verb, bad arguments and exit codes 1, 2, 3 and 5. |
+| `ListCommandTests.cs` | page and game records, name order, sort and bounded paging, every bad-argument class including repeated options, missing library. |
+| `SearchCommandTests.cs` | v10 matching, blank term, unpaged total, paging, bad arguments including repeated options, missing library. |
+| `LaunchDryRunCommandTests.cs` | resolve by id and exact name, file/URL actions, never started, missing executable, missing and ambiguous games, missing/plugin/emulator play actions, bad arguments including repeated options, missing library. |
+| `CliQueryCommandsTests.cs` | spawns the real built CLI and exercises the discovered command path end to end: `list`, `search`, `launch --dry-run`, unknown verb, bad and repeated arguments, and exit codes 1, 2, 3 and 5. |
 | `CliQueryFixture.cs` | temporary SQLite libraries written through `GameRepository`. |
 
 The commands are also reachable through `Program.RunAsync` without a dispatch edit because

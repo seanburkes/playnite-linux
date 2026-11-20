@@ -19,23 +19,29 @@ internal sealed record QueryOptions(string LibraryPath, int Offset, int? Limit, 
         int? limit = null;
         var sortBy = SortOrder.Name;
         var descending = false;
+        var seen = new HashSet<string>(StringComparer.Ordinal);
         for (var index = 0; index < args.Length; index++)
         {
             switch (args[index])
             {
                 case "--library":
+                    OptionGuard.Once(seen, "--library", usage);
                     library = Value(args, ref index, "--library", usage);
                     break;
                 case "--offset":
+                    OptionGuard.Once(seen, "--offset", usage);
                     offset = Bounded(Value(args, ref index, "--offset", usage), "--offset", 0, LibraryQuery.MaxOffset, usage);
                     break;
                 case "--limit":
+                    OptionGuard.Once(seen, "--limit", usage);
                     limit = Bounded(Value(args, ref index, "--limit", usage), "--limit", 1, LibraryQuery.MaxLimit, usage);
                     break;
                 case "--sort":
+                    OptionGuard.Once(seen, "--sort", usage);
                     sortBy = Sort(Value(args, ref index, "--sort", usage), usage);
                     break;
                 case "--descending":
+                    OptionGuard.Once(seen, "--descending", usage);
                     descending = true;
                     break;
                 default:

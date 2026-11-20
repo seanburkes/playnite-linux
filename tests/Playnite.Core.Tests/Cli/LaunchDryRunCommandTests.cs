@@ -115,6 +115,10 @@ public sealed class LaunchDryRunCommandTests
         { ["--dry-run", "--library", "/tmp/library.sqlite"], "Choose exactly one of --id and --name" },
         { ["--dry-run", "--library", "/tmp/library.sqlite", "--id", Guid.Empty.ToString(), "--name", "Game"], "Choose exactly one of --id and --name" },
         { ["--dry-run", "--library", "/tmp/library.sqlite", "--id", "not-a-guid"], "--id must be a GUID" },
+        { ["--dry-run", "--library", "/tmp/library.sqlite", "--id", Guid.Empty.ToString(), "--id", Guid.Empty.ToString()], "--id was specified more than once" },
+        { ["--dry-run", "--library", "/tmp/library.sqlite", "--name", "Game", "--name", "Other"], "--name was specified more than once" },
+        { ["--dry-run", "--library", "/tmp/library.sqlite", "--library", "/tmp/other.sqlite", "--name", "Game"], "--library was specified more than once" },
+        { ["--dry-run", "--dry-run", "--library", "/tmp/library.sqlite", "--name", "Game"], "--dry-run was specified more than once" },
         { ["--dry-run", "--library", "/tmp/library.sqlite", "--name", "Game", "extra"], "Usage: Playnite.Cli launch" },
         { ["--dry-run"], "Usage: Playnite.Cli launch" }
     };

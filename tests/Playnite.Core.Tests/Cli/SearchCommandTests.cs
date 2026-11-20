@@ -88,7 +88,12 @@ public sealed class SearchCommandTests
         { ["--library", "/tmp/library.sqlite"], "Usage: Playnite.Cli search" },
         { ["term", "extra", "--library", "/tmp/library.sqlite"], "Usage: Playnite.Cli search" },
         { ["term", "--library", "/tmp/library.sqlite", "--limit", "0"], "--limit must be an integer from 1 to 10000" },
-        { ["term", "--library", "/tmp/library.sqlite", "--offset", "1000001"], "--offset must be an integer from 0 to 1000000" }
+        { ["term", "--library", "/tmp/library.sqlite", "--offset", "1000001"], "--offset must be an integer from 0 to 1000000" },
+        { ["term", "--library", "/tmp/library.sqlite", "--limit", "1", "--limit", "2"], "--limit was specified more than once" },
+        { ["term", "--library", "/tmp/library.sqlite", "--offset", "1", "--offset", "2"], "--offset was specified more than once" },
+        { ["term", "--library", "/tmp/library.sqlite", "--sort", "name", "--sort", "playtime"], "--sort was specified more than once" },
+        { ["term", "--library", "/tmp/library.sqlite", "--descending", "--descending"], "--descending was specified more than once" },
+        { ["term", "--library", "/tmp/library.sqlite", "--library", "/tmp/other.sqlite"], "--library was specified more than once" }
     };
 
     [Fact]
