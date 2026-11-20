@@ -64,15 +64,15 @@ Phase 6 (Core services and SDK v7) is next. The acceptance record is
 | --- | ---: |
 | deferred | 1 |
 | done | 78 |
-| in-progress | 3 |
-| todo | 24 |
+| in-progress | 4 |
+| todo | 23 |
 
 ## Ledger
 
 | Metric | Value |
 | --- | ---: |
-| Ledger rows | 323 |
-| Ledger fragments | 96 |
+| Ledger rows | 324 |
+| Ledger fragments | 97 |
 
 ## Units
 
@@ -159,7 +159,7 @@ Phase 6 (Core services and SDK v7) is next. The acceptance record is
 | p5-shards2 | W5 | repo | Phase 5 exit assessment and merged-wave reconciliation | done | `units/p5-shards2.*`; 4 ledger rows |
 | p6-001 | W6 | core | Library service | done | `units/p6-001.*`; 2 ledger rows |
 | p6-002 | W6 | core | Import service | done | `units/p6-002.*`; 2 ledger rows |
-| p6-003 | W6 | core | Settings/metadata services | todo | `units/p6-003.*`; 0 ledger rows |
+| p6-003 | W6 | core | Steam sync | in-progress | `units/p6-003.*`; 1 ledger rows |
 | p6-004 | W6 | core | Settings service | done | `units/p6-004.*`; 3 ledger rows |
 | p6-005 | W6 | sdk | Sample plugins | todo | `units/p6-005.*`; 0 ledger rows |
 | p6-011 | W6 | core | CLI query surface | done | `units/p6-011.*`; 2 ledger rows |

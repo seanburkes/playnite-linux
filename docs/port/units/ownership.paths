@@ -220,6 +220,9 @@ src/Playnite.Steam/SteamLibraryParser.cs	p5-001	777578cc81efb0130b41924c282542f0
 src/Playnite.Steam/SteamManifestParser.cs	p5-001	777578cc81efb0130b41924c282542f0b346836c	pull/109
 src/Playnite.Steam/SteamModels.cs	p5-001	777578cc81efb0130b41924c282542f0b346836c	pull/109
 src/Playnite.Steam/SteamRootResolver.cs	p5-002	f8aed2fe6b29918fbe6bc29dd5f3b54a7af6fcee	pull/112
+src/Playnite.Steam/Sync/SteamDiscoverySource.cs	p6-003	3ee13798c9b4a17de34be327bc816d3132640923	pull/180
+src/Playnite.Steam/Sync/SteamLibrarySyncService.cs	p6-003	3ee13798c9b4a17de34be327bc816d3132640923	pull/180
+src/Playnite.Steam/Sync/SteamSyncContracts.cs	p6-003	3ee13798c9b4a17de34be327bc816d3132640923	pull/180
 src/Playnite.Steam/p5-008/FlatpakSteamLaunch.cs	p5-008	c31b8a96d63da58921a0448f08295229cf2914d9	pull/158
 src/Playnite.Steam/p5-008/SteamLaunchEvidence.cs	p5-008	d82758baa26eecf25801e982a8fa32bfb98396c5	pull/137
 src/Playnite.Steam/p5-008/SteamProcessLauncher.cs	p5-008	d82758baa26eecf25801e982a8fa32bfb98396c5	pull/137
@@ -329,6 +332,8 @@ tests/Playnite.Core.Tests/Sessions/SessionTestDoubles.cs	p5-004	35b61264636fe22d
 tests/Playnite.Core.Tests/Settings/SettingsServiceTests.cs	p6-004	c5ac0c7707f33702aa490b442a9aba983c9280bd	pull/181
 tests/Playnite.Core.Tests/SettingsMigrationTests.cs	p4-004	a6f8bfc7e3cf94a37c5c043da6f2e90609b2ba6b	pull/91
 tests/Playnite.Core.Tests/Steam/SteamDiscoveryTests.cs	p5-002	f8aed2fe6b29918fbe6bc29dd5f3b54a7af6fcee	pull/112
+tests/Playnite.Core.Tests/Steam/SteamLibrarySyncIntegrationTests.cs	p6-003	3ee13798c9b4a17de34be327bc816d3132640923	pull/180
+tests/Playnite.Core.Tests/Steam/SteamLibrarySyncServiceTests.cs	p6-003	3ee13798c9b4a17de34be327bc816d3132640923	pull/180
 tests/Playnite.Core.Tests/Steam/SteamParserTests.cs	p5-001	777578cc81efb0130b41924c282542f0b346836c	pull/109
 tests/Playnite.Core.Tests/Steam/SteamPortalTests.cs	p5-008	c72614dda10fc9fa89995c2b58b41c37cecf2441	pull/156
 tests/Playnite.Core.Tests/Steam/SteamRealCorpusDiscoveryTests.cs	p5-002	f82c3d46ae122098228dc34349fbd955cafa8177	pull/146
