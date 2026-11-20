@@ -43,6 +43,9 @@ src/Playnite.Core/Import/LibraryMigration.cs	p4-003	8ff04700cf62708a5dbf3fbbc9da
 src/Playnite.Core/Import/LibraryMigration.cs	p4-005	f12a4325c58cf66d47b93c5768e46861696d3052	pull/96
 src/Playnite.Core/Library/LibraryQuery.cs	p6-001	7e6d39dd85c1ceec4bde01dfc852516defae3ec8	pull/161
 src/Playnite.Core/Library/LibraryService.cs	p6-001	7e6d39dd85c1ceec4bde01dfc852516defae3ec8	pull/161
+src/Playnite.Core/Library/PagedLibraryComparer.cs	p6-012	e6f7c4fed225c276545b3756476a3f4b8c8206eb	pull/168
+src/Playnite.Core/Library/PagedLibraryQuery.cs	p6-012	e6f7c4fed225c276545b3756476a3f4b8c8206eb	pull/168
+src/Playnite.Core/Library/PagedLibraryReader.cs	p6-012	e6f7c4fed225c276545b3756476a3f4b8c8206eb	pull/168
 src/Playnite.Core/Localization/English.json	p3-007b	d6935c7ccef9672178bf647c9f412d7a47116ded	pull/78
 src/Playnite.Core/Localization/LOC.cs	p3-007b	d6935c7ccef9672178bf647c9f412d7a47116ded	pull/78
 src/Playnite.Core/Localization/LocalizationCoverage.cs	p3-loc-coverage-ds	37a3a37dbd9818692e5030bac2dcfcb625589009	pull/82
@@ -283,6 +286,7 @@ tests/Playnite.Core.Tests/Integration/SingleInstanceTests.cs	p5-005a	785b8920066
 tests/Playnite.Core.Tests/Integration/XdgDirectoriesTests.cs	p5-005a	785b89200666ab63f07ca2fd1af4e757c3ef1e36	pull/119
 tests/Playnite.Core.Tests/Library/LibraryServiceContractTests.cs	p6-001	7e6d39dd85c1ceec4bde01dfc852516defae3ec8	pull/161
 tests/Playnite.Core.Tests/Library/LibraryServiceImportTests.cs	p6-001	7e6d39dd85c1ceec4bde01dfc852516defae3ec8	pull/161
+tests/Playnite.Core.Tests/Library/PagedLibraryReaderTests.cs	p6-012	e6f7c4fed225c276545b3756476a3f4b8c8206eb	pull/168
 tests/Playnite.Core.Tests/LinuxEnvironmentTests.cs	*	d6401f1f07c69474d0ce395797ab694bedf019e7	pull/68
 tests/Playnite.Core.Tests/LinuxPathsTests.cs	p5-002	a37890f33110c70b8411bac4457d16e0aa41822f	pull/116
 tests/Playnite.Core.Tests/LocalizationCoverageTests.cs	p3-loc-coverage-ds	37a3a37dbd9818692e5030bac2dcfcb625589009	pull/82

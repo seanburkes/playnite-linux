@@ -63,7 +63,7 @@ Phase 6 (Core services and SDK v7) is next. The acceptance record is
 | Status | Units |
 | --- | ---: |
 | deferred | 1 |
-| done | 75 |
+| done | 76 |
 | in-progress | 3 |
 | todo | 26 |
 
@@ -71,8 +71,8 @@ Phase 6 (Core services and SDK v7) is next. The acceptance record is
 
 | Metric | Value |
 | --- | ---: |
-| Ledger rows | 314 |
-| Ledger fragments | 87 |
+| Ledger rows | 316 |
+| Ledger fragments | 89 |
 
 ## Units
 
@@ -163,6 +163,7 @@ Phase 6 (Core services and SDK v7) is next. The acceptance record is
 | p6-004 | W6 | sdk | SDK v7 contracts | todo | `units/p6-004.*`; 0 ledger rows |
 | p6-005 | W6 | sdk | Sample plugins | todo | `units/p6-005.*`; 0 ledger rows |
 | p6-011 | W6 | core | CLI query surface | done | `units/p6-011.*`; 2 ledger rows |
+| p6-012 | W6 | core | Repository-level ordered paging for list/search | done | `units/p6-012.*`; 2 ledger rows |
 | p6-shards | W6 | repo | Phase 6 core services and SDK v7 board | done | `units/p6-shards.*`; 3 ledger rows |
 | p7-001 | W7 | ui | Bootstrap/DI/theme/localisation | todo | `units/p7-001.*`; 0 ledger rows |
 | p7-002 | W7 | ui | Shell/main window | todo | `units/p7-002.*`; 0 ledger rows |
