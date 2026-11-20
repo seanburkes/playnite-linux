@@ -71,8 +71,8 @@ Phase 6 (Core services and SDK v7) is next. The acceptance record is
 
 | Metric | Value |
 | --- | ---: |
-| Ledger rows | 307 |
-| Ledger fragments | 80 |
+| Ledger rows | 308 |
+| Ledger fragments | 81 |
 
 ## Units
 
@@ -147,7 +147,7 @@ Phase 6 (Core services and SDK v7) is next. The acceptance record is
 | p4-tla | W4 | data | Library import crash-safety formal model | done | `units/p4-tla.*`; 4 ledger rows |
 | p5-001 | W5 | steam | VDF/ACF parsers | done | `units/p5-001.*`; 4 ledger rows |
 | p5-002 | W5 | steam | Steam root/library discovery | done | `units/p5-002.*`; 7 ledger rows |
-| p5-003 | W5 | steam | Artwork/metadata cache | done | `units/p5-003.*`; 8 ledger rows |
+| p5-003 | W5 | steam | Artwork/metadata cache | done | `units/p5-003.*`; 9 ledger rows |
 | p5-004 | W5 | platform | Process launcher/session tracker | done | `units/p5-004.*`; 10 ledger rows |
 | p5-005 | W5 | platform | XDG/single-instance/protocol | todo | `units/p5-005.*`; 0 ledger rows |
 | p5-005a | W5 | platform | XDG/single-instance/protocol continuation | done | `units/p5-005a.*`; 5 ledger rows |

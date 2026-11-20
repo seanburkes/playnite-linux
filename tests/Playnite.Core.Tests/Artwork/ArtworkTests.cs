@@ -523,13 +523,16 @@ public sealed class ArtworkTests
 
     private sealed class HttpStub : IAsyncDisposable
     {
+        private static readonly TimeSpan ShutdownTimeout = TimeSpan.FromSeconds(10);
         private readonly Clock? clock;
         private readonly TcpListener listener = new(IPAddress.Loopback, 0);
         private readonly CancellationTokenSource stop = new();
         private readonly Task serving;
         private readonly bool block;
+        private TcpClient? accepted;
         public TaskCompletionSource Received { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public Uri Url { get; }
+        public int Port { get; }
         public int Requests { get; private set; }
         public List<DateTimeOffset> Times { get; } = [];
         public byte[] Body { get; set; }
@@ -540,7 +543,8 @@ public sealed class ArtworkTests
             Body = body;
             this.clock = clock;
             listener.Start();
-            Url = new Uri($"http://127.0.0.1:{((IPEndPoint)listener.LocalEndpoint).Port}/explicit-source");
+            Port = ((IPEndPoint)listener.LocalEndpoint).Port;
+            Url = new Uri($"http://127.0.0.1:{Port}/explicit-source");
             serving = ServeAsync(body, status, declaredLength, omitLength, extraHeaders);
         }
 
@@ -548,31 +552,60 @@ public sealed class ArtworkTests
         {
             try
             {
-                while (!stop.IsCancellationRequested)
+                while (true)
                 {
-                    using var connection = await listener.AcceptTcpClientAsync(stop.Token);
-                    await using var stream = connection.GetStream();
-                    using var reader = new StreamReader(stream, leaveOpen: true);
-                    while (await reader.ReadLineAsync(stop.Token) is { Length: > 0 }) { }
-                    Requests++;
-                    Times.Add(clock?.UtcNow ?? DateTimeOffset.MinValue);
-                    Received.TrySetResult();
-                    if (block) await Task.Delay(Timeout.Infinite, stop.Token);
-                    byte[] actualBody = Body;
-                    string header = $"HTTP/1.1 {status} Stub\r\nConnection: close\r\n" + (omitLength ? "" : $"Content-Length: {length ?? actualBody.Length}\r\n") + extra + "\r\n";
-                    await stream.WriteAsync(Encoding.ASCII.GetBytes(header), stop.Token);
-                    await stream.WriteAsync(actualBody, stop.Token);
+                    TcpClient connection = await listener.AcceptTcpClientAsync(stop.Token);
+                    accepted = connection;
+                    try
+                    {
+                        await using var stream = connection.GetStream();
+                        using var reader = new StreamReader(stream, leaveOpen: true);
+                        while (await reader.ReadLineAsync(stop.Token) is { Length: > 0 }) { }
+                        Requests++;
+                        Times.Add(clock?.UtcNow ?? DateTimeOffset.MinValue);
+                        Received.TrySetResult();
+                        if (block) await Task.Delay(Timeout.Infinite, stop.Token);
+                        byte[] actualBody = Body;
+                        string header = $"HTTP/1.1 {status} Stub\r\nConnection: close\r\n" + (omitLength ? "" : $"Content-Length: {length ?? actualBody.Length}\r\n") + extra + "\r\n";
+                        await stream.WriteAsync(Encoding.ASCII.GetBytes(header), stop.Token);
+                        await stream.WriteAsync(actualBody, stop.Token);
+                    }
+                    finally
+                    {
+                        accepted = null;
+                        connection.Dispose();
+                    }
                 }
             }
             catch (OperationCanceledException) when (stop.IsCancellationRequested) { }
+            catch (SocketException) when (stop.IsCancellationRequested) { }
+            catch (ObjectDisposedException) when (stop.IsCancellationRequested) { }
+            catch (InvalidOperationException) when (stop.IsCancellationRequested) { }
+            catch (IOException) when (stop.IsCancellationRequested) { }
         }
 
         public async ValueTask DisposeAsync()
         {
-            await stop.CancelAsync();
-            listener.Stop();
-            await serving;
-            stop.Dispose();
+            try
+            {
+                await stop.CancelAsync();
+                listener.Stop();
+                accepted?.Dispose();
+                try
+                {
+                    await serving.WaitAsync(ShutdownTimeout);
+                }
+                catch (TimeoutException)
+                {
+                    throw new TimeoutException($"Artwork HTTP stub on port {Port} still holds its listener or an accepted socket {ShutdownTimeout.TotalSeconds:0}s after teardown began.");
+                }
+            }
+            finally
+            {
+                listener.Stop();
+                accepted?.Dispose();
+                stop.Dispose();
+            }
         }
     }
 }
