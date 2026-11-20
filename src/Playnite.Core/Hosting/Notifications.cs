@@ -111,8 +111,34 @@ public sealed record NotificationDismissResult(NotificationDismissStatus Status,
     public bool IsDismissed => Status == NotificationDismissStatus.Dismissed;
 }
 
-/// <summary>Result of dismissing every tracked notification.</summary>
-public sealed record NotificationDismissAllResult(int Dismissed, string? Diagnostic = null);
+/// <summary>One tracked notification whose host dismissal did not succeed.</summary>
+/// <param name="Id">Id of the message that was removed locally but not dismissed by the host.</param>
+/// <param name="Status">The status the host reported, or <see cref="NotificationHostStatus.Failed"/> when it threw.</param>
+/// <param name="Diagnostic">The host's diagnostic, or the exception message when the host threw.</param>
+/// <param name="Threw">True when the host threw instead of returning a result.</param>
+public sealed record NotificationDismissFailure(
+    string Id,
+    NotificationHostStatus Status,
+    string? Diagnostic = null,
+    bool Threw = false);
+
+/// <summary>
+/// Result of dismissing every tracked notification. <see cref="Dismissed"/> counts the messages
+/// removed from the tracked list; <see cref="Failures"/> names every one the host did not dismiss,
+/// whether it returned an unsuccessful result or threw.
+/// </summary>
+public sealed record NotificationDismissAllResult(int Dismissed, string? Diagnostic = null)
+{
+    /// <summary>One entry per tracked message whose host dismissal did not succeed.</summary>
+    public IReadOnlyList<NotificationDismissFailure> Failures { get; init; } =
+        Array.Empty<NotificationDismissFailure>();
+
+    /// <summary>Number of messages removed locally that the host did not dismiss.</summary>
+    public int FailedCount => Failures.Count;
+
+    /// <summary>True when at least one tracked message was not dismissed by the host.</summary>
+    public bool HasFailures => Failures.Count > 0;
+}
 
 /// <summary>
 /// The host-facing notification surface: publish, deduplicate by id and dismiss. The v10 API
@@ -139,7 +165,11 @@ public interface INotificationsAPI
     /// <summary>Removes one tracked message and asks the host to dismiss it when possible.</summary>
     Task<NotificationDismissResult> DismissAsync(string id, CancellationToken cancellationToken = default);
 
-    /// <summary>Removes every tracked message and asks the host to dismiss each one.</summary>
+    /// <summary>
+    /// Removes every tracked message and asks the host to dismiss each one. Every host outcome is
+    /// aggregated: a message the host did not dismiss appears in
+    /// <see cref="NotificationDismissAllResult.Failures"/> with its status and diagnostic.
+    /// </summary>
     Task<NotificationDismissAllResult> DismissAllAsync(CancellationToken cancellationToken = default);
 }
 
@@ -372,17 +402,15 @@ public sealed class NotificationsApi : INotificationsAPI
             return new NotificationDismissAllResult(ids.Length, MissingHostDismissDiagnostic);
         }
 
-        var failures = new List<string>();
+        var failures = new List<NotificationDismissFailure>();
+        var diagnostics = new List<string>();
         foreach (var id in ids)
         {
             cancellationToken.ThrowIfCancellationRequested();
+            NotificationHostResult result;
             try
             {
-                var result = await host.DismissAsync(id, cancellationToken).ConfigureAwait(false);
-                if (!result.WasPresented)
-                {
-                    failures.Add($"{id}: {result.Diagnostic ?? "the host did not dismiss it"}");
-                }
+                result = await host.DismissAsync(id, cancellationToken).ConfigureAwait(false);
             }
             catch (OperationCanceledException)
             {
@@ -390,13 +418,33 @@ public sealed class NotificationsApi : INotificationsAPI
             }
             catch (Exception exception)
             {
-                failures.Add($"{id}: {exception.Message}");
+                failures.Add(new NotificationDismissFailure(
+                    id,
+                    NotificationHostStatus.Failed,
+                    exception.Message,
+                    Threw: true));
+                diagnostics.Add($"{id}: {exception.Message}");
+                continue;
             }
+
+            if (result.WasPresented)
+            {
+                continue;
+            }
+
+            var diagnostic = result.Diagnostic is null
+                ? $"the host did not dismiss it ({result.Status})"
+                : $"the host did not dismiss it ({result.Status}): {result.Diagnostic}";
+            failures.Add(new NotificationDismissFailure(id, result.Status, result.Diagnostic));
+            diagnostics.Add($"{id}: {diagnostic}");
         }
 
         return new NotificationDismissAllResult(
             ids.Length,
-            failures.Count == 0 ? null : "Some host dismissals failed: " + string.Join("; ", failures));
+            failures.Count == 0 ? null : "Some host dismissals failed: " + string.Join("; ", diagnostics))
+        {
+            Failures = failures,
+        };
     }
 
     private NotificationPublishResult Complete(

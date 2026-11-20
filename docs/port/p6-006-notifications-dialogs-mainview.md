@@ -27,7 +27,7 @@ also needs the Core `Game` model, which Abstractions may not reference. The
 | `Add(message)` | `PublishAsync(message)`: the host presents first, then the message is tracked. |
 | Duplicate id ignored | `Duplicate`; the host is not called again. An in-flight duplicate shares the first result. |
 | `Remove(id)` | `DismissAsync(id)`: local removal, then a best-effort host dismiss. |
-| `RemoveAll()` | `DismissAllAsync()`: removes everything and reports any host failures. |
+| `RemoveAll()` | `DismissAllAsync()`: removes everything and aggregates every host failure. |
 
 Deduplication is by ordinal `Id`, as in v10. A duplicate never calls the host, never raises
 `Changed` and leaves the first message's text intact. A failed or unavailable presentation does
@@ -41,6 +41,13 @@ is tracked when the host answers.
 A `Changed` handler is caller code and is raised after the publish result is fixed. A throwing
 handler is not converted into a host failure; it propagates to the publisher after the message is
 already tracked.
+
+`DismissAllAsync` never drops a host outcome. Every message the host did not dismiss — whether
+the host returned `Unavailable`/`Failed` or threw — is recorded as a
+`NotificationDismissFailure` (id, status, diagnostic, `Threw`) in
+`NotificationDismissAllResult.Failures`, and the aggregate diagnostic names each one.
+`Dismissed` still counts the messages removed from the tracked list; `HasFailures` and
+`FailedCount` summarize the host outcome.
 
 ## Dialog API
 
@@ -76,7 +83,7 @@ explicitly degraded surfaces.
 
 | File | Covers |
 | --- | --- |
-| `NotificationsApiTests` | Publish/track, id dedupe, concurrent duplicate sharing, missing host, unavailable/failed host retry, cancellation, dismiss, dismiss-all failure reporting, `Changed`. |
+| `NotificationsApiTests` | Publish/track, id dedupe, concurrent duplicate sharing, missing host, unavailable/failed host retry, cancellation, dismiss, dismiss-all failure aggregation (thrown and returned results), `Changed`. |
 | `DialogsFactoryTests` | Message/error/file/folder/save/string request and response mapping, missing host, host failure, cancellation, validation. |
 | `MainViewApiTests` | State and game queries, missing host, host failure, cancellation, snapshot copying, enum validation. |
 | `HostApiTests` | Degraded startup, partial registration, full wiring, diagnostics. |
@@ -88,7 +95,7 @@ The fake hosts are in `Fakes.cs`; no test needs a desktop session, D-Bus, a wind
 
 - `dotnet build tests/Playnite.Core.Tests -c Release -warnaserror`: 0 warnings, 0 errors.
 - `dotnet test tests/Playnite.Core.Tests --filter-namespace Playnite.Core.Tests.Hosting`:
-  60 passed, 0 failed, 0 skipped.
-- Full `Playnite.Core.Tests`: 2,851 passed, 0 failed, 0 skipped.
+  63 passed, 0 failed, 0 skipped.
+- Full `Playnite.Core.Tests`: 2,854 passed, 0 failed, 0 skipped.
 - `Playnite.Architecture.Tests`: 199 passed, 0 failed, 0 skipped (banned constructs, SDK
   boundary and dependency graph unchanged).
