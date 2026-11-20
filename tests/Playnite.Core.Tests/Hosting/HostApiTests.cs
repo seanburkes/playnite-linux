@@ -1,5 +1,6 @@
 using Playnite.Core.Hosting;
 using Xunit;
+using Playnite.SDK;
 
 namespace Playnite.Core.Tests.Hosting;
 

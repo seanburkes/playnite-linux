@@ -5,36 +5,6 @@ Playnite.SDK.Data.SerializationPropertyNameAttribute
 Playnite.SDK.Data.SerializationPropertyNameAttribute.PropertyName.get -> string!
 Playnite.SDK.Data.SerializationPropertyNameAttribute.PropertyName.set -> void
 Playnite.SDK.Data.SerializationPropertyNameAttribute.SerializationPropertyNameAttribute(string! propertyName) -> void
-const Playnite.SDK.PlayniteUriRoute.AppSource = "playnite" -> string!
-const Playnite.SDK.PlayniteUriRoute.MaxActionIndex = 999 -> int
-const Playnite.SDK.PlayniteUriRoute.MaxArgumentLength = 1024 -> int
-const Playnite.SDK.PlayniteUriRoute.MaxArguments = 32 -> int
-const Playnite.SDK.PlayniteUriRoute.MaxFilterValueLength = 256 -> int
-const Playnite.SDK.PlayniteUriRoute.MaxLength = 2048 -> int
-const Playnite.SDK.PlayniteUriRoute.MaxSearchTermLength = 256 -> int
-const Playnite.SDK.PlayniteUriRoute.MaxSourceLength = 64 -> int
-const Playnite.SDK.PlayniteUriRoute.Scheme = "playnite" -> string!
-override Playnite.SDK.Descriptions.HtmlDescriptionResult.Equals(object? obj) -> bool
-override Playnite.SDK.Descriptions.HtmlDescriptionResult.GetHashCode() -> int
-override Playnite.SDK.Descriptions.HtmlDescriptionResult.ToString() -> string!
-override Playnite.SDK.Descriptions.HtmlDescriptionSourceResult.Equals(object? obj) -> bool
-override Playnite.SDK.Descriptions.HtmlDescriptionSourceResult.GetHashCode() -> int
-override Playnite.SDK.Descriptions.HtmlDescriptionSourceResult.ToString() -> string!
-override Playnite.SDK.Descriptions.HtmlSanitizationResult.Equals(object? obj) -> bool
-override Playnite.SDK.Descriptions.HtmlSanitizationResult.GetHashCode() -> int
-override Playnite.SDK.Descriptions.HtmlSanitizationResult.ToString() -> string!
-override Playnite.SDK.PlayniteFilterTarget.Equals(object? obj) -> bool
-override Playnite.SDK.PlayniteFilterTarget.GetHashCode() -> int
-override Playnite.SDK.PlayniteFilterTarget.ToString() -> string!
-override Playnite.SDK.PlayniteUriRoute.Equals(object? obj) -> bool
-override Playnite.SDK.PlayniteUriRoute.GetHashCode() -> int
-override Playnite.SDK.PlayniteUriRoute.ToString() -> string!
-override Playnite.SDK.UriCommandResult.Equals(object? obj) -> bool
-override Playnite.SDK.UriCommandResult.GetHashCode() -> int
-override Playnite.SDK.UriCommandResult.ToString() -> string!
-override Playnite.SDK.UriDispatchResult.Equals(object? obj) -> bool
-override Playnite.SDK.UriDispatchResult.GetHashCode() -> int
-override Playnite.SDK.UriDispatchResult.ToString() -> string!
 Playnite.SDK.Descriptions.HtmlDescriptionResult
 Playnite.SDK.Descriptions.HtmlDescriptionResult.<Clone>$() -> Playnite.SDK.Descriptions.HtmlDescriptionResult!
 Playnite.SDK.Descriptions.HtmlDescriptionResult.Deconstruct(out Playnite.SDK.Descriptions.HtmlDescriptionStatus Status, out string! Html, out string? Diagnostic, out Playnite.SDK.Descriptions.HtmlSanitizationResult? Sanitization) -> void
@@ -82,10 +52,75 @@ Playnite.SDK.Descriptions.IHtmlDescriptionProvider
 Playnite.SDK.Descriptions.IHtmlDescriptionProvider.GetDescriptionAsync(string! gameId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Playnite.SDK.Descriptions.HtmlDescriptionSourceResult!>
 Playnite.SDK.Descriptions.IHtmlSanitizer
 Playnite.SDK.Descriptions.IHtmlSanitizer.Sanitize(string? html) -> Playnite.SDK.Descriptions.HtmlSanitizationResult!
+Playnite.SDK.DesktopView
+Playnite.SDK.DesktopView.Details = 0 -> Playnite.SDK.DesktopView
+Playnite.SDK.DesktopView.Grid = 1 -> Playnite.SDK.DesktopView
+Playnite.SDK.DesktopView.List = 2 -> Playnite.SDK.DesktopView
 Playnite.SDK.Events.PlayniteUriEventArgs
 Playnite.SDK.Events.PlayniteUriEventArgs.Arguments.get -> string![]!
 Playnite.SDK.Events.PlayniteUriEventArgs.Arguments.set -> void
 Playnite.SDK.Events.PlayniteUriEventArgs.PlayniteUriEventArgs() -> void
+Playnite.SDK.FileDialogKind
+Playnite.SDK.FileDialogKind.OpenFile = 0 -> Playnite.SDK.FileDialogKind
+Playnite.SDK.FileDialogKind.SaveFile = 1 -> Playnite.SDK.FileDialogKind
+Playnite.SDK.FileDialogKind.SelectFolder = 2 -> Playnite.SDK.FileDialogKind
+Playnite.SDK.FileDialogRequest
+Playnite.SDK.FileDialogRequest.<Clone>$() -> Playnite.SDK.FileDialogRequest!
+Playnite.SDK.FileDialogRequest.AllowMultiple.get -> bool
+Playnite.SDK.FileDialogRequest.Equals(Playnite.SDK.FileDialogRequest? other) -> bool
+Playnite.SDK.FileDialogRequest.FileDialogRequest(Playnite.SDK.FileDialogKind kind, string? title = null, string? filter = null, string? initialDirectory = null, bool allowMultiple = false, bool promptOverwrite = false) -> void
+Playnite.SDK.FileDialogRequest.Filter.get -> string?
+Playnite.SDK.FileDialogRequest.InitialDirectory.get -> string?
+Playnite.SDK.FileDialogRequest.Kind.get -> Playnite.SDK.FileDialogKind
+Playnite.SDK.FileDialogRequest.PromptOverwrite.get -> bool
+Playnite.SDK.FileDialogRequest.Title.get -> string?
+Playnite.SDK.FileDialogResponse
+Playnite.SDK.FileDialogResponse.<Clone>$() -> Playnite.SDK.FileDialogResponse!
+Playnite.SDK.FileDialogResponse.Diagnostic.get -> string?
+Playnite.SDK.FileDialogResponse.Equals(Playnite.SDK.FileDialogResponse? other) -> bool
+Playnite.SDK.FileDialogResponse.FileDialogResponse(Playnite.SDK.HostOperationStatus status, System.Collections.Generic.IEnumerable<string!>? paths = null, string? diagnostic = null) -> void
+Playnite.SDK.FileDialogResponse.IsAccepted.get -> bool
+Playnite.SDK.FileDialogResponse.IsCompleted.get -> bool
+Playnite.SDK.FileDialogResponse.Path.get -> string?
+Playnite.SDK.FileDialogResponse.Paths.get -> System.Collections.Generic.IReadOnlyList<string!>!
+Playnite.SDK.FileDialogResponse.Status.get -> Playnite.SDK.HostOperationStatus
+Playnite.SDK.FullscreenView
+Playnite.SDK.FullscreenView.Details = 1 -> Playnite.SDK.FullscreenView
+Playnite.SDK.FullscreenView.List = 0 -> Playnite.SDK.FullscreenView
+Playnite.SDK.HostOperationStatus
+Playnite.SDK.HostOperationStatus.Completed = 0 -> Playnite.SDK.HostOperationStatus
+Playnite.SDK.HostOperationStatus.Failed = 2 -> Playnite.SDK.HostOperationStatus
+Playnite.SDK.HostOperationStatus.Unavailable = 1 -> Playnite.SDK.HostOperationStatus
+Playnite.SDK.IDialogHost
+Playnite.SDK.IDialogHost.SelectFileAsync(Playnite.SDK.FileDialogRequest! request, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<Playnite.SDK.FileDialogResponse!>!
+Playnite.SDK.IDialogHost.SelectStringAsync(Playnite.SDK.TextInputDialogRequest! request, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<Playnite.SDK.TextInputDialogResponse!>!
+Playnite.SDK.IDialogHost.ShowMessageAsync(Playnite.SDK.MessageDialogRequest! request, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<Playnite.SDK.MessageDialogResponse!>!
+Playnite.SDK.IDialogsFactory
+Playnite.SDK.IDialogsFactory.SaveFileAsync(string? title = null, string? filter = null, string? initialDirectory = null, bool promptOverwrite = false, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<Playnite.SDK.FileDialogResponse!>!
+Playnite.SDK.IDialogsFactory.SelectFileAsync(Playnite.SDK.FileDialogRequest! request, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<Playnite.SDK.FileDialogResponse!>!
+Playnite.SDK.IDialogsFactory.SelectFolderAsync(string? title = null, string? initialDirectory = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<Playnite.SDK.FileDialogResponse!>!
+Playnite.SDK.IDialogsFactory.SelectStringAsync(Playnite.SDK.TextInputDialogRequest! request, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<Playnite.SDK.TextInputDialogResponse!>!
+Playnite.SDK.IDialogsFactory.ShowErrorAsync(string! text, string? caption = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<Playnite.SDK.MessageDialogResponse!>!
+Playnite.SDK.IDialogsFactory.ShowMessageAsync(Playnite.SDK.MessageDialogRequest! request, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<Playnite.SDK.MessageDialogResponse!>!
+Playnite.SDK.IMainViewAPI
+Playnite.SDK.IMainViewAPI.GetFilteredGamesAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<Playnite.SDK.MainViewGamesResponse!>!
+Playnite.SDK.IMainViewAPI.GetSelectedGamesAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<Playnite.SDK.MainViewGamesResponse!>!
+Playnite.SDK.IMainViewAPI.GetStateAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<Playnite.SDK.MainViewResponse!>!
+Playnite.SDK.IMainViewHost
+Playnite.SDK.IMainViewHost.GetFilteredGamesAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<Playnite.SDK.Models.IGameView!>!>!
+Playnite.SDK.IMainViewHost.GetSelectedGamesAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<Playnite.SDK.Models.IGameView!>!>!
+Playnite.SDK.IMainViewHost.GetStateAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<Playnite.SDK.MainViewState!>!
+Playnite.SDK.INotificationHost
+Playnite.SDK.INotificationHost.DismissAsync(string! id, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<Playnite.SDK.NotificationHostResult!>!
+Playnite.SDK.INotificationHost.PresentAsync(Playnite.SDK.NotificationMessage! message, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<Playnite.SDK.NotificationHostResult!>!
+Playnite.SDK.INotificationsAPI
+Playnite.SDK.INotificationsAPI.Changed -> System.EventHandler?
+Playnite.SDK.INotificationsAPI.Count.get -> int
+Playnite.SDK.INotificationsAPI.DismissAllAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<Playnite.SDK.NotificationDismissAllResult!>!
+Playnite.SDK.INotificationsAPI.DismissAsync(string! id, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<Playnite.SDK.NotificationDismissResult!>!
+Playnite.SDK.INotificationsAPI.Messages.get -> System.Collections.Generic.IReadOnlyList<Playnite.SDK.NotificationMessage!>!
+Playnite.SDK.INotificationsAPI.PublishAsync(Playnite.SDK.NotificationMessage! message, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<Playnite.SDK.NotificationPublishResult!>!
+Playnite.SDK.INotificationsAPI.PublishAsync(string! id, string! text, Playnite.SDK.NotificationType type, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<Playnite.SDK.NotificationPublishResult!>!
 Playnite.SDK.IUriCommandHost
 Playnite.SDK.IUriCommandHost.ApplyFilterAsync(Playnite.SDK.PlayniteFilterTarget! filter, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Playnite.SDK.UriCommandResult!>
 Playnite.SDK.IUriCommandHost.SearchAsync(string? term, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Playnite.SDK.UriCommandResult!>
@@ -95,6 +130,188 @@ Playnite.SDK.IUriCommandHost.StartGameAsync(System.Guid gameId, int? actionIndex
 Playnite.SDK.IUriHandlerAPI
 Playnite.SDK.IUriHandlerAPI.RegisterSource(string! source, System.Action<Playnite.SDK.Events.PlayniteUriEventArgs!>! handler) -> void
 Playnite.SDK.IUriHandlerAPI.RemoveSource(string! source) -> void
+Playnite.SDK.MainViewGamesResponse
+Playnite.SDK.MainViewGamesResponse.<Clone>$() -> Playnite.SDK.MainViewGamesResponse!
+Playnite.SDK.MainViewGamesResponse.Diagnostic.get -> string?
+Playnite.SDK.MainViewGamesResponse.Equals(Playnite.SDK.MainViewGamesResponse? other) -> bool
+Playnite.SDK.MainViewGamesResponse.Games.get -> System.Collections.Generic.IReadOnlyList<Playnite.SDK.Models.IGameView!>!
+Playnite.SDK.MainViewGamesResponse.IsCompleted.get -> bool
+Playnite.SDK.MainViewGamesResponse.MainViewGamesResponse(Playnite.SDK.HostOperationStatus status, System.Collections.Generic.IEnumerable<Playnite.SDK.Models.IGameView!>? games = null, string? diagnostic = null) -> void
+Playnite.SDK.MainViewGamesResponse.Status.get -> Playnite.SDK.HostOperationStatus
+Playnite.SDK.MainViewResponse
+Playnite.SDK.MainViewResponse.<Clone>$() -> Playnite.SDK.MainViewResponse!
+Playnite.SDK.MainViewResponse.Deconstruct(out Playnite.SDK.HostOperationStatus Status, out Playnite.SDK.MainViewState? State, out string? Diagnostic) -> void
+Playnite.SDK.MainViewResponse.Diagnostic.get -> string?
+Playnite.SDK.MainViewResponse.Diagnostic.init -> void
+Playnite.SDK.MainViewResponse.Equals(Playnite.SDK.MainViewResponse? other) -> bool
+Playnite.SDK.MainViewResponse.IsCompleted.get -> bool
+Playnite.SDK.MainViewResponse.MainViewResponse(Playnite.SDK.HostOperationStatus Status, Playnite.SDK.MainViewState? State = null, string? Diagnostic = null) -> void
+Playnite.SDK.MainViewResponse.State.get -> Playnite.SDK.MainViewState?
+Playnite.SDK.MainViewResponse.State.init -> void
+Playnite.SDK.MainViewResponse.Status.get -> Playnite.SDK.HostOperationStatus
+Playnite.SDK.MainViewResponse.Status.init -> void
+Playnite.SDK.MainViewState
+Playnite.SDK.MainViewState.<Clone>$() -> Playnite.SDK.MainViewState!
+Playnite.SDK.MainViewState.ActiveDesktopView.get -> Playnite.SDK.DesktopView
+Playnite.SDK.MainViewState.ActiveFullscreenView.get -> Playnite.SDK.FullscreenView
+Playnite.SDK.MainViewState.Equals(Playnite.SDK.MainViewState? other) -> bool
+Playnite.SDK.MainViewState.FilteredGames.get -> System.Collections.Generic.IReadOnlyList<Playnite.SDK.Models.IGameView!>!
+Playnite.SDK.MainViewState.Grouping.get -> Playnite.SDK.Models.LibraryGroupBy
+Playnite.SDK.MainViewState.MainViewState(Playnite.SDK.DesktopView activeDesktopView = Playnite.SDK.DesktopView.Grid, Playnite.SDK.FullscreenView activeFullscreenView = Playnite.SDK.FullscreenView.List, Playnite.SDK.Models.SortOrder sortOrder = Playnite.SDK.Models.SortOrder.Name, bool sortDescending = false, Playnite.SDK.Models.LibraryGroupBy grouping = Playnite.SDK.Models.LibraryGroupBy.None, System.Collections.Generic.IEnumerable<Playnite.SDK.Models.IGameView!>? selectedGames = null, System.Collections.Generic.IEnumerable<Playnite.SDK.Models.IGameView!>? filteredGames = null) -> void
+Playnite.SDK.MainViewState.SelectedGames.get -> System.Collections.Generic.IReadOnlyList<Playnite.SDK.Models.IGameView!>!
+Playnite.SDK.MainViewState.SortDescending.get -> bool
+Playnite.SDK.MainViewState.SortOrder.get -> Playnite.SDK.Models.SortOrder
+Playnite.SDK.MessageDialogButton
+Playnite.SDK.MessageDialogButton.Ok = 0 -> Playnite.SDK.MessageDialogButton
+Playnite.SDK.MessageDialogButton.OkCancel = 1 -> Playnite.SDK.MessageDialogButton
+Playnite.SDK.MessageDialogButton.YesNo = 2 -> Playnite.SDK.MessageDialogButton
+Playnite.SDK.MessageDialogButton.YesNoCancel = 3 -> Playnite.SDK.MessageDialogButton
+Playnite.SDK.MessageDialogImage
+Playnite.SDK.MessageDialogImage.Error = 1 -> Playnite.SDK.MessageDialogImage
+Playnite.SDK.MessageDialogImage.Information = 3 -> Playnite.SDK.MessageDialogImage
+Playnite.SDK.MessageDialogImage.None = 0 -> Playnite.SDK.MessageDialogImage
+Playnite.SDK.MessageDialogImage.Question = 4 -> Playnite.SDK.MessageDialogImage
+Playnite.SDK.MessageDialogImage.Warning = 2 -> Playnite.SDK.MessageDialogImage
+Playnite.SDK.MessageDialogRequest
+Playnite.SDK.MessageDialogRequest.<Clone>$() -> Playnite.SDK.MessageDialogRequest!
+Playnite.SDK.MessageDialogRequest.Buttons.get -> Playnite.SDK.MessageDialogButton
+Playnite.SDK.MessageDialogRequest.Caption.get -> string?
+Playnite.SDK.MessageDialogRequest.Equals(Playnite.SDK.MessageDialogRequest? other) -> bool
+Playnite.SDK.MessageDialogRequest.Image.get -> Playnite.SDK.MessageDialogImage
+Playnite.SDK.MessageDialogRequest.MessageDialogRequest(string! text, string? caption = null, Playnite.SDK.MessageDialogButton buttons = Playnite.SDK.MessageDialogButton.Ok, Playnite.SDK.MessageDialogImage image = Playnite.SDK.MessageDialogImage.None) -> void
+Playnite.SDK.MessageDialogRequest.Text.get -> string!
+Playnite.SDK.MessageDialogResponse
+Playnite.SDK.MessageDialogResponse.<Clone>$() -> Playnite.SDK.MessageDialogResponse!
+Playnite.SDK.MessageDialogResponse.Deconstruct(out Playnite.SDK.HostOperationStatus Status, out Playnite.SDK.MessageDialogResult Result, out string? Diagnostic) -> void
+Playnite.SDK.MessageDialogResponse.Diagnostic.get -> string?
+Playnite.SDK.MessageDialogResponse.Diagnostic.init -> void
+Playnite.SDK.MessageDialogResponse.Equals(Playnite.SDK.MessageDialogResponse? other) -> bool
+Playnite.SDK.MessageDialogResponse.IsCompleted.get -> bool
+Playnite.SDK.MessageDialogResponse.MessageDialogResponse(Playnite.SDK.HostOperationStatus Status, Playnite.SDK.MessageDialogResult Result = Playnite.SDK.MessageDialogResult.None, string? Diagnostic = null) -> void
+Playnite.SDK.MessageDialogResponse.Result.get -> Playnite.SDK.MessageDialogResult
+Playnite.SDK.MessageDialogResponse.Result.init -> void
+Playnite.SDK.MessageDialogResponse.Status.get -> Playnite.SDK.HostOperationStatus
+Playnite.SDK.MessageDialogResponse.Status.init -> void
+Playnite.SDK.MessageDialogResult
+Playnite.SDK.MessageDialogResult.Cancel = 2 -> Playnite.SDK.MessageDialogResult
+Playnite.SDK.MessageDialogResult.No = 4 -> Playnite.SDK.MessageDialogResult
+Playnite.SDK.MessageDialogResult.None = 0 -> Playnite.SDK.MessageDialogResult
+Playnite.SDK.MessageDialogResult.Ok = 1 -> Playnite.SDK.MessageDialogResult
+Playnite.SDK.MessageDialogResult.Yes = 3 -> Playnite.SDK.MessageDialogResult
+Playnite.SDK.Models.IGameView
+Playnite.SDK.Models.IGameView.Id.get -> System.Guid
+Playnite.SDK.Models.IGameView.Name.get -> string!
+Playnite.SDK.Models.LibraryGroupBy
+Playnite.SDK.Models.LibraryGroupBy.Added = 19 -> Playnite.SDK.Models.LibraryGroupBy
+Playnite.SDK.Models.LibraryGroupBy.CommunityScore = 18 -> Playnite.SDK.Models.LibraryGroupBy
+Playnite.SDK.Models.LibraryGroupBy.CriticScore = 17 -> Playnite.SDK.Models.LibraryGroupBy
+Playnite.SDK.Models.LibraryGroupBy.InstallSize = 25 -> Playnite.SDK.Models.LibraryGroupBy
+Playnite.SDK.Models.LibraryGroupBy.InstallationStatus = 22 -> Playnite.SDK.Models.LibraryGroupBy
+Playnite.SDK.Models.LibraryGroupBy.LastActivity = 4 -> Playnite.SDK.Models.LibraryGroupBy
+Playnite.SDK.Models.LibraryGroupBy.Modified = 20 -> Playnite.SDK.Models.LibraryGroupBy
+Playnite.SDK.Models.LibraryGroupBy.Name = 23 -> Playnite.SDK.Models.LibraryGroupBy
+Playnite.SDK.Models.LibraryGroupBy.None = 0 -> Playnite.SDK.Models.LibraryGroupBy
+Playnite.SDK.Models.LibraryGroupBy.PlayTime = 14 -> Playnite.SDK.Models.LibraryGroupBy
+Playnite.SDK.Models.LibraryGroupBy.RecentActivity = 26 -> Playnite.SDK.Models.LibraryGroupBy
+Playnite.SDK.Models.LibraryGroupBy.ReleaseYear = 6 -> Playnite.SDK.Models.LibraryGroupBy
+Playnite.SDK.Models.LibraryGroupBy.UserScore = 16 -> Playnite.SDK.Models.LibraryGroupBy
+Playnite.SDK.Models.SortOrder
+Playnite.SDK.Models.SortOrder.Added = 21 -> Playnite.SDK.Models.SortOrder
+Playnite.SDK.Models.SortOrder.CommunityScore = 20 -> Playnite.SDK.Models.SortOrder
+Playnite.SDK.Models.SortOrder.CriticScore = 19 -> Playnite.SDK.Models.SortOrder
+Playnite.SDK.Models.SortOrder.Favorite = 25 -> Playnite.SDK.Models.SortOrder
+Playnite.SDK.Models.SortOrder.Hidden = 24 -> Playnite.SDK.Models.SortOrder
+Playnite.SDK.Models.SortOrder.InstallDirectory = 26 -> Playnite.SDK.Models.SortOrder
+Playnite.SDK.Models.SortOrder.InstallSize = 28 -> Playnite.SDK.Models.SortOrder
+Playnite.SDK.Models.SortOrder.IsInstalled = 23 -> Playnite.SDK.Models.SortOrder
+Playnite.SDK.Models.SortOrder.LastActivity = 4 -> Playnite.SDK.Models.SortOrder
+Playnite.SDK.Models.SortOrder.Modified = 22 -> Playnite.SDK.Models.SortOrder
+Playnite.SDK.Models.SortOrder.Name = 0 -> Playnite.SDK.Models.SortOrder
+Playnite.SDK.Models.SortOrder.PlayCount = 15 -> Playnite.SDK.Models.SortOrder
+Playnite.SDK.Models.SortOrder.Playtime = 16 -> Playnite.SDK.Models.SortOrder
+Playnite.SDK.Models.SortOrder.RecentActivity = 29 -> Playnite.SDK.Models.SortOrder
+Playnite.SDK.Models.SortOrder.ReleaseDate = 6 -> Playnite.SDK.Models.SortOrder
+Playnite.SDK.Models.SortOrder.RomList = 30 -> Playnite.SDK.Models.SortOrder
+Playnite.SDK.Models.SortOrder.UserScore = 18 -> Playnite.SDK.Models.SortOrder
+Playnite.SDK.Models.SortOrder.Version = 12 -> Playnite.SDK.Models.SortOrder
+Playnite.SDK.NotificationDismissAllResult
+Playnite.SDK.NotificationDismissAllResult.<Clone>$() -> Playnite.SDK.NotificationDismissAllResult!
+Playnite.SDK.NotificationDismissAllResult.Deconstruct(out int Dismissed, out string? Diagnostic) -> void
+Playnite.SDK.NotificationDismissAllResult.Diagnostic.get -> string?
+Playnite.SDK.NotificationDismissAllResult.Diagnostic.init -> void
+Playnite.SDK.NotificationDismissAllResult.Dismissed.get -> int
+Playnite.SDK.NotificationDismissAllResult.Dismissed.init -> void
+Playnite.SDK.NotificationDismissAllResult.Equals(Playnite.SDK.NotificationDismissAllResult? other) -> bool
+Playnite.SDK.NotificationDismissAllResult.FailedCount.get -> int
+Playnite.SDK.NotificationDismissAllResult.Failures.get -> System.Collections.Generic.IReadOnlyList<Playnite.SDK.NotificationDismissFailure!>!
+Playnite.SDK.NotificationDismissAllResult.Failures.init -> void
+Playnite.SDK.NotificationDismissAllResult.HasFailures.get -> bool
+Playnite.SDK.NotificationDismissAllResult.NotificationDismissAllResult(int Dismissed, string? Diagnostic = null) -> void
+Playnite.SDK.NotificationDismissFailure
+Playnite.SDK.NotificationDismissFailure.<Clone>$() -> Playnite.SDK.NotificationDismissFailure!
+Playnite.SDK.NotificationDismissFailure.Deconstruct(out string! Id, out Playnite.SDK.NotificationHostStatus Status, out string? Diagnostic, out bool Threw) -> void
+Playnite.SDK.NotificationDismissFailure.Diagnostic.get -> string?
+Playnite.SDK.NotificationDismissFailure.Diagnostic.init -> void
+Playnite.SDK.NotificationDismissFailure.Equals(Playnite.SDK.NotificationDismissFailure? other) -> bool
+Playnite.SDK.NotificationDismissFailure.Id.get -> string!
+Playnite.SDK.NotificationDismissFailure.Id.init -> void
+Playnite.SDK.NotificationDismissFailure.NotificationDismissFailure(string! Id, Playnite.SDK.NotificationHostStatus Status, string? Diagnostic = null, bool Threw = false) -> void
+Playnite.SDK.NotificationDismissFailure.Status.get -> Playnite.SDK.NotificationHostStatus
+Playnite.SDK.NotificationDismissFailure.Status.init -> void
+Playnite.SDK.NotificationDismissFailure.Threw.get -> bool
+Playnite.SDK.NotificationDismissFailure.Threw.init -> void
+Playnite.SDK.NotificationDismissResult
+Playnite.SDK.NotificationDismissResult.<Clone>$() -> Playnite.SDK.NotificationDismissResult!
+Playnite.SDK.NotificationDismissResult.Deconstruct(out Playnite.SDK.NotificationDismissStatus Status, out string? Diagnostic) -> void
+Playnite.SDK.NotificationDismissResult.Diagnostic.get -> string?
+Playnite.SDK.NotificationDismissResult.Diagnostic.init -> void
+Playnite.SDK.NotificationDismissResult.Equals(Playnite.SDK.NotificationDismissResult? other) -> bool
+Playnite.SDK.NotificationDismissResult.IsDismissed.get -> bool
+Playnite.SDK.NotificationDismissResult.NotificationDismissResult(Playnite.SDK.NotificationDismissStatus Status, string? Diagnostic = null) -> void
+Playnite.SDK.NotificationDismissResult.Status.get -> Playnite.SDK.NotificationDismissStatus
+Playnite.SDK.NotificationDismissResult.Status.init -> void
+Playnite.SDK.NotificationDismissStatus
+Playnite.SDK.NotificationDismissStatus.Dismissed = 0 -> Playnite.SDK.NotificationDismissStatus
+Playnite.SDK.NotificationDismissStatus.NotFound = 1 -> Playnite.SDK.NotificationDismissStatus
+Playnite.SDK.NotificationHostResult
+Playnite.SDK.NotificationHostResult.<Clone>$() -> Playnite.SDK.NotificationHostResult!
+Playnite.SDK.NotificationHostResult.Deconstruct(out Playnite.SDK.NotificationHostStatus Status, out string? Diagnostic) -> void
+Playnite.SDK.NotificationHostResult.Diagnostic.get -> string?
+Playnite.SDK.NotificationHostResult.Diagnostic.init -> void
+Playnite.SDK.NotificationHostResult.Equals(Playnite.SDK.NotificationHostResult? other) -> bool
+Playnite.SDK.NotificationHostResult.NotificationHostResult(Playnite.SDK.NotificationHostStatus Status, string? Diagnostic = null) -> void
+Playnite.SDK.NotificationHostResult.Status.get -> Playnite.SDK.NotificationHostStatus
+Playnite.SDK.NotificationHostResult.Status.init -> void
+Playnite.SDK.NotificationHostResult.WasPresented.get -> bool
+Playnite.SDK.NotificationHostStatus
+Playnite.SDK.NotificationHostStatus.Failed = 2 -> Playnite.SDK.NotificationHostStatus
+Playnite.SDK.NotificationHostStatus.Presented = 0 -> Playnite.SDK.NotificationHostStatus
+Playnite.SDK.NotificationHostStatus.Unavailable = 1 -> Playnite.SDK.NotificationHostStatus
+Playnite.SDK.NotificationMessage
+Playnite.SDK.NotificationMessage.<Clone>$() -> Playnite.SDK.NotificationMessage!
+Playnite.SDK.NotificationMessage.Equals(Playnite.SDK.NotificationMessage? other) -> bool
+Playnite.SDK.NotificationMessage.Id.get -> string!
+Playnite.SDK.NotificationMessage.NotificationMessage(string! id, string! text, Playnite.SDK.NotificationType type = Playnite.SDK.NotificationType.Info) -> void
+Playnite.SDK.NotificationMessage.Text.get -> string!
+Playnite.SDK.NotificationMessage.Type.get -> Playnite.SDK.NotificationType
+Playnite.SDK.NotificationPublishResult
+Playnite.SDK.NotificationPublishResult.<Clone>$() -> Playnite.SDK.NotificationPublishResult!
+Playnite.SDK.NotificationPublishResult.Deconstruct(out Playnite.SDK.NotificationPublishStatus Status, out string? Diagnostic) -> void
+Playnite.SDK.NotificationPublishResult.Diagnostic.get -> string?
+Playnite.SDK.NotificationPublishResult.Diagnostic.init -> void
+Playnite.SDK.NotificationPublishResult.Equals(Playnite.SDK.NotificationPublishResult? other) -> bool
+Playnite.SDK.NotificationPublishResult.IsSuccess.get -> bool
+Playnite.SDK.NotificationPublishResult.NotificationPublishResult(Playnite.SDK.NotificationPublishStatus Status, string? Diagnostic = null) -> void
+Playnite.SDK.NotificationPublishResult.Status.get -> Playnite.SDK.NotificationPublishStatus
+Playnite.SDK.NotificationPublishResult.Status.init -> void
+Playnite.SDK.NotificationPublishStatus
+Playnite.SDK.NotificationPublishStatus.Duplicate = 1 -> Playnite.SDK.NotificationPublishStatus
+Playnite.SDK.NotificationPublishStatus.Failed = 3 -> Playnite.SDK.NotificationPublishStatus
+Playnite.SDK.NotificationPublishStatus.Published = 0 -> Playnite.SDK.NotificationPublishStatus
+Playnite.SDK.NotificationPublishStatus.Unavailable = 2 -> Playnite.SDK.NotificationPublishStatus
+Playnite.SDK.NotificationType
+Playnite.SDK.NotificationType.Error = 1 -> Playnite.SDK.NotificationType
+Playnite.SDK.NotificationType.Info = 0 -> Playnite.SDK.NotificationType
 Playnite.SDK.PlayniteFilterField
 Playnite.SDK.PlayniteFilterField.AgeRating = 13 -> Playnite.SDK.PlayniteFilterField
 Playnite.SDK.PlayniteFilterField.Category = 8 -> Playnite.SDK.PlayniteFilterField
@@ -145,6 +362,27 @@ Playnite.SDK.PlayniteUriTarget.StartGame = 1 -> Playnite.SDK.PlayniteUriTarget
 Playnite.SDK.PlayniteViewTarget
 Playnite.SDK.PlayniteViewTarget.Desktop = 0 -> Playnite.SDK.PlayniteViewTarget
 Playnite.SDK.PlayniteViewTarget.Fullscreen = 1 -> Playnite.SDK.PlayniteViewTarget
+Playnite.SDK.TextInputDialogRequest
+Playnite.SDK.TextInputDialogRequest.<Clone>$() -> Playnite.SDK.TextInputDialogRequest!
+Playnite.SDK.TextInputDialogRequest.Caption.get -> string?
+Playnite.SDK.TextInputDialogRequest.DefaultInput.get -> string?
+Playnite.SDK.TextInputDialogRequest.Equals(Playnite.SDK.TextInputDialogRequest? other) -> bool
+Playnite.SDK.TextInputDialogRequest.Text.get -> string!
+Playnite.SDK.TextInputDialogRequest.TextInputDialogRequest(string! text, string? caption = null, string? defaultInput = null) -> void
+Playnite.SDK.TextInputDialogResponse
+Playnite.SDK.TextInputDialogResponse.<Clone>$() -> Playnite.SDK.TextInputDialogResponse!
+Playnite.SDK.TextInputDialogResponse.Accepted.get -> bool
+Playnite.SDK.TextInputDialogResponse.Accepted.init -> void
+Playnite.SDK.TextInputDialogResponse.Deconstruct(out Playnite.SDK.HostOperationStatus Status, out bool Accepted, out string? Text, out string? Diagnostic) -> void
+Playnite.SDK.TextInputDialogResponse.Diagnostic.get -> string?
+Playnite.SDK.TextInputDialogResponse.Diagnostic.init -> void
+Playnite.SDK.TextInputDialogResponse.Equals(Playnite.SDK.TextInputDialogResponse? other) -> bool
+Playnite.SDK.TextInputDialogResponse.IsCompleted.get -> bool
+Playnite.SDK.TextInputDialogResponse.Status.get -> Playnite.SDK.HostOperationStatus
+Playnite.SDK.TextInputDialogResponse.Status.init -> void
+Playnite.SDK.TextInputDialogResponse.Text.get -> string?
+Playnite.SDK.TextInputDialogResponse.Text.init -> void
+Playnite.SDK.TextInputDialogResponse.TextInputDialogResponse(Playnite.SDK.HostOperationStatus Status, bool Accepted = false, string? Text = null, string? Diagnostic = null) -> void
 Playnite.SDK.UriCommandResult
 Playnite.SDK.UriCommandResult.<Clone>$() -> Playnite.SDK.UriCommandResult!
 Playnite.SDK.UriCommandResult.Deconstruct(out Playnite.SDK.UriCommandStatus Status, out string? Diagnostic) -> void
@@ -176,6 +414,81 @@ Playnite.SDK.UriDispatchStatus.Failed = 4 -> Playnite.SDK.UriDispatchStatus
 Playnite.SDK.UriDispatchStatus.Rejected = 1 -> Playnite.SDK.UriDispatchStatus
 Playnite.SDK.UriDispatchStatus.Unavailable = 3 -> Playnite.SDK.UriDispatchStatus
 Playnite.SDK.UriDispatchStatus.UnhandledSource = 2 -> Playnite.SDK.UriDispatchStatus
+const Playnite.SDK.PlayniteUriRoute.AppSource = "playnite" -> string!
+const Playnite.SDK.PlayniteUriRoute.MaxActionIndex = 999 -> int
+const Playnite.SDK.PlayniteUriRoute.MaxArgumentLength = 1024 -> int
+const Playnite.SDK.PlayniteUriRoute.MaxArguments = 32 -> int
+const Playnite.SDK.PlayniteUriRoute.MaxFilterValueLength = 256 -> int
+const Playnite.SDK.PlayniteUriRoute.MaxLength = 2048 -> int
+const Playnite.SDK.PlayniteUriRoute.MaxSearchTermLength = 256 -> int
+const Playnite.SDK.PlayniteUriRoute.MaxSourceLength = 64 -> int
+const Playnite.SDK.PlayniteUriRoute.Scheme = "playnite" -> string!
+override Playnite.SDK.Descriptions.HtmlDescriptionResult.Equals(object? obj) -> bool
+override Playnite.SDK.Descriptions.HtmlDescriptionResult.GetHashCode() -> int
+override Playnite.SDK.Descriptions.HtmlDescriptionResult.ToString() -> string!
+override Playnite.SDK.Descriptions.HtmlDescriptionSourceResult.Equals(object? obj) -> bool
+override Playnite.SDK.Descriptions.HtmlDescriptionSourceResult.GetHashCode() -> int
+override Playnite.SDK.Descriptions.HtmlDescriptionSourceResult.ToString() -> string!
+override Playnite.SDK.Descriptions.HtmlSanitizationResult.Equals(object? obj) -> bool
+override Playnite.SDK.Descriptions.HtmlSanitizationResult.GetHashCode() -> int
+override Playnite.SDK.Descriptions.HtmlSanitizationResult.ToString() -> string!
+override Playnite.SDK.FileDialogRequest.Equals(object? obj) -> bool
+override Playnite.SDK.FileDialogRequest.GetHashCode() -> int
+override Playnite.SDK.FileDialogRequest.ToString() -> string!
+override Playnite.SDK.FileDialogResponse.Equals(object? obj) -> bool
+override Playnite.SDK.FileDialogResponse.GetHashCode() -> int
+override Playnite.SDK.FileDialogResponse.ToString() -> string!
+override Playnite.SDK.MainViewGamesResponse.Equals(object? obj) -> bool
+override Playnite.SDK.MainViewGamesResponse.GetHashCode() -> int
+override Playnite.SDK.MainViewGamesResponse.ToString() -> string!
+override Playnite.SDK.MainViewResponse.Equals(object? obj) -> bool
+override Playnite.SDK.MainViewResponse.GetHashCode() -> int
+override Playnite.SDK.MainViewResponse.ToString() -> string!
+override Playnite.SDK.MainViewState.Equals(object? obj) -> bool
+override Playnite.SDK.MainViewState.GetHashCode() -> int
+override Playnite.SDK.MainViewState.ToString() -> string!
+override Playnite.SDK.MessageDialogRequest.Equals(object? obj) -> bool
+override Playnite.SDK.MessageDialogRequest.GetHashCode() -> int
+override Playnite.SDK.MessageDialogRequest.ToString() -> string!
+override Playnite.SDK.MessageDialogResponse.Equals(object? obj) -> bool
+override Playnite.SDK.MessageDialogResponse.GetHashCode() -> int
+override Playnite.SDK.MessageDialogResponse.ToString() -> string!
+override Playnite.SDK.NotificationDismissAllResult.Equals(object? obj) -> bool
+override Playnite.SDK.NotificationDismissAllResult.GetHashCode() -> int
+override Playnite.SDK.NotificationDismissAllResult.ToString() -> string!
+override Playnite.SDK.NotificationDismissFailure.Equals(object? obj) -> bool
+override Playnite.SDK.NotificationDismissFailure.GetHashCode() -> int
+override Playnite.SDK.NotificationDismissFailure.ToString() -> string!
+override Playnite.SDK.NotificationDismissResult.Equals(object? obj) -> bool
+override Playnite.SDK.NotificationDismissResult.GetHashCode() -> int
+override Playnite.SDK.NotificationDismissResult.ToString() -> string!
+override Playnite.SDK.NotificationHostResult.Equals(object? obj) -> bool
+override Playnite.SDK.NotificationHostResult.GetHashCode() -> int
+override Playnite.SDK.NotificationHostResult.ToString() -> string!
+override Playnite.SDK.NotificationMessage.Equals(object? obj) -> bool
+override Playnite.SDK.NotificationMessage.GetHashCode() -> int
+override Playnite.SDK.NotificationMessage.ToString() -> string!
+override Playnite.SDK.NotificationPublishResult.Equals(object? obj) -> bool
+override Playnite.SDK.NotificationPublishResult.GetHashCode() -> int
+override Playnite.SDK.NotificationPublishResult.ToString() -> string!
+override Playnite.SDK.PlayniteFilterTarget.Equals(object? obj) -> bool
+override Playnite.SDK.PlayniteFilterTarget.GetHashCode() -> int
+override Playnite.SDK.PlayniteFilterTarget.ToString() -> string!
+override Playnite.SDK.PlayniteUriRoute.Equals(object? obj) -> bool
+override Playnite.SDK.PlayniteUriRoute.GetHashCode() -> int
+override Playnite.SDK.PlayniteUriRoute.ToString() -> string!
+override Playnite.SDK.TextInputDialogRequest.Equals(object? obj) -> bool
+override Playnite.SDK.TextInputDialogRequest.GetHashCode() -> int
+override Playnite.SDK.TextInputDialogRequest.ToString() -> string!
+override Playnite.SDK.TextInputDialogResponse.Equals(object? obj) -> bool
+override Playnite.SDK.TextInputDialogResponse.GetHashCode() -> int
+override Playnite.SDK.TextInputDialogResponse.ToString() -> string!
+override Playnite.SDK.UriCommandResult.Equals(object? obj) -> bool
+override Playnite.SDK.UriCommandResult.GetHashCode() -> int
+override Playnite.SDK.UriCommandResult.ToString() -> string!
+override Playnite.SDK.UriDispatchResult.Equals(object? obj) -> bool
+override Playnite.SDK.UriDispatchResult.GetHashCode() -> int
+override Playnite.SDK.UriDispatchResult.ToString() -> string!
 static Playnite.SDK.Descriptions.HtmlDescriptionResult.operator !=(Playnite.SDK.Descriptions.HtmlDescriptionResult? left, Playnite.SDK.Descriptions.HtmlDescriptionResult? right) -> bool
 static Playnite.SDK.Descriptions.HtmlDescriptionResult.operator ==(Playnite.SDK.Descriptions.HtmlDescriptionResult? left, Playnite.SDK.Descriptions.HtmlDescriptionResult? right) -> bool
 static Playnite.SDK.Descriptions.HtmlDescriptionSourceResult.Failure(string! diagnostic) -> Playnite.SDK.Descriptions.HtmlDescriptionSourceResult!
@@ -185,16 +498,46 @@ static Playnite.SDK.Descriptions.HtmlDescriptionSourceResult.operator !=(Playnit
 static Playnite.SDK.Descriptions.HtmlDescriptionSourceResult.operator ==(Playnite.SDK.Descriptions.HtmlDescriptionSourceResult? left, Playnite.SDK.Descriptions.HtmlDescriptionSourceResult? right) -> bool
 static Playnite.SDK.Descriptions.HtmlSanitizationResult.operator !=(Playnite.SDK.Descriptions.HtmlSanitizationResult? left, Playnite.SDK.Descriptions.HtmlSanitizationResult? right) -> bool
 static Playnite.SDK.Descriptions.HtmlSanitizationResult.operator ==(Playnite.SDK.Descriptions.HtmlSanitizationResult? left, Playnite.SDK.Descriptions.HtmlSanitizationResult? right) -> bool
+static Playnite.SDK.FileDialogRequest.operator !=(Playnite.SDK.FileDialogRequest? left, Playnite.SDK.FileDialogRequest? right) -> bool
+static Playnite.SDK.FileDialogRequest.operator ==(Playnite.SDK.FileDialogRequest? left, Playnite.SDK.FileDialogRequest? right) -> bool
+static Playnite.SDK.FileDialogResponse.operator !=(Playnite.SDK.FileDialogResponse? left, Playnite.SDK.FileDialogResponse? right) -> bool
+static Playnite.SDK.FileDialogResponse.operator ==(Playnite.SDK.FileDialogResponse? left, Playnite.SDK.FileDialogResponse? right) -> bool
+static Playnite.SDK.MainViewGamesResponse.operator !=(Playnite.SDK.MainViewGamesResponse? left, Playnite.SDK.MainViewGamesResponse? right) -> bool
+static Playnite.SDK.MainViewGamesResponse.operator ==(Playnite.SDK.MainViewGamesResponse? left, Playnite.SDK.MainViewGamesResponse? right) -> bool
+static Playnite.SDK.MainViewResponse.operator !=(Playnite.SDK.MainViewResponse? left, Playnite.SDK.MainViewResponse? right) -> bool
+static Playnite.SDK.MainViewResponse.operator ==(Playnite.SDK.MainViewResponse? left, Playnite.SDK.MainViewResponse? right) -> bool
+static Playnite.SDK.MainViewState.operator !=(Playnite.SDK.MainViewState? left, Playnite.SDK.MainViewState? right) -> bool
+static Playnite.SDK.MainViewState.operator ==(Playnite.SDK.MainViewState? left, Playnite.SDK.MainViewState? right) -> bool
+static Playnite.SDK.MessageDialogRequest.operator !=(Playnite.SDK.MessageDialogRequest? left, Playnite.SDK.MessageDialogRequest? right) -> bool
+static Playnite.SDK.MessageDialogRequest.operator ==(Playnite.SDK.MessageDialogRequest? left, Playnite.SDK.MessageDialogRequest? right) -> bool
+static Playnite.SDK.MessageDialogResponse.operator !=(Playnite.SDK.MessageDialogResponse? left, Playnite.SDK.MessageDialogResponse? right) -> bool
+static Playnite.SDK.MessageDialogResponse.operator ==(Playnite.SDK.MessageDialogResponse? left, Playnite.SDK.MessageDialogResponse? right) -> bool
+static Playnite.SDK.NotificationDismissAllResult.operator !=(Playnite.SDK.NotificationDismissAllResult? left, Playnite.SDK.NotificationDismissAllResult? right) -> bool
+static Playnite.SDK.NotificationDismissAllResult.operator ==(Playnite.SDK.NotificationDismissAllResult? left, Playnite.SDK.NotificationDismissAllResult? right) -> bool
+static Playnite.SDK.NotificationDismissFailure.operator !=(Playnite.SDK.NotificationDismissFailure? left, Playnite.SDK.NotificationDismissFailure? right) -> bool
+static Playnite.SDK.NotificationDismissFailure.operator ==(Playnite.SDK.NotificationDismissFailure? left, Playnite.SDK.NotificationDismissFailure? right) -> bool
+static Playnite.SDK.NotificationDismissResult.operator !=(Playnite.SDK.NotificationDismissResult? left, Playnite.SDK.NotificationDismissResult? right) -> bool
+static Playnite.SDK.NotificationDismissResult.operator ==(Playnite.SDK.NotificationDismissResult? left, Playnite.SDK.NotificationDismissResult? right) -> bool
+static Playnite.SDK.NotificationHostResult.operator !=(Playnite.SDK.NotificationHostResult? left, Playnite.SDK.NotificationHostResult? right) -> bool
+static Playnite.SDK.NotificationHostResult.operator ==(Playnite.SDK.NotificationHostResult? left, Playnite.SDK.NotificationHostResult? right) -> bool
+static Playnite.SDK.NotificationMessage.operator !=(Playnite.SDK.NotificationMessage? left, Playnite.SDK.NotificationMessage? right) -> bool
+static Playnite.SDK.NotificationMessage.operator ==(Playnite.SDK.NotificationMessage? left, Playnite.SDK.NotificationMessage? right) -> bool
+static Playnite.SDK.NotificationPublishResult.operator !=(Playnite.SDK.NotificationPublishResult? left, Playnite.SDK.NotificationPublishResult? right) -> bool
+static Playnite.SDK.NotificationPublishResult.operator ==(Playnite.SDK.NotificationPublishResult? left, Playnite.SDK.NotificationPublishResult? right) -> bool
 static Playnite.SDK.PlayniteFilterTarget.operator !=(Playnite.SDK.PlayniteFilterTarget? left, Playnite.SDK.PlayniteFilterTarget? right) -> bool
 static Playnite.SDK.PlayniteFilterTarget.operator ==(Playnite.SDK.PlayniteFilterTarget? left, Playnite.SDK.PlayniteFilterTarget? right) -> bool
 static Playnite.SDK.PlayniteUriRoute.IsValidSourceName(string? source) -> bool
+static Playnite.SDK.PlayniteUriRoute.TryParse(string? value, out Playnite.SDK.PlayniteUriRoute? route, out string? error) -> bool
 static Playnite.SDK.PlayniteUriRoute.operator !=(Playnite.SDK.PlayniteUriRoute? left, Playnite.SDK.PlayniteUriRoute? right) -> bool
 static Playnite.SDK.PlayniteUriRoute.operator ==(Playnite.SDK.PlayniteUriRoute? left, Playnite.SDK.PlayniteUriRoute? right) -> bool
-static Playnite.SDK.PlayniteUriRoute.TryParse(string? value, out Playnite.SDK.PlayniteUriRoute? route, out string? error) -> bool
+static Playnite.SDK.TextInputDialogRequest.operator !=(Playnite.SDK.TextInputDialogRequest? left, Playnite.SDK.TextInputDialogRequest? right) -> bool
+static Playnite.SDK.TextInputDialogRequest.operator ==(Playnite.SDK.TextInputDialogRequest? left, Playnite.SDK.TextInputDialogRequest? right) -> bool
+static Playnite.SDK.TextInputDialogResponse.operator !=(Playnite.SDK.TextInputDialogResponse? left, Playnite.SDK.TextInputDialogResponse? right) -> bool
+static Playnite.SDK.TextInputDialogResponse.operator ==(Playnite.SDK.TextInputDialogResponse? left, Playnite.SDK.TextInputDialogResponse? right) -> bool
 static Playnite.SDK.UriCommandResult.Completed() -> Playnite.SDK.UriCommandResult!
 static Playnite.SDK.UriCommandResult.Failed(string! diagnostic) -> Playnite.SDK.UriCommandResult!
+static Playnite.SDK.UriCommandResult.Unavailable(string! diagnostic) -> Playnite.SDK.UriCommandResult!
 static Playnite.SDK.UriCommandResult.operator !=(Playnite.SDK.UriCommandResult? left, Playnite.SDK.UriCommandResult? right) -> bool
 static Playnite.SDK.UriCommandResult.operator ==(Playnite.SDK.UriCommandResult? left, Playnite.SDK.UriCommandResult? right) -> bool
-static Playnite.SDK.UriCommandResult.Unavailable(string! diagnostic) -> Playnite.SDK.UriCommandResult!
 static Playnite.SDK.UriDispatchResult.operator !=(Playnite.SDK.UriDispatchResult? left, Playnite.SDK.UriDispatchResult? right) -> bool
 static Playnite.SDK.UriDispatchResult.operator ==(Playnite.SDK.UriDispatchResult? left, Playnite.SDK.UriDispatchResult? right) -> bool

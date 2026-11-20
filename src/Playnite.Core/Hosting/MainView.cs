@@ -1,156 +1,66 @@
-using Playnite.Core.Library;
 using Playnite.Core.Models;
-using Playnite.Core.Queries;
+using Playnite.SDK;
+using Playnite.SDK.Models;
+using CoreLibraryGroupBy = Playnite.Core.Library.LibraryGroupBy;
+using CoreSortOrder = Playnite.Core.Queries.SortOrder;
 
 namespace Playnite.Core.Hosting;
 
-/// <summary>Currently active desktop view. Values follow the v10 SDK contract.</summary>
-public enum DesktopView
+/// <summary>
+/// Projects a Core game onto the SDK's read-only view. The Core model stays free of the
+/// abstraction's types; a host wraps a game when it hands one to <see cref="IMainViewAPI"/>.
+/// </summary>
+public sealed class GameViewAdapter : IGameView
 {
-    /// <summary>Details view.</summary>
-    Details = 0,
+    private readonly Game game;
 
-    /// <summary>Grid view.</summary>
-    Grid = 1,
+    /// <summary>Wraps an existing Core game.</summary>
+    public GameViewAdapter(Game game) =>
+        this.game = game ?? throw new ArgumentNullException(nameof(game));
 
-    /// <summary>List view.</summary>
-    List = 2,
-}
+    /// <inheritdoc />
+    public Guid Id => game.Id;
 
-/// <summary>Currently active fullscreen view. Values follow the v10 SDK contract.</summary>
-public enum FullscreenView
-{
-    /// <summary>List view.</summary>
-    List = 0,
-
-    /// <summary>Details view.</summary>
-    Details = 1,
-}
-
-/// <summary>The shell state a host reports for the main-view query surface.</summary>
-public sealed record MainViewState
-{
-    /// <summary>Creates a state snapshot, copying the game lists.</summary>
-    public MainViewState(
-        DesktopView activeDesktopView = DesktopView.Grid,
-        FullscreenView activeFullscreenView = FullscreenView.List,
-        SortOrder sortOrder = SortOrder.Name,
-        bool sortDescending = false,
-        LibraryGroupBy grouping = LibraryGroupBy.None,
-        IEnumerable<Game>? selectedGames = null,
-        IEnumerable<Game>? filteredGames = null)
-    {
-        if (!Enum.IsDefined(activeDesktopView))
-        {
-            throw new ArgumentOutOfRangeException(nameof(activeDesktopView), activeDesktopView, "Unknown desktop view.");
-        }
-
-        if (!Enum.IsDefined(activeFullscreenView))
-        {
-            throw new ArgumentOutOfRangeException(nameof(activeFullscreenView), activeFullscreenView, "Unknown fullscreen view.");
-        }
-
-        if (!Enum.IsDefined(sortOrder))
-        {
-            throw new ArgumentOutOfRangeException(nameof(sortOrder), sortOrder, "Unknown sort order.");
-        }
-
-        if (!Enum.IsDefined(grouping))
-        {
-            throw new ArgumentOutOfRangeException(nameof(grouping), grouping, "Unknown grouping.");
-        }
-
-        ActiveDesktopView = activeDesktopView;
-        ActiveFullscreenView = activeFullscreenView;
-        SortOrder = sortOrder;
-        SortDescending = sortDescending;
-        Grouping = grouping;
-        SelectedGames = (selectedGames ?? Array.Empty<Game>()).ToArray();
-        FilteredGames = (filteredGames ?? Array.Empty<Game>()).ToArray();
-    }
-
-    /// <summary>Active desktop view.</summary>
-    public DesktopView ActiveDesktopView { get; }
-
-    /// <summary>Active fullscreen view.</summary>
-    public FullscreenView ActiveFullscreenView { get; }
-
-    /// <summary>Active sort key.</summary>
-    public SortOrder SortOrder { get; }
-
-    /// <summary>True when the active sort is descending.</summary>
-    public bool SortDescending { get; }
-
-    /// <summary>Active grouping key.</summary>
-    public LibraryGroupBy Grouping { get; }
-
-    /// <summary>Selected games in selection order.</summary>
-    public IReadOnlyList<Game> SelectedGames { get; }
-
-    /// <summary>Games currently visible in the library view.</summary>
-    public IReadOnlyList<Game> FilteredGames { get; }
-}
-
-/// <summary>The main-view state plus the host outcome.</summary>
-public sealed record MainViewResponse(HostOperationStatus Status, MainViewState? State = null, string? Diagnostic = null)
-{
-    /// <summary>True when the host answered the request.</summary>
-    public bool IsCompleted => Status == HostOperationStatus.Completed;
-}
-
-/// <summary>A list of games plus the host outcome.</summary>
-public sealed record MainViewGamesResponse
-{
-    /// <summary>Creates a response, copying the game list.</summary>
-    public MainViewGamesResponse(HostOperationStatus status, IEnumerable<Game>? games = null, string? diagnostic = null)
-    {
-        Status = status;
-        Games = (games ?? Array.Empty<Game>()).ToArray();
-        Diagnostic = diagnostic;
-    }
-
-    /// <summary>Host outcome.</summary>
-    public HostOperationStatus Status { get; }
-
-    /// <summary>Games in host order; empty when unavailable.</summary>
-    public IReadOnlyList<Game> Games { get; }
-
-    /// <summary>Diagnostic for an unavailable or failed request.</summary>
-    public string? Diagnostic { get; }
-
-    /// <summary>True when the host answered the request.</summary>
-    public bool IsCompleted => Status == HostOperationStatus.Completed;
+    /// <inheritdoc />
+    public string Name => game.Name ?? string.Empty;
 }
 
 /// <summary>
-/// The query seam supplied by the UI shell. The CLI may register a headless host or leave it
-/// unregistered; the API then reports Unavailable with a diagnostic instead of throwing.
+/// Maps Core query enums to and from the SDK host enums. Both keep the same v10 values, so a
+/// host can translate a Core query without redefining either contract.
 /// </summary>
-public interface IMainViewHost
+public static class MainViewEnumAdapter
 {
-    /// <summary>Returns the current shell state.</summary>
-    Task<MainViewState> GetStateAsync(CancellationToken cancellationToken = default);
+    /// <summary>Maps a Core sort order to the SDK contract.</summary>
+    public static SortOrder ToSdk(CoreSortOrder order) =>
+        Checked<SortOrder>((int)order, nameof(order));
 
-    /// <summary>Returns the current selection.</summary>
-    Task<IReadOnlyList<Game>> GetSelectedGamesAsync(CancellationToken cancellationToken = default);
+    /// <summary>Maps an SDK sort order to the Core enum.</summary>
+    public static CoreSortOrder ToCore(SortOrder order) =>
+        Checked<CoreSortOrder>((int)order, nameof(order));
 
-    /// <summary>Returns the games currently visible in the library view.</summary>
-    Task<IReadOnlyList<Game>> GetFilteredGamesAsync(CancellationToken cancellationToken = default);
-}
+    /// <summary>Maps a Core grouping key to the SDK contract.</summary>
+    public static LibraryGroupBy ToSdk(CoreLibraryGroupBy grouping) =>
+        Checked<LibraryGroupBy>((int)grouping, nameof(grouping));
 
-/// <summary>
-/// The v10-named main-view query surface: the data the shell needs without any UI toolkit type.
-/// </summary>
-public interface IMainViewAPI
-{
-    /// <summary>Returns the current shell state.</summary>
-    Task<MainViewResponse> GetStateAsync(CancellationToken cancellationToken = default);
+    /// <summary>Maps an SDK grouping key to the Core enum.</summary>
+    public static CoreLibraryGroupBy ToCore(LibraryGroupBy grouping) =>
+        Checked<CoreLibraryGroupBy>((int)grouping, nameof(grouping));
 
-    /// <summary>Returns the current selection.</summary>
-    Task<MainViewGamesResponse> GetSelectedGamesAsync(CancellationToken cancellationToken = default);
+    private static TEnum Checked<TEnum>(int value, string parameter)
+        where TEnum : struct, Enum
+    {
+        var mapped = (TEnum)Enum.ToObject(typeof(TEnum), value);
+        if (!Enum.IsDefined(mapped))
+        {
+            throw new ArgumentOutOfRangeException(
+                parameter,
+                value,
+                "Unknown " + parameter + " value.");
+        }
 
-    /// <summary>Returns the games currently visible in the library view.</summary>
-    Task<MainViewGamesResponse> GetFilteredGamesAsync(CancellationToken cancellationToken = default);
+        return mapped;
+    }
 }
 
 /// <summary>Delegates every query to an optional main-view host.</summary>
@@ -198,7 +108,7 @@ public sealed class MainViewApi : IMainViewAPI
     /// <inheritdoc />
     public Task<MainViewGamesResponse> GetSelectedGamesAsync(CancellationToken cancellationToken = default)
     {
-        Func<CancellationToken, Task<IReadOnlyList<Game>>>? query =
+        Func<CancellationToken, Task<IReadOnlyList<IGameView>>>? query =
             host is null ? null : host.GetSelectedGamesAsync;
         return QueryGamesAsync(query, cancellationToken);
     }
@@ -206,13 +116,13 @@ public sealed class MainViewApi : IMainViewAPI
     /// <inheritdoc />
     public Task<MainViewGamesResponse> GetFilteredGamesAsync(CancellationToken cancellationToken = default)
     {
-        Func<CancellationToken, Task<IReadOnlyList<Game>>>? query =
+        Func<CancellationToken, Task<IReadOnlyList<IGameView>>>? query =
             host is null ? null : host.GetFilteredGamesAsync;
         return QueryGamesAsync(query, cancellationToken);
     }
 
     private static async Task<MainViewGamesResponse> QueryGamesAsync(
-        Func<CancellationToken, Task<IReadOnlyList<Game>>>? query,
+        Func<CancellationToken, Task<IReadOnlyList<IGameView>>>? query,
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();

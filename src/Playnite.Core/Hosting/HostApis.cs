@@ -1,3 +1,5 @@
+using Playnite.SDK;
+
 namespace Playnite.Core.Hosting;
 
 /// <summary>
