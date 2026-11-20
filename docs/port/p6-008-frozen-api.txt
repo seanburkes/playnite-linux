@@ -1,0 +1,68 @@
+#nullable enable
+Playnite.SDK.Data.IDataSerializer
+Playnite.SDK.Data.IDataSerializer.AreObjectsEqual(object? object1, object? object2) -> bool
+Playnite.SDK.Data.IDataSerializer.FromJson<T>(string! json) -> T?
+Playnite.SDK.Data.IDataSerializer.FromJsonFile<T>(string! filePath) -> T?
+Playnite.SDK.Data.IDataSerializer.FromJsonStream<T>(System.IO.Stream! stream) -> T?
+Playnite.SDK.Data.IDataSerializer.FromToml<T>(string! toml) -> T?
+Playnite.SDK.Data.IDataSerializer.FromTomlFile<T>(string! filePath) -> T?
+Playnite.SDK.Data.IDataSerializer.FromYaml<T>(string! yaml) -> T?
+Playnite.SDK.Data.IDataSerializer.FromYamlFile<T>(string! filePath) -> T?
+Playnite.SDK.Data.IDataSerializer.GetClone<T, U>(T? source) -> U?
+Playnite.SDK.Data.IDataSerializer.GetClone<T>(T? source) -> T?
+Playnite.SDK.Data.IDataSerializer.ToJson(object? obj, bool formatted = false) -> string!
+Playnite.SDK.Data.IDataSerializer.ToJsonStream(object? obj, System.IO.Stream! stream, bool formatted = false) -> void
+Playnite.SDK.Data.IDataSerializer.ToYaml(object? obj) -> string!
+Playnite.SDK.Data.IDataSerializer.TryFromJson<T>(string! json, out T? content) -> bool
+Playnite.SDK.Data.IDataSerializer.TryFromJson<T>(string! json, out T? content, out System.Exception? error) -> bool
+Playnite.SDK.Data.IDataSerializer.TryFromJsonFile<T>(string! filePath, out T? content) -> bool
+Playnite.SDK.Data.IDataSerializer.TryFromJsonFile<T>(string! filePath, out T? content, out System.Exception? error) -> bool
+Playnite.SDK.Data.IDataSerializer.TryFromJsonStream<T>(System.IO.Stream! stream, out T? content) -> bool
+Playnite.SDK.Data.IDataSerializer.TryFromJsonStream<T>(System.IO.Stream! stream, out T? content, out System.Exception? error) -> bool
+Playnite.SDK.Data.IDataSerializer.TryFromToml<T>(string! toml, out T? content) -> bool
+Playnite.SDK.Data.IDataSerializer.TryFromToml<T>(string! toml, out T? content, out System.Exception? error) -> bool
+Playnite.SDK.Data.IDataSerializer.TryFromTomlFile<T>(string! filePath, out T? content) -> bool
+Playnite.SDK.Data.IDataSerializer.TryFromTomlFile<T>(string! filePath, out T? content, out System.Exception? error) -> bool
+Playnite.SDK.Data.IDataSerializer.TryFromYaml<T>(string! yaml, out T? content) -> bool
+Playnite.SDK.Data.IDataSerializer.TryFromYaml<T>(string! yaml, out T? content, out System.Exception? error) -> bool
+Playnite.SDK.Data.IDataSerializer.TryFromYamlFile<T>(string! filePath, out T? content) -> bool
+Playnite.SDK.Data.IDataSerializer.TryFromYamlFile<T>(string! filePath, out T? content, out System.Exception? error) -> bool
+Playnite.SDK.Events.OnApplicationStartedEventArgs
+Playnite.SDK.Events.OnApplicationStartedEventArgs.OnApplicationStartedEventArgs() -> void
+Playnite.SDK.Models.IIdentifiable
+Playnite.SDK.Models.IIdentifiable.Id.get -> System.Guid
+Playnite.SDK.Models.InstallationStatus
+Playnite.SDK.Models.InstallationStatus.Installed = 0 -> Playnite.SDK.Models.InstallationStatus
+Playnite.SDK.Models.InstallationStatus.Uninstalled = 1 -> Playnite.SDK.Models.InstallationStatus
+Playnite.SDK.Plugins.LibraryGetGamesArgs
+Playnite.SDK.Plugins.LibraryGetGamesArgs.CancelToken.get -> System.Threading.CancellationToken
+Playnite.SDK.Plugins.LibraryGetGamesArgs.LibraryGetGamesArgs() -> void
+Playnite.SDK.Plugins.LibraryGetGamesArgs.LibraryGetGamesArgs(System.Threading.CancellationToken cancelToken) -> void
+Playnite.SDK.Plugins.MetadataField
+Playnite.SDK.Plugins.MetadataField.AgeRating = 14 -> Playnite.SDK.Plugins.MetadataField
+Playnite.SDK.Plugins.MetadataField.BackgroundImage = 12 -> Playnite.SDK.Plugins.MetadataField
+Playnite.SDK.Plugins.MetadataField.CommunityScore = 9 -> Playnite.SDK.Plugins.MetadataField
+Playnite.SDK.Plugins.MetadataField.CoverImage = 11 -> Playnite.SDK.Plugins.MetadataField
+Playnite.SDK.Plugins.MetadataField.CriticScore = 8 -> Playnite.SDK.Plugins.MetadataField
+Playnite.SDK.Plugins.MetadataField.Description = 6 -> Playnite.SDK.Plugins.MetadataField
+Playnite.SDK.Plugins.MetadataField.Developers = 3 -> Playnite.SDK.Plugins.MetadataField
+Playnite.SDK.Plugins.MetadataField.Features = 13 -> Playnite.SDK.Plugins.MetadataField
+Playnite.SDK.Plugins.MetadataField.Genres = 1 -> Playnite.SDK.Plugins.MetadataField
+Playnite.SDK.Plugins.MetadataField.Icon = 10 -> Playnite.SDK.Plugins.MetadataField
+Playnite.SDK.Plugins.MetadataField.InstallSize = 18 -> Playnite.SDK.Plugins.MetadataField
+Playnite.SDK.Plugins.MetadataField.Links = 7 -> Playnite.SDK.Plugins.MetadataField
+Playnite.SDK.Plugins.MetadataField.Name = 0 -> Playnite.SDK.Plugins.MetadataField
+Playnite.SDK.Plugins.MetadataField.Platform = 17 -> Playnite.SDK.Plugins.MetadataField
+Playnite.SDK.Plugins.MetadataField.Publishers = 4 -> Playnite.SDK.Plugins.MetadataField
+Playnite.SDK.Plugins.MetadataField.Region = 16 -> Playnite.SDK.Plugins.MetadataField
+Playnite.SDK.Plugins.MetadataField.ReleaseDate = 2 -> Playnite.SDK.Plugins.MetadataField
+Playnite.SDK.Plugins.MetadataField.Series = 15 -> Playnite.SDK.Plugins.MetadataField
+Playnite.SDK.Plugins.MetadataField.Tags = 5 -> Playnite.SDK.Plugins.MetadataField
+Playnite.SDK.SdkVersions
+static Playnite.SDK.SdkVersions.SDKVersion.get -> System.Version!
+Playnite.SDK.Data.DontSerializeAttribute
+Playnite.SDK.Data.DontSerializeAttribute.DontSerializeAttribute() -> void
+Playnite.SDK.Data.SerializationPropertyNameAttribute
+Playnite.SDK.Data.SerializationPropertyNameAttribute.PropertyName.get -> string!
+Playnite.SDK.Data.SerializationPropertyNameAttribute.PropertyName.set -> void
+Playnite.SDK.Data.SerializationPropertyNameAttribute.SerializationPropertyNameAttribute(string! propertyName) -> void
