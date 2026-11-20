@@ -375,6 +375,25 @@ class OwnershipGuardTests(unittest.TestCase):
         self.assertIn("docs/port/units/p4-003.queue.tsv", result.stdout)
         self.assertIn("at most one unit evidence namespace", result.stderr)
 
+    def test_foreign_unit_evidence_without_a_trailer_fails(self) -> None:
+        # The no-manifest baseline: a unit declaration alone does not allow a
+        # foreign unit-evidence path when the head carries no Cross-Unit-Move
+        # trailer, even if the PR has no evidence of its own.
+        self.fixture.append("docs/port/p4-002-import.md", "foreign\n")
+        head = self.fixture.commit(
+            "a p4-003 PR touching only p4-002 evidence\n\n"
+            "Port-Unit: p4-003"
+        )
+
+        result = self.fixture.ownership(head, "--branch", "fm/p4-003")
+
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertIn(
+            "foreign unit evidence: PR owns p4-003 but touches unit p4-002",
+            result.stderr,
+        )
+        self.assertIn("docs/port/p4-002-import.md (unit p4-002)", result.stdout)
+
     def test_cross_unit_product_file_fails_with_map_evidence(self) -> None:
         path = "src/Playnite.Core/Import/AssetCopy.cs"
         self.fixture = Fixture(
@@ -1599,6 +1618,50 @@ class EvidenceGuardTests(unittest.TestCase):
         self.assertEqual(result.returncode, 1, result.stderr)
         self.assertIn("no unclaimed deleted counterpart", result.stderr)
         self.assertIn("docs/port/p4-002-import.md", result.stderr)
+
+    def test_foreign_unit_evidence_without_a_trailer_fails_the_evidence_check(self) -> None:
+        # The no-manifest baseline: without a Cross-Unit-Move trailer, carrying
+        # its own queue transition and fragment does not let a unit PR touch
+        # another unit's evidence.
+        implementation = self.fixture.commit("implementation head")
+        self.fixture.set_queue("p4-003", "in-progress")
+        self.fixture.add_fragment(head=implementation)
+        self.fixture.append("docs/port/p4-002-import.md", "foreign\n")
+        head = self.fixture.commit(
+            "own evidence plus a foreign edit\n\n"
+            "Port-Unit: p4-003"
+        )
+
+        result = self.fixture.evidence(head, "--branch", "fm/p4-003")
+
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertIn("touches foreign unit evidence", result.stderr)
+        self.assertIn("docs/port/p4-002-import.md (unit p4-002)", result.stderr)
+
+    def test_map_owned_foreign_path_without_a_trailer_fails_the_evidence_check(self) -> None:
+        # The map-owned counterpart of the no-manifest baseline: own evidence
+        # does not authorise a path the base map attributes to another unit.
+        path = "src/Playnite.Core/Import/AssetCopy.cs"
+        self.fixture = Fixture(
+            ownership=[claim(path, "p4-005")], files={path: "// asset copy\n"}
+        )
+        self.addCleanup(self.fixture.cleanup)
+        implementation = self.fixture.commit("implementation head")
+        self.fixture.append(path, "// foreign bytes\n")
+        self.fixture.set_queue("p4-003", "in-progress")
+        self.fixture.add_fragment(head=implementation)
+        head = self.fixture.commit(
+            "own evidence plus a foreign owned edit\n\n"
+            "Port-Unit: p4-003"
+        )
+
+        result = self.fixture.evidence(head, "--branch", "fm/p4-003")
+
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertIn(
+            "touches unit-owned paths owned only by another unit", result.stderr
+        )
+        self.assertIn(f"{path} (unit p4-005;", result.stderr)
 
     def test_fragment_must_name_an_ancestor_head(self) -> None:
         self.fixture.set_queue("p4-003", "in-progress")
