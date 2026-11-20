@@ -133,14 +133,16 @@
 
 ### 5. No unrelated change from the PR — pass
 
-- Of the 25 delta files, the seven `p6-005`/metadata files are main-merge imports, not PR
-  intent: `git diff b46bef6..f339b37 -- src/Playnite.Core/Metadata tests/Playnite.Core.Tests/Metadata docs/port/p6-005-metadata-service.md` is empty, and `b46bef6` is the main commit
-  (`#189`) merged into this branch. The queue/ledger/`PORT-STATUS`/`ownership.paths` edits are
-  those same aggregate regenerations.
-- Against `b46bef6`, the PR-authored delta is exactly the p6-006 unit: five hosting files, the
-  `Playnite.Platform` adapter, the p6-006 contract doc, the p6-006 queue/shard rows and the
-  p6-006 ledger fragment. No `queue.tsv` row other than p6-006, no protected oracle, baseline or
-  schema path.
+- Of the 25 delta files, nine are `p6-005`/metadata files and are byte-identical to main's
+  `b46bef6` (`#189`), which this branch merged: `git diff b46bef6..f339b37 -- src/Playnite.Core/Metadata tests/Playnite.Core.Tests/Metadata docs/port/p6-005-metadata-service.md docs/port/units/p6-005.queue.tsv docs/port/units/p6-005.ledger.d` is empty.
+  They are the merge import, not PR intent.
+- The four aggregate files (`docs/port/PORT-STATUS.md`, `ledger.tsv`, `queue.tsv`,
+  `ownership.paths`) are the post-merge `port-index` regeneration for that same `#189` merge; the
+  only `queue.tsv` row they touch is p6-005, and the two ledger rows are its rows. None of them
+  records p6-006 product work.
+- The remaining 12 files are exactly the p6-006 unit: five hosting files, the `Playnite.Platform`
+  adapter, four hosting test files, the p6-006 contract doc and the p6-006 queue/ledger shard
+  entries. No protected oracle, baseline or schema path.
 - `f339b37` is docs-only over the CI-validated code head `0d56d3e`, so the cited
   `ci_run=44702814169` still covers every changed code and test file.
 
