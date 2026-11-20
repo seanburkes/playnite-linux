@@ -63,16 +63,16 @@ Phase 6 (Core services and SDK v7) is next. The acceptance record is
 | Status | Units |
 | --- | ---: |
 | deferred | 1 |
-| done | 82 |
-| in-progress | 6 |
+| done | 83 |
+| in-progress | 5 |
 | todo | 22 |
 
 ## Ledger
 
 | Metric | Value |
 | --- | ---: |
-| Ledger rows | 335 |
-| Ledger fragments | 108 |
+| Ledger rows | 336 |
+| Ledger fragments | 109 |
 
 ## Units
 
@@ -159,7 +159,7 @@ Phase 6 (Core services and SDK v7) is next. The acceptance record is
 | p5-shards2 | W5 | repo | Phase 5 exit assessment and merged-wave reconciliation | done | `units/p5-shards2.*`; 4 ledger rows |
 | p6-001 | W6 | core | Library service | done | `units/p6-001.*`; 2 ledger rows |
 | p6-002 | W6 | core | Import service | done | `units/p6-002.*`; 2 ledger rows |
-| p6-003 | W6 | core | Steam sync | in-progress | `units/p6-003.*`; 1 ledger rows |
+| p6-003 | W6 | core | Steam sync | done | `units/p6-003.*`; 2 ledger rows |
 | p6-004 | W6 | core | Settings service | done | `units/p6-004.*`; 3 ledger rows |
 | p6-005 | W6 | core | Metadata service | done | `units/p6-005.*`; 2 ledger rows |
 | p6-006 | W6 | sdk | Notifications, dialogs and main-view API | done | `units/p6-006.*`; 2 ledger rows |
