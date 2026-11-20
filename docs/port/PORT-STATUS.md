@@ -63,16 +63,16 @@ Phase 6 (Core services and SDK v7) is next. The acceptance record is
 | Status | Units |
 | --- | ---: |
 | deferred | 1 |
-| done | 76 |
+| done | 77 |
 | in-progress | 3 |
-| todo | 26 |
+| todo | 25 |
 
 ## Ledger
 
 | Metric | Value |
 | --- | ---: |
-| Ledger rows | 317 |
-| Ledger fragments | 90 |
+| Ledger rows | 319 |
+| Ledger fragments | 92 |
 
 ## Units
 
@@ -158,7 +158,7 @@ Phase 6 (Core services and SDK v7) is next. The acceptance record is
 | p5-shards | W5 | repo | Phase 5 shard board reconciliation | done | `units/p5-shards.*`; 15 ledger rows |
 | p5-shards2 | W5 | repo | Phase 5 exit assessment and merged-wave reconciliation | done | `units/p5-shards2.*`; 4 ledger rows |
 | p6-001 | W6 | core | Library service | done | `units/p6-001.*`; 2 ledger rows |
-| p6-002 | W6 | core | Import/sync service | todo | `units/p6-002.*`; 0 ledger rows |
+| p6-002 | W6 | core | Import service | done | `units/p6-002.*`; 2 ledger rows |
 | p6-003 | W6 | core | Settings/metadata services | todo | `units/p6-003.*`; 0 ledger rows |
 | p6-004 | W6 | sdk | SDK v7 contracts | todo | `units/p6-004.*`; 0 ledger rows |
 | p6-005 | W6 | sdk | Sample plugins | todo | `units/p6-005.*`; 0 ledger rows |

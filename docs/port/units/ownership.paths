@@ -1,6 +1,7 @@
 path	unit	commit	pull
 src/Playnite.Cli/AssemblyInfo.cs	p4-002	3e157257c383425ddfcbc1fe6c5469c30c875da6	pull/165
 src/Playnite.Cli/CliCommandRegistry.cs	p4-002	3e157257c383425ddfcbc1fe6c5469c30c875da6	pull/165
+src/Playnite.Cli/Commands/ImportLibraryCommand.cs	p6-002	c051da647f058b815254cc11e4e4b971860651d0	pull/173
 src/Playnite.Cli/Commands/LaunchDryRunCommand.cs	p6-011	e2eed7b7d1f11022090aeb1ceb6de2a21cbb2a33	pull/167
 src/Playnite.Cli/Commands/ListCommand.cs	p6-011	e2eed7b7d1f11022090aeb1ceb6de2a21cbb2a33	pull/167
 src/Playnite.Cli/Commands/OptionGuard.cs	p6-011	e2eed7b7d1f11022090aeb1ceb6de2a21cbb2a33	pull/167
@@ -10,6 +11,7 @@ src/Playnite.Cli/Commands/SearchCommand.cs	p6-011	e2eed7b7d1f11022090aeb1ceb6de2
 src/Playnite.Cli/ICliCommand.cs	p4-002	3e157257c383425ddfcbc1fe6c5469c30c875da6	pull/165
 src/Playnite.Cli/ImportCommand.cs	p4-002	9f81d30b3cc4a6beb0e15f39610ecd219ebc19f7	pull/94
 src/Playnite.Cli/ImportCommand.cs	p4-003	8ff04700cf62708a5dbf3fbbc9dae08016fed9f5	pull/97
+src/Playnite.Cli/LegacyLibraryReaderProcess.cs	p6-002	c051da647f058b815254cc11e4e4b971860651d0	pull/173
 src/Playnite.Cli/Program.cs	p2-001	9afd818ae8a695e921bb98f386bfceb83d0059db	pull/29
 src/Playnite.Cli/Program.cs	p2-004	34af4f0fb6430fbc585d3b76ce85094390a26467	pull/34
 src/Playnite.Cli/Program.cs	p4-002	9f81d30b3cc4a6beb0e15f39610ecd219ebc19f7	pull/94
@@ -38,6 +40,7 @@ src/Playnite.Core/IEnvironment.cs	*	d6401f1f07c69474d0ce395797ab694bedf019e7	pul
 src/Playnite.Core/IFileSystem.cs	*	d6401f1f07c69474d0ce395797ab694bedf019e7	pull/68
 src/Playnite.Core/IPaths.cs	p5-002	a37890f33110c70b8411bac4457d16e0aa41822f	pull/116
 src/Playnite.Core/Import/AssetCopy.cs	p4-005	f12a4325c58cf66d47b93c5768e46861696d3052	pull/96
+src/Playnite.Core/Import/LibraryImportService.cs	p6-002	c051da647f058b815254cc11e4e4b971860651d0	pull/173
 src/Playnite.Core/Import/LibraryMigration.cs	p4-002	9f81d30b3cc4a6beb0e15f39610ecd219ebc19f7	pull/94
 src/Playnite.Core/Import/LibraryMigration.cs	p4-003	8ff04700cf62708a5dbf3fbbc9dae08016fed9f5	pull/97
 src/Playnite.Core/Import/LibraryMigration.cs	p4-005	f12a4325c58cf66d47b93c5768e46861696d3052	pull/96
@@ -256,6 +259,7 @@ tests/Playnite.Core.Tests/ChecksumTests.cs	p3-crc-ds	ee3ab1db11ef44cb5b489c8bce8
 tests/Playnite.Core.Tests/Cli/CliCommandRegistryTests.cs	p4-002	3e157257c383425ddfcbc1fe6c5469c30c875da6	pull/165
 tests/Playnite.Core.Tests/Cli/CliQueryCommandsTests.cs	p6-011	e2eed7b7d1f11022090aeb1ceb6de2a21cbb2a33	pull/167
 tests/Playnite.Core.Tests/Cli/CliQueryFixture.cs	p6-011	e2eed7b7d1f11022090aeb1ceb6de2a21cbb2a33	pull/167
+tests/Playnite.Core.Tests/Cli/ImportLibraryCommandTests.cs	p6-002	c051da647f058b815254cc11e4e4b971860651d0	pull/173
 tests/Playnite.Core.Tests/Cli/LaunchDryRunCommandTests.cs	p6-011	e2eed7b7d1f11022090aeb1ceb6de2a21cbb2a33	pull/167
 tests/Playnite.Core.Tests/Cli/ListCommandTests.cs	p6-011	e2eed7b7d1f11022090aeb1ceb6de2a21cbb2a33	pull/167
 tests/Playnite.Core.Tests/Cli/SearchCommandTests.cs	p6-011	e2eed7b7d1f11022090aeb1ceb6de2a21cbb2a33	pull/167
@@ -274,6 +278,8 @@ tests/Playnite.Core.Tests/DesktopIntegration/SleepInhibitionAndDiagnosticsTests.
 tests/Playnite.Core.Tests/DesktopIntegration/SleepInhibitionTests.cs	p5-007a	60e71ca950a21b72a08165e60c0e8066905ffed3	pull/121
 tests/Playnite.Core.Tests/FileSystemTests.cs	*	d6401f1f07c69474d0ce395797ab694bedf019e7	pull/68
 tests/Playnite.Core.Tests/Import/AssetCopyTests.cs	p4-005	f12a4325c58cf66d47b93c5768e46861696d3052	pull/96
+tests/Playnite.Core.Tests/Import/LibraryImportServiceIntegrationTests.cs	p6-002	c051da647f058b815254cc11e4e4b971860651d0	pull/173
+tests/Playnite.Core.Tests/Import/LibraryImportServiceTests.cs	p6-002	c051da647f058b815254cc11e4e4b971860651d0	pull/173
 tests/Playnite.Core.Tests/Import/LibraryMigrationTests.cs	p4-002	9f81d30b3cc4a6beb0e15f39610ecd219ebc19f7	pull/94
 tests/Playnite.Core.Tests/Import/LibraryMigrationTests.cs	p4-003	8ff04700cf62708a5dbf3fbbc9dae08016fed9f5	pull/97
 tests/Playnite.Core.Tests/Import/LibraryMigrationTests.cs	p4-005	b9d12a55679934ffd2e72ff65063aa27e03758de	pull/100
