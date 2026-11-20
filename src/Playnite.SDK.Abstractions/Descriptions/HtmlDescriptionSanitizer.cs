@@ -1,6 +1,3 @@
-using System.Globalization;
-using System.Text;
-
 namespace Playnite.SDK.Descriptions;
 
 /// <summary>One sanitised description and what was removed to make it safe.</summary>
