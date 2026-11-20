@@ -30,13 +30,18 @@ public sealed class PagedLibraryReader
          FROM (SELECT r.Path FROM game_rom r WHERE r.GameId = game.Id ORDER BY r.Position) AS roms)
         """;
 
-    private readonly LibraryDatabase database;
+    private readonly IPagedLibrarySessionFactory sessionFactory;
 
     /// <summary>Reads pages from the supplied destination.</summary>
     public PagedLibraryReader(LibraryDatabase database)
+        : this(new SqlitePagedLibrarySessionFactory(database))
     {
-        ArgumentNullException.ThrowIfNull(database);
-        this.database = database;
+    }
+
+    internal PagedLibraryReader(IPagedLibrarySessionFactory sessionFactory)
+    {
+        ArgumentNullException.ThrowIfNull(sessionFactory);
+        this.sessionFactory = sessionFactory;
     }
 
     /// <summary>Returns one page of the library in the requested total order.</summary>
@@ -48,26 +53,27 @@ public sealed class PagedLibraryReader
     }
 
     private Task<LibraryPage> ReadPageAsync(PagedLibraryQuery query, CancellationToken cancellationToken)
-        => database.ReadAsync(async session =>
+    {
+        var pageSql = PageSql(query);
+        return sessionFactory.ReadAsync(async session =>
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var count = await session.QuerySingleOrDefaultAsync<long>(CountSql).ConfigureAwait(false);
+            var count = await session.CountAsync(cancellationToken).ConfigureAwait(false);
             var total = checked((int)count);
-            var ids = await session.QueryAsync<string>(
-                PageSql(query), new { query.Offset, query.Limit }).ConfigureAwait(false);
+            var ids = await session.ReadPageIdsAsync(
+                pageSql, query.Offset, query.Limit, cancellationToken).ConfigureAwait(false);
 
-            var games = new List<StoredGame>(query.Limit);
+            var games = new List<StoredGame>(ids.Count);
             foreach (var id in ids)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                var game = await session.Games.GetAsync(Guid.Parse(id)).ConfigureAwait(false)
-                    ?? throw new InvalidOperationException($"Game {id} disappeared from the read snapshot.");
-                games.Add(game);
+                games.Add(await session.GetGameAsync(Guid.Parse(id), cancellationToken).ConfigureAwait(false));
             }
 
             cancellationToken.ThrowIfCancellationRequested();
             return new LibraryPage(games, total, []);
         }, cancellationToken);
+    }
 
     /// <summary>Validates query bounds and the sort key before a destination is opened.</summary>
     internal static void Validate(PagedLibraryQuery query)
@@ -111,7 +117,7 @@ public sealed class PagedLibraryReader
         SortOrder.ReleaseDate =>
         [
             "game.ReleaseYear IS NOT NULL",
-            "COALESCE(game.ReleaseYear, 0)",
+            "CASE WHEN game.ReleaseYear = 0 THEN 1 ELSE COALESCE(game.ReleaseYear, 0) END",
             "COALESCE(game.ReleaseMonth, 1)",
             "COALESCE(game.ReleaseDay, 1)",
         ],
@@ -132,4 +138,48 @@ public sealed class PagedLibraryReader
         SortOrder.RomList => [RomListExpression],
         _ => throw new ArgumentOutOfRangeException(nameof(sort), sort, "Unknown library sort key."),
     };
+
+    private sealed class SqlitePagedLibrarySessionFactory(LibraryDatabase database) : IPagedLibrarySessionFactory
+    {
+        public Task<T> ReadAsync<T>(
+            Func<IPagedLibrarySession, Task<T>> read, CancellationToken cancellationToken)
+            => database.ReadAsync(session => read(new SqlitePagedLibrarySession(session)), cancellationToken);
+    }
+
+    private sealed class SqlitePagedLibrarySession(LibrarySession session) : IPagedLibrarySession
+    {
+        public Task<long> CountAsync(CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return session.QuerySingleOrDefaultAsync<long>(CountSql);
+        }
+
+        public async Task<IReadOnlyList<string>> ReadPageIdsAsync(
+            string sql, int offset, int limit, CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var ids = await session.QueryAsync<string>(sql, new { Offset = offset, Limit = limit })
+                .ConfigureAwait(false);
+            return ids.ToArray();
+        }
+
+        public async Task<StoredGame> GetGameAsync(Guid id, CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return await session.Games.GetAsync(id).ConfigureAwait(false)
+                ?? throw new InvalidOperationException($"Game {id} disappeared from the read snapshot.");
+        }
+    }
+}
+
+internal interface IPagedLibrarySessionFactory
+{
+    Task<T> ReadAsync<T>(Func<IPagedLibrarySession, Task<T>> read, CancellationToken cancellationToken);
+}
+
+internal interface IPagedLibrarySession
+{
+    Task<long> CountAsync(CancellationToken cancellationToken);
+    Task<IReadOnlyList<string>> ReadPageIdsAsync(string sql, int offset, int limit, CancellationToken cancellationToken);
+    Task<StoredGame> GetGameAsync(Guid id, CancellationToken cancellationToken);
 }

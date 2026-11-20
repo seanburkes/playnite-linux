@@ -142,7 +142,7 @@ public sealed class PagedLibraryReaderTests
     }
 
     [Fact]
-    public async Task Page_reads_only_the_requested_window()
+    public async Task Page_returns_only_the_requested_window()
     {
         using var files = new DatabaseTestDirectory();
         var cancellationToken = TestContext.Current.CancellationToken;
@@ -153,6 +153,42 @@ public sealed class PagedLibraryReaderTests
 
         Assert.Equal([Id(7), Id(8), Id(9), Id(10)], Ids(page));
         Assert.Equal(25, page.TotalCount);
+    }
+
+    [Fact]
+    public async Task Page_read_requests_only_the_window_from_the_session()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var ids = Enumerable.Range(1, 1000).Select(Id).ToArray();
+        var session = new SpySession { Total = ids.Length, Ids = ids };
+        var reader = new PagedLibraryReader(new SpySessionFactory(session));
+
+        var page = await reader.ListAsync(new(Offset: 995, Limit: 5), cancellationToken);
+
+        var read = Assert.Single(session.PageReads);
+        Assert.Contains("LIMIT @Limit OFFSET @Offset", read.Sql, StringComparison.Ordinal);
+        Assert.EndsWith("game.Id ASC LIMIT @Limit OFFSET @Offset;", read.Sql, StringComparison.Ordinal);
+        Assert.Equal(995, read.Offset);
+        Assert.Equal(5, read.Limit);
+        Assert.Equal(1, session.CountCalls);
+        Assert.Equal(ids[995..], session.GraphReads);
+        Assert.Equal(ids[995..], Ids(page));
+        Assert.Equal(1000, page.TotalCount);
+    }
+
+    [Fact]
+    public async Task Cancellation_during_graph_load_stops_without_a_page()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var ids = Enumerable.Range(1, 10).Select(Id).ToArray();
+        using var cancel = new CancellationTokenSource();
+        var session = new SpySession { Total = ids.Length, Ids = ids, AfterGraphRead = cancel.Cancel };
+        var reader = new PagedLibraryReader(new SpySessionFactory(session));
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, cancel.Token);
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            () => reader.ListAsync(new(Limit: 10), linked.Token));
+        Assert.Single(session.GraphReads);
     }
 
     [Theory]
@@ -176,10 +212,8 @@ public sealed class PagedLibraryReaderTests
     }
 
     [Theory]
-    [InlineData(SortOrder.Name)]
     [InlineData(SortOrder.LastActivity)]
     [InlineData(SortOrder.ReleaseDate)]
-    [InlineData(SortOrder.Version)]
     [InlineData(SortOrder.PlayCount)]
     [InlineData(SortOrder.Playtime)]
     [InlineData(SortOrder.UserScore)]
@@ -190,11 +224,9 @@ public sealed class PagedLibraryReaderTests
     [InlineData(SortOrder.IsInstalled)]
     [InlineData(SortOrder.Hidden)]
     [InlineData(SortOrder.Favorite)]
-    [InlineData(SortOrder.InstallDirectory)]
     [InlineData(SortOrder.InstallSize)]
     [InlineData(SortOrder.RecentActivity)]
-    [InlineData(SortOrder.RomList)]
-    public async Task Ordered_pages_match_the_in_memory_comparer_in_both_directions(SortOrder sort)
+    public async Task Numeric_and_date_orders_match_the_in_memory_comparer_in_both_directions(SortOrder sort)
     {
         using var files = new DatabaseTestDirectory();
         var cancellationToken = TestContext.Current.CancellationToken;
@@ -212,6 +244,40 @@ public sealed class PagedLibraryReaderTests
             Assert.Equal(expected.Games.Select(game => game.Value.Id), Ids(actual));
             Assert.Equal(expected.TotalCount, actual.TotalCount);
         }
+    }
+
+    [Theory]
+    [InlineData(SortOrder.Name)]
+    [InlineData(SortOrder.Version)]
+    [InlineData(SortOrder.InstallDirectory)]
+    [InlineData(SortOrder.RomList)]
+    public async Task Text_orders_follow_the_documented_binary_collation(SortOrder sort)
+    {
+        using var files = new DatabaseTestDirectory();
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var database = await SeedAsync(files, cancellationToken, TextGames());
+        var reader = new PagedLibraryReader(database);
+
+        Guid[] ascending = sort switch
+        {
+            SortOrder.Name => [Id(14), Id(11), Id(13), Id(10), Id(12)],
+            SortOrder.Version => [Id(14), Id(10), Id(11), Id(12), Id(13)],
+            SortOrder.InstallDirectory => [Id(13), Id(10), Id(11), Id(14), Id(12)],
+            SortOrder.RomList => [Id(14), Id(10), Id(11), Id(12), Id(13)],
+            _ => throw new ArgumentOutOfRangeException(nameof(sort)),
+        };
+        Guid[] descending = sort switch
+        {
+            SortOrder.Name => [Id(12), Id(10), Id(13), Id(11), Id(14)],
+            SortOrder.Version => [Id(13), Id(11), Id(12), Id(14), Id(10)],
+            SortOrder.InstallDirectory => [Id(12), Id(14), Id(11), Id(13), Id(10)],
+            SortOrder.RomList => [Id(13), Id(11), Id(12), Id(14), Id(10)],
+            _ => throw new ArgumentOutOfRangeException(nameof(sort)),
+        };
+
+        Assert.Equal(ascending, Ids(await reader.ListAsync(new(SortBy: sort, Limit: 10), cancellationToken)));
+        Assert.Equal(descending, Ids(await reader.ListAsync(
+            new(SortBy: sort, Descending: true, Limit: 10), cancellationToken)));
     }
 
     private static StoredGame[] TieGames() =>
@@ -339,6 +405,51 @@ public sealed class PagedLibraryReaderTests
             InstallSize = 0,
             Version = "v06",
         }),
+        new(new Game(Id(7), "7")
+        {
+            Name = "Game 07",
+            ReleaseDate = ReleaseDate.Empty,
+            Playtime = 0,
+            PlayCount = 0,
+            IsInstalled = false,
+        }),
+        new(new Game(Id(8), "8")
+        {
+            Name = "Game 08",
+            ReleaseDate = new ReleaseDate(1),
+            Playtime = 0,
+            PlayCount = 0,
+            IsInstalled = false,
+        }),
+    ];
+
+    private static StoredGame[] TextGames() =>
+    [
+        new(new Game(Id(10), "10") { Name = "apple" }),
+        new(new Game(Id(11), "11")
+        {
+            Name = "Apple",
+            Version = "1.0",
+            InstallDirectory = "C:/Games/A",
+            Roms = [new GameRom("a", "rom-a")],
+        }),
+        new(new Game(Id(12), "12")
+        {
+            Name = "Éclair",
+            Version = "1.0",
+            InstallDirectory = "C:/Games/a",
+            Roms = [new GameRom("a", "rom-a")],
+        }),
+        new(new Game(Id(13), "13")
+        {
+            Name = "Zelda",
+            Version = "2.0",
+            Roms = [new GameRom("b", "rom-b"), new GameRom("c", "rom-c")],
+        }),
+        new(new Game(Id(14), "14")
+        {
+            InstallDirectory = "C:/Games/B",
+        }),
     ];
 
     private static StoredGame Game(int id, string? name, string? sortingName = null)
@@ -368,5 +479,43 @@ public sealed class PagedLibraryReaderTests
             return 0;
         }, cancellationToken);
         return database;
+    }
+
+    private sealed class SpySessionFactory(SpySession session) : IPagedLibrarySessionFactory
+    {
+        public Task<T> ReadAsync<T>(
+            Func<IPagedLibrarySession, Task<T>> read, CancellationToken cancellationToken)
+            => read(session);
+    }
+
+    private sealed class SpySession : IPagedLibrarySession
+    {
+        public long Total { get; init; }
+        public Guid[] Ids { get; init; } = [];
+        public Action? AfterGraphRead { get; init; }
+        public int CountCalls { get; private set; }
+        public List<(string Sql, int Offset, int Limit)> PageReads { get; } = [];
+        public List<Guid> GraphReads { get; } = [];
+
+        public Task<long> CountAsync(CancellationToken cancellationToken)
+        {
+            CountCalls++;
+            return Task.FromResult(Total);
+        }
+
+        public Task<IReadOnlyList<string>> ReadPageIdsAsync(
+            string sql, int offset, int limit, CancellationToken cancellationToken)
+        {
+            PageReads.Add((sql, offset, limit));
+            var page = Ids.Skip(offset).Take(limit).Select(id => id.ToString("D")).ToArray();
+            return Task.FromResult<IReadOnlyList<string>>(page);
+        }
+
+        public Task<StoredGame> GetGameAsync(Guid id, CancellationToken cancellationToken)
+        {
+            GraphReads.Add(id);
+            AfterGraphRead?.Invoke();
+            return Task.FromResult(new StoredGame(new Game(id, id.ToString("D")) { Name = id.ToString("D") }));
+        }
     }
 }

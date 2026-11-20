@@ -25,7 +25,7 @@ ascending and last descending.
 | --- | --- |
 | `Name` | effective name |
 | `LastActivity`, `Added`, `Modified` | UTC ISO-8601 column |
-| `ReleaseDate` | null flag, year, month (default 1), day (default 1) |
+| `ReleaseDate` | null flag, year (0 maps to 1 so `Empty` ties with year 1), month (default 1), day (default 1) |
 | `Version`, `InstallDirectory` | text column |
 | `PlayCount`, `Playtime`, `InstallSize` | fixed-width decimal column |
 | `UserScore`, `CriticScore`, `CommunityScore` | integer column |
@@ -33,10 +33,11 @@ ascending and last descending.
 | `RecentActivity` | `CASE` reproducing `GetGameRecentActivity` |
 | `RomList` | ordered ROM paths joined with `", "` |
 
-Text columns use SQLite's BINARY collation. `GameComparer` in p6-001 compares text with the
-current culture; the paged path is deterministic across runs and locales, and the two paths
-coincide for the stored numeric and date keys. `PagedLibraryReaderTests` pins the shared
-order for every sort key with duplicate keys and nulls.
+Text columns (`Name`, `Version`, `InstallDirectory`, `RomList`) use SQLite's BINARY
+collation. `GameComparer` in p6-001 compares text with the current culture; the paged path is
+deterministic across runs and locales and does not claim that text order matches it. The two
+paths coincide for the stored numeric, date and flag keys. `PagedLibraryReaderTests` pins the
+numeric/date parity and the documented BINARY text order separately.
 
 ## SQL and memory
 
@@ -49,7 +50,9 @@ SELECT game.Id FROM game ORDER BY <terms> LIMIT @Limit OFFSET @Offset;
 
 Ordering, `LIMIT` and `OFFSET` run in SQLite, so the full table is never materialised in the
 process. Game graphs are loaded only for the returned page identities. The final tie-breaker
-is `game.Id ASC`, which makes a page stable when a primary key repeats.
+is `game.Id ASC`, which makes a page stable when a primary key repeats. An internal session
+seam lets a test double record the statement and the requested window; production uses the
+SQLite snapshot adapter.
 
 ## Bounds and cancellation
 
@@ -69,6 +72,8 @@ Callers page the full stored order; the query shape and comparers remain in p6-0
 
 `PagedLibraryReaderTests` covers first, middle, last, empty and past-end pages; offset and
 limit bounds; duplicate primary keys with name and identity ties; descending null order;
-determinism across repeated calls and reversed insertion order; cancellation; the generated
-statement's `LIMIT`/`OFFSET`/tie-breaker; and parity with `LibraryService` for every
-`SortOrder` in both directions.
+determinism across repeated calls and reversed insertion order; pre-read and mid-load
+cancellation; the generated statement's `LIMIT`/`OFFSET`/tie-breaker; an instrumented session
+seam proving a page of N requests only the N-row window; numeric and date parity with
+`LibraryService` in both directions; and explicit BINARY-order coverage for every text key,
+including case, accent, null and duplicate values.
