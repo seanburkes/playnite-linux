@@ -1,13 +1,13 @@
 # SDK Abstractions preview baseline
 
 `Playnite.SDK.Abstractions.dll` is a **reference assembly**, not an implementation or a
-v6 compatibility shim. It freezes the seven public seed types declared in
-`../PublicAPI.Shipped.txt` plus the p6-007 URI/HTML-description contracts declared in
-`../PublicAPI.Unshipped.txt`, with assembly version `7.0.0.0`, targeting `net11.0`.
+v6 compatibility shim. It freezes the v7 abstraction surface declared in
+`../PublicAPI.Shipped.txt` and `../PublicAPI.Unshipped.txt`: 62 exported types and 603
+declarations, with assembly version `7.0.0.0`, targeting `net11.0`.
 
-SHA-256: `b857c115112f5191d8d8a1f6c1cc75c9fd025a55dc2bceb555cc13878506dbd0`.
+SHA-256: `e79568cb2f30f404244c3a4db13fe7e731dc617f448a8789fcff591eead8beb8`.
 
-It was generated with .NET SDK 11.0.100 from this unit's sources by building
+It was generated with .NET SDK 11.0.100 from this repository's sources by building
 `src/Playnite.SDK.Abstractions` in Release and copying
 `obj/Release/net11.0/ref/Playnite.SDK.Abstractions.dll` here. Only the first baseline
 bootstrap used `-p:ApiCompatValidateAssemblies=false` before a contract assembly existed;
@@ -28,8 +28,9 @@ requires the `oracle-change` label and the protected-path gate; review is advers
 owner's behalf.
 `Playnite.SDK.Abstractions.sha256` separately pins the binary baseline bytes and is
 asserted by the architecture suite. The binary baseline is regenerated only when a
-reviewed surface move adds declarations; p6-007's move did so, and its regeneration
-keeps the pinned text and binary surfaces in step.
+reviewed surface change adds declarations. The p6-006 and p6-007 surface moves were merged
+(`d1d57be`, `b80847b`), and p6-008 regenerated this baseline from those merged sources so the
+pinned text and binary surfaces stay in step with the frozen v7 surface.
 
 For compatible additions, declare the new API in `PublicAPI.Unshipped.txt`; do not
 overwrite the baseline to silence a failure. Any intentional breaking change needs an
