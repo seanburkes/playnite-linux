@@ -1,3 +1,4 @@
+using System.Numerics;
 using Newtonsoft.Json.Linq;
 
 namespace Playnite.Settings;
@@ -49,6 +50,50 @@ public abstract class SettingsKey
     internal abstract object? FromToken(JToken token);
 
     internal abstract void ValidateToken(JToken token);
+
+    /// <summary>
+    /// Reads an integer token without narrowing past its JSON representation. A value that
+    /// Json.NET parsed as <see cref="BigInteger"/> stays exact so callers can range-check it.
+    /// </summary>
+    internal static bool TryGetInteger(JToken token, out BigInteger value)
+    {
+        if (token is JValue { Type: JTokenType.Integer, Value: { } raw })
+        {
+            switch (raw)
+            {
+                case BigInteger integer:
+                    value = integer;
+                    return true;
+                case long integer:
+                    value = integer;
+                    return true;
+                case ulong integer:
+                    value = integer;
+                    return true;
+                case int integer:
+                    value = integer;
+                    return true;
+                case uint integer:
+                    value = integer;
+                    return true;
+                case short integer:
+                    value = integer;
+                    return true;
+                case ushort integer:
+                    value = integer;
+                    return true;
+                case byte integer:
+                    value = integer;
+                    return true;
+                case sbyte integer:
+                    value = integer;
+                    return true;
+            }
+        }
+
+        value = default;
+        return false;
+    }
 }
 
 /// <summary>A typed settings name with a documented v10 default.</summary>
@@ -104,15 +149,71 @@ public sealed class SettingsKey<T> : SettingsKey
             return;
         }
 
-        var matches = type == typeof(bool) ? token.Type == JTokenType.Boolean
-            : type == typeof(int) ? token.Type == JTokenType.Integer
-            : type == typeof(long) ? token.Type == JTokenType.Integer
-            : type == typeof(string) ? token.Type == JTokenType.String
-            : type.IsEnum ? IsDefinedEnum(type, token)
-            : false;
-        if (!matches)
+        if (type == typeof(bool))
+        {
+            if (token.Type != JTokenType.Boolean)
+            {
+                throw InvalidType(token);
+            }
+
+            return;
+        }
+
+        if (type == typeof(string))
+        {
+            if (token.Type != JTokenType.String)
+            {
+                throw InvalidType(token);
+            }
+
+            return;
+        }
+
+        if (type == typeof(int) || type == typeof(long) || type.IsEnum)
+        {
+            ValidateInteger(type, token);
+            return;
+        }
+
+        throw InvalidType(token);
+    }
+
+    private void ValidateInteger(Type type, JToken token)
+    {
+        if (token.Type != JTokenType.Integer)
         {
             throw InvalidType(token);
+        }
+
+        // A token beyond long is still an integer; it is out of every supported CLR range.
+        if (!TryGetInteger(token, out var value))
+        {
+            throw type.IsEnum ? UndefinedEnum(type, token) : OutOfRange(type, token);
+        }
+
+        if (type == typeof(int))
+        {
+            if (value < int.MinValue || value > int.MaxValue)
+            {
+                throw OutOfRange(type, token);
+            }
+
+            return;
+        }
+
+        if (type == typeof(long))
+        {
+            if (value < long.MinValue || value > long.MaxValue)
+            {
+                throw OutOfRange(type, token);
+            }
+
+            return;
+        }
+
+        if (value < int.MinValue || value > int.MaxValue || !Enum.IsDefined(type, (int)value))
+        {
+            throw UndefinedEnum(type, token);
         }
     }
 
@@ -120,16 +221,13 @@ public sealed class SettingsKey<T> : SettingsKey
         new(SettingsFailure.InvalidValue,
             $"Setting '{Name}' must be a {Nullable.GetUnderlyingType(typeof(T))?.Name ?? typeof(T).Name}, not {token.Type}.");
 
-    private static bool IsDefinedEnum(Type type, JToken token)
-    {
-        if (token.Type != JTokenType.Integer)
-        {
-            return false;
-        }
+    private SettingsException OutOfRange(Type type, JToken token) =>
+        new(SettingsFailure.InvalidValue,
+            $"Setting '{Name}' value {token} is outside the {type.Name} range.");
 
-        var value = token.Value<long>();
-        return value is >= int.MinValue and <= int.MaxValue && Enum.IsDefined(type, (int)value);
-    }
+    private SettingsException UndefinedEnum(Type type, JToken token) =>
+        new(SettingsFailure.InvalidValue,
+            $"Setting '{Name}' value {token} is not a defined {type.Name} value.");
 }
 
 /// <summary>

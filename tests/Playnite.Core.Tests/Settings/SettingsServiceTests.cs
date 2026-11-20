@@ -236,6 +236,156 @@ public sealed class SettingsServiceTests : IDisposable
         Assert.Contains("StartInFullscreen", exception.Message);
     }
 
+    [Theory]
+    [InlineData("2147483648")]           // int.MaxValue + 1, still a JSON long
+    [InlineData("-2147483649")]          // int.MinValue - 1
+    [InlineData("9223372036854775807")]  // long.MaxValue
+    [InlineData("9223372036854775808")]  // long.MaxValue + 1
+    [InlineData("-9223372036854775809")] // long.MinValue - 1
+    public async Task Out_of_range_integer_is_rejected_at_load_with_the_key_name(string value)
+    {
+        var archived = $$"""{"Version":{{value}}}""";
+        var storage = new FakeStorage
+        {
+            Contents = Encoding.UTF8.GetBytes(Envelope(archived, "{}", Encoding.UTF8.GetBytes(archived))),
+        };
+        using var service = new PlayniteSettingsService(storage);
+
+        var exception = await Assert.ThrowsAsync<SettingsException>(() => service.LoadAsync());
+
+        Assert.Equal(SettingsFailure.InvalidValue, exception.Failure);
+        Assert.Contains("Version", exception.Message);
+    }
+
+    [Fact]
+    public async Task Out_of_range_integer_in_legacy_is_rejected_at_load()
+    {
+        var archived = """{"Version":2147483648}""";
+        var storage = new FakeStorage
+        {
+            Contents = Encoding.UTF8.GetBytes(Envelope("{}", archived, Encoding.UTF8.GetBytes(archived))),
+        };
+        using var service = new PlayniteSettingsService(storage);
+
+        var exception = await Assert.ThrowsAsync<SettingsException>(() => service.LoadAsync());
+
+        Assert.Equal(SettingsFailure.InvalidValue, exception.Failure);
+        Assert.Contains("Version", exception.Message);
+    }
+
+    [Theory]
+    [InlineData("2147483647", 2147483647)]
+    [InlineData("-2147483648", -2147483648)]
+    public async Task Int_boundary_values_are_accepted_and_read_exactly(string value, int expected)
+    {
+        var archived = $$"""{"Version":{{value}}}""";
+        var storage = new FakeStorage
+        {
+            Contents = Encoding.UTF8.GetBytes(Envelope(archived, "{}", Encoding.UTF8.GetBytes(archived))),
+        };
+        using var service = new PlayniteSettingsService(storage);
+
+        var snapshot = await service.LoadAsync();
+
+        Assert.Equal(expected, snapshot.Get(PlayniteSettingsKeys.Version));
+    }
+
+    [Theory]
+    [InlineData("9223372036854775807", long.MaxValue)]
+    [InlineData("-9223372036854775808", long.MinValue)]
+    public async Task Long_boundary_values_read_exactly_through_a_long_key(string value, long expected)
+    {
+        var archived = $$"""{"UnmodeledLong":{{value}}}""";
+        var storage = new FakeStorage
+        {
+            Contents = Encoding.UTF8.GetBytes(Envelope(archived, "{}", Encoding.UTF8.GetBytes(archived))),
+        };
+        using var service = new PlayniteSettingsService(storage);
+
+        var snapshot = await service.LoadAsync();
+
+        Assert.Equal(expected, snapshot.Get(new SettingsKey<long>("UnmodeledLong", 0)));
+    }
+
+    [Theory]
+    [InlineData("9223372036854775808")]
+    [InlineData("-9223372036854775809")]
+    public async Task Out_of_range_long_read_is_a_typed_error_not_an_overflow(string value)
+    {
+        var archived = $$"""{"UnmodeledLong":{{value}}}""";
+        var storage = new FakeStorage
+        {
+            Contents = Encoding.UTF8.GetBytes(Envelope(archived, "{}", Encoding.UTF8.GetBytes(archived))),
+        };
+        using var service = new PlayniteSettingsService(storage);
+        var snapshot = await service.LoadAsync();
+
+        var exception = Assert.Throws<SettingsException>(
+            () => snapshot.Get(new SettingsKey<long>("UnmodeledLong", 0)));
+
+        Assert.Equal(SettingsFailure.InvalidValue, exception.Failure);
+        Assert.Contains("UnmodeledLong", exception.Message);
+    }
+
+    [Theory]
+    [InlineData("\"7\"")]
+    [InlineData("7.5")]
+    [InlineData("2147483647.0")]
+    [InlineData("1e400")]
+    [InlineData("true")]
+    [InlineData("null")]
+    [InlineData("[]")]
+    [InlineData("{}")]
+    public async Task Malformed_typed_values_are_rejected_at_load_with_the_key_name(string value)
+    {
+        var archived = $$"""{"Version":{{value}}}""";
+        var storage = new FakeStorage
+        {
+            Contents = Encoding.UTF8.GetBytes(Envelope(archived, "{}", Encoding.UTF8.GetBytes(archived))),
+        };
+        using var service = new PlayniteSettingsService(storage);
+
+        var exception = await Assert.ThrowsAsync<SettingsException>(() => service.LoadAsync());
+
+        Assert.Equal(SettingsFailure.InvalidValue, exception.Failure);
+        Assert.Contains("Version", exception.Message);
+    }
+
+    [Theory]
+    [InlineData("2147483648")]
+    [InlineData("3")]
+    public async Task Out_of_range_enum_is_rejected_at_load_with_the_key_name(string value)
+    {
+        var archived = $$"""{"AutoBackupFrequency":{{value}}}""";
+        var storage = new FakeStorage
+        {
+            Contents = Encoding.UTF8.GetBytes(Envelope(archived, "{}", Encoding.UTF8.GetBytes(archived))),
+        };
+        using var service = new PlayniteSettingsService(storage);
+
+        var exception = await Assert.ThrowsAsync<SettingsException>(() => service.LoadAsync());
+
+        Assert.Equal(SettingsFailure.InvalidValue, exception.Failure);
+        Assert.Contains("AutoBackupFrequency", exception.Message);
+    }
+
+    [Theory]
+    [InlineData("2147483648")]
+    [InlineData("9223372036854775808")]
+    public async Task Out_of_range_schema_version_is_unsupported_not_an_overflow(string value)
+    {
+        var storage = new FakeStorage
+        {
+            Contents = Encoding.UTF8.GetBytes(
+                $$$"""{"schemaVersion":{{{value}}},"settings":{},"legacy":{},"settingsUtf8":"e30=","report":{}}"""),
+        };
+        using var service = new PlayniteSettingsService(storage);
+
+        var exception = await Assert.ThrowsAsync<SettingsException>(() => service.LoadAsync());
+
+        Assert.Equal(SettingsFailure.UnsupportedSchema, exception.Failure);
+    }
+
     [Fact]
     public async Task Unknown_property_name_is_not_written_into_settings()
     {

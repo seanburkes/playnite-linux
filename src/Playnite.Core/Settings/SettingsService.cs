@@ -383,10 +383,10 @@ public sealed class PlayniteSettingsService : IDisposable
                 "The settings schemaVersion is not an integer.");
         }
 
-        if (version.Value.Value<int>() != 1)
+        if (!SettingsKey.TryGetInteger(version.Value, out var schemaVersion) || schemaVersion != 1)
         {
             throw new SettingsException(SettingsFailure.UnsupportedSchema,
-                $"Unsupported settings schema version {version.Value.Value<int>()}.");
+                $"Unsupported settings schema version {version.Value}.");
         }
 
         if (envelope.Property("settings", StringComparison.Ordinal)?.Value is not JObject settings)
