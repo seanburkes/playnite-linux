@@ -71,8 +71,8 @@ Phase 6 (Core services and SDK v7) is next. The acceptance record is
 
 | Metric | Value |
 | --- | ---: |
-| Ledger rows | 311 |
-| Ledger fragments | 84 |
+| Ledger rows | 312 |
+| Ledger fragments | 85 |
 
 ## Units
 
@@ -138,7 +138,7 @@ Phase 6 (Core services and SDK v7) is next. The acceptance record is
 | p3-fuzz-ds | W3 | leaves | Bounded serialisation fuzz target and CI gate | done | `units/p3-fuzz-ds.*`; 7 ledger rows |
 | p3-loc-coverage-ds | W3 | leaves | Localisation coverage and placeholder validation | done | `units/p3-loc-coverage-ds.*`; 6 ledger rows |
 | p4-001 | W4 | data | SQLite schema/repositories | done | `units/p4-001.*`; 6 ledger rows |
-| p4-002 | W4 | data | v10 LiteDB importer | done | `units/p4-002.*`; 5 ledger rows |
+| p4-002 | W4 | data | v10 LiteDB importer | done | `units/p4-002.*`; 6 ledger rows |
 | p4-003 | W4 | data | Atomic swap/rollback | done | `units/p4-003.*`; 11 ledger rows |
 | p4-004 | W4 | data | Settings migration | done | `units/p4-004.*`; 5 ledger rows |
 | p4-005 | W4 | data | Asset copy/hash | done | `units/p4-005.*`; 11 ledger rows |
