@@ -1,2 +1,2 @@
 id	wave	area	unit	depends	status	owner	oracle	test	notes
-p6-004	W6	sdk	SDK v7 contracts	p3-004	todo	sdk	api-compat	test:sdk	surface parity
+p6-004	W6	core	Settings service	p6-001,p4-004	done	core	golden:settings; tests/golden/settings; p4-004 envelope	SettingsServiceTests	UI-free PlayniteSettingsService over the p4-004 migration envelope: typed read/update with documented v10 defaults, envelope validation through SettingsMigration.ExportV10, explicit MigrateFromV10Async, unknown/legacy preservation, Changed subscription, and sibling-temp atomic writes with an unchanged file on failure. Raw v10 configs are refused until explicitly migrated; corrupt or unsupported files never overwrite.
