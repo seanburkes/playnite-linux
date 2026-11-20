@@ -16,16 +16,18 @@ Review-only: no product change was authored by this review.
 | PR state | open, **not draft**, `mergeStateStatus: CLEAN`, `oracle-change` label present, 8/8 checks pass |
 | CI | run [44830738130](https://github.com/seanburkes/playnite-linux/actions/runs/44830738130) on `7241628` success; run [44830148388](https://github.com/seanburkes/playnite-linux/actions/runs/44830148388) on `850e50f` success |
 
-The reviewed tree is the PR head; the diff digest reproduces exactly:
+The reviewed tree is the PR head. Commands below were run from the repository root;
+`<proof>` and `<sdk>` stand for the local proof directory and the .NET SDK 11.0.100 directory.
+The diff digest reproduces exactly:
 
 ```console
-$ sha256sum /home/sean/src/firstmate/data/p6-208/candidate.diff
+$ sha256sum data/p6-208/candidate.diff
 acdd776e77b33edad844ebc59ccbbe64de6011441f82457f424f4d609cd8511d  .../candidate.diff
 
-$ git -C /home/sean/.treehouse/playnite-linux-4a47e8/2/playnite-linux diff 226739b37eef68cc50541a34a8120169864d24ae 7241628fe70f3970096cebb3da816101b75efb5b | sha256sum
+$ git diff 226739b37eef68cc50541a34a8120169864d24ae 7241628fe70f3970096cebb3da816101b75efb5b | sha256sum
 acdd776e77b33edad844ebc59ccbbe64de6011441f82457f424f4d609cd8511d  -
 
-$ git -C /home/sean/.treehouse/playnite-linux-4a47e8/2/playnite-linux diff --shortstat 226739b..7241628
+$ git diff --shortstat 226739b..7241628
  13 files changed, 4258 insertions(+), 8 deletions(-)
 ```
 
@@ -94,7 +96,7 @@ Build succeeded.
 ```
 
 The analyzer is genuinely enforcing both directions, proved on a throwaway copy outside the
-worktree (`/tmp/opencode/p1-review-ca-clone`, same sources and PublicAPI text):
+worktree (same sources and PublicAPI text):
 
 ```console
 # remove the IGameView type declaration from PublicAPI.Unshipped.txt
@@ -115,7 +117,7 @@ Regeneration produces no diff:
 $ dotnet format analyzers src/Playnite.SDK.Abstractions/Playnite.SDK.Abstractions.csproj \
     --diagnostics RS0016 RS0017 --severity error
 Formatted 0 of 24 files.
-$ sha256sum -c /tmp/opencode/publicapi-before.sha
+$ sha256sum -c <scratch>/publicapi-before.sha
 src/.../PublicAPI.Shipped.txt: OK
 src/.../PublicAPI.Unshipped.txt: OK
 ```
@@ -184,9 +186,9 @@ Right side is a scratch compilation of the PR head's
 `Microsoft.DotNet.ApiCompat.Tool 11.0.100` (`11.0.100+297acf93…`).
 
 ```console
-$ apicompat --left /home/sean/src/firstmate/data/p1-review-ca/proof/v6-extract/lib/net462/Playnite.SDK.dll \
-    --right /home/sean/src/firstmate/data/p1-review-ca/proof/compat/bin/Release/net11.0/Playnite.SDK.dll \
-    --roslyn-assemblies-path /home/sean/.local/share/mise/dotnet-root/sdk/11.0.100/Roslyn/bincore
+$ apicompat --left <proof>/v6-extract/lib/net462/Playnite.SDK.dll \
+    --right <proof>/compat/bin/Release/net11.0/Playnite.SDK.dll \
+    --roslyn-assemblies-path <sdk>/Roslyn/bincore
 EXIT=1
 $ grep -c '^CP' run.log
 306
@@ -230,8 +232,8 @@ the two assembly paths before replaying. As-is it does not replay (exit 1), whic
 by that header. After substitution:
 
 ```console
-$ apicompat --left /home/sean/src/firstmate/data/p1-review-ca/proof/v6-extract/lib/net462/Playnite.SDK.dll --right /home/sean/src/firstmate/data/p1-review-ca/proof/compat/bin/Release/net11.0/Playnite.SDK.dll \
-    --roslyn-assemblies-path /home/sean/.local/share/mise/dotnet-root/sdk/11.0.100/Roslyn/bincore \
+$ apicompat --left <proof>/v6-extract/lib/net462/Playnite.SDK.dll --right <proof>/compat/bin/Release/net11.0/Playnite.SDK.dll \
+    --roslyn-assemblies-path <sdk>/Roslyn/bincore \
     --suppression-file substituted-suppressions.xml
 APICompat ran successfully without finding any breaking changes.
 EXIT=0
