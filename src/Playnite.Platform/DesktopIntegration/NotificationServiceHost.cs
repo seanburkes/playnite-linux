@@ -1,4 +1,5 @@
 using Playnite.Core.Hosting;
+using Playnite.SDK;
 
 namespace Playnite.Platform.DesktopIntegration;
 

@@ -1,4 +1,4 @@
-namespace Playnite.Core.Hosting;
+namespace Playnite.SDK;
 
 /// <summary>
 /// Outcome of a host-backed operation. Unavailable and Failed are explicit results, not

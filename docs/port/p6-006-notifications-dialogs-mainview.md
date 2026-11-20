@@ -1,23 +1,36 @@
 # p6-006 — notifications, dialogs and main-view API
 
-`Playnite.Core.Hosting` is the headless, host-facing API layer for the surfaces the shell and
-the CLI need: notifications, modal dialogs and main-view queries. Every surface is an interface
-over an injectable host, so a fake host drives the contract tests and the future Avalonia shell
-supplies the real one. The layer references no UI toolkit: the dependency graph is
+`Playnite.Core.Hosting` holds the concrete headless services for the surfaces the shell and the
+CLI need: notifications, modal dialogs and main-view queries. The contracts, host seams and DTOs
+live in `Playnite.SDK.Abstractions` (`Playnite.SDK` and `Playnite.SDK.Models`), so a plugin can
+consume them with a reference to Abstractions alone. Every surface is an interface over an
+injectable host, so a fake host drives the contract tests and the future Avalonia shell supplies
+the real one. The layer references no UI toolkit: the dependency graph is
 `Playnite.Core → Playnite.SDK.Abstractions` plus the BCL. `Playnite.Platform` adapts the
 p5-007a desktop notification service without adding Avalonia to the graph.
 
-## Why Core, not Abstractions
+## Where the contracts live
 
-The v10 interface names and shapes are retained where they map cleanly, but this is the headless
-v11 surface, not a byte-for-byte v10 clone: sort direction is `bool SortDescending`, grouping is
-Core `LibraryGroupBy`, and `SortOrder` is the Core stored-field subset. The full v10 key sets and
-the UI extension points are p6-008/Phase 7 work. The public Abstractions files
-(`PublicAPI.Shipped.txt`, `PublicAPI.Unshipped.txt`, `api-baseline/`) are protected by the oracle
-gate, so `p6-008` must move this surface into Abstractions and freeze it with the reviewed
-ApiCompat report. Putting the service surface in Core now keeps this unit additive. `IMainViewAPI`
-also needs the Core `Game` model, which Abstractions may not reference. The
-`sdk-002`/`sdk-003`/`sdk-004` parity rows stay `planned` until that move.
+`INotificationsAPI`, `IDialogsFactory`, `IMainViewAPI`, their `I*Host` seams and every
+request/response DTO are public members of `Playnite.SDK.Abstractions`. They were moved out of
+`Playnite.Core` in this unit, not redefined: the v10 names and shapes are retained where they map
+cleanly, but this is the headless v11 surface, not a byte-for-byte v10 clone. `SortOrder` and
+`LibraryGroupBy` are declared in `Playnite.SDK.Models` so `MainViewState` keeps every shell
+field; Core keeps its own query enums and `MainViewEnumAdapter` maps between the two.
+`IMainViewAPI` no longer names the Core `Game` type: it returns
+`Playnite.SDK.Models.IGameView`, and `GameViewAdapter` projects a
+`Playnite.Core.Models.Game` onto it, leaving the Core model untouched. The concrete services
+(`NotificationsApi`,
+`DialogsFactory`, `MainViewApi`, `HostApis`) stay in Core because they are host implementations,
+not contracts.
+
+`PublicAPI.Unshipped.txt` declares the moved surface; `PublicAPI.Shipped.txt` and the api-baseline
+are unchanged because the move is a compatible addition to the assembly. The reviewed
+`p6-006-apicompat-*` files record the v6→v7 comparison for the moved members: 98 intended
+`CP0002`/`CP0006`/`CP0009` breaks, each classified `adapted`, with the suppression file replaying
+to a clean ApiCompat exit 0. The complete 62-type freeze and the remaining v6 surface stay with
+p6-008.
+
 
 ## Notification API
 
@@ -65,11 +78,15 @@ button/image sets.
 ## Main-view API
 
 `IMainViewAPI` exposes the query data from v10 `IMainViewAPI` that does not need an Avalonia
-type: active desktop and fullscreen views, a Core `SortOrder` plus `bool SortDescending`, a Core
-`LibraryGroupBy`, the current selection and the games visible in the library view. `IMainViewHost`
-supplies the snapshot; the API copies the lists so a host cannot mutate an answer after it
-returns. Missing host, a null state and a null game list are `Unavailable`/`Failed` results, never
-startup exceptions.
+type: active desktop and fullscreen views, an abstraction-level `SortOrder` plus
+`bool SortDescending`, an abstraction-level `LibraryGroupBy`, the current selection and the games
+visible in the library view. Games are exposed as `IGameView` (`Id`, `Name`), so the contract has
+no dependency on the Core database model; `GameViewAdapter` wraps a Core game and
+`MainViewEnumAdapter` maps the SDK sort and grouping values to the Core enums, so no
+foreign-owned Core file changes. `IMainViewHost` supplies the snapshot and the API copies
+the lists so a host cannot mutate an answer after it returns. Missing host, a null state and a
+null game list are `Unavailable`/`Failed` results, never startup exceptions.
+
 
 ## Degraded startup
 
@@ -92,12 +109,22 @@ explicitly degraded surfaces.
 | `NotificationServiceHostTests` | p5-007a mapping: Info/Normal, Error/Critical, delivered and transport-duplicate presentations, unavailable detail, dismissal, cancellation. |
 
 The fake hosts are in `Fakes.cs`; no test needs a desktop session, D-Bus, a window or a dialog.
+`tests/Playnite.Core.Tests/SdkContracts/SdkHostContractTests` adds one compile-time fake for
+`IGameView`, `INotificationHost`, `INotificationsAPI`, `IDialogHost`, `IDialogsFactory`,
+`IMainViewHost` and `IMainViewAPI`, exercising every member through the real Core service, and
+covers `GameViewAdapter` plus the Core↔SDK enum mapping in both directions.
+`tests/Playnite.Architecture.Tests/SdkHostSurfaceTests` asserts the moved types live in the
+Abstractions assembly and compiles a sample plugin against that assembly alone (no Core, no
+Avalonia), including the reshaped `IGameView` main-view surface.
 
 ## Verification
 
-- `dotnet build tests/Playnite.Core.Tests -c Release -warnaserror`: 0 warnings, 0 errors.
-- `dotnet test tests/Playnite.Core.Tests --filter-namespace Playnite.Core.Tests.Hosting`:
-  67 passed, 0 failed, 0 skipped.
-- Full `Playnite.Core.Tests`: 2,876 passed, 0 failed, 0 skipped.
-- `Playnite.Architecture.Tests`: 199 passed, 0 failed, 0 skipped (banned constructs, SDK
+- `dotnet build src/Playnite.SDK.Abstractions -c Release -warnaserror`: 0 warnings, 0 errors.
+- `dotnet build` on Core, Platform, Cli, Core.Tests and Architecture.Tests: 0 warnings, 0 errors.
+- Full `Playnite.Core.Tests`: 3,047 passed, 0 failed, 0 skipped.
+- `Playnite.Architecture.Tests`: 201 passed, 0 failed, 0 skipped (banned constructs, SDK
   boundary and dependency graph unchanged).
+- ApiCompat v6→v7: 308 differences (210 `CP0001`, 82 `CP0002`, 15 `CP0006`, 1 `CP0009`),
+  classified in `p6-006-apicompat-classification.tsv`; the 98 moved-member suppressions replay
+  to exit 0. The final linux-ci run is cited in the unit ledger fragment and the PR.
+
