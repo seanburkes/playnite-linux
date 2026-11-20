@@ -112,10 +112,14 @@ public sealed class SteamDiscoverySource : ISteamSyncDiscovery
             }
 
             // An available library that declares no apps and holds no manifest has nothing to
-            // prove it was enumerated completely; it may be a block Steam just emptied.
+            // prove it was enumerated completely. A missing app set is unknown; a present but
+            // empty one is an emptied block. Both suppress removal for the same reason, but the
+            // reason names what the library file actually said.
             if (library.Apps is not { Count: > 0 } && files.Length == 0)
             {
-                issues.Add(new(SteamSyncReasons.LibraryAppsEmptied, null, library.Index));
+                issues.Add(new(library.Apps is null
+                    ? SteamSyncReasons.LibraryAppsUnknown
+                    : SteamSyncReasons.LibraryAppsEmptied, null, library.Index));
                 complete = false;
             }
 

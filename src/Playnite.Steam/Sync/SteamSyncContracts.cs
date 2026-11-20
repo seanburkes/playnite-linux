@@ -44,8 +44,8 @@ public static class SteamSyncReasons
     public const string LibraryEntryDropped = "library-entry-dropped";
 
     /// <summary>
-    /// An unavailable library did not declare its app set, so the apps that lived there are
-    /// unknown rather than absent.
+    /// A library did not declare its app set and nothing was enumerated there either, so the apps
+    /// that lived there are unknown rather than absent.
     /// </summary>
     public const string LibraryAppsUnknown = "library-apps-unknown";
 

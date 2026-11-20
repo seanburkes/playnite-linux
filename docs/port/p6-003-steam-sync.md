@@ -80,7 +80,7 @@ not known to be complete:
 | --- | --- |
 | `library-file-rejected` | The library file was not parsed, so the declared library list is unknown. p5-002 names a copy as selected even when the parser rejects it; the root library is still enumerated, so its apps are observed while every other library may be missing. |
 | `library-entry-dropped` | The parser dropped a declared entry (its path is not absolute), so neither its path nor its declared apps reached discovery. |
-| `library-apps-unknown` | An unavailable library did not declare its app set, so the apps that lived there are unknown rather than absent. |
+| `library-apps-unknown` | A library did not declare its app set and nothing was enumerated there either, so the apps that lived there are unknown rather than absent. |
 | `library-apps-emptied` | A declared library's app set is empty and nothing was enumerated there either, so an emptied block cannot be told apart from a lost one. |
 
 A run that suppresses removal still adds and updates every observed app; it reports
@@ -141,9 +141,11 @@ could not be enumerated) reports `Reconciled = false` together with an issue nam
 | `SteamLibrarySyncIntegrationTests.Real_corpus_syncs_four_manifests_reports_every_other_declared_app_and_is_idempotent` | The redacted real corpus: 4 manifest apps added, every other declared app reported, unavailable external library preserved, second sync zero changes. |
 | `SteamLibrarySyncIntegrationTests.Truncated_library_file_suppresses_removal_and_reports_a_degraded_sync` | A truncated library file hides a second library: `Removed = 0`, the unobserved app stays installed, `Reconciled = false` and `library-file-rejected`. |
 | `SteamLibrarySyncIntegrationTests.Dropped_library_entry_suppresses_removal_and_reports_a_degraded_sync` | A declared entry the parser drops leaves its app unobserved: `Removed = 0` and `library-entry-dropped`. |
-| `SteamLibrarySyncIntegrationTests.Emptied_library_app_set_suppresses_removal_and_reports_a_degraded_sync` | A detached library whose app set was emptied: `Removed = 0` and `library-apps-emptied`. |
+| `SteamLibrarySyncIntegrationTests.Emptied_library_app_set_suppresses_removal_and_reports_a_degraded_sync` | A detached library whose app set was emptied: the library is unavailable, `Removed = 0` and `library-apps-emptied`. |
 | `SteamLibrarySyncIntegrationTests.Emptied_app_set_on_a_reachable_library_suppresses_removal` | An emptied declaration on a reachable library with no manifest is still no proof: `Removed = 0` and `library-apps-emptied`. |
+| `SteamLibrarySyncIntegrationTests.Undeclared_app_set_on_a_reachable_library_suppresses_removal` | A reachable library whose app set is no longer declared: `Removed = 0` and `library-apps-unknown`. |
 | `SteamLibrarySyncIntegrationTests.Unavailable_library_without_a_declared_app_set_suppresses_removal` | A detached library that declares no app set: `Removed = 0` and `library-apps-unknown`. |
+| `SteamLibrarySyncIntegrationTests.A_complete_discovery_that_projects_no_app_and_no_skip_suppresses_removal` | A clean parse that projects no app and no skip: `CanReconcile = false` and `Removed = 0`, so a stored game stays installed. |
 
 The integration test copies `tests/fixtures/steam/real` into a temporary home, verifies every
 `SHA256SUMS` entry, remaps the two recorded library paths and runs the production discovery
