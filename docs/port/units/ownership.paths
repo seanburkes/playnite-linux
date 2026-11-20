@@ -284,8 +284,10 @@ tests/Playnite.Core.Tests/Integration/PlayniteUriTests.cs	p5-005a	785b89200666ab
 tests/Playnite.Core.Tests/Integration/ProtocolHandlerTests.cs	p5-005a	785b89200666ab63f07ca2fd1af4e757c3ef1e36	pull/119
 tests/Playnite.Core.Tests/Integration/SingleInstanceTests.cs	p5-005a	785b89200666ab63f07ca2fd1af4e757c3ef1e36	pull/119
 tests/Playnite.Core.Tests/Integration/XdgDirectoriesTests.cs	p5-005a	785b89200666ab63f07ca2fd1af4e757c3ef1e36	pull/119
+tests/Playnite.Core.Tests/Library/LibraryCliPagingEqualityTests.cs	p6-001	5b968b956e789c8a454b851e4189677795186f6c	pull/172
 tests/Playnite.Core.Tests/Library/LibraryServiceContractTests.cs	p6-001	7e6d39dd85c1ceec4bde01dfc852516defae3ec8	pull/161
 tests/Playnite.Core.Tests/Library/LibraryServiceImportTests.cs	p6-001	7e6d39dd85c1ceec4bde01dfc852516defae3ec8	pull/161
+tests/Playnite.Core.Tests/Library/LibraryServicePagingTests.cs	p6-001	5b968b956e789c8a454b851e4189677795186f6c	pull/172
 tests/Playnite.Core.Tests/Library/PagedLibraryReaderTests.cs	p6-012	e6f7c4fed225c276545b3756476a3f4b8c8206eb	pull/168
 tests/Playnite.Core.Tests/LinuxEnvironmentTests.cs	*	d6401f1f07c69474d0ce395797ab694bedf019e7	pull/68
 tests/Playnite.Core.Tests/LinuxPathsTests.cs	p5-002	a37890f33110c70b8411bac4457d16e0aa41822f	pull/116
