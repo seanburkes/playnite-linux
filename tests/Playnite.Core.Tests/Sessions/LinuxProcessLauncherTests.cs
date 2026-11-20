@@ -293,8 +293,9 @@ public sealed class LinuxProcessLauncherTests
             "if pid==0:\n" +
             "    time.sleep(30)\n" +
             "    os._exit(0)\n" +
-            "with open(sys.argv[1],'w') as handle:\n" +
+            "with open(sys.argv[1]+'.tmp','w') as handle:\n" +
             "    handle.write(str(pid))\n" +
+            "os.replace(sys.argv[1]+'.tmp', sys.argv[1])\n" +
             "time.sleep(2)\n" +
             "os._exit(0)\n";
         ProcessIdentity childIdentity = default;
@@ -303,27 +304,22 @@ public sealed class LinuxProcessLauncherTests
         {
             var process = await launcher.StartAsync(
                 new LaunchRequest(python, ["-c", script, pidFile]), CancellationToken.None);
-            var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(5);
-            var childPid = 0;
-            while (DateTime.UtcNow < deadline)
-            {
-                if (File.Exists(pidFile)
-                    && int.TryParse(File.ReadAllText(pidFile), System.Globalization.NumberStyles.None,
-                        System.Globalization.CultureInfo.InvariantCulture, out childPid)
-                    && childPid > 0)
-                {
-                    break;
-                }
-
-                await Task.Delay(10);
-            }
-
-            Assert.True(childPid > 0, "The child PID file was not written.");
+            var childPid = await ReadPublishedPidAsync(pidFile, "The child PID file was not written.");
             var childStat = await new LinuxProcStatReader().ReadAsync(childPid, CancellationToken.None);
             Assert.NotNull(childStat);
             childIdentity = new ProcessIdentity(childPid, childStat.Value.StartTimeTicks, childStat.Value.ProcessGroupId);
 
-            await using var tracker = new GameSessionTracker(launcher, new LinuxProcessObserver());
+            var observer = RootExitObserver(process.Identity);
+            var delay = new GatedSessionDelay();
+            var applied = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            delay.OnDelay = _ =>
+            {
+                if (observer.Signal.Task.IsCompleted)
+                {
+                    applied.TrySetResult();
+                }
+            };
+            await using var tracker = new GameSessionTracker(launcher, observer, delay);
             using var recorder = new SessionEventRecorder(tracker);
             var tracking = tracker.TrackAsync(
                 process,
@@ -331,12 +327,7 @@ public sealed class LinuxProcessLauncherTests
                 CancellationToken.None);
             await recorder.WaitForAsync(change => change.State == GameSessionState.Running);
 
-            while (await launcher.IsRunningAsync(process, CancellationToken.None))
-            {
-                await Task.Delay(10);
-            }
-
-            await Task.Delay(100);
+            await WaitAsync(applied.Task, "The tracker never applied an observation after the root exited.");
             Assert.Equal(GameSessionState.Running, tracker.State);
             Assert.True(await IdentityIsRunningAsync(childIdentity), "The reparented child did not survive the root exit.");
             Assert.True(await tracker.StopAsync(CancellationToken.None));
@@ -381,8 +372,9 @@ public sealed class LinuxProcessLauncherTests
             "if pid==0:\n" +
             "    time.sleep(30)\n" +
             "    os._exit(0)\n" +
-            "with open(sys.argv[1],'w') as handle:\n" +
+            "with open(sys.argv[1]+'.tmp','w') as handle:\n" +
             "    handle.write(str(pid))\n" +
+            "os.replace(sys.argv[1]+'.tmp', sys.argv[1])\n" +
             "time.sleep(0.3)\n" +
             "os._exit(0)\n";
         ProcessIdentity childIdentity = default;
@@ -391,29 +383,11 @@ public sealed class LinuxProcessLauncherTests
         {
             var process = await launcher.StartAsync(
                 new LaunchRequest(python, ["-c", script, pidFile]), CancellationToken.None);
-            var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(5);
-            var childPid = 0;
-            while (DateTime.UtcNow < deadline)
-            {
-                if (File.Exists(pidFile)
-                    && int.TryParse(File.ReadAllText(pidFile), System.Globalization.NumberStyles.None,
-                        System.Globalization.CultureInfo.InvariantCulture, out childPid)
-                    && childPid > 0)
-                {
-                    break;
-                }
-
-                await Task.Delay(10);
-            }
-
-            Assert.True(childPid > 0, "The child PID file was not written.");
+            var childPid = await ReadPublishedPidAsync(pidFile, "The child PID file was not written.");
             var childStat = await new LinuxProcStatReader().ReadAsync(childPid, CancellationToken.None);
             Assert.NotNull(childStat);
             childIdentity = new ProcessIdentity(childPid, childStat.Value.StartTimeTicks, childStat.Value.ProcessGroupId);
-            while (await launcher.IsRunningAsync(process, CancellationToken.None))
-            {
-                await Task.Delay(10);
-            }
+            await WaitForProcessExitAsync(process.Identity);
 
             // The root is gone, so the child has been reparented. It must still belong to the
             // dedicated group created for the launch; that is what keeps the never-observed
@@ -424,14 +398,24 @@ public sealed class LinuxProcessLauncherTests
             Assert.Equal(process.Identity.ProcessGroupId, reparented.Value.ProcessGroupId);
             Assert.True(await IdentityIsRunningAsync(childIdentity), "The reparented group child is not running.");
 
-            await using var tracker = new GameSessionTracker(launcher, new LinuxProcessObserver());
+            var observer = RootExitObserver(process.Identity);
+            var delay = new GatedSessionDelay();
+            var applied = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            delay.OnDelay = _ =>
+            {
+                if (observer.Signal.Task.IsCompleted)
+                {
+                    applied.TrySetResult();
+                }
+            };
+            await using var tracker = new GameSessionTracker(launcher, observer, delay);
             using var recorder = new SessionEventRecorder(tracker);
             var tracking = tracker.TrackAsync(
                 process,
                 new SessionOptions { PollInterval = TimeSpan.FromMilliseconds(10) },
                 CancellationToken.None);
             await recorder.WaitForAsync(change => change.State == GameSessionState.Running);
-            await Task.Delay(50);
+            await WaitAsync(applied.Task, "The tracker never applied the root-exit observation.");
             Assert.Equal(GameSessionState.Running, tracker.State);
             Assert.True(await IdentityIsRunningAsync(childIdentity), "The reparented group child is not running.");
             Assert.True(await tracker.StopAsync(CancellationToken.None));
@@ -455,15 +439,20 @@ public sealed class LinuxProcessLauncherTests
         const string python = "/usr/bin/python3";
         Assert.True(File.Exists(python), "The process-group test requires python3.");
         var pidFile = Path.Combine(Path.GetTempPath(), $"p5-004-escape-{Path.GetRandomFileName()}");
+        var readyFile = Path.Combine(Path.GetTempPath(), $"p5-004-escape-ready-{Path.GetRandomFileName()}");
         const string script =
             "import os,sys,time\n" +
             "pid=os.fork()\n" +
             "if pid==0:\n" +
             "    os.setsid()\n" +
+            "    with open(sys.argv[2]+'.tmp','w') as handle:\n" +
+            "        handle.write(str(os.getpid()))\n" +
+            "    os.replace(sys.argv[2]+'.tmp', sys.argv[2])\n" +
             "    time.sleep(30)\n" +
             "    os._exit(0)\n" +
-            "with open(sys.argv[1],'w') as handle:\n" +
+            "with open(sys.argv[1]+'.tmp','w') as handle:\n" +
             "    handle.write(str(pid))\n" +
+            "os.replace(sys.argv[1]+'.tmp', sys.argv[1])\n" +
             "time.sleep(2)\n" +
             "os._exit(0)\n";
         ProcessIdentity childIdentity = default;
@@ -471,37 +460,26 @@ public sealed class LinuxProcessLauncherTests
         try
         {
             var process = await launcher.StartAsync(
-                new LaunchRequest(python, ["-c", script, pidFile]), CancellationToken.None);
-            var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(5);
-            var childPid = 0;
-            while (DateTime.UtcNow < deadline)
+                new LaunchRequest(python, ["-c", script, pidFile, readyFile]), CancellationToken.None);
+            var childPid = await ReadPublishedPidAsync(pidFile, "The escaping child PID file was not written.");
+            var readyPid = await ReadPublishedPidAsync(readyFile, "The child never entered its own session.");
+            Assert.Equal(childPid, readyPid);
+            var stat = await new LinuxProcStatReader().ReadAsync(childPid, CancellationToken.None);
+            Assert.NotNull(stat);
+            childIdentity = new ProcessIdentity(childPid, stat.Value.StartTimeTicks, stat.Value.ProcessGroupId);
+            Assert.Equal(childPid, childIdentity.ProcessGroupId);
+
+            var observer = RootExitObserver(process.Identity);
+            var delay = new GatedSessionDelay();
+            var applied = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            delay.OnDelay = _ =>
             {
-                if (File.Exists(pidFile)
-                    && int.TryParse(File.ReadAllText(pidFile), System.Globalization.NumberStyles.None,
-                        System.Globalization.CultureInfo.InvariantCulture, out childPid)
-                    && childPid > 0)
+                if (observer.Signal.Task.IsCompleted)
                 {
-                    break;
+                    applied.TrySetResult();
                 }
-
-                await Task.Delay(10);
-            }
-
-            Assert.True(childPid > 0, "The escaping child PID file was not written.");
-            while (DateTime.UtcNow < deadline)
-            {
-                var stat = await new LinuxProcStatReader().ReadAsync(childPid, CancellationToken.None);
-                if (stat is { } row && row.ProcessGroupId == childPid)
-                {
-                    childIdentity = new ProcessIdentity(childPid, row.StartTimeTicks, row.ProcessGroupId);
-                    break;
-                }
-
-                await Task.Delay(10);
-            }
-
-            Assert.True(childIdentity.ProcessId == childPid, "The child never entered its own session.");
-            await using var tracker = new GameSessionTracker(launcher, new LinuxProcessObserver());
+            };
+            await using var tracker = new GameSessionTracker(launcher, observer, delay);
             using var recorder = new SessionEventRecorder(tracker);
             var tracking = tracker.TrackAsync(
                 process,
@@ -509,12 +487,7 @@ public sealed class LinuxProcessLauncherTests
                 CancellationToken.None);
             await recorder.WaitForAsync(change => change.State == GameSessionState.Running);
 
-            while (await launcher.IsRunningAsync(process, CancellationToken.None))
-            {
-                await Task.Delay(10);
-            }
-
-            await Task.Delay(100);
+            await WaitAsync(applied.Task, "The tracker never applied an observation after the root exited.");
             var survivor = await Assert.ThrowsAsync<ProcessSurvivorException>(() => tracker.StopAsync(CancellationToken.None));
             Assert.Contains(survivor.Survivors, identity => identity.ProcessId == childPid);
             Assert.Equal(GameSessionState.Running, tracker.State);
@@ -531,6 +504,7 @@ public sealed class LinuxProcessLauncherTests
         finally
         {
             File.Delete(pidFile);
+            File.Delete(readyFile);
             if (childIdentity.ProcessId > 0)
             {
                 await KillIdentityAsync(childIdentity);
@@ -563,6 +537,84 @@ public sealed class LinuxProcessLauncherTests
         }
     }
 
+    private static SignallingProcessObserver RootExitObserver(ProcessIdentity root) =>
+        new(
+            new LinuxProcessObserver(),
+            snapshot => snapshot.Processes.All(entry => entry.Identity != root || !entry.IsRunning));
+
+    private static async Task WaitAsync(Task task, string failure)
+    {
+        try
+        {
+            await task.WaitAsync(TimeSpan.FromSeconds(5));
+        }
+        catch (TimeoutException)
+        {
+            Assert.Fail(failure);
+        }
+    }
+
+    private static async Task WaitForFileAsync(string path, string failure)
+    {
+        using var watcher = new FileSystemWatcher(Path.GetDirectoryName(path)!, Path.GetFileName(path));
+        var published = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        watcher.Created += (_, _) => published.TrySetResult();
+        watcher.Renamed += (_, _) => published.TrySetResult();
+        watcher.EnableRaisingEvents = true;
+        if (!File.Exists(path))
+        {
+            await WaitAsync(published.Task, failure);
+        }
+    }
+
+    private static async Task<int> ReadPublishedPidAsync(string path, string failure)
+    {
+        await WaitForFileAsync(path, failure);
+        if (!int.TryParse(
+                await File.ReadAllTextAsync(path),
+                System.Globalization.NumberStyles.None,
+                System.Globalization.CultureInfo.InvariantCulture,
+                out var pid)
+            || pid <= 0)
+        {
+            Assert.Fail(failure);
+        }
+
+        return pid;
+    }
+
+    private static async Task WaitForProcessExitAsync(ProcessIdentity identity)
+    {
+        if (!TryReadIdentity(identity.ProcessId, out var stat)
+            || stat.StartTimeTicks != identity.StartTimeTicks
+            || !stat.IsRunning)
+        {
+            return;
+        }
+
+        System.Diagnostics.Process process;
+        try
+        {
+            process = System.Diagnostics.Process.GetProcessById(identity.ProcessId);
+        }
+        catch (ArgumentException)
+        {
+            return;
+        }
+
+        using (process)
+        {
+            try
+            {
+                await process.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(5));
+            }
+            catch (TimeoutException)
+            {
+                Assert.Fail($"Process {identity.ProcessId} did not exit within 5 seconds.");
+            }
+        }
+    }
+
     private static async Task KillIdentityAsync(ProcessIdentity identity)
     {
         if (!await IdentityIsRunningAsync(identity))
@@ -591,25 +643,18 @@ public sealed class LinuxProcessLauncherTests
             && row.IsRunning;
     }
 
-    private static async Task AssertProcessGoneAsync(ProcessIdentity identity)
+    private static Task AssertProcessGoneAsync(ProcessIdentity identity)
     {
-        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(5);
-        while (DateTime.UtcNow < deadline)
+        // Every caller has already awaited a stop that verifies the tracked identities are gone,
+        // so this is a postcondition check rather than another observation wait.
+        if (TryReadIdentity(identity.ProcessId, out var stat)
+            && stat.StartTimeTicks == identity.StartTimeTicks
+            && stat.IsRunning)
         {
-            if (!TryReadIdentity(identity.ProcessId, out var stat) || stat.StartTimeTicks != identity.StartTimeTicks)
-            {
-                return;
-            }
-
-            if (!stat.IsRunning)
-            {
-                return;
-            }
-
-            await Task.Delay(10);
+            Assert.Fail($"Process {identity.ProcessId} with start ticks {identity.StartTimeTicks} survived.");
         }
 
-        Assert.Fail($"Process {identity.ProcessId} with start ticks {identity.StartTimeTicks} survived.");
+        return Task.CompletedTask;
     }
 
     private static bool TryReadIdentity(int processId, out ProcStat stat)
