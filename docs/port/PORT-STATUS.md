@@ -63,7 +63,7 @@ Phase 6 (Core services and SDK v7) is next. The acceptance record is
 | Status | Units |
 | --- | ---: |
 | deferred | 1 |
-| done | 83 |
+| done | 84 |
 | in-progress | 5 |
 | todo | 22 |
 
@@ -71,8 +71,8 @@ Phase 6 (Core services and SDK v7) is next. The acceptance record is
 
 | Metric | Value |
 | --- | ---: |
-| Ledger rows | 336 |
-| Ledger fragments | 109 |
+| Ledger rows | 337 |
+| Ledger fragments | 110 |
 
 ## Units
 
@@ -165,6 +165,7 @@ Phase 6 (Core services and SDK v7) is next. The acceptance record is
 | p6-006 | W6 | sdk | Notifications, dialogs and main-view API | done | `units/p6-006.*`; 2 ledger rows |
 | p6-007 | W6 | sdk | URI handler and HTML description service | done | `units/p6-007.*`; 3 ledger rows |
 | p6-008 | W6 | sdk | SDK Abstractions freeze and ApiCompat report | done | `units/p6-008.*`; 1 ledger rows |
+| p6-009 | W6 | sdk | Sample plugins (Hello World, library provider, metadata provider) | done | `units/p6-009.*`; 1 ledger rows |
 | p6-011 | W6 | core | CLI query surface | done | `units/p6-011.*`; 2 ledger rows |
 | p6-012 | W6 | core | Repository-level ordered paging for list/search | done | `units/p6-012.*`; 3 ledger rows |
 | p6-guard-baseline | W6 | repo | Shared SDK baseline ownership allowance | in-progress | `units/p6-guard-baseline.*`; 1 ledger rows |

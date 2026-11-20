@@ -235,6 +235,13 @@ src/Playnite.SDK.Abstractions/api-baseline/README.md	p6-007	b80847be88f268b4b72b
 src/Playnite.SDK.Abstractions/api-baseline/README.md	p6-008	98f7391ff469b72eb2a2ff40571a6cd7c791073a	pull/208
 src/Playnite.SDK/AssemblyMarker.cs	p2-001	9afd818ae8a695e921bb98f386bfceb83d0059db	pull/29
 src/Playnite.SDK/AssemblyMarker.cs	p2-002	abdb82bedd0bcadfe93c1fc6f11937c55b116b7c	pull/37
+src/Playnite.SDK/Models/GameMetadata.cs	p6-009	316a4a9da68d6379651333f8b1d4c4b1501b5db4	pull/212
+src/Playnite.SDK/Plugins/GenericPlugin.cs	p6-009	316a4a9da68d6379651333f8b1d4c4b1501b5db4	pull/212
+src/Playnite.SDK/Plugins/GetMetadataArgs.cs	p6-009	316a4a9da68d6379651333f8b1d4c4b1501b5db4	pull/212
+src/Playnite.SDK/Plugins/IPlayniteExtension.cs	p6-009	316a4a9da68d6379651333f8b1d4c4b1501b5db4	pull/212
+src/Playnite.SDK/Plugins/LibraryPlugin.cs	p6-009	316a4a9da68d6379651333f8b1d4c4b1501b5db4	pull/212
+src/Playnite.SDK/Plugins/MetadataPlugin.cs	p6-009	316a4a9da68d6379651333f8b1d4c4b1501b5db4	pull/212
+src/Playnite.SDK/Plugins/Plugin.cs	p6-009	316a4a9da68d6379651333f8b1d4c4b1501b5db4	pull/212
 src/Playnite.Steam/Artwork/ArtworkCache.cs	p5-003	22f051a92b6b5a82566fd382a04f9848c30ed756	pull/118
 src/Playnite.Steam/Artwork/ArtworkFetcher.cs	p5-003	22f051a92b6b5a82566fd382a04f9848c30ed756	pull/118
 src/Playnite.Steam/Artwork/ArtworkIdentity.cs	p5-003	74475aef9353c4a7459ca838d9c3736b1be5a189	pull/152
@@ -404,6 +411,10 @@ tests/Playnite.Core.Tests/p5-008/SteamAcceptanceSurvivorTests.cs	p5-008	71f4578b
 tests/Playnite.Core.Tests/p5-008/SteamLaunchTests.cs	p5-008	d82758baa26eecf25801e982a8fa32bfb98396c5	pull/137
 tests/Playnite.Core.Tests/p5-008/SteamProtonCommandLineTests.cs	p5-008	612e193c28b4a046a7edb7affb134865e8575f5c	pull/140
 tests/Playnite.Core.Tests/p5-008/SteamRealDiscoveryTests.cs	p5-008	1e842c075aeb3412323fcd467ca93aaaef03b8cb	pull/126
+tests/Playnite.Plugin.Tests/FakePluginHost.cs	p6-009	316a4a9da68d6379651333f8b1d4c4b1501b5db4	pull/212
+tests/Playnite.Plugin.Tests/SampleAssemblies.cs	p6-009	316a4a9da68d6379651333f8b1d4c4b1501b5db4	pull/212
+tests/Playnite.Plugin.Tests/SamplePluginBuildTests.cs	p6-009	316a4a9da68d6379651333f8b1d4c4b1501b5db4	pull/212
+tests/Playnite.Plugin.Tests/SamplePluginLoadTests.cs	p6-009	316a4a9da68d6379651333f8b1d4c4b1501b5db4	pull/212
 tests/Playnite.Smoke.Tests/HostSmokeTests.cs	p2-004	34af4f0fb6430fbc585d3b76ce85094390a26467	pull/34
 tests/Playnite.Smoke.Tests/README.md	p2-004	34af4f0fb6430fbc585d3b76ce85094390a26467	pull/34
 tests/README.md	p2-review-model	3497640ecdc76144381f168913785fe17b24fe73	pull/49
