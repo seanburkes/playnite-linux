@@ -16,8 +16,8 @@ existing contracts and are not edited by this unit.
 ## Ordering
 
 The page statement orders in SQL by the stored sort value, then the effective name
-(`COALESCE(NULLIF(SortingName, ''), Name)`) when the primary key is not name, then the
-stored identity ascending. This is the same shape as `LibraryService`: direction applies
+(`COALESCE(NULLIF(SortingName, ''), Name)`) when the primary key is not name, then the stored
+identity text in ordinal order. This is the same shape as `LibraryService`: direction applies
 only to the primary key; name and identity ties stay ascending. Null primaries sort first
 ascending and last descending.
 
@@ -76,6 +76,7 @@ limit bounds; duplicate primary keys with name and identity ties; descending nul
 determinism across repeated calls and reversed insertion order; pre-read and mid-load
 cancellation; the generated statement's `LIMIT`/`OFFSET`/tie-breaker; an instrumented session
 seam proving a page of N requests only the N-row window; numeric and date parity with
-`LibraryService` in both directions; and text order against `PagedLibraryComparer` for
+`LibraryService` in both directions; text order against `PagedLibraryComparer` for
 mixed-case, accented and numeric-prefixed titles, including a case-only test that fails under
-BINARY order.
+BINARY order; and a total-order test that reads the stored `Id` text and pins the comparer's
+final ordinal identity key against the paged order.

@@ -1,4 +1,5 @@
 using System.Globalization;
+using Dapper;
 using Playnite.Core.Database;
 using Playnite.Core.Library;
 using Playnite.Core.Models;
@@ -263,13 +264,38 @@ public sealed class PagedLibraryReaderTests
         {
             var expected = games.Select(stored => stored.Value)
                 .OrderBy(game => game, new PagedLibraryComparer(sort, descending))
-                .ThenBy(game => game.Id)
                 .Select(game => game.Id);
             var actual = await reader.ListAsync(
                 new(SortBy: sort, Descending: descending, Limit: 20), cancellationToken);
 
             Assert.Equal(expected, Ids(actual));
         }
+    }
+
+    [Fact]
+    public async Task Comparer_total_order_equals_the_paged_text_identity_order()
+    {
+        using var files = new DatabaseTestDirectory();
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var games = TieGames();
+        var database = await SeedAsync(files, cancellationToken, games);
+        var reader = new PagedLibraryReader(database);
+
+        var page = await reader.ListAsync(new(SortBy: SortOrder.UserScore, Limit: 10), cancellationToken);
+
+        var comparerOrder = games.Select(stored => stored.Value)
+            .OrderBy(game => game, new PagedLibraryComparer(SortOrder.UserScore))
+            .Select(game => game.Id);
+        Assert.Equal(comparerOrder, Ids(page));
+
+        using var connection = DatabaseTestDirectory.Connect(files.PathFor());
+        var stored = (await connection.QueryAsync<string>("SELECT Id FROM game;")).ToArray();
+        Assert.All(games, game => Assert.Contains(game.Value.Id.ToString("D"), stored));
+        var textOrder = games.Select(stored => stored.Value)
+            .OrderBy(game => game.Name, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(game => game.Id.ToString("D"), StringComparer.Ordinal)
+            .Select(game => game.Id);
+        Assert.Equal(textOrder, Ids(page));
     }
 
     [Fact]
