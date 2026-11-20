@@ -437,9 +437,19 @@ public sealed class GameSessionTrackerTests
         var process = new FakeGameProcess(Root.ProcessId, Root.StartTimeTicks);
         var launcher = new FakeProcessLauncher(process);
         var observer = new ScriptedProcessObserver(_ => ProcessSnapshots.Stopped());
-        var observedTwice = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        observer.OnCall = call => { if (call >= 2) observedTwice.TrySetResult(); };
-        await using var tracker = new GameSessionTracker(launcher, observer, new SystemSessionDelay());
+        var delay = new GatedSessionDelay();
+        var appliedTwice = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        delay.OnDelay = call =>
+        {
+            if (call >= 2)
+            {
+                appliedTwice.TrySetResult();
+                // Park the loop after the second applied sample so no later observation can
+                // rewrite the state the assertions below read.
+                delay.BlockUntilCancelled = true;
+            }
+        };
+        await using var tracker = new GameSessionTracker(launcher, observer, delay);
         using var recorder = new SessionEventRecorder(tracker);
         using var cancellation = new CancellationTokenSource();
 
@@ -447,7 +457,14 @@ public sealed class GameSessionTrackerTests
             process,
             new SessionOptions { PollInterval = TimeSpan.FromMilliseconds(5) },
             cancellation.Token);
-        await observedTwice.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        try
+        {
+            await appliedTwice.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        }
+        catch (TimeoutException)
+        {
+            Assert.Fail("The tracker did not apply two observations after the root had exited.");
+        }
 
         Assert.Equal(GameSessionState.Running, tracker.State);
         Assert.True(tracker.IsDegraded);
@@ -463,12 +480,26 @@ public sealed class GameSessionTrackerTests
         var process = new FakeGameProcess(Root.ProcessId, Root.StartTimeTicks);
         var launcher = new FakeProcessLauncher(process);
         var observer = new ScriptedProcessObserver(_ => ProcessSnapshots.WithUnreadable([999], new ProcessEntry(Root, 1, true)));
-        var observedTwice = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        observer.OnCall = call => { if (call >= 2) observedTwice.TrySetResult(); };
-        await using var tracker = new GameSessionTracker(launcher, observer, new SystemSessionDelay());
+        var delay = new GatedSessionDelay();
+        var appliedTwice = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        delay.OnDelay = call =>
+        {
+            if (call >= 2)
+            {
+                appliedTwice.TrySetResult();
+            }
+        };
+        await using var tracker = new GameSessionTracker(launcher, observer, delay);
 
         var tracking = tracker.TrackAsync(process, new SessionOptions { PollInterval = TimeSpan.FromMilliseconds(5) }, CancellationToken.None);
-        await observedTwice.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        try
+        {
+            await appliedTwice.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        }
+        catch (TimeoutException)
+        {
+            Assert.Fail("The tracker did not apply two observations for the unrelated unreadable row.");
+        }
 
         Assert.Equal(GameSessionState.Running, tracker.State);
         Assert.False(tracker.IsDegraded);

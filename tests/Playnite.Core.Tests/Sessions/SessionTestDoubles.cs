@@ -116,17 +116,55 @@ internal sealed class ScriptedProcessObserver : IProcessObserver
 
 internal sealed class GatedSessionDelay : ISessionDelay
 {
+    private int calls;
+
     public bool BlockUntilCancelled { get; set; }
 
     public TaskCompletionSource DelayEntered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
+    /// <summary>
+    /// Invoked after the tracker has applied a snapshot and entered the delay that follows it.
+    /// A test can therefore observe "this observation was applied" without polling a clock.
+    /// </summary>
+    public Action<int>? OnDelay { get; set; }
+
     public async Task DelayAsync(TimeSpan duration, CancellationToken cancellationToken)
     {
+        // Yield instead of consuming wall-clock time: a tracker whose snapshots also complete
+        // synchronously must still hand the test thread a chance to run.
+        await Task.Yield();
+        var call = Interlocked.Increment(ref calls);
+        OnDelay?.Invoke(call);
         DelayEntered.TrySetResult();
         if (BlockUntilCancelled)
         {
             await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
         }
+    }
+}
+
+internal sealed class SignallingProcessObserver : IProcessObserver
+{
+    private readonly IProcessObserver inner;
+    private readonly Func<ProcessSnapshot, bool> predicate;
+
+    public SignallingProcessObserver(IProcessObserver inner, Func<ProcessSnapshot, bool> predicate)
+    {
+        this.inner = inner;
+        this.predicate = predicate;
+    }
+
+    public TaskCompletionSource Signal { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+    public async Task<ProcessSnapshot> SnapshotAsync(CancellationToken cancellationToken)
+    {
+        var snapshot = await inner.SnapshotAsync(cancellationToken).ConfigureAwait(false);
+        if (predicate(snapshot))
+        {
+            Signal.TrySetResult();
+        }
+
+        return snapshot;
     }
 }
 
