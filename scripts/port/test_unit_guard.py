@@ -1853,6 +1853,130 @@ class EvidenceGuardTests(unittest.TestCase):
         self.assertIn("GitHub API is unreachable", result.stderr)
 
 
+class SharedBaselineTests(unittest.TestCase):
+    """Both guards honour one reviewed allowance for SDK baseline bookkeeping.
+
+    The behaviour proofs drive the real command-line checks; the last case pins
+    the single constant so a later edit cannot widen it into product code.
+    """
+
+    SHIPPED = "src/Playnite.SDK.Abstractions/PublicAPI.Shipped.txt"
+    UNSHIPPED = "src/Playnite.SDK.Abstractions/PublicAPI.Unshipped.txt"
+    BASELINE_README = "src/Playnite.SDK.Abstractions/api-baseline/README.md"
+    BASELINE_DIRECTORY = "src/Playnite.SDK.Abstractions/api-baseline/"
+
+    def _fixture(self, files: dict[str, str]) -> Fixture:
+        fixture = Fixture(
+            ownership=[
+                claim(self.SHIPPED, "p4-005", pull=97),
+                claim(self.UNSHIPPED, "p4-005", pull=97),
+                claim(self.BASELINE_README, "p4-005", pull=97),
+            ],
+            files=files,
+        )
+        self.addCleanup(fixture.cleanup)
+        return fixture
+
+    def _own_evidence(self, fixture: Fixture, message: str) -> str:
+        fixture.set_queue("p4-003", "in-progress")
+        implementation = fixture.commit(message)
+        fixture.add_fragment(head=implementation)
+        return fixture.commit("record the p4-003 evidence")
+
+    def test_baseline_modification_passes_both_guards_for_an_unrelated_unit(self) -> None:
+        baseline = {
+            self.SHIPPED: "shipped\n",
+            self.UNSHIPPED: "unshipped\n",
+            self.BASELINE_README: "baseline\n",
+        }
+
+        for path in (self.SHIPPED, self.UNSHIPPED, self.BASELINE_README):
+            fixture = self._fixture(dict(baseline))
+            fixture.append(path, "regenerated\n")
+            head = self._own_evidence(fixture, "API surface change")
+
+            ownership = fixture.ownership(head, "--branch", "fm/p4-003")
+            evidence = fixture.evidence(head, "--branch", "fm/p4-003")
+
+            self.assertEqual(ownership.returncode, 0, ownership.stderr)
+            self.assertIn("unit: p4-003", ownership.stdout)
+            self.assertIn(path, ownership.stdout)
+            self.assertIn("offending paths:\n  (none)", ownership.stdout)
+            self.assertEqual(evidence.returncode, 0, evidence.stderr)
+            self.assertIn("unit: p4-003", evidence.stdout)
+
+    def test_baseline_delete_fails_both_guards(self) -> None:
+        fixture = self._fixture({
+            self.SHIPPED: "shipped\n",
+            self.UNSHIPPED: "unshipped\n",
+            self.BASELINE_README: "baseline\n",
+        })
+        fixture.git("rm", "-q", self.SHIPPED)
+        head = self._own_evidence(fixture, "delete the baseline")
+
+        ownership = fixture.ownership(head, "--branch", "fm/p4-003")
+        evidence = fixture.evidence(head, "--branch", "fm/p4-003")
+
+        for result in (ownership, evidence):
+            self.assertEqual(result.returncode, 1, result.stderr)
+            self.assertIn(self.SHIPPED, result.stderr)
+            self.assertIn(
+                "is shared SDK baseline bookkeeping; a pull request may add or "
+                "modify it but not D it",
+                result.stderr,
+            )
+
+    def test_unlisted_sdk_product_code_is_still_ownership_checked(self) -> None:
+        product = "src/Playnite.SDK.Abstractions/Models/IIdentifiable.cs"
+        fixture = Fixture(
+            ownership=[claim(product, "p4-005", pull=97)],
+            files={product: "namespace Playnite.SDK.Models;\n"},
+        )
+        self.addCleanup(fixture.cleanup)
+        fixture.append(product, "// foreign product bytes\n")
+        head = self._own_evidence(fixture, "edit an unlisted SDK product file")
+
+        ownership = fixture.ownership(head, "--branch", "fm/p4-003")
+        evidence = fixture.evidence(head, "--branch", "fm/p4-003")
+
+        self.assertEqual(ownership.returncode, 1, ownership.stderr)
+        self.assertIn(f"{product} (unit p4-005;", ownership.stdout)
+        self.assertIn("foreign unit ownership", ownership.stderr)
+        self.assertEqual(evidence.returncode, 1, evidence.stderr)
+        self.assertIn(
+            "touches unit-owned paths owned only by another unit", evidence.stderr
+        )
+        self.assertIn(f"{product} (unit p4-005;", evidence.stderr)
+
+    def test_shared_baseline_constant_is_exactly_the_documented_allowance(self) -> None:
+        from unit_guard_common import SHARED_BASELINE, is_shared_baseline_path
+
+        # A product-code path added here would change this set and fail.  The
+        # directory is exact too: swapping it for the project root would expose
+        # every SDK source file and also fail.
+        self.assertEqual(
+            SHARED_BASELINE.files,
+            frozenset({self.SHIPPED, self.UNSHIPPED}),
+        )
+        self.assertEqual(SHARED_BASELINE.directory, self.BASELINE_DIRECTORY)
+        self.assertTrue(
+            is_shared_baseline_path(
+                self.BASELINE_DIRECTORY + "Playnite.SDK.Abstractions.dll"
+            )
+        )
+        self.assertTrue(is_shared_baseline_path(self.SHIPPED))
+        self.assertFalse(
+            is_shared_baseline_path("src/Playnite.SDK.Abstractions/SdkVersions.cs")
+        )
+        self.assertFalse(is_shared_baseline_path(self.SHIPPED + ".bak"))
+        self.assertFalse(is_shared_baseline_path(self.BASELINE_DIRECTORY.rstrip("/")))
+        self.assertFalse(
+            is_shared_baseline_path(
+                "src/Playnite.SDK.Abstractions/api-baseline-notes/README.md"
+            )
+        )
+
+
 class WorkflowShapeTests(unittest.TestCase):
     def test_guard_workflow_runs_both_checks_without_a_label_escape(self) -> None:
         workflow = (ROOT / ".github" / "workflows" / "port-unit-guard.yml").read_text(
