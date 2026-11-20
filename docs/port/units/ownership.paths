@@ -60,6 +60,9 @@ src/Playnite.Core/Manifests/ExtensionManifest.cs	p3-005	8e3c9c5df2efac1458a7660e
 src/Playnite.Core/Manifests/ManifestSerialization.cs	p3-005	8e3c9c5df2efac1458a7660ef7550550e5f20f04	pull/73
 src/Playnite.Core/Manifests/ManifestVersionConverter.cs	p3-005	8e3c9c5df2efac1458a7660ef7550550e5f20f04	pull/73
 src/Playnite.Core/Manifests/UpdateManifest.cs	p3-005	8e3c9c5df2efac1458a7660ef7550550e5f20f04	pull/73
+src/Playnite.Core/Metadata/MetadataCache.cs	p6-005	b46bef667a18f45f8b1da8b978aa04862252e7b6	pull/189
+src/Playnite.Core/Metadata/MetadataContracts.cs	p6-005	b46bef667a18f45f8b1da8b978aa04862252e7b6	pull/189
+src/Playnite.Core/Metadata/MetadataService.cs	p6-005	b46bef667a18f45f8b1da8b978aa04862252e7b6	pull/189
 src/Playnite.Core/Migrations/LocalizationKeyMigration.cs	p3-009	1bddab6a428ff44f35c1f738e1f54a0903cda11b	pull/81
 src/Playnite.Core/Migrations/localization-v10.json	p3-009	1bddab6a428ff44f35c1f738e1f54a0903cda11b	pull/81
 src/Playnite.Core/Models/AgeRating.cs	p3-004	f4855e114c4eeb1dc375e2c695e7f042aef0fbcd	pull/72
@@ -307,6 +310,9 @@ tests/Playnite.Core.Tests/LocalizationCoverageTests.cs	p3-loc-coverage-ds	37a3a3
 tests/Playnite.Core.Tests/LocalizationKeyTests.cs	p3-007b	d6935c7ccef9672178bf647c9f412d7a47116ded	pull/78
 tests/Playnite.Core.Tests/LocalizationMigrationTests.cs	p3-009	1bddab6a428ff44f35c1f738e1f54a0903cda11b	pull/81
 tests/Playnite.Core.Tests/ManifestTests.cs	p3-005	8e3c9c5df2efac1458a7660ef7550550e5f20f04	pull/73
+tests/Playnite.Core.Tests/Metadata/FakeMetadataProvider.cs	p6-005	b46bef667a18f45f8b1da8b978aa04862252e7b6	pull/189
+tests/Playnite.Core.Tests/Metadata/MetadataCacheTests.cs	p6-005	b46bef667a18f45f8b1da8b978aa04862252e7b6	pull/189
+tests/Playnite.Core.Tests/Metadata/MetadataServiceTests.cs	p6-005	b46bef667a18f45f8b1da8b978aa04862252e7b6	pull/189
 tests/Playnite.Core.Tests/Models/ModelBehaviorTests.cs	p3-004	f4855e114c4eeb1dc375e2c695e7f042aef0fbcd	pull/72
 tests/Playnite.Core.Tests/Models/ModelGoldenTests.cs	p3-004	f4855e114c4eeb1dc375e2c695e7f042aef0fbcd	pull/72
 tests/Playnite.Core.Tests/Models/ModelProbe.cs	p3-004	f4855e114c4eeb1dc375e2c695e7f042aef0fbcd	pull/72
