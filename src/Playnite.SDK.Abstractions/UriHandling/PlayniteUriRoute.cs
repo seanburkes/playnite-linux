@@ -1,7 +1,7 @@
 using System.Globalization;
 using System.Text;
 
-namespace Playnite.Core.UriHandling;
+namespace Playnite.SDK;
 
 /// <summary>The application command a <c>playnite://</c> URI targets.</summary>
 public enum PlayniteUriTarget

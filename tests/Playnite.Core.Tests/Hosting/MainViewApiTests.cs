@@ -3,6 +3,8 @@ using Playnite.Core.Library;
 using Playnite.Core.Models;
 using Playnite.Core.Queries;
 using Xunit;
+using Playnite.SDK;
+using Playnite.SDK.Models;
 
 namespace Playnite.Core.Tests.Hosting;
 
@@ -104,8 +106,8 @@ public sealed class MainViewApiTests
         var filtered = Game("Filtered");
         var host = new FakeMainViewHost
         {
-            SelectedHandler = _ => Task.FromResult<IReadOnlyList<Game>>([selected]),
-            FilteredHandler = _ => Task.FromResult<IReadOnlyList<Game>>([filtered]),
+            SelectedHandler = _ => Task.FromResult<IReadOnlyList<IGameView>>([selected]),
+            FilteredHandler = _ => Task.FromResult<IReadOnlyList<IGameView>>([filtered]),
         };
         var api = new MainViewApi(host);
 
@@ -153,8 +155,8 @@ public sealed class MainViewApiTests
     {
         var host = new FakeMainViewHost
         {
-            SelectedHandler = _ => Task.FromResult<IReadOnlyList<Game>>(null!),
-            FilteredHandler = _ => Task.FromResult<IReadOnlyList<Game>>(null!),
+            SelectedHandler = _ => Task.FromResult<IReadOnlyList<IGameView>>(null!),
+            FilteredHandler = _ => Task.FromResult<IReadOnlyList<IGameView>>(null!),
         };
         var api = new MainViewApi(host);
 
@@ -170,7 +172,7 @@ public sealed class MainViewApiTests
     public async Task ResponsesCopyTheHostList()
     {
         var games = new List<Game> { Game("Portal 2") };
-        var host = new FakeMainViewHost { FilteredHandler = _ => Task.FromResult<IReadOnlyList<Game>>(games) };
+        var host = new FakeMainViewHost { FilteredHandler = _ => Task.FromResult<IReadOnlyList<IGameView>>(games) };
         var api = new MainViewApi(host);
 
         var response = await api.GetFilteredGamesAsync();

@@ -1,10 +1,11 @@
 using System.Reflection;
 using System.Text.RegularExpressions;
-using Playnite.Core.Descriptions;
-using Playnite.Core.Hosting;
-using Playnite.Core.UriHandling;
+using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
 using Playnite.SDK.Data;
 using Xunit;
+using Playnite.SDK;
+using Playnite.SDK.Models;
 
 namespace Playnite.Architecture.Tests;
 
@@ -48,7 +49,7 @@ public sealed class SdkFreezeTests
             .ToArray();
 
         Assert.Equal(exported, declared);
-        Assert.Equal(9, exported.Length);
+        Assert.Equal(62, exported.Length);
         Assert.Equal(27, typeof(IDataSerializer).GetMethods().Length);
         Assert.Single(typeof(Playnite.SDK.Models.IIdentifiable).GetProperties());
     }
@@ -102,29 +103,53 @@ public sealed class SdkFreezeTests
             .Where(line => line.StartsWith("CP", StringComparison.Ordinal))
             .Select(line =>
             {
-                var match = Regex.Match(line, @"^CP(?<code>\d{4}): Type '(?<type>[^']+)' exists on v6-baseline but not on v7-candidate$");
+                var match = Regex.Match(
+                    line,
+                    @"^(?<code>CP\d{4}): (?:Type|Member) '(?<target>[^']+)' exists on v6-baseline but not on v7-candidate$");
+                if (!match.Success)
+                {
+                    match = Regex.Match(
+                        line,
+                        @"^(?<code>CP\d{4}): Cannot add interface member '(?<target>[^']+)' to v7-candidate because it does not exist on v6-baseline$");
+                }
+
+                if (!match.Success)
+                {
+                    match = Regex.Match(
+                        line,
+                        @"^(?<code>CP\d{4}): Type '(?<target>[^']+)' has the sealed modifier on v7-candidate but not on v6-baseline$");
+                }
+
                 Assert.True(match.Success, "Unrecognised ApiCompat line: " + line);
-                return (Code: match.Groups["code"].Value, Type: match.Groups["type"].Value);
+                return (Code: match.Groups["code"].Value, Target: match.Groups["target"].Value);
             })
             .ToArray();
 
-        Assert.Equal(218, differences.Length);
-        Assert.All(differences, difference => Assert.Equal("0001", difference.Code));
+        Assert.Equal(306, differences.Length);
+        Assert.Equal(
+            new[] { ("CP0001", 208), ("CP0002", 82), ("CP0006", 15), ("CP0009", 1) },
+            differences.GroupBy(difference => difference.Code)
+                .OrderBy(group => group.Key, StringComparer.Ordinal)
+                .Select(group => (group.Key, group.Count()))
+                .ToArray());
 
         var rows = File.ReadAllLines(Docs("p6-008-apicompat-classification.tsv"));
-        Assert.Equal("v6_difference\tgroup\tclassification\tdecision", rows[0]);
+        Assert.Equal("code\tv6_difference\tgroup\tclassification\tdecision", rows[0]);
         var classified = rows.Skip(1)
             .Select(row => row.Split('\t'))
             .Select(columns =>
             {
-                Assert.Equal(4, columns.Length);
-                return (Type: columns[0], Group: columns[1], Classification: columns[2], Decision: columns[3]);
+                Assert.Equal(5, columns.Length);
+                return (Code: columns[0], Target: columns[1], Group: columns[2], Classification: columns[3], Decision: columns[4]);
             })
             .ToArray();
 
-        Assert.Equal(differences.Select(d => d.Type).Order(StringComparer.Ordinal),
-            classified.Select(c => c.Type).Order(StringComparer.Ordinal));
-        Assert.Equal(classified.Length, classified.Select(c => c.Type).Distinct(StringComparer.Ordinal).Count());
+        Assert.Equal(
+            differences.Select(d => d.Code + "\t" + d.Target).Order(StringComparer.Ordinal).ToArray(),
+            classified.Select(c => c.Code + "\t" + c.Target).Order(StringComparer.Ordinal).ToArray());
+        Assert.Equal(
+            classified.Length,
+            classified.Select(c => (c.Code, c.Target)).Distinct().Count());
         Assert.All(classified, row =>
         {
             Assert.Contains(row.Classification, AllowedClassifications);
@@ -132,6 +157,16 @@ public sealed class SdkFreezeTests
             Assert.False(string.IsNullOrWhiteSpace(row.Decision));
         });
         Assert.DoesNotContain(classified, row => row.Classification == "breaking");
+
+        var suppressions = File.ReadAllText(Docs("p6-008-apicompat-suppressions.xml"));
+        Assert.Equal(306, Regex.Matches(suppressions, "<Suppression>").Count);
+        Assert.Equal(306, Regex.Matches(suppressions, "<Target>").Count);
+        foreach (var code in new[] { "CP0001", "CP0002", "CP0006", "CP0009" })
+        {
+            Assert.Equal(
+                differences.Count(difference => difference.Code == code),
+                Regex.Matches(suppressions, $"<DiagnosticId>{code}</DiagnosticId>").Count);
+        }
     }
 
     [Fact]
@@ -151,9 +186,6 @@ public sealed class SdkFreezeTests
     {
         var expected = Abstractions.GetExportedTypes()
             .Where(type => type.IsInterface)
-            .Concat(typeof(INotificationsAPI).Assembly.GetExportedTypes()
-                .Where(type => type.IsInterface && type.Namespace is
-                    "Playnite.Core.Hosting" or "Playnite.Core.UriHandling" or "Playnite.Core.Descriptions"))
             .Select(type => type.FullName!)
             .Order(StringComparer.Ordinal)
             .ToArray();
@@ -171,7 +203,7 @@ public sealed class SdkFreezeTests
 
         Assert.Equal(expected, coverage.Select(row => row.Interface).Order(StringComparer.Ordinal));
         Assert.Equal(coverage.Length, coverage.Select(row => row.Interface).Distinct(StringComparer.Ordinal).Count());
-        Assert.Equal(12, coverage.Length);
+        Assert.Equal(13, coverage.Length);
 
         foreach (var row in coverage)
         {
@@ -218,6 +250,83 @@ public sealed class SdkFreezeTests
                 .ToArray());
         Assert.DoesNotContain(abstractions.Dependencies(),
             dependency => dependency.StartsWith("Playnite.", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Sample_plugin_compiles_against_the_abstractions_assembly_alone()
+    {
+        // A plugin consumer sees only Playnite.SDK.Abstractions: no Core, no Avalonia, no SDK
+        // implementation assembly. The sample uses every moved host surface and the reshaped
+        // IMainViewAPI game view so a regression fails this compile, not just a reflection test.
+        const string source = """
+            using System;
+            using System.Threading;
+            using System.Threading.Tasks;
+            using Playnite.SDK;
+            using Playnite.SDK.Models;
+
+            public sealed class SamplePlugin
+            {
+                private readonly INotificationsAPI notifications;
+                private readonly IDialogsFactory dialogs;
+                private readonly IMainViewAPI mainView;
+                private readonly IUriHandlerAPI uri;
+
+                public SamplePlugin(
+                    INotificationsAPI notifications,
+                    IDialogsFactory dialogs,
+                    IMainViewAPI mainView,
+                    IUriHandlerAPI uri)
+                {
+                    this.notifications = notifications;
+                    this.dialogs = dialogs;
+                    this.mainView = mainView;
+                    this.uri = uri;
+                }
+
+                public async Task RunAsync(CancellationToken cancellationToken = default)
+                {
+                    await notifications.PublishAsync("sample", "text", NotificationType.Info, cancellationToken);
+                    await dialogs.ShowMessageAsync(new MessageDialogRequest("text"), cancellationToken);
+                    await dialogs.SelectFolderAsync(cancellationToken: cancellationToken);
+
+                    MainViewResponse response = await mainView.GetStateAsync(cancellationToken);
+                    IGameView? game = response.State?.SelectedGames.Count > 0
+                        ? response.State.SelectedGames[0]
+                        : null;
+                    _ = game?.Id;
+
+                    uri.RegisterSource("sample", args => Console.WriteLine(args.Arguments.Length));
+                    uri.RemoveSource("sample");
+                }
+            }
+            """;
+
+        var framework = ((string)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES")!)
+            .Split(Path.PathSeparator)
+            .Where(path => !Path.GetFileName(path).StartsWith("Playnite", StringComparison.Ordinal))
+            .Where(path =>
+            {
+                var name = Path.GetFileNameWithoutExtension(path);
+                return name.StartsWith("System", StringComparison.Ordinal)
+                    || name.StartsWith("Microsoft", StringComparison.Ordinal)
+                    || name is "netstandard" or "mscorlib";
+            })
+            .Select(path => MetadataReference.CreateFromFile(path))
+            .Append(MetadataReference.CreateFromFile(Abstractions.Location));
+        var compilation = CSharpCompilation.Create(
+            "SamplePlugin",
+            [CSharpSyntaxTree.ParseText(source)],
+            framework,
+            new CSharpCompilationOptions(
+                OutputKind.DynamicallyLinkedLibrary,
+                nullableContextOptions: NullableContextOptions.Enable));
+        var errors = compilation.GetDiagnostics()
+            .Where(diagnostic => diagnostic.Severity == DiagnosticSeverity.Error)
+            .Select(diagnostic => diagnostic.ToString())
+            .ToArray();
+
+        Assert.True(errors.Length == 0, string.Join(Environment.NewLine, errors));
     }
 
     private static string[] Declarations(string fileName)

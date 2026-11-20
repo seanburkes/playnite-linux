@@ -5,6 +5,9 @@ using Playnite.Core.UriHandling;
 using Playnite.SDK.Data;
 using Xunit;
 using SdkModels = Playnite.SDK.Models;
+using Playnite.SDK;
+using Playnite.SDK.Models;
+using Playnite.SDK.Descriptions;
 
 namespace Playnite.Core.Tests.SdkContracts;
 
@@ -60,6 +63,14 @@ public sealed class SdkInterfaceContractTests
     {
         SdkModels.IIdentifiable identifiable = new ContractIdentifiable { Id = GameId };
         Assert.Equal(GameId, identifiable.Id);
+    }
+
+    [Fact]
+    public void IGameView_id_and_name_are_exercised()
+    {
+        SdkModels.IGameView view = new ContractGameView { Id = GameId, Name = "contract-game" };
+        Assert.Equal(GameId, view.Id);
+        Assert.Equal("contract-game", view.Name);
     }
 
     [Fact]
@@ -239,6 +250,13 @@ public sealed class SdkInterfaceContractTests
     private sealed class ContractIdentifiable : SdkModels.IIdentifiable
     {
         public Guid Id { get; init; }
+    }
+
+    private sealed class ContractGameView : SdkModels.IGameView
+    {
+        public Guid Id { get; init; }
+
+        public string Name { get; init; } = string.Empty;
     }
 
     private sealed class ContractDataSerializer : IDataSerializer
@@ -484,8 +502,8 @@ public sealed class SdkInterfaceContractTests
     private sealed class ContractMainViewHost : IMainViewHost
     {
         public MainViewState State { get; init; } = new();
-        public IReadOnlyList<Game> Selected { get; init; } = [];
-        public IReadOnlyList<Game> Filtered { get; init; } = [];
+        public IReadOnlyList<IGameView> Selected { get; init; } = [];
+        public IReadOnlyList<IGameView> Filtered { get; init; } = [];
         public int StateCalls { get; private set; }
         public int SelectedCalls { get; private set; }
         public int FilteredCalls { get; private set; }
@@ -496,13 +514,13 @@ public sealed class SdkInterfaceContractTests
             return Task.FromResult(State);
         }
 
-        public Task<IReadOnlyList<Game>> GetSelectedGamesAsync(CancellationToken cancellationToken = default)
+        public Task<IReadOnlyList<IGameView>> GetSelectedGamesAsync(CancellationToken cancellationToken = default)
         {
             SelectedCalls++;
             return Task.FromResult(Selected);
         }
 
-        public Task<IReadOnlyList<Game>> GetFilteredGamesAsync(CancellationToken cancellationToken = default)
+        public Task<IReadOnlyList<IGameView>> GetFilteredGamesAsync(CancellationToken cancellationToken = default)
         {
             FilteredCalls++;
             return Task.FromResult(Filtered);

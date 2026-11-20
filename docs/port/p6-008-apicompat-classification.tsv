@@ -1,219 +1,307 @@
-v6_difference	group	classification	decision
-Playnite.ImportExclusionItem	excluded-boundary	excluded	v6 global-namespace helper; not an SDK contract type.
-System.StrExtensions	excluded-boundary	excluded	v6 global-namespace string helper; not an SDK contract type.
-Playnite.SDK.ApplicationMode	infrastructure	deferred	Deferred host/infrastructure facade; not part of the seven-type p6-008 seed freeze.
-Playnite.SDK.BuiltinExtension	infrastructure	deferred	Deferred host/infrastructure facade; not part of the seven-type p6-008 seed freeze.
-Playnite.SDK.BuiltinExtensions	infrastructure	deferred	Deferred host/infrastructure facade; not part of the seven-type p6-008 seed freeze.
-Playnite.SDK.GameDatabaseCollection	database	deferred	Deferred database API; the p4-001 repository is the v1 data path.
-Playnite.SDK.IGameDatabase	database	deferred	Deferred database API; the p4-001 repository is the v1 data path.
-Playnite.SDK.IGameDatabaseAPI	database	deferred	Deferred database API; the p4-001 repository is the v1 data path.
-Playnite.SDK.ItemUpdateEvent<TItem>	database	deferred	Deferred database API; the p4-001 repository is the v1 data path.
-Playnite.SDK.ItemUpdatedEventArgs<TItem>	database	deferred	Deferred database API; the p4-001 repository is the v1 data path.
-Playnite.SDK.ItemCollectionChangedEventArgs<TItem>	database	deferred	Deferred database API; the p4-001 repository is the v1 data path.
-Playnite.SDK.IItemCollection	database	deferred	Deferred database API; the p4-001 repository is the v1 data path.
-Playnite.SDK.IItemCollection<TItem>	database	deferred	Deferred database API; the p4-001 repository is the v1 data path.
-Playnite.SDK.LocalizedException	infrastructure	deferred	Deferred host/infrastructure facade; not part of the seven-type p6-008 seed freeze.
-Playnite.SDK.ReferenceException	infrastructure	deferred	Deferred host/infrastructure facade; not part of the seven-type p6-008 seed freeze.
-Playnite.SDK.TypeMismatchException	infrastructure	deferred	Deferred host/infrastructure facade; not part of the seven-type p6-008 seed freeze.
-Playnite.SDK.ExpandableVariables	infrastructure	deferred	Deferred host/infrastructure facade; not part of the seven-type p6-008 seed freeze.
-Playnite.SDK.ExtensionFunction	infrastructure	deferred	Deferred host/infrastructure facade; not part of the seven-type p6-008 seed freeze.
-Playnite.SDK.IAddons	infrastructure	deferred	Deferred host/infrastructure facade; not part of the seven-type p6-008 seed freeze.
-Playnite.SDK.MessageBoxOption	host-api-adapted	adapted	v6 WPF dialog DTO; p6-006 uses typed MessageDialogRequest/Response.
-Playnite.SDK.MessageBoxToggle	host-api-adapted	adapted	v6 WPF dialog DTO; p6-006 uses typed MessageDialogRequest/Response.
-Playnite.SDK.GlobalProgressActionArgs	host-api-adapted	adapted	v6 WPF progress DTO; no v1 headless equivalent is frozen.
-Playnite.SDK.GlobalProgressResult	host-api-adapted	adapted	v6 WPF progress DTO; no v1 headless equivalent is frozen.
-Playnite.SDK.GlobalProgressOptions	host-api-adapted	adapted	v6 WPF progress DTO; no v1 headless equivalent is frozen.
-Playnite.SDK.ImageFileOption	host-api-adapted	adapted	v6 dialog DTO; p6-006 uses typed FileDialogRequest/Response.
-Playnite.SDK.GenericItemOption	host-api-adapted	adapted	v6 dialog DTO; p6-006 uses typed dialog requests.
-Playnite.SDK.StringSelectionDialogResult	host-api-adapted	adapted	v6 dialog DTO; p6-006 uses TextInputDialogResponse.
-Playnite.SDK.WindowCreationOptions	host-api-adapted	adapted	v6 WPF window options; no v1 headless equivalent is frozen.
-Playnite.SDK.IDialogsFactory	host-api-adapted	adapted	DialogsFactory (p6-006) exposes typed asynchronous request/response methods instead of v6 WPF/Dispatcher methods.
-Playnite.SDK.IEmulationAPI	emulation	deferred	Deferred emulation API; not part of the v1 headless slice.
-Playnite.SDK.ILogger	logging	deferred	Deferred logging facade; no v6 logger is frozen in v7.
-Playnite.SDK.DesktopView	host-api-adapted	adapted	p6-006 keeps the v6 numeric values but the enum lives in Core.Hosting, not the frozen Abstractions.
-Playnite.SDK.FullscreenView	host-api-adapted	adapted	p6-006 keeps the v6 numeric values but the enum lives in Core.Hosting, not the frozen Abstractions.
-Playnite.SDK.IMainViewAPI	host-api-adapted	adapted	MainViewApi (p6-006) is an asynchronous query surface; v6 property setters and Dispatcher are UI extension points deferred by ADR-023.
-Playnite.SDK.NotificationMessage	host-api-adapted	adapted	Core notification record is immutable and has no WPF ICommand/events; p6-006 owns the headless shape.
-Playnite.SDK.NotificationType	host-api-adapted	adapted	Core enum keeps Info/Error values; p6-006 owns the headless shape.
-Playnite.SDK.INotificationsAPI	host-api-adapted	adapted	NotificationsApi (p6-006) exposes PublishAsync/DismissAsync/DismissAllAsync instead of v6 Add/Remove/RemoveAll over ObservableCollection.
-Playnite.SDK.IPlayniteAPI	infrastructure	deferred	Deferred host/infrastructure facade; not part of the seven-type p6-008 seed freeze.
-Playnite.SDK.API	infrastructure	deferred	Deferred host/infrastructure facade; not part of the seven-type p6-008 seed freeze.
-Playnite.SDK.IPlayniteInfoAPI	infrastructure	deferred	Deferred host/infrastructure facade; not part of the seven-type p6-008 seed freeze.
-Playnite.SDK.IPlaynitePathsAPI	infrastructure	deferred	Deferred host/infrastructure facade; not part of the seven-type p6-008 seed freeze.
-Playnite.SDK.PlaytimeImportMode	infrastructure	deferred	Deferred host/infrastructure facade; not part of the seven-type p6-008 seed freeze.
-Playnite.SDK.IFullscreenSettingsAPI	settings	deferred	Deferred settings API; p6-004 owns the headless settings service.
-Playnite.SDK.ICompletionStatusSettignsApi	settings	deferred	Deferred settings API; p6-004 owns the headless settings service.
-Playnite.SDK.IPlayniteSettingsAPI	settings	deferred	Deferred settings API; p6-004 owns the headless settings service.
-Playnite.SDK.ISettings	settings	deferred	Deferred settings API; p6-004 owns the headless settings service.
-Playnite.SDK.IUriHandlerAPI	host-api-adapted	adapted	UriHandlerApi (p6-007) keeps RegisterSource/RemoveSource but the interface lives in Core.UriHandling, not the frozen Abstractions.
-Playnite.SDK.WebViewResourceLoadedCallback	webview	deferred	Deferred by ADR-019; WebView is a v1.1 item.
-Playnite.SDK.ShouldPassResourceContentFuncArgs	webview	deferred	Deferred by ADR-019; WebView is a v1.1 item.
-Playnite.SDK.WebViewSettings	webview	deferred	Deferred by ADR-019; WebView is a v1.1 item.
-Playnite.SDK.JavaScriptEvaluationResult	webview	deferred	Deferred by ADR-019; WebView is a v1.1 item.
-Playnite.SDK.IWebView	webview	deferred	Deferred by ADR-019; WebView is a v1.1 item.
-Playnite.SDK.IWebViewFactory	webview	deferred	Deferred by ADR-019; WebView is a v1.1 item.
-Playnite.SDK.HttpCookie	webview	deferred	Deferred by ADR-019; WebView is a v1.1 item.
-Playnite.SDK.CookieSameSite	webview	deferred	Deferred by ADR-019; WebView is a v1.1 item.
-Playnite.SDK.CookiePriority	webview	deferred	Deferred by ADR-019; WebView is a v1.1 item.
-Playnite.SDK.LibraryClient	infrastructure	deferred	Deferred host/infrastructure facade; not part of the seven-type p6-008 seed freeze.
-Playnite.SDK.NullLoggger	logging	deferred	Deferred logging facade; no v6 logger is frozen in v7.
-Playnite.SDK.ILogProvider	logging	deferred	Deferred logging facade; no v6 logger is frozen in v7.
-Playnite.SDK.LogManager	logging	deferred	Deferred logging facade; no v6 logger is frozen in v7.
-Playnite.SDK.LibraryMetadataProvider	infrastructure	deferred	Deferred host/infrastructure facade; not part of the seven-type p6-008 seed freeze.
-Playnite.SDK.RelayCommandBase	infrastructure	deferred	Deferred host/infrastructure facade; not part of the seven-type p6-008 seed freeze.
-Playnite.SDK.RelayCommand	infrastructure	deferred	Deferred host/infrastructure facade; not part of the seven-type p6-008 seed freeze.
-Playnite.SDK.RelayCommand<T>	infrastructure	deferred	Deferred host/infrastructure facade; not part of the seven-type p6-008 seed freeze.
-Playnite.SDK.IResourceProvider	infrastructure	deferred	Deferred host/infrastructure facade; not part of the seven-type p6-008 seed freeze.
-Playnite.SDK.ResourceProvider	infrastructure	deferred	Deferred host/infrastructure facade; not part of the seven-type p6-008 seed freeze.
-Playnite.SDK.Controls.PluginUserControl	excluded-boundary	excluded	WPF control; UI extension point deferred by ADR-023.
-Playnite.SDK.Data.Serialization	data	deferred	Deferred serializer implementation/markup surface; IDataSerializer is the frozen contract.
-Playnite.SDK.Data.IMarkupConverter	excluded-boundary	excluded	WPF markup contract; UI extension point, not a headless abstraction.
-Playnite.SDK.Data.Markup	excluded-boundary	excluded	WPF markup extension; UI extension point, not a headless abstraction.
-Playnite.SDK.Data.SqliteOpenFlags	excluded-boundary	excluded	v6 SQLite wrapper enum; not part of the headless abstraction freeze.
-Playnite.SDK.Data.ISQLite	excluded-boundary	excluded	v6 SQLite wrapper; the Linux port uses its own repository and does not freeze this v6 implementation type.
-Playnite.SDK.Data.SQLite	excluded-boundary	excluded	v6 SQLite wrapper; the Linux port uses its own repository and does not freeze this v6 implementation type.
-Playnite.SDK.Events.ControllerInputState	events	deferred	Deferred event surface; only OnApplicationStartedEventArgs is in the v7 freeze.
-Playnite.SDK.Events.ControllerInput	events	deferred	Deferred event surface; only OnApplicationStartedEventArgs is in the v7 freeze.
-Playnite.SDK.Events.ApplicationEvent	events	deferred	Deferred event surface; only OnApplicationStartedEventArgs is in the v7 freeze.
-Playnite.SDK.Events.OnGameSelectedEventArgs	events	deferred	Deferred event surface; only OnApplicationStartedEventArgs is in the v7 freeze.
-Playnite.SDK.Events.OnGameStartingEventArgs	events	deferred	Deferred event surface; only OnApplicationStartedEventArgs is in the v7 freeze.
-Playnite.SDK.Events.OnGameStartedEventArgs	events	deferred	Deferred event surface; only OnApplicationStartedEventArgs is in the v7 freeze.
-Playnite.SDK.Events.OnGameStartupCancelledEventArgs	events	deferred	Deferred event surface; only OnApplicationStartedEventArgs is in the v7 freeze.
-Playnite.SDK.Events.OnGameStoppedEventArgs	events	deferred	Deferred event surface; only OnApplicationStartedEventArgs is in the v7 freeze.
-Playnite.SDK.Events.OnGameInstalledEventArgs	events	deferred	Deferred event surface; only OnApplicationStartedEventArgs is in the v7 freeze.
-Playnite.SDK.Events.OnGameInstallationCancelledEventArgs	events	deferred	Deferred event surface; only OnApplicationStartedEventArgs is in the v7 freeze.
-Playnite.SDK.Events.OnGameUninstalledEventArgs	events	deferred	Deferred event surface; only OnApplicationStartedEventArgs is in the v7 freeze.
-Playnite.SDK.Events.OnApplicationStoppedEventArgs	events	deferred	Deferred event surface; only OnApplicationStartedEventArgs is in the v7 freeze.
-Playnite.SDK.Events.OnLibraryUpdatedEventArgs	events	deferred	Deferred event surface; only OnApplicationStartedEventArgs is in the v7 freeze.
-Playnite.SDK.Events.OnControllerButtonStateChangedArgs	events	deferred	Deferred event surface; only OnApplicationStartedEventArgs is in the v7 freeze.
-Playnite.SDK.Events.OnControllerConnectedArgs	events	deferred	Deferred event surface; only OnApplicationStartedEventArgs is in the v7 freeze.
-Playnite.SDK.Events.OnControllerDisconnectedArgs	events	deferred	Deferred event surface; only OnApplicationStartedEventArgs is in the v7 freeze.
-Playnite.SDK.Events.OnFullscreenViewChangedArgs	events	deferred	Deferred event surface; only OnApplicationStartedEventArgs is in the v7 freeze.
-Playnite.SDK.Events.GamepadController	events	deferred	Deferred event surface; only OnApplicationStartedEventArgs is in the v7 freeze.
-Playnite.SDK.Events.IGamepad	events	deferred	Deferred event surface; only OnApplicationStartedEventArgs is in the v7 freeze.
-Playnite.SDK.Events.PlayniteUriEventArgs	host-api-adapted	adapted	p6-007 keeps the v6 argument shape in Core.UriHandling, not the frozen Abstractions.
-Playnite.SDK.Events.WebViewLoadingChangedEventArgs	events	deferred	Deferred event surface; only OnApplicationStartedEventArgs is in the v7 freeze.
-Playnite.SDK.Exceptions.ScriptRuntimeException	infrastructure	deferred	Deferred host/infrastructure facade; not part of the seven-type p6-008 seed freeze.
-Playnite.SDK.Models.AgeRating	models	deferred	Deferred model surface; the v7 freeze contains only IIdentifiable and InstallationStatus, not the full v6 Game model.
-Playnite.SDK.Models.AgeRatingOrg	models	deferred	Deferred model surface; the v7 freeze contains only IIdentifiable and InstallationStatus, not the full v6 Game model.
-Playnite.SDK.Models.AppSoftwareType	models	deferred	Deferred model surface; the v7 freeze contains only IIdentifiable and InstallationStatus, not the full v6 Game model.
-Playnite.SDK.Models.AppSoftware	models	deferred	Deferred model surface; the v7 freeze contains only IIdentifiable and InstallationStatus, not the full v6 Game model.
-Playnite.SDK.Models.Category	models	deferred	Deferred model surface; the v7 freeze contains only IIdentifiable and InstallationStatus, not the full v6 Game model.
-Playnite.SDK.Models.Company	models	deferred	Deferred model surface; the v7 freeze contains only IIdentifiable and InstallationStatus, not the full v6 Game model.
-Playnite.SDK.Models.Developer	models	deferred	Deferred model surface; the v7 freeze contains only IIdentifiable and InstallationStatus, not the full v6 Game model.
-Playnite.SDK.Models.Publisher	models	deferred	Deferred model surface; the v7 freeze contains only IIdentifiable and InstallationStatus, not the full v6 Game model.
-Playnite.SDK.Models.CompletionStatus	models	deferred	Deferred model surface; the v7 freeze contains only IIdentifiable and InstallationStatus, not the full v6 Game model.
-Playnite.SDK.Models.DatabaseObject	models	deferred	Deferred model surface; the v7 freeze contains only IIdentifiable and InstallationStatus, not the full v6 Game model.
-Playnite.SDK.Models.EmulatorDefinitionProfile	models	deferred	Deferred model surface; the v7 freeze contains only IIdentifiable and InstallationStatus, not the full v6 Game model.
-Playnite.SDK.Models.EmulatorDefinition	models	deferred	Deferred model surface; the v7 freeze contains only IIdentifiable and InstallationStatus, not the full v6 Game model.
-Playnite.SDK.Models.EmulatedRegion	models	deferred	Deferred model surface; the v7 freeze contains only IIdentifiable and InstallationStatus, not the full v6 Game model.
-Playnite.SDK.Models.EmulatedPlatform	models	deferred	Deferred model surface; the v7 freeze contains only IIdentifiable and InstallationStatus, not the full v6 Game model.
-Playnite.SDK.Models.EmulatorProfile	models	deferred	Deferred model surface; the v7 freeze contains only IIdentifiable and InstallationStatus, not the full v6 Game model.
-Playnite.SDK.Models.BuiltInEmulatorProfile	models	deferred	Deferred model surface; the v7 freeze contains only IIdentifiable and InstallationStatus, not the full v6 Game model.
-Playnite.SDK.Models.CustomEmulatorProfile	models	deferred	Deferred model surface; the v7 freeze contains only IIdentifiable and InstallationStatus, not the full v6 Game model.
-Playnite.SDK.Models.Emulator	models	deferred	Deferred model surface; the v7 freeze contains only IIdentifiable and InstallationStatus, not the full v6 Game model.
-Playnite.SDK.Models.SortOrder	host-api-adapted	adapted	p6-001 owns the Core SortOrder; it is not part of the frozen Abstractions.
-Playnite.SDK.Models.SortOrderDirection	host-api-adapted	adapted	v6 UI sort direction; p6-006 uses a bool on MainViewState.
-Playnite.SDK.Models.GroupableField	host-api-adapted	adapted	v6 UI grouping enum; p6-006 uses Core LibraryGroupBy.
-Playnite.SDK.Models.FilterPresetSettings	host-api-adapted	adapted	v6 UI filter state; p6-006/Playnite.Core.Queries own the headless shape.
-Playnite.SDK.Models.IdItemFilterItemProperties	host-api-adapted	adapted	v6 UI filter DTO; not frozen in Abstractions.
-Playnite.SDK.Models.StringFilterItemProperties	host-api-adapted	adapted	v6 UI filter DTO; not frozen in Abstractions.
-Playnite.SDK.Models.EnumFilterItemProperties	host-api-adapted	adapted	v6 UI filter DTO; not frozen in Abstractions.
-Playnite.SDK.Models.FilterPreset	host-api-adapted	adapted	v6 UI filter preset; not frozen in Abstractions.
-Playnite.SDK.Models.GameField	models	deferred	Deferred model surface; the v7 freeze contains only IIdentifiable and InstallationStatus, not the full v6 Game model.
-Playnite.SDK.Models.Game	models	deferred	Deferred model surface; the v7 freeze contains only IIdentifiable and InstallationStatus, not the full v6 Game model.
-Playnite.SDK.Models.TrackingMode	models	deferred	Deferred model surface; the v7 freeze contains only IIdentifiable and InstallationStatus, not the full v6 Game model.
-Playnite.SDK.Models.GameActionType	models	deferred	Deferred model surface; the v7 freeze contains only IIdentifiable and InstallationStatus, not the full v6 Game model.
-Playnite.SDK.Models.GameAction	models	deferred	Deferred model surface; the v7 freeze contains only IIdentifiable and InstallationStatus, not the full v6 Game model.
-Playnite.SDK.Models.GameFeature	models	deferred	Deferred model surface; the v7 freeze contains only IIdentifiable and InstallationStatus, not the full v6 Game model.
-Playnite.SDK.Models.MetadataFile	models	deferred	Deferred model surface; the v7 freeze contains only IIdentifiable and InstallationStatus, not the full v6 Game model.
-Playnite.SDK.Models.MetadataIdProperty	models	deferred	Deferred model surface; the v7 freeze contains only IIdentifiable and InstallationStatus, not the full v6 Game model.
-Playnite.SDK.Models.MetadataNameProperty	models	deferred	Deferred model surface; the v7 freeze contains only IIdentifiable and InstallationStatus, not the full v6 Game model.
-Playnite.SDK.Models.MetadataSpecProperty	models	deferred	Deferred model surface; the v7 freeze contains only IIdentifiable and InstallationStatus, not the full v6 Game model.
-Playnite.SDK.Models.MetadataProperty	models	deferred	Deferred model surface; the v7 freeze contains only IIdentifiable and InstallationStatus, not the full v6 Game model.
-Playnite.SDK.Models.GameMetadata	models	deferred	Deferred model surface; the v7 freeze contains only IIdentifiable and InstallationStatus, not the full v6 Game model.
-Playnite.SDK.Models.GameRom	models	deferred	Deferred model surface; the v7 freeze contains only IIdentifiable and InstallationStatus, not the full v6 Game model.
-Playnite.SDK.Models.ScannerConfigPlayActionSettings	models	deferred	Deferred model surface; the v7 freeze contains only IIdentifiable and InstallationStatus, not the full v6 Game model.
-Playnite.SDK.Models.GameScannerConfig	models	deferred	Deferred model surface; the v7 freeze contains only IIdentifiable and InstallationStatus, not the full v6 Game model.
-Playnite.SDK.Models.GameSource	models	deferred	Deferred model surface; the v7 freeze contains only IIdentifiable and InstallationStatus, not the full v6 Game model.
-Playnite.SDK.Models.Genre	models	deferred	Deferred model surface; the v7 freeze contains only IIdentifiable and InstallationStatus, not the full v6 Game model.
-Playnite.SDK.Models.InstallSizeGroup	models	deferred	Deferred model surface; the v7 freeze contains only IIdentifiable and InstallationStatus, not the full v6 Game model.
-Playnite.SDK.Models.Link	models	deferred	Deferred model surface; the v7 freeze contains only IIdentifiable and InstallationStatus, not the full v6 Game model.
-Playnite.SDK.Models.PastTimeSegment	models	deferred	Deferred model surface; the v7 freeze contains only IIdentifiable and InstallationStatus, not the full v6 Game model.
-Playnite.SDK.Models.Platform	models	deferred	Deferred model surface; the v7 freeze contains only IIdentifiable and InstallationStatus, not the full v6 Game model.
-Playnite.SDK.Models.PlaytimeCategory	models	deferred	Deferred model surface; the v7 freeze contains only IIdentifiable and InstallationStatus, not the full v6 Game model.
-Playnite.SDK.Models.Region	models	deferred	Deferred model surface; the v7 freeze contains only IIdentifiable and InstallationStatus, not the full v6 Game model.
-Playnite.SDK.Models.ReleaseDate	models	deferred	Deferred model surface; the v7 freeze contains only IIdentifiable and InstallationStatus, not the full v6 Game model.
-Playnite.SDK.Models.ScoreRating	models	deferred	Deferred model surface; the v7 freeze contains only IIdentifiable and InstallationStatus, not the full v6 Game model.
-Playnite.SDK.Models.ScoreGroup	models	deferred	Deferred model surface; the v7 freeze contains only IIdentifiable and InstallationStatus, not the full v6 Game model.
-Playnite.SDK.Models.Series	models	deferred	Deferred model surface; the v7 freeze contains only IIdentifiable and InstallationStatus, not the full v6 Game model.
-Playnite.SDK.Models.Tag	models	deferred	Deferred model surface; the v7 freeze contains only IIdentifiable and InstallationStatus, not the full v6 Game model.
-Playnite.SDK.Plugins.AutomaticPlayActionType	plugins	deferred	Deferred plugin extension surface; p6-009 samples and later plugin units consume this after the freeze.
-Playnite.SDK.Plugins.AutomaticPlayController	plugins	deferred	Deferred plugin extension surface; p6-009 samples and later plugin units consume this after the freeze.
-Playnite.SDK.Plugins.ControllerBase	plugins	deferred	Deferred plugin extension surface; p6-009 samples and later plugin units consume this after the freeze.
-Playnite.SDK.Plugins.InstallController	plugins	deferred	Deferred plugin extension surface; p6-009 samples and later plugin units consume this after the freeze.
-Playnite.SDK.Plugins.UninstallController	plugins	deferred	Deferred plugin extension surface; p6-009 samples and later plugin units consume this after the freeze.
-Playnite.SDK.Plugins.PlayController	plugins	deferred	Deferred plugin extension surface; p6-009 samples and later plugin units consume this after the freeze.
-Playnite.SDK.Plugins.InstallActionArgs	plugins	deferred	Deferred plugin extension surface; p6-009 samples and later plugin units consume this after the freeze.
-Playnite.SDK.Plugins.UninstallActionArgs	plugins	deferred	Deferred plugin extension surface; p6-009 samples and later plugin units consume this after the freeze.
-Playnite.SDK.Plugins.PlayActionArgs	plugins	deferred	Deferred plugin extension surface; p6-009 samples and later plugin units consume this after the freeze.
-Playnite.SDK.Plugins.GameStartedEventArgs	plugins	deferred	Deferred plugin extension surface; p6-009 samples and later plugin units consume this after the freeze.
-Playnite.SDK.Plugins.GameStoppedEventArgs	plugins	deferred	Deferred plugin extension surface; p6-009 samples and later plugin units consume this after the freeze.
-Playnite.SDK.Plugins.GameUninstalledEventArgs	plugins	deferred	Deferred plugin extension surface; p6-009 samples and later plugin units consume this after the freeze.
-Playnite.SDK.Plugins.GameInstallationData	plugins	deferred	Deferred plugin extension surface; p6-009 samples and later plugin units consume this after the freeze.
-Playnite.SDK.Plugins.GameInstalledEventArgs	plugins	deferred	Deferred plugin extension surface; p6-009 samples and later plugin units consume this after the freeze.
-Playnite.SDK.Plugins.GameInstallationCancelledEventArgs	plugins	deferred	Deferred plugin extension surface; p6-009 samples and later plugin units consume this after the freeze.
-Playnite.SDK.Plugins.LibraryImportGamesArgs	plugins	deferred	Deferred plugin extension surface; p6-009 samples and later plugin units consume this after the freeze.
-Playnite.SDK.Plugins.LibraryPluginProperties	plugins	deferred	Deferred plugin extension surface; p6-009 samples and later plugin units consume this after the freeze.
-Playnite.SDK.Plugins.LibraryPlugin	plugins	deferred	Deferred plugin extension surface; p6-009 samples and later plugin units consume this after the freeze.
-Playnite.SDK.Plugins.PluginMenuItem	plugins	deferred	Deferred plugin extension surface; p6-009 samples and later plugin units consume this after the freeze.
-Playnite.SDK.Plugins.GameMenuItemActionArgs	plugins	deferred	Deferred plugin extension surface; p6-009 samples and later plugin units consume this after the freeze.
-Playnite.SDK.Plugins.ScriptGameMenuItemActionArgs	plugins	deferred	Deferred plugin extension surface; p6-009 samples and later plugin units consume this after the freeze.
-Playnite.SDK.Plugins.GameMenuItem	plugins	deferred	Deferred plugin extension surface; p6-009 samples and later plugin units consume this after the freeze.
-Playnite.SDK.Plugins.ScriptGameMenuItem	plugins	deferred	Deferred plugin extension surface; p6-009 samples and later plugin units consume this after the freeze.
-Playnite.SDK.Plugins.GetGameMenuItemsArgs	plugins	deferred	Deferred plugin extension surface; p6-009 samples and later plugin units consume this after the freeze.
-Playnite.SDK.Plugins.ScriptMainMenuItemActionArgs	plugins	deferred	Deferred plugin extension surface; p6-009 samples and later plugin units consume this after the freeze.
-Playnite.SDK.Plugins.MainMenuItemActionArgs	plugins	deferred	Deferred plugin extension surface; p6-009 samples and later plugin units consume this after the freeze.
-Playnite.SDK.Plugins.MainMenuItem	plugins	deferred	Deferred plugin extension surface; p6-009 samples and later plugin units consume this after the freeze.
-Playnite.SDK.Plugins.ScriptMainMenuItem	plugins	deferred	Deferred plugin extension surface; p6-009 samples and later plugin units consume this after the freeze.
-Playnite.SDK.Plugins.GetMainMenuItemsArgs	plugins	deferred	Deferred plugin extension surface; p6-009 samples and later plugin units consume this after the freeze.
-Playnite.SDK.Plugins.MetadataRequestOptions	plugins	deferred	Deferred plugin extension surface; p6-009 samples and later plugin units consume this after the freeze.
-Playnite.SDK.Plugins.GetMetadataFieldArgs	plugins	deferred	Deferred plugin extension surface; p6-009 samples and later plugin units consume this after the freeze.
-Playnite.SDK.Plugins.OnDemandMetadataProvider	plugins	deferred	Deferred plugin extension surface; p6-009 samples and later plugin units consume this after the freeze.
-Playnite.SDK.Plugins.MetadataPluginProperties	plugins	deferred	Deferred plugin extension surface; p6-009 samples and later plugin units consume this after the freeze.
-Playnite.SDK.Plugins.MetadataPlugin	plugins	deferred	Deferred plugin extension surface; p6-009 samples and later plugin units consume this after the freeze.
-Playnite.SDK.Plugins.GetPlayActionsArgs	plugins	deferred	Deferred plugin extension surface; p6-009 samples and later plugin units consume this after the freeze.
-Playnite.SDK.Plugins.GetInstallActionsArgs	plugins	deferred	Deferred plugin extension surface; p6-009 samples and later plugin units consume this after the freeze.
-Playnite.SDK.Plugins.GetUninstallActionsArgs	plugins	deferred	Deferred plugin extension surface; p6-009 samples and later plugin units consume this after the freeze.
-Playnite.SDK.Plugins.LoadPluginAttribute	plugins	deferred	Deferred plugin extension surface; p6-009 samples and later plugin units consume this after the freeze.
-Playnite.SDK.Plugins.IgnorePluginAttribute	plugins	deferred	Deferred plugin extension surface; p6-009 samples and later plugin units consume this after the freeze.
-Playnite.SDK.Plugins.GetGameViewControlArgs	plugins	deferred	Deferred plugin extension surface; p6-009 samples and later plugin units consume this after the freeze.
-Playnite.SDK.Plugins.AddCustomElementSupportArgs	plugins	deferred	Deferred plugin extension surface; p6-009 samples and later plugin units consume this after the freeze.
-Playnite.SDK.Plugins.AddSettingsSupportArgs	plugins	deferred	Deferred plugin extension surface; p6-009 samples and later plugin units consume this after the freeze.
-Playnite.SDK.Plugins.AddConvertersSupportArgs	plugins	deferred	Deferred plugin extension surface; p6-009 samples and later plugin units consume this after the freeze.
-Playnite.SDK.Plugins.PluginProperties	plugins	deferred	Deferred plugin extension surface; p6-009 samples and later plugin units consume this after the freeze.
-Playnite.SDK.Plugins.GenericPluginProperties	plugins	deferred	Deferred plugin extension surface; p6-009 samples and later plugin units consume this after the freeze.
-Playnite.SDK.Plugins.GenericPlugin	plugins	deferred	Deferred plugin extension surface; p6-009 samples and later plugin units consume this after the freeze.
-Playnite.SDK.Plugins.Plugin	plugins	deferred	Deferred plugin extension surface; p6-009 samples and later plugin units consume this after the freeze.
-Playnite.SDK.Plugins.SearchSupport	plugins	deferred	Deferred plugin extension surface; p6-009 samples and later plugin units consume this after the freeze.
-Playnite.SDK.Plugins.SearchContext	plugins	deferred	Deferred plugin extension surface; p6-009 samples and later plugin units consume this after the freeze.
-Playnite.SDK.Plugins.GenericListSearchContext	plugins	deferred	Deferred plugin extension surface; p6-009 samples and later plugin units consume this after the freeze.
-Playnite.SDK.Plugins.GameSearchFilterSettings	plugins	deferred	Deferred plugin extension surface; p6-009 samples and later plugin units consume this after the freeze.
-Playnite.SDK.Plugins.GetSearchResultsArgs	plugins	deferred	Deferred plugin extension surface; p6-009 samples and later plugin units consume this after the freeze.
-Playnite.SDK.Plugins.SearchItemAction	plugins	deferred	Deferred plugin extension surface; p6-009 samples and later plugin units consume this after the freeze.
-Playnite.SDK.Plugins.ContextSwitchSearchItemAction	plugins	deferred	Deferred plugin extension surface; p6-009 samples and later plugin units consume this after the freeze.
-Playnite.SDK.Plugins.SearchItem	plugins	deferred	Deferred plugin extension surface; p6-009 samples and later plugin units consume this after the freeze.
-Playnite.SDK.Plugins.GameSearchItem	plugins	deferred	Deferred plugin extension surface; p6-009 samples and later plugin units consume this after the freeze.
-Playnite.SDK.Plugins.SiderbarItemType	plugins	deferred	Deferred plugin extension surface; p6-009 samples and later plugin units consume this after the freeze.
-Playnite.SDK.Plugins.SidebarItem	plugins	deferred	Deferred plugin extension surface; p6-009 samples and later plugin units consume this after the freeze.
-Playnite.SDK.Plugins.TopPanelItem	plugins	deferred	Deferred plugin extension surface; p6-009 samples and later plugin units consume this after the freeze.
-Playnite.SDK.WebViewModels.ResourceType	webview	deferred	Deferred by ADR-019; WebView is a v1.1 item.
-Playnite.SDK.WebViewModels.Request	webview	deferred	Deferred by ADR-019; WebView is a v1.1 item.
-Playnite.SDK.WebViewModels.Response	webview	deferred	Deferred by ADR-019; WebView is a v1.1 item.
-Playnite.SDK.WebViewModels.UrlRequestStatus	webview	deferred	Deferred by ADR-019; WebView is a v1.1 item.
-System.Collections.Concurrent.ObservableConcurrentDictionary<TKey, TValue>	excluded-boundary	excluded	v6 global-namespace collection helper; not an SDK contract type.
-System.Collections.Generic.ComparableDbItemList<T>	excluded-boundary	excluded	v6 global-namespace database collection helper; not an SDK contract type.
-System.Collections.Generic.ComparableList<T>	excluded-boundary	excluded	v6 global-namespace collection helper; not an SDK contract type.
-System.Collections.Generic.ObservableObject	excluded-boundary	excluded	v6 global-namespace INotifyPropertyChanged helper; not an SDK contract type.
-System.Collections.Generic.RangeObservableCollection<T>	excluded-boundary	excluded	v6 global-namespace collection helper; not an SDK contract type.
-System.Collections.Generic.ListExtensions	excluded-boundary	excluded	v6 global-namespace collection helper; not an SDK contract type.
+code	v6_difference	group	classification	decision
+CP0001	Playnite.ImportExclusionItem	excluded-boundary	excluded	v6 global-namespace helper; not an SDK contract type.
+CP0001	Playnite.SDK.API	infrastructure	deferred	Deferred host/infrastructure facade; not part of the seven-type p6-008 seed freeze.
+CP0001	Playnite.SDK.ApplicationMode	infrastructure	deferred	Deferred host/infrastructure facade; not part of the seven-type p6-008 seed freeze.
+CP0001	Playnite.SDK.BuiltinExtension	infrastructure	deferred	Deferred host/infrastructure facade; not part of the seven-type p6-008 seed freeze.
+CP0001	Playnite.SDK.BuiltinExtensions	infrastructure	deferred	Deferred host/infrastructure facade; not part of the seven-type p6-008 seed freeze.
+CP0001	Playnite.SDK.Controls.PluginUserControl	excluded-boundary	excluded	WPF control; UI extension point deferred by ADR-023.
+CP0001	Playnite.SDK.CookiePriority	webview	deferred	Deferred by ADR-019; WebView is a v1.1 item.
+CP0001	Playnite.SDK.CookieSameSite	webview	deferred	Deferred by ADR-019; WebView is a v1.1 item.
+CP0001	Playnite.SDK.Data.IMarkupConverter	excluded-boundary	excluded	WPF markup contract; UI extension point, not a headless abstraction.
+CP0001	Playnite.SDK.Data.ISQLite	excluded-boundary	excluded	v6 SQLite wrapper; the Linux port uses its own repository and does not freeze this v6 implementation type.
+CP0001	Playnite.SDK.Data.Markup	excluded-boundary	excluded	WPF markup extension; UI extension point, not a headless abstraction.
+CP0001	Playnite.SDK.Data.SQLite	excluded-boundary	excluded	v6 SQLite wrapper; the Linux port uses its own repository and does not freeze this v6 implementation type.
+CP0001	Playnite.SDK.Data.Serialization	data	deferred	Deferred serializer implementation/markup surface; IDataSerializer is the frozen contract.
+CP0001	Playnite.SDK.Data.SqliteOpenFlags	excluded-boundary	excluded	v6 SQLite wrapper enum; not part of the headless abstraction freeze.
+CP0001	Playnite.SDK.Events.ApplicationEvent	events	deferred	Deferred event surface; only OnApplicationStartedEventArgs is in the v7 freeze.
+CP0001	Playnite.SDK.Events.ControllerInput	events	deferred	Deferred event surface; only OnApplicationStartedEventArgs is in the v7 freeze.
+CP0001	Playnite.SDK.Events.ControllerInputState	events	deferred	Deferred event surface; only OnApplicationStartedEventArgs is in the v7 freeze.
+CP0001	Playnite.SDK.Events.GamepadController	events	deferred	Deferred event surface; only OnApplicationStartedEventArgs is in the v7 freeze.
+CP0001	Playnite.SDK.Events.IGamepad	events	deferred	Deferred event surface; only OnApplicationStartedEventArgs is in the v7 freeze.
+CP0001	Playnite.SDK.Events.OnApplicationStoppedEventArgs	events	deferred	Deferred event surface; only OnApplicationStartedEventArgs is in the v7 freeze.
+CP0001	Playnite.SDK.Events.OnControllerButtonStateChangedArgs	events	deferred	Deferred event surface; only OnApplicationStartedEventArgs is in the v7 freeze.
+CP0001	Playnite.SDK.Events.OnControllerConnectedArgs	events	deferred	Deferred event surface; only OnApplicationStartedEventArgs is in the v7 freeze.
+CP0001	Playnite.SDK.Events.OnControllerDisconnectedArgs	events	deferred	Deferred event surface; only OnApplicationStartedEventArgs is in the v7 freeze.
+CP0001	Playnite.SDK.Events.OnFullscreenViewChangedArgs	events	deferred	Deferred event surface; only OnApplicationStartedEventArgs is in the v7 freeze.
+CP0001	Playnite.SDK.Events.OnGameInstallationCancelledEventArgs	events	deferred	Deferred event surface; only OnApplicationStartedEventArgs is in the v7 freeze.
+CP0001	Playnite.SDK.Events.OnGameInstalledEventArgs	events	deferred	Deferred event surface; only OnApplicationStartedEventArgs is in the v7 freeze.
+CP0001	Playnite.SDK.Events.OnGameSelectedEventArgs	events	deferred	Deferred event surface; only OnApplicationStartedEventArgs is in the v7 freeze.
+CP0001	Playnite.SDK.Events.OnGameStartedEventArgs	events	deferred	Deferred event surface; only OnApplicationStartedEventArgs is in the v7 freeze.
+CP0001	Playnite.SDK.Events.OnGameStartingEventArgs	events	deferred	Deferred event surface; only OnApplicationStartedEventArgs is in the v7 freeze.
+CP0001	Playnite.SDK.Events.OnGameStartupCancelledEventArgs	events	deferred	Deferred event surface; only OnApplicationStartedEventArgs is in the v7 freeze.
+CP0001	Playnite.SDK.Events.OnGameStoppedEventArgs	events	deferred	Deferred event surface; only OnApplicationStartedEventArgs is in the v7 freeze.
+CP0001	Playnite.SDK.Events.OnGameUninstalledEventArgs	events	deferred	Deferred event surface; only OnApplicationStartedEventArgs is in the v7 freeze.
+CP0001	Playnite.SDK.Events.OnLibraryUpdatedEventArgs	events	deferred	Deferred event surface; only OnApplicationStartedEventArgs is in the v7 freeze.
+CP0001	Playnite.SDK.Events.WebViewLoadingChangedEventArgs	events	deferred	Deferred event surface; only OnApplicationStartedEventArgs is in the v7 freeze.
+CP0001	Playnite.SDK.Exceptions.ScriptRuntimeException	infrastructure	deferred	Deferred host/infrastructure facade; not part of the seven-type p6-008 seed freeze.
+CP0001	Playnite.SDK.ExpandableVariables	infrastructure	deferred	Deferred host/infrastructure facade; not part of the seven-type p6-008 seed freeze.
+CP0001	Playnite.SDK.ExtensionFunction	infrastructure	deferred	Deferred host/infrastructure facade; not part of the seven-type p6-008 seed freeze.
+CP0001	Playnite.SDK.GameDatabaseCollection	database	deferred	Deferred database API; the p4-001 repository is the v1 data path.
+CP0001	Playnite.SDK.GenericItemOption	host-api-adapted	adapted	v6 dialog DTO; p6-006 uses typed dialog requests.
+CP0001	Playnite.SDK.GlobalProgressActionArgs	host-api-adapted	adapted	v6 WPF progress DTO; no v1 headless equivalent is frozen.
+CP0001	Playnite.SDK.GlobalProgressOptions	host-api-adapted	adapted	v6 WPF progress DTO; no v1 headless equivalent is frozen.
+CP0001	Playnite.SDK.GlobalProgressResult	host-api-adapted	adapted	v6 WPF progress DTO; no v1 headless equivalent is frozen.
+CP0001	Playnite.SDK.HttpCookie	webview	deferred	Deferred by ADR-019; WebView is a v1.1 item.
+CP0001	Playnite.SDK.IAddons	infrastructure	deferred	Deferred host/infrastructure facade; not part of the seven-type p6-008 seed freeze.
+CP0001	Playnite.SDK.ICompletionStatusSettignsApi	settings	deferred	Deferred settings API; p6-004 owns the headless settings service.
+CP0001	Playnite.SDK.IEmulationAPI	emulation	deferred	Deferred emulation API; not part of the v1 headless slice.
+CP0001	Playnite.SDK.IFullscreenSettingsAPI	settings	deferred	Deferred settings API; p6-004 owns the headless settings service.
+CP0001	Playnite.SDK.IGameDatabase	database	deferred	Deferred database API; the p4-001 repository is the v1 data path.
+CP0001	Playnite.SDK.IGameDatabaseAPI	database	deferred	Deferred database API; the p4-001 repository is the v1 data path.
+CP0001	Playnite.SDK.IItemCollection	database	deferred	Deferred database API; the p4-001 repository is the v1 data path.
+CP0001	Playnite.SDK.IItemCollection<TItem>	database	deferred	Deferred database API; the p4-001 repository is the v1 data path.
+CP0001	Playnite.SDK.ILogProvider	logging	deferred	Deferred logging facade; no v6 logger is frozen in v7.
+CP0001	Playnite.SDK.ILogger	logging	deferred	Deferred logging facade; no v6 logger is frozen in v7.
+CP0001	Playnite.SDK.IPlayniteAPI	infrastructure	deferred	Deferred host/infrastructure facade; not part of the seven-type p6-008 seed freeze.
+CP0001	Playnite.SDK.IPlayniteInfoAPI	infrastructure	deferred	Deferred host/infrastructure facade; not part of the seven-type p6-008 seed freeze.
+CP0001	Playnite.SDK.IPlaynitePathsAPI	infrastructure	deferred	Deferred host/infrastructure facade; not part of the seven-type p6-008 seed freeze.
+CP0001	Playnite.SDK.IPlayniteSettingsAPI	settings	deferred	Deferred settings API; p6-004 owns the headless settings service.
+CP0001	Playnite.SDK.IResourceProvider	infrastructure	deferred	Deferred host/infrastructure facade; not part of the seven-type p6-008 seed freeze.
+CP0001	Playnite.SDK.ISettings	settings	deferred	Deferred settings API; p6-004 owns the headless settings service.
+CP0001	Playnite.SDK.IWebView	webview	deferred	Deferred by ADR-019; WebView is a v1.1 item.
+CP0001	Playnite.SDK.IWebViewFactory	webview	deferred	Deferred by ADR-019; WebView is a v1.1 item.
+CP0001	Playnite.SDK.ImageFileOption	host-api-adapted	adapted	v6 dialog DTO; p6-006 uses typed FileDialogRequest/Response.
+CP0001	Playnite.SDK.ItemCollectionChangedEventArgs<TItem>	database	deferred	Deferred database API; the p4-001 repository is the v1 data path.
+CP0001	Playnite.SDK.ItemUpdateEvent<TItem>	database	deferred	Deferred database API; the p4-001 repository is the v1 data path.
+CP0001	Playnite.SDK.ItemUpdatedEventArgs<TItem>	database	deferred	Deferred database API; the p4-001 repository is the v1 data path.
+CP0001	Playnite.SDK.JavaScriptEvaluationResult	webview	deferred	Deferred by ADR-019; WebView is a v1.1 item.
+CP0001	Playnite.SDK.LibraryClient	infrastructure	deferred	Deferred host/infrastructure facade; not part of the seven-type p6-008 seed freeze.
+CP0001	Playnite.SDK.LibraryMetadataProvider	infrastructure	deferred	Deferred host/infrastructure facade; not part of the seven-type p6-008 seed freeze.
+CP0001	Playnite.SDK.LocalizedException	infrastructure	deferred	Deferred host/infrastructure facade; not part of the seven-type p6-008 seed freeze.
+CP0001	Playnite.SDK.LogManager	logging	deferred	Deferred logging facade; no v6 logger is frozen in v7.
+CP0001	Playnite.SDK.MessageBoxOption	host-api-adapted	adapted	v6 WPF dialog DTO; p6-006 uses typed MessageDialogRequest/Response.
+CP0001	Playnite.SDK.MessageBoxToggle	host-api-adapted	adapted	v6 WPF dialog DTO; p6-006 uses typed MessageDialogRequest/Response.
+CP0001	Playnite.SDK.Models.AgeRating	models	deferred	Deferred model surface; the v7 freeze contains only IIdentifiable and InstallationStatus, not the full v6 Game model.
+CP0001	Playnite.SDK.Models.AgeRatingOrg	models	deferred	Deferred model surface; the v7 freeze contains only IIdentifiable and InstallationStatus, not the full v6 Game model.
+CP0001	Playnite.SDK.Models.AppSoftware	models	deferred	Deferred model surface; the v7 freeze contains only IIdentifiable and InstallationStatus, not the full v6 Game model.
+CP0001	Playnite.SDK.Models.AppSoftwareType	models	deferred	Deferred model surface; the v7 freeze contains only IIdentifiable and InstallationStatus, not the full v6 Game model.
+CP0001	Playnite.SDK.Models.BuiltInEmulatorProfile	models	deferred	Deferred model surface; the v7 freeze contains only IIdentifiable and InstallationStatus, not the full v6 Game model.
+CP0001	Playnite.SDK.Models.Category	models	deferred	Deferred model surface; the v7 freeze contains only IIdentifiable and InstallationStatus, not the full v6 Game model.
+CP0001	Playnite.SDK.Models.Company	models	deferred	Deferred model surface; the v7 freeze contains only IIdentifiable and InstallationStatus, not the full v6 Game model.
+CP0001	Playnite.SDK.Models.CompletionStatus	models	deferred	Deferred model surface; the v7 freeze contains only IIdentifiable and InstallationStatus, not the full v6 Game model.
+CP0001	Playnite.SDK.Models.CustomEmulatorProfile	models	deferred	Deferred model surface; the v7 freeze contains only IIdentifiable and InstallationStatus, not the full v6 Game model.
+CP0001	Playnite.SDK.Models.DatabaseObject	models	deferred	Deferred model surface; the v7 freeze contains only IIdentifiable and InstallationStatus, not the full v6 Game model.
+CP0001	Playnite.SDK.Models.Developer	models	deferred	Deferred model surface; the v7 freeze contains only IIdentifiable and InstallationStatus, not the full v6 Game model.
+CP0001	Playnite.SDK.Models.EmulatedPlatform	models	deferred	Deferred model surface; the v7 freeze contains only IIdentifiable and InstallationStatus, not the full v6 Game model.
+CP0001	Playnite.SDK.Models.EmulatedRegion	models	deferred	Deferred model surface; the v7 freeze contains only IIdentifiable and InstallationStatus, not the full v6 Game model.
+CP0001	Playnite.SDK.Models.Emulator	models	deferred	Deferred model surface; the v7 freeze contains only IIdentifiable and InstallationStatus, not the full v6 Game model.
+CP0001	Playnite.SDK.Models.EmulatorDefinition	models	deferred	Deferred model surface; the v7 freeze contains only IIdentifiable and InstallationStatus, not the full v6 Game model.
+CP0001	Playnite.SDK.Models.EmulatorDefinitionProfile	models	deferred	Deferred model surface; the v7 freeze contains only IIdentifiable and InstallationStatus, not the full v6 Game model.
+CP0001	Playnite.SDK.Models.EmulatorProfile	models	deferred	Deferred model surface; the v7 freeze contains only IIdentifiable and InstallationStatus, not the full v6 Game model.
+CP0001	Playnite.SDK.Models.EnumFilterItemProperties	host-api-adapted	adapted	v6 UI filter DTO; not frozen in Abstractions.
+CP0001	Playnite.SDK.Models.FilterPreset	host-api-adapted	adapted	v6 UI filter preset; not frozen in Abstractions.
+CP0001	Playnite.SDK.Models.FilterPresetSettings	host-api-adapted	adapted	v6 UI filter state; p6-006/Playnite.Core.Queries own the headless shape.
+CP0001	Playnite.SDK.Models.Game	models	deferred	Deferred model surface; the v7 freeze contains only IIdentifiable and InstallationStatus, not the full v6 Game model.
+CP0001	Playnite.SDK.Models.GameAction	models	deferred	Deferred model surface; the v7 freeze contains only IIdentifiable and InstallationStatus, not the full v6 Game model.
+CP0001	Playnite.SDK.Models.GameActionType	models	deferred	Deferred model surface; the v7 freeze contains only IIdentifiable and InstallationStatus, not the full v6 Game model.
+CP0001	Playnite.SDK.Models.GameFeature	models	deferred	Deferred model surface; the v7 freeze contains only IIdentifiable and InstallationStatus, not the full v6 Game model.
+CP0001	Playnite.SDK.Models.GameField	models	deferred	Deferred model surface; the v7 freeze contains only IIdentifiable and InstallationStatus, not the full v6 Game model.
+CP0001	Playnite.SDK.Models.GameMetadata	models	deferred	Deferred model surface; the v7 freeze contains only IIdentifiable and InstallationStatus, not the full v6 Game model.
+CP0001	Playnite.SDK.Models.GameRom	models	deferred	Deferred model surface; the v7 freeze contains only IIdentifiable and InstallationStatus, not the full v6 Game model.
+CP0001	Playnite.SDK.Models.GameScannerConfig	models	deferred	Deferred model surface; the v7 freeze contains only IIdentifiable and InstallationStatus, not the full v6 Game model.
+CP0001	Playnite.SDK.Models.GameSource	models	deferred	Deferred model surface; the v7 freeze contains only IIdentifiable and InstallationStatus, not the full v6 Game model.
+CP0001	Playnite.SDK.Models.Genre	models	deferred	Deferred model surface; the v7 freeze contains only IIdentifiable and InstallationStatus, not the full v6 Game model.
+CP0001	Playnite.SDK.Models.GroupableField	host-api-adapted	adapted	v6 UI grouping enum; p6-006 uses Core LibraryGroupBy.
+CP0001	Playnite.SDK.Models.IdItemFilterItemProperties	host-api-adapted	adapted	v6 UI filter DTO; not frozen in Abstractions.
+CP0001	Playnite.SDK.Models.InstallSizeGroup	models	deferred	Deferred model surface; the v7 freeze contains only IIdentifiable and InstallationStatus, not the full v6 Game model.
+CP0001	Playnite.SDK.Models.Link	models	deferred	Deferred model surface; the v7 freeze contains only IIdentifiable and InstallationStatus, not the full v6 Game model.
+CP0001	Playnite.SDK.Models.MetadataFile	models	deferred	Deferred model surface; the v7 freeze contains only IIdentifiable and InstallationStatus, not the full v6 Game model.
+CP0001	Playnite.SDK.Models.MetadataIdProperty	models	deferred	Deferred model surface; the v7 freeze contains only IIdentifiable and InstallationStatus, not the full v6 Game model.
+CP0001	Playnite.SDK.Models.MetadataNameProperty	models	deferred	Deferred model surface; the v7 freeze contains only IIdentifiable and InstallationStatus, not the full v6 Game model.
+CP0001	Playnite.SDK.Models.MetadataProperty	models	deferred	Deferred model surface; the v7 freeze contains only IIdentifiable and InstallationStatus, not the full v6 Game model.
+CP0001	Playnite.SDK.Models.MetadataSpecProperty	models	deferred	Deferred model surface; the v7 freeze contains only IIdentifiable and InstallationStatus, not the full v6 Game model.
+CP0001	Playnite.SDK.Models.PastTimeSegment	models	deferred	Deferred model surface; the v7 freeze contains only IIdentifiable and InstallationStatus, not the full v6 Game model.
+CP0001	Playnite.SDK.Models.Platform	models	deferred	Deferred model surface; the v7 freeze contains only IIdentifiable and InstallationStatus, not the full v6 Game model.
+CP0001	Playnite.SDK.Models.PlaytimeCategory	models	deferred	Deferred model surface; the v7 freeze contains only IIdentifiable and InstallationStatus, not the full v6 Game model.
+CP0001	Playnite.SDK.Models.Publisher	models	deferred	Deferred model surface; the v7 freeze contains only IIdentifiable and InstallationStatus, not the full v6 Game model.
+CP0001	Playnite.SDK.Models.Region	models	deferred	Deferred model surface; the v7 freeze contains only IIdentifiable and InstallationStatus, not the full v6 Game model.
+CP0001	Playnite.SDK.Models.ReleaseDate	models	deferred	Deferred model surface; the v7 freeze contains only IIdentifiable and InstallationStatus, not the full v6 Game model.
+CP0001	Playnite.SDK.Models.ScannerConfigPlayActionSettings	models	deferred	Deferred model surface; the v7 freeze contains only IIdentifiable and InstallationStatus, not the full v6 Game model.
+CP0001	Playnite.SDK.Models.ScoreGroup	models	deferred	Deferred model surface; the v7 freeze contains only IIdentifiable and InstallationStatus, not the full v6 Game model.
+CP0001	Playnite.SDK.Models.ScoreRating	models	deferred	Deferred model surface; the v7 freeze contains only IIdentifiable and InstallationStatus, not the full v6 Game model.
+CP0001	Playnite.SDK.Models.Series	models	deferred	Deferred model surface; the v7 freeze contains only IIdentifiable and InstallationStatus, not the full v6 Game model.
+CP0001	Playnite.SDK.Models.SortOrderDirection	host-api-adapted	adapted	v6 UI sort direction; p6-006 uses a bool on MainViewState.
+CP0001	Playnite.SDK.Models.StringFilterItemProperties	host-api-adapted	adapted	v6 UI filter DTO; not frozen in Abstractions.
+CP0001	Playnite.SDK.Models.Tag	models	deferred	Deferred model surface; the v7 freeze contains only IIdentifiable and InstallationStatus, not the full v6 Game model.
+CP0001	Playnite.SDK.Models.TrackingMode	models	deferred	Deferred model surface; the v7 freeze contains only IIdentifiable and InstallationStatus, not the full v6 Game model.
+CP0001	Playnite.SDK.NullLoggger	logging	deferred	Deferred logging facade; no v6 logger is frozen in v7.
+CP0001	Playnite.SDK.PlaytimeImportMode	infrastructure	deferred	Deferred host/infrastructure facade; not part of the seven-type p6-008 seed freeze.
+CP0001	Playnite.SDK.Plugins.AddConvertersSupportArgs	plugins	deferred	Deferred plugin extension surface; p6-009 samples and later plugin units consume this after the freeze.
+CP0001	Playnite.SDK.Plugins.AddCustomElementSupportArgs	plugins	deferred	Deferred plugin extension surface; p6-009 samples and later plugin units consume this after the freeze.
+CP0001	Playnite.SDK.Plugins.AddSettingsSupportArgs	plugins	deferred	Deferred plugin extension surface; p6-009 samples and later plugin units consume this after the freeze.
+CP0001	Playnite.SDK.Plugins.AutomaticPlayActionType	plugins	deferred	Deferred plugin extension surface; p6-009 samples and later plugin units consume this after the freeze.
+CP0001	Playnite.SDK.Plugins.AutomaticPlayController	plugins	deferred	Deferred plugin extension surface; p6-009 samples and later plugin units consume this after the freeze.
+CP0001	Playnite.SDK.Plugins.ContextSwitchSearchItemAction	plugins	deferred	Deferred plugin extension surface; p6-009 samples and later plugin units consume this after the freeze.
+CP0001	Playnite.SDK.Plugins.ControllerBase	plugins	deferred	Deferred plugin extension surface; p6-009 samples and later plugin units consume this after the freeze.
+CP0001	Playnite.SDK.Plugins.GameInstallationCancelledEventArgs	plugins	deferred	Deferred plugin extension surface; p6-009 samples and later plugin units consume this after the freeze.
+CP0001	Playnite.SDK.Plugins.GameInstallationData	plugins	deferred	Deferred plugin extension surface; p6-009 samples and later plugin units consume this after the freeze.
+CP0001	Playnite.SDK.Plugins.GameInstalledEventArgs	plugins	deferred	Deferred plugin extension surface; p6-009 samples and later plugin units consume this after the freeze.
+CP0001	Playnite.SDK.Plugins.GameMenuItem	plugins	deferred	Deferred plugin extension surface; p6-009 samples and later plugin units consume this after the freeze.
+CP0001	Playnite.SDK.Plugins.GameMenuItemActionArgs	plugins	deferred	Deferred plugin extension surface; p6-009 samples and later plugin units consume this after the freeze.
+CP0001	Playnite.SDK.Plugins.GameSearchFilterSettings	plugins	deferred	Deferred plugin extension surface; p6-009 samples and later plugin units consume this after the freeze.
+CP0001	Playnite.SDK.Plugins.GameSearchItem	plugins	deferred	Deferred plugin extension surface; p6-009 samples and later plugin units consume this after the freeze.
+CP0001	Playnite.SDK.Plugins.GameStartedEventArgs	plugins	deferred	Deferred plugin extension surface; p6-009 samples and later plugin units consume this after the freeze.
+CP0001	Playnite.SDK.Plugins.GameStoppedEventArgs	plugins	deferred	Deferred plugin extension surface; p6-009 samples and later plugin units consume this after the freeze.
+CP0001	Playnite.SDK.Plugins.GameUninstalledEventArgs	plugins	deferred	Deferred plugin extension surface; p6-009 samples and later plugin units consume this after the freeze.
+CP0001	Playnite.SDK.Plugins.GenericListSearchContext	plugins	deferred	Deferred plugin extension surface; p6-009 samples and later plugin units consume this after the freeze.
+CP0001	Playnite.SDK.Plugins.GenericPlugin	plugins	deferred	Deferred plugin extension surface; p6-009 samples and later plugin units consume this after the freeze.
+CP0001	Playnite.SDK.Plugins.GenericPluginProperties	plugins	deferred	Deferred plugin extension surface; p6-009 samples and later plugin units consume this after the freeze.
+CP0001	Playnite.SDK.Plugins.GetGameMenuItemsArgs	plugins	deferred	Deferred plugin extension surface; p6-009 samples and later plugin units consume this after the freeze.
+CP0001	Playnite.SDK.Plugins.GetGameViewControlArgs	plugins	deferred	Deferred plugin extension surface; p6-009 samples and later plugin units consume this after the freeze.
+CP0001	Playnite.SDK.Plugins.GetInstallActionsArgs	plugins	deferred	Deferred plugin extension surface; p6-009 samples and later plugin units consume this after the freeze.
+CP0001	Playnite.SDK.Plugins.GetMainMenuItemsArgs	plugins	deferred	Deferred plugin extension surface; p6-009 samples and later plugin units consume this after the freeze.
+CP0001	Playnite.SDK.Plugins.GetMetadataFieldArgs	plugins	deferred	Deferred plugin extension surface; p6-009 samples and later plugin units consume this after the freeze.
+CP0001	Playnite.SDK.Plugins.GetPlayActionsArgs	plugins	deferred	Deferred plugin extension surface; p6-009 samples and later plugin units consume this after the freeze.
+CP0001	Playnite.SDK.Plugins.GetSearchResultsArgs	plugins	deferred	Deferred plugin extension surface; p6-009 samples and later plugin units consume this after the freeze.
+CP0001	Playnite.SDK.Plugins.GetUninstallActionsArgs	plugins	deferred	Deferred plugin extension surface; p6-009 samples and later plugin units consume this after the freeze.
+CP0001	Playnite.SDK.Plugins.IgnorePluginAttribute	plugins	deferred	Deferred plugin extension surface; p6-009 samples and later plugin units consume this after the freeze.
+CP0001	Playnite.SDK.Plugins.InstallActionArgs	plugins	deferred	Deferred plugin extension surface; p6-009 samples and later plugin units consume this after the freeze.
+CP0001	Playnite.SDK.Plugins.InstallController	plugins	deferred	Deferred plugin extension surface; p6-009 samples and later plugin units consume this after the freeze.
+CP0001	Playnite.SDK.Plugins.LibraryImportGamesArgs	plugins	deferred	Deferred plugin extension surface; p6-009 samples and later plugin units consume this after the freeze.
+CP0001	Playnite.SDK.Plugins.LibraryPlugin	plugins	deferred	Deferred plugin extension surface; p6-009 samples and later plugin units consume this after the freeze.
+CP0001	Playnite.SDK.Plugins.LibraryPluginProperties	plugins	deferred	Deferred plugin extension surface; p6-009 samples and later plugin units consume this after the freeze.
+CP0001	Playnite.SDK.Plugins.LoadPluginAttribute	plugins	deferred	Deferred plugin extension surface; p6-009 samples and later plugin units consume this after the freeze.
+CP0001	Playnite.SDK.Plugins.MainMenuItem	plugins	deferred	Deferred plugin extension surface; p6-009 samples and later plugin units consume this after the freeze.
+CP0001	Playnite.SDK.Plugins.MainMenuItemActionArgs	plugins	deferred	Deferred plugin extension surface; p6-009 samples and later plugin units consume this after the freeze.
+CP0001	Playnite.SDK.Plugins.MetadataPlugin	plugins	deferred	Deferred plugin extension surface; p6-009 samples and later plugin units consume this after the freeze.
+CP0001	Playnite.SDK.Plugins.MetadataPluginProperties	plugins	deferred	Deferred plugin extension surface; p6-009 samples and later plugin units consume this after the freeze.
+CP0001	Playnite.SDK.Plugins.MetadataRequestOptions	plugins	deferred	Deferred plugin extension surface; p6-009 samples and later plugin units consume this after the freeze.
+CP0001	Playnite.SDK.Plugins.OnDemandMetadataProvider	plugins	deferred	Deferred plugin extension surface; p6-009 samples and later plugin units consume this after the freeze.
+CP0001	Playnite.SDK.Plugins.PlayActionArgs	plugins	deferred	Deferred plugin extension surface; p6-009 samples and later plugin units consume this after the freeze.
+CP0001	Playnite.SDK.Plugins.PlayController	plugins	deferred	Deferred plugin extension surface; p6-009 samples and later plugin units consume this after the freeze.
+CP0001	Playnite.SDK.Plugins.Plugin	plugins	deferred	Deferred plugin extension surface; p6-009 samples and later plugin units consume this after the freeze.
+CP0001	Playnite.SDK.Plugins.PluginMenuItem	plugins	deferred	Deferred plugin extension surface; p6-009 samples and later plugin units consume this after the freeze.
+CP0001	Playnite.SDK.Plugins.PluginProperties	plugins	deferred	Deferred plugin extension surface; p6-009 samples and later plugin units consume this after the freeze.
+CP0001	Playnite.SDK.Plugins.ScriptGameMenuItem	plugins	deferred	Deferred plugin extension surface; p6-009 samples and later plugin units consume this after the freeze.
+CP0001	Playnite.SDK.Plugins.ScriptGameMenuItemActionArgs	plugins	deferred	Deferred plugin extension surface; p6-009 samples and later plugin units consume this after the freeze.
+CP0001	Playnite.SDK.Plugins.ScriptMainMenuItem	plugins	deferred	Deferred plugin extension surface; p6-009 samples and later plugin units consume this after the freeze.
+CP0001	Playnite.SDK.Plugins.ScriptMainMenuItemActionArgs	plugins	deferred	Deferred plugin extension surface; p6-009 samples and later plugin units consume this after the freeze.
+CP0001	Playnite.SDK.Plugins.SearchContext	plugins	deferred	Deferred plugin extension surface; p6-009 samples and later plugin units consume this after the freeze.
+CP0001	Playnite.SDK.Plugins.SearchItem	plugins	deferred	Deferred plugin extension surface; p6-009 samples and later plugin units consume this after the freeze.
+CP0001	Playnite.SDK.Plugins.SearchItemAction	plugins	deferred	Deferred plugin extension surface; p6-009 samples and later plugin units consume this after the freeze.
+CP0001	Playnite.SDK.Plugins.SearchSupport	plugins	deferred	Deferred plugin extension surface; p6-009 samples and later plugin units consume this after the freeze.
+CP0001	Playnite.SDK.Plugins.SidebarItem	plugins	deferred	Deferred plugin extension surface; p6-009 samples and later plugin units consume this after the freeze.
+CP0001	Playnite.SDK.Plugins.SiderbarItemType	plugins	deferred	Deferred plugin extension surface; p6-009 samples and later plugin units consume this after the freeze.
+CP0001	Playnite.SDK.Plugins.TopPanelItem	plugins	deferred	Deferred plugin extension surface; p6-009 samples and later plugin units consume this after the freeze.
+CP0001	Playnite.SDK.Plugins.UninstallActionArgs	plugins	deferred	Deferred plugin extension surface; p6-009 samples and later plugin units consume this after the freeze.
+CP0001	Playnite.SDK.Plugins.UninstallController	plugins	deferred	Deferred plugin extension surface; p6-009 samples and later plugin units consume this after the freeze.
+CP0001	Playnite.SDK.ReferenceException	infrastructure	deferred	Deferred host/infrastructure facade; not part of the seven-type p6-008 seed freeze.
+CP0001	Playnite.SDK.RelayCommand	infrastructure	deferred	Deferred host/infrastructure facade; not part of the seven-type p6-008 seed freeze.
+CP0001	Playnite.SDK.RelayCommand<T>	infrastructure	deferred	Deferred host/infrastructure facade; not part of the seven-type p6-008 seed freeze.
+CP0001	Playnite.SDK.RelayCommandBase	infrastructure	deferred	Deferred host/infrastructure facade; not part of the seven-type p6-008 seed freeze.
+CP0001	Playnite.SDK.ResourceProvider	infrastructure	deferred	Deferred host/infrastructure facade; not part of the seven-type p6-008 seed freeze.
+CP0001	Playnite.SDK.ShouldPassResourceContentFuncArgs	webview	deferred	Deferred by ADR-019; WebView is a v1.1 item.
+CP0001	Playnite.SDK.StringSelectionDialogResult	host-api-adapted	adapted	v6 dialog DTO; p6-006 uses TextInputDialogResponse.
+CP0001	Playnite.SDK.TypeMismatchException	infrastructure	deferred	Deferred host/infrastructure facade; not part of the seven-type p6-008 seed freeze.
+CP0001	Playnite.SDK.WebViewModels.Request	webview	deferred	Deferred by ADR-019; WebView is a v1.1 item.
+CP0001	Playnite.SDK.WebViewModels.ResourceType	webview	deferred	Deferred by ADR-019; WebView is a v1.1 item.
+CP0001	Playnite.SDK.WebViewModels.Response	webview	deferred	Deferred by ADR-019; WebView is a v1.1 item.
+CP0001	Playnite.SDK.WebViewModels.UrlRequestStatus	webview	deferred	Deferred by ADR-019; WebView is a v1.1 item.
+CP0001	Playnite.SDK.WebViewResourceLoadedCallback	webview	deferred	Deferred by ADR-019; WebView is a v1.1 item.
+CP0001	Playnite.SDK.WebViewSettings	webview	deferred	Deferred by ADR-019; WebView is a v1.1 item.
+CP0001	Playnite.SDK.WindowCreationOptions	host-api-adapted	adapted	v6 WPF window options; no v1 headless equivalent is frozen.
+CP0001	System.Collections.Concurrent.ObservableConcurrentDictionary<TKey, TValue>	excluded-boundary	excluded	v6 global-namespace collection helper; not an SDK contract type.
+CP0001	System.Collections.Generic.ComparableDbItemList<T>	excluded-boundary	excluded	v6 global-namespace database collection helper; not an SDK contract type.
+CP0001	System.Collections.Generic.ComparableList<T>	excluded-boundary	excluded	v6 global-namespace collection helper; not an SDK contract type.
+CP0001	System.Collections.Generic.ListExtensions	excluded-boundary	excluded	v6 global-namespace collection helper; not an SDK contract type.
+CP0001	System.Collections.Generic.ObservableObject	excluded-boundary	excluded	v6 global-namespace INotifyPropertyChanged helper; not an SDK contract type.
+CP0001	System.Collections.Generic.RangeObservableCollection<T>	excluded-boundary	excluded	v6 global-namespace collection helper; not an SDK contract type.
+CP0001	System.StrExtensions	excluded-boundary	excluded	v6 global-namespace string helper; not an SDK contract type.
+CP0002	Playnite.SDK.DesktopView Playnite.SDK.IMainViewAPI.ActiveDesktopView.get	host-api-moved	adapted	v6 mutable property/setter or Dispatcher member removed; p6-006 exposes the same shell state through the asynchronous MainViewState query over IGameView (ADR-023).
+CP0002	Playnite.SDK.FullscreenView Playnite.SDK.IMainViewAPI.ActiveFullscreenView.get	host-api-moved	adapted	v6 mutable property/setter or Dispatcher member removed; p6-006 exposes the same shell state through the asynchronous MainViewState query over IGameView (ADR-023).
+CP0002	Playnite.SDK.GenericItemOption Playnite.SDK.IDialogsFactory.ChooseItemWithSearch(System.Collections.Generic.List<Playnite.SDK.GenericItemOption>, System.Func<string, System.Collections.Generic.List<Playnite.SDK.GenericItemOption>>, string, string)	host-api-moved	adapted	v6 synchronous WPF/Dispatcher dialog member removed; p6-006 replaces it with the typed asynchronous IDialogsFactory request/response surface (ADR-018/ADR-023).
+CP0002	Playnite.SDK.GlobalProgressResult Playnite.SDK.IDialogsFactory.ActivateGlobalProgress(System.Action<Playnite.SDK.GlobalProgressActionArgs>, Playnite.SDK.GlobalProgressOptions)	host-api-moved	adapted	v6 synchronous WPF/Dispatcher dialog member removed; p6-006 replaces it with the typed asynchronous IDialogsFactory request/response surface (ADR-018/ADR-023).
+CP0002	Playnite.SDK.GlobalProgressResult Playnite.SDK.IDialogsFactory.ActivateGlobalProgress(System.Func<Playnite.SDK.GlobalProgressActionArgs, System.Threading.Tasks.Task>, Playnite.SDK.GlobalProgressOptions)	host-api-moved	adapted	v6 synchronous WPF/Dispatcher dialog member removed; p6-006 replaces it with the typed asynchronous IDialogsFactory request/response surface (ADR-018/ADR-023).
+CP0002	Playnite.SDK.ImageFileOption Playnite.SDK.IDialogsFactory.ChooseImageFile(System.Collections.Generic.List<Playnite.SDK.ImageFileOption>, string, double, double)	host-api-moved	adapted	v6 synchronous WPF/Dispatcher dialog member removed; p6-006 replaces it with the typed asynchronous IDialogsFactory request/response surface (ADR-018/ADR-023).
+CP0002	Playnite.SDK.MessageBoxOption Playnite.SDK.IDialogsFactory.ShowMessage(string, string, System.Windows.MessageBoxImage, System.Collections.Generic.List<Playnite.SDK.MessageBoxOption>)	host-api-moved	adapted	v6 synchronous WPF/Dispatcher dialog member removed; p6-006 replaces it with the typed asynchronous IDialogsFactory request/response surface (ADR-018/ADR-023).
+CP0002	Playnite.SDK.Models.FilterPresetSettings Playnite.SDK.IMainViewAPI.GetCurrentFilterSettings()	host-api-moved	adapted	v6 mutable property/setter or Dispatcher member removed; p6-006 exposes the same shell state through the asynchronous MainViewState query over IGameView (ADR-023).
+CP0002	Playnite.SDK.Models.GroupableField Playnite.SDK.IMainViewAPI.Grouping.get	host-api-moved	adapted	v6 mutable property/setter or Dispatcher member removed; p6-006 exposes the same shell state through the asynchronous MainViewState query over IGameView (ADR-023).
+CP0002	Playnite.SDK.Models.SortOrder Playnite.SDK.IMainViewAPI.SortOrder.get	host-api-moved	adapted	v6 mutable property/setter or Dispatcher member removed; p6-006 exposes the same shell state through the asynchronous MainViewState query over IGameView (ADR-023).
+CP0002	Playnite.SDK.Models.SortOrder Playnite.SDK.Models.SortOrder.AgeRatings	host-api-moved	adapted	v6 collection sort key not implemented by the stored-field sort subset; deferred rather than reinterpreted as an ID sort.
+CP0002	Playnite.SDK.Models.SortOrder Playnite.SDK.Models.SortOrder.Categories	host-api-moved	adapted	v6 collection sort key not implemented by the stored-field sort subset; deferred rather than reinterpreted as an ID sort.
+CP0002	Playnite.SDK.Models.SortOrder Playnite.SDK.Models.SortOrder.CompletionStatus	host-api-moved	adapted	v6 collection sort key not implemented by the stored-field sort subset; deferred rather than reinterpreted as an ID sort.
+CP0002	Playnite.SDK.Models.SortOrder Playnite.SDK.Models.SortOrder.Developers	host-api-moved	adapted	v6 collection sort key not implemented by the stored-field sort subset; deferred rather than reinterpreted as an ID sort.
+CP0002	Playnite.SDK.Models.SortOrder Playnite.SDK.Models.SortOrder.Features	host-api-moved	adapted	v6 collection sort key not implemented by the stored-field sort subset; deferred rather than reinterpreted as an ID sort.
+CP0002	Playnite.SDK.Models.SortOrder Playnite.SDK.Models.SortOrder.Genres	host-api-moved	adapted	v6 collection sort key not implemented by the stored-field sort subset; deferred rather than reinterpreted as an ID sort.
+CP0002	Playnite.SDK.Models.SortOrder Playnite.SDK.Models.SortOrder.Library	host-api-moved	adapted	v6 collection sort key not implemented by the stored-field sort subset; deferred rather than reinterpreted as an ID sort.
+CP0002	Playnite.SDK.Models.SortOrder Playnite.SDK.Models.SortOrder.Platforms	host-api-moved	adapted	v6 collection sort key not implemented by the stored-field sort subset; deferred rather than reinterpreted as an ID sort.
+CP0002	Playnite.SDK.Models.SortOrder Playnite.SDK.Models.SortOrder.Publishers	host-api-moved	adapted	v6 collection sort key not implemented by the stored-field sort subset; deferred rather than reinterpreted as an ID sort.
+CP0002	Playnite.SDK.Models.SortOrder Playnite.SDK.Models.SortOrder.Regions	host-api-moved	adapted	v6 collection sort key not implemented by the stored-field sort subset; deferred rather than reinterpreted as an ID sort.
+CP0002	Playnite.SDK.Models.SortOrder Playnite.SDK.Models.SortOrder.Series	host-api-moved	adapted	v6 collection sort key not implemented by the stored-field sort subset; deferred rather than reinterpreted as an ID sort.
+CP0002	Playnite.SDK.Models.SortOrder Playnite.SDK.Models.SortOrder.Source	host-api-moved	adapted	v6 collection sort key not implemented by the stored-field sort subset; deferred rather than reinterpreted as an ID sort.
+CP0002	Playnite.SDK.Models.SortOrder Playnite.SDK.Models.SortOrder.Tags	host-api-moved	adapted	v6 collection sort key not implemented by the stored-field sort subset; deferred rather than reinterpreted as an ID sort.
+CP0002	Playnite.SDK.Models.SortOrderDirection Playnite.SDK.IMainViewAPI.SortOrderDirection.get	host-api-moved	adapted	v6 mutable property/setter or Dispatcher member removed; p6-006 exposes the same shell state through the asynchronous MainViewState query over IGameView (ADR-023).
+CP0002	Playnite.SDK.NotificationMessage.NotificationMessage(string, string, Playnite.SDK.NotificationType, System.Action)	host-api-moved	adapted	v6 WPF ICommand/event activation member removed; the headless message is an immutable record with a validated constructor (ADR-018).
+CP0002	Playnite.SDK.StringSelectionDialogResult Playnite.SDK.IDialogsFactory.SelectString(string, string, string)	host-api-moved	adapted	v6 synchronous WPF/Dispatcher dialog member removed; p6-006 replaces it with the typed asynchronous IDialogsFactory request/response surface (ADR-018/ADR-023).
+CP0002	Playnite.SDK.StringSelectionDialogResult Playnite.SDK.IDialogsFactory.SelectString(string, string, string, System.Collections.Generic.List<Playnite.SDK.MessageBoxToggle>)	host-api-moved	adapted	v6 synchronous WPF/Dispatcher dialog member removed; p6-006 replaces it with the typed asynchronous IDialogsFactory request/response surface (ADR-018/ADR-023).
+CP0002	System.Action Playnite.SDK.NotificationMessage.ActivationAction.get	host-api-moved	adapted	v6 WPF ICommand/event activation member removed; the headless message is an immutable record with a validated constructor (ADR-018).
+CP0002	System.Collections.Generic.IEnumerable<Playnite.SDK.Models.Game> Playnite.SDK.IMainViewAPI.SelectedGames.get	host-api-moved	adapted	v6 mutable property/setter or Dispatcher member removed; p6-006 exposes the same shell state through the asynchronous MainViewState query over IGameView (ADR-023).
+CP0002	System.Collections.Generic.List<Playnite.SDK.Models.FilterPreset> Playnite.SDK.IMainViewAPI.GetSortedFilterFullscreenPresets()	host-api-moved	adapted	v6 mutable property/setter or Dispatcher member removed; p6-006 exposes the same shell state through the asynchronous MainViewState query over IGameView (ADR-023).
+CP0002	System.Collections.Generic.List<Playnite.SDK.Models.FilterPreset> Playnite.SDK.IMainViewAPI.GetSortedFilterPresets()	host-api-moved	adapted	v6 mutable property/setter or Dispatcher member removed; p6-006 exposes the same shell state through the asynchronous MainViewState query over IGameView (ADR-023).
+CP0002	System.Collections.Generic.List<Playnite.SDK.Models.Game> Playnite.SDK.IMainViewAPI.FilteredGames.get	host-api-moved	adapted	v6 mutable property/setter or Dispatcher member removed; p6-006 exposes the same shell state through the asynchronous MainViewState query over IGameView (ADR-023).
+CP0002	System.Collections.Generic.List<string> Playnite.SDK.IDialogsFactory.SelectFiles(string)	host-api-moved	adapted	v6 synchronous WPF/Dispatcher dialog member removed; p6-006 replaces it with the typed asynchronous IDialogsFactory request/response surface (ADR-018/ADR-023).
+CP0002	System.Collections.Generic.List<string> Playnite.SDK.IDialogsFactory.SelectFiles(string, string)	host-api-moved	adapted	v6 synchronous WPF/Dispatcher dialog member removed; p6-006 replaces it with the typed asynchronous IDialogsFactory request/response surface (ADR-018/ADR-023).
+CP0002	System.Collections.ObjectModel.ObservableCollection<Playnite.SDK.NotificationMessage> Playnite.SDK.INotificationsAPI.Messages.get	host-api-moved	adapted	v6 ObservableCollection Add/Remove member removed; p6-006 replaces it with id-deduplicated PublishAsync/DismissAsync/DismissAllAsync (ADR-018).
+CP0002	System.Guid Playnite.SDK.IMainViewAPI.GetActiveFilterPreset()	host-api-moved	adapted	v6 mutable property/setter or Dispatcher member removed; p6-006 exposes the same shell state through the asynchronous MainViewState query over IGameView (ADR-023).
+CP0002	System.Nullable<bool> Playnite.SDK.IMainViewAPI.OpenEditDialog(System.Collections.Generic.List<System.Guid>)	host-api-moved	adapted	v6 mutable property/setter or Dispatcher member removed; p6-006 exposes the same shell state through the asynchronous MainViewState query over IGameView (ADR-023).
+CP0002	System.Nullable<bool> Playnite.SDK.IMainViewAPI.OpenEditDialog(System.Guid)	host-api-moved	adapted	v6 mutable property/setter or Dispatcher member removed; p6-006 exposes the same shell state through the asynchronous MainViewState query over IGameView (ADR-023).
+CP0002	System.Windows.Input.ICommand Playnite.SDK.NotificationMessage.ActivateCommand.get	host-api-moved	adapted	v6 WPF ICommand/event activation member removed; the headless message is an immutable record with a validated constructor (ADR-018).
+CP0002	System.Windows.Input.ICommand Playnite.SDK.NotificationMessage.CloseCommand.get	host-api-moved	adapted	v6 WPF ICommand/event activation member removed; the headless message is an immutable record with a validated constructor (ADR-018).
+CP0002	System.Windows.MessageBoxResult Playnite.SDK.IDialogsFactory.ShowErrorMessage(string)	host-api-moved	adapted	v6 synchronous WPF/Dispatcher dialog member removed; p6-006 replaces it with the typed asynchronous IDialogsFactory request/response surface (ADR-018/ADR-023).
+CP0002	System.Windows.MessageBoxResult Playnite.SDK.IDialogsFactory.ShowErrorMessage(string, string)	host-api-moved	adapted	v6 synchronous WPF/Dispatcher dialog member removed; p6-006 replaces it with the typed asynchronous IDialogsFactory request/response surface (ADR-018/ADR-023).
+CP0002	System.Windows.MessageBoxResult Playnite.SDK.IDialogsFactory.ShowMessage(string)	host-api-moved	adapted	v6 synchronous WPF/Dispatcher dialog member removed; p6-006 replaces it with the typed asynchronous IDialogsFactory request/response surface (ADR-018/ADR-023).
+CP0002	System.Windows.MessageBoxResult Playnite.SDK.IDialogsFactory.ShowMessage(string, string)	host-api-moved	adapted	v6 synchronous WPF/Dispatcher dialog member removed; p6-006 replaces it with the typed asynchronous IDialogsFactory request/response surface (ADR-018/ADR-023).
+CP0002	System.Windows.MessageBoxResult Playnite.SDK.IDialogsFactory.ShowMessage(string, string, System.Windows.MessageBoxButton)	host-api-moved	adapted	v6 synchronous WPF/Dispatcher dialog member removed; p6-006 replaces it with the typed asynchronous IDialogsFactory request/response surface (ADR-018/ADR-023).
+CP0002	System.Windows.MessageBoxResult Playnite.SDK.IDialogsFactory.ShowMessage(string, string, System.Windows.MessageBoxButton, System.Windows.MessageBoxImage)	host-api-moved	adapted	v6 synchronous WPF/Dispatcher dialog member removed; p6-006 replaces it with the typed asynchronous IDialogsFactory request/response surface (ADR-018/ADR-023).
+CP0002	System.Windows.Threading.Dispatcher Playnite.SDK.IMainViewAPI.UIDispatcher.get	host-api-moved	adapted	v6 mutable property/setter or Dispatcher member removed; p6-006 exposes the same shell state through the asynchronous MainViewState query over IGameView (ADR-023).
+CP0002	System.Windows.Window Playnite.SDK.IDialogsFactory.CreateWindow(Playnite.SDK.WindowCreationOptions)	host-api-moved	adapted	v6 synchronous WPF/Dispatcher dialog member removed; p6-006 replaces it with the typed asynchronous IDialogsFactory request/response surface (ADR-018/ADR-023).
+CP0002	System.Windows.Window Playnite.SDK.IDialogsFactory.GetCurrentAppWindow()	host-api-moved	adapted	v6 synchronous WPF/Dispatcher dialog member removed; p6-006 replaces it with the typed asynchronous IDialogsFactory request/response surface (ADR-018/ADR-023).
+CP0002	bool Playnite.SDK.IMainViewAPI.OpenPluginSettings(System.Guid)	host-api-moved	adapted	v6 mutable property/setter or Dispatcher member removed; p6-006 exposes the same shell state through the asynchronous MainViewState query over IGameView (ADR-023).
+CP0002	string Playnite.SDK.IDialogsFactory.SaveFile(string)	host-api-moved	adapted	v6 synchronous WPF/Dispatcher dialog member removed; p6-006 replaces it with the typed asynchronous IDialogsFactory request/response surface (ADR-018/ADR-023).
+CP0002	string Playnite.SDK.IDialogsFactory.SaveFile(string, bool)	host-api-moved	adapted	v6 synchronous WPF/Dispatcher dialog member removed; p6-006 replaces it with the typed asynchronous IDialogsFactory request/response surface (ADR-018/ADR-023).
+CP0002	string Playnite.SDK.IDialogsFactory.SaveFile(string, bool, string)	host-api-moved	adapted	v6 synchronous WPF/Dispatcher dialog member removed; p6-006 replaces it with the typed asynchronous IDialogsFactory request/response surface (ADR-018/ADR-023).
+CP0002	string Playnite.SDK.IDialogsFactory.SaveFile(string, string)	host-api-moved	adapted	v6 synchronous WPF/Dispatcher dialog member removed; p6-006 replaces it with the typed asynchronous IDialogsFactory request/response surface (ADR-018/ADR-023).
+CP0002	string Playnite.SDK.IDialogsFactory.SelectFile(string)	host-api-moved	adapted	v6 synchronous WPF/Dispatcher dialog member removed; p6-006 replaces it with the typed asynchronous IDialogsFactory request/response surface (ADR-018/ADR-023).
+CP0002	string Playnite.SDK.IDialogsFactory.SelectFile(string, string)	host-api-moved	adapted	v6 synchronous WPF/Dispatcher dialog member removed; p6-006 replaces it with the typed asynchronous IDialogsFactory request/response surface (ADR-018/ADR-023).
+CP0002	string Playnite.SDK.IDialogsFactory.SelectFolder()	host-api-moved	adapted	v6 synchronous WPF/Dispatcher dialog member removed; p6-006 replaces it with the typed asynchronous IDialogsFactory request/response surface (ADR-018/ADR-023).
+CP0002	string Playnite.SDK.IDialogsFactory.SelectFolder(string)	host-api-moved	adapted	v6 synchronous WPF/Dispatcher dialog member removed; p6-006 replaces it with the typed asynchronous IDialogsFactory request/response surface (ADR-018/ADR-023).
+CP0002	string Playnite.SDK.IDialogsFactory.SelectIconFile()	host-api-moved	adapted	v6 synchronous WPF/Dispatcher dialog member removed; p6-006 replaces it with the typed asynchronous IDialogsFactory request/response surface (ADR-018/ADR-023).
+CP0002	string Playnite.SDK.IDialogsFactory.SelectIconFile(string)	host-api-moved	adapted	v6 synchronous WPF/Dispatcher dialog member removed; p6-006 replaces it with the typed asynchronous IDialogsFactory request/response surface (ADR-018/ADR-023).
+CP0002	string Playnite.SDK.IDialogsFactory.SelectImagefile()	host-api-moved	adapted	v6 synchronous WPF/Dispatcher dialog member removed; p6-006 replaces it with the typed asynchronous IDialogsFactory request/response surface (ADR-018/ADR-023).
+CP0002	string Playnite.SDK.IDialogsFactory.SelectImagefile(string)	host-api-moved	adapted	v6 synchronous WPF/Dispatcher dialog member removed; p6-006 replaces it with the typed asynchronous IDialogsFactory request/response surface (ADR-018/ADR-023).
+CP0002	void Playnite.SDK.IDialogsFactory.ShowSelectableString(string, string, string)	host-api-moved	adapted	v6 synchronous WPF/Dispatcher dialog member removed; p6-006 replaces it with the typed asynchronous IDialogsFactory request/response surface (ADR-018/ADR-023).
+CP0002	void Playnite.SDK.IMainViewAPI.ActiveDesktopView.set	host-api-moved	adapted	v6 mutable property/setter or Dispatcher member removed; p6-006 exposes the same shell state through the asynchronous MainViewState query over IGameView (ADR-023).
+CP0002	void Playnite.SDK.IMainViewAPI.ApplyFilterPreset(Playnite.SDK.Models.FilterPreset)	host-api-moved	adapted	v6 mutable property/setter or Dispatcher member removed; p6-006 exposes the same shell state through the asynchronous MainViewState query over IGameView (ADR-023).
+CP0002	void Playnite.SDK.IMainViewAPI.ApplyFilterPreset(System.Guid)	host-api-moved	adapted	v6 mutable property/setter or Dispatcher member removed; p6-006 exposes the same shell state through the asynchronous MainViewState query over IGameView (ADR-023).
+CP0002	void Playnite.SDK.IMainViewAPI.Grouping.set	host-api-moved	adapted	v6 mutable property/setter or Dispatcher member removed; p6-006 exposes the same shell state through the asynchronous MainViewState query over IGameView (ADR-023).
+CP0002	void Playnite.SDK.IMainViewAPI.OpenSearch(Playnite.SDK.Plugins.SearchContext, string)	host-api-moved	adapted	v6 mutable property/setter or Dispatcher member removed; p6-006 exposes the same shell state through the asynchronous MainViewState query over IGameView (ADR-023).
+CP0002	void Playnite.SDK.IMainViewAPI.OpenSearch(string)	host-api-moved	adapted	v6 mutable property/setter or Dispatcher member removed; p6-006 exposes the same shell state through the asynchronous MainViewState query over IGameView (ADR-023).
+CP0002	void Playnite.SDK.IMainViewAPI.SelectGame(System.Guid)	host-api-moved	adapted	v6 mutable property/setter or Dispatcher member removed; p6-006 exposes the same shell state through the asynchronous MainViewState query over IGameView (ADR-023).
+CP0002	void Playnite.SDK.IMainViewAPI.SelectGames(System.Collections.Generic.IEnumerable<System.Guid>)	host-api-moved	adapted	v6 mutable property/setter or Dispatcher member removed; p6-006 exposes the same shell state through the asynchronous MainViewState query over IGameView (ADR-023).
+CP0002	void Playnite.SDK.IMainViewAPI.SortOrderDirection.set	host-api-moved	adapted	v6 mutable property/setter or Dispatcher member removed; p6-006 exposes the same shell state through the asynchronous MainViewState query over IGameView (ADR-023).
+CP0002	void Playnite.SDK.IMainViewAPI.SwitchToLibraryView()	host-api-moved	adapted	v6 mutable property/setter or Dispatcher member removed; p6-006 exposes the same shell state through the asynchronous MainViewState query over IGameView (ADR-023).
+CP0002	void Playnite.SDK.IMainViewAPI.ToggleFullscreenView()	host-api-moved	adapted	v6 mutable property/setter or Dispatcher member removed; p6-006 exposes the same shell state through the asynchronous MainViewState query over IGameView (ADR-023).
+CP0002	void Playnite.SDK.INotificationsAPI.Add(Playnite.SDK.NotificationMessage)	host-api-moved	adapted	v6 ObservableCollection Add/Remove member removed; p6-006 replaces it with id-deduplicated PublishAsync/DismissAsync/DismissAllAsync (ADR-018).
+CP0002	void Playnite.SDK.INotificationsAPI.Add(string, string, Playnite.SDK.NotificationType)	host-api-moved	adapted	v6 ObservableCollection Add/Remove member removed; p6-006 replaces it with id-deduplicated PublishAsync/DismissAsync/DismissAllAsync (ADR-018).
+CP0002	void Playnite.SDK.INotificationsAPI.Remove(string)	host-api-moved	adapted	v6 ObservableCollection Add/Remove member removed; p6-006 replaces it with id-deduplicated PublishAsync/DismissAsync/DismissAllAsync (ADR-018).
+CP0002	void Playnite.SDK.INotificationsAPI.RemoveAll()	host-api-moved	adapted	v6 ObservableCollection Add/Remove member removed; p6-006 replaces it with id-deduplicated PublishAsync/DismissAsync/DismissAllAsync (ADR-018).
+CP0002	void Playnite.SDK.NotificationMessage.Activated.add	host-api-moved	adapted	v6 WPF ICommand/event activation member removed; the headless message is an immutable record with a validated constructor (ADR-018).
+CP0002	void Playnite.SDK.NotificationMessage.Activated.remove	host-api-moved	adapted	v6 WPF ICommand/event activation member removed; the headless message is an immutable record with a validated constructor (ADR-018).
+CP0002	void Playnite.SDK.NotificationMessage.Closed.add	host-api-moved	adapted	v6 WPF ICommand/event activation member removed; the headless message is an immutable record with a validated constructor (ADR-018).
+CP0002	void Playnite.SDK.NotificationMessage.Closed.remove	host-api-moved	adapted	v6 WPF ICommand/event activation member removed; the headless message is an immutable record with a validated constructor (ADR-018).
+CP0006	System.Collections.Generic.IReadOnlyList<Playnite.SDK.NotificationMessage> Playnite.SDK.INotificationsAPI.Messages	host-api-moved	adapted	New asynchronous notification member added to the v7 host interface; v6 mutated an ObservableCollection. Intended v7 major adaptation (ADR-018).
+CP0006	System.EventHandler? Playnite.SDK.INotificationsAPI.Changed	host-api-moved	adapted	New asynchronous notification member added to the v7 host interface; v6 mutated an ObservableCollection. Intended v7 major adaptation (ADR-018).
+CP0006	System.Threading.Tasks.Task<Playnite.SDK.FileDialogResponse> Playnite.SDK.IDialogsFactory.SaveFileAsync(string?, string?, string?, bool?, System.Threading.CancellationToken?)	host-api-moved	adapted	New asynchronous dialog member added to the v7 host interface; v6 had no equivalent. Intended v7 major adaptation (ADR-018/ADR-023).
+CP0006	System.Threading.Tasks.Task<Playnite.SDK.FileDialogResponse> Playnite.SDK.IDialogsFactory.SelectFileAsync(Playnite.SDK.FileDialogRequest, System.Threading.CancellationToken)	host-api-moved	adapted	New asynchronous dialog member added to the v7 host interface; v6 had no equivalent. Intended v7 major adaptation (ADR-018/ADR-023).
+CP0006	System.Threading.Tasks.Task<Playnite.SDK.FileDialogResponse> Playnite.SDK.IDialogsFactory.SelectFolderAsync(string?, string?, System.Threading.CancellationToken?)	host-api-moved	adapted	New asynchronous dialog member added to the v7 host interface; v6 had no equivalent. Intended v7 major adaptation (ADR-018/ADR-023).
+CP0006	System.Threading.Tasks.Task<Playnite.SDK.MainViewGamesResponse> Playnite.SDK.IMainViewAPI.GetFilteredGamesAsync(System.Threading.CancellationToken)	host-api-moved	adapted	New asynchronous main-view query added to the v7 host interface; v6 exposed the same data as mutable properties. Intended v7 major adaptation (ADR-023).
+CP0006	System.Threading.Tasks.Task<Playnite.SDK.MainViewGamesResponse> Playnite.SDK.IMainViewAPI.GetSelectedGamesAsync(System.Threading.CancellationToken)	host-api-moved	adapted	New asynchronous main-view query added to the v7 host interface; v6 exposed the same data as mutable properties. Intended v7 major adaptation (ADR-023).
+CP0006	System.Threading.Tasks.Task<Playnite.SDK.MainViewResponse> Playnite.SDK.IMainViewAPI.GetStateAsync(System.Threading.CancellationToken)	host-api-moved	adapted	New asynchronous main-view query added to the v7 host interface; v6 exposed the same data as mutable properties. Intended v7 major adaptation (ADR-023).
+CP0006	System.Threading.Tasks.Task<Playnite.SDK.MessageDialogResponse> Playnite.SDK.IDialogsFactory.ShowErrorAsync(string, string?, System.Threading.CancellationToken)	host-api-moved	adapted	New asynchronous dialog member added to the v7 host interface; v6 had no equivalent. Intended v7 major adaptation (ADR-018/ADR-023).
+CP0006	System.Threading.Tasks.Task<Playnite.SDK.MessageDialogResponse> Playnite.SDK.IDialogsFactory.ShowMessageAsync(Playnite.SDK.MessageDialogRequest, System.Threading.CancellationToken)	host-api-moved	adapted	New asynchronous dialog member added to the v7 host interface; v6 had no equivalent. Intended v7 major adaptation (ADR-018/ADR-023).
+CP0006	System.Threading.Tasks.Task<Playnite.SDK.NotificationDismissAllResult> Playnite.SDK.INotificationsAPI.DismissAllAsync(System.Threading.CancellationToken)	host-api-moved	adapted	New asynchronous notification member added to the v7 host interface; v6 mutated an ObservableCollection. Intended v7 major adaptation (ADR-018).
+CP0006	System.Threading.Tasks.Task<Playnite.SDK.NotificationDismissResult> Playnite.SDK.INotificationsAPI.DismissAsync(string, System.Threading.CancellationToken)	host-api-moved	adapted	New asynchronous notification member added to the v7 host interface; v6 mutated an ObservableCollection. Intended v7 major adaptation (ADR-018).
+CP0006	System.Threading.Tasks.Task<Playnite.SDK.NotificationPublishResult> Playnite.SDK.INotificationsAPI.PublishAsync(Playnite.SDK.NotificationMessage, System.Threading.CancellationToken)	host-api-moved	adapted	New asynchronous notification member added to the v7 host interface; v6 mutated an ObservableCollection. Intended v7 major adaptation (ADR-018).
+CP0006	System.Threading.Tasks.Task<Playnite.SDK.NotificationPublishResult> Playnite.SDK.INotificationsAPI.PublishAsync(string, string, Playnite.SDK.NotificationType, System.Threading.CancellationToken)	host-api-moved	adapted	New asynchronous notification member added to the v7 host interface; v6 mutated an ObservableCollection. Intended v7 major adaptation (ADR-018).
+CP0006	System.Threading.Tasks.Task<Playnite.SDK.TextInputDialogResponse> Playnite.SDK.IDialogsFactory.SelectStringAsync(Playnite.SDK.TextInputDialogRequest, System.Threading.CancellationToken)	host-api-moved	adapted	New asynchronous dialog member added to the v7 host interface; v6 had no equivalent. Intended v7 major adaptation (ADR-018/ADR-023).
+CP0009	Playnite.SDK.NotificationMessage	host-api-moved	adapted	The headless notification message is a sealed immutable record; v6's inheritable class also carried WPF activation members that are removed (ADR-018).

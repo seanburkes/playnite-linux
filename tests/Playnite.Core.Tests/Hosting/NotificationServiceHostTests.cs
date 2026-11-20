@@ -1,6 +1,7 @@
 using Playnite.Core.Hosting;
 using Playnite.Platform.DesktopIntegration;
 using Xunit;
+using Playnite.SDK;
 
 namespace Playnite.Core.Tests.Hosting;
 

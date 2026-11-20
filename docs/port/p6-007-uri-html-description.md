@@ -15,6 +15,11 @@ in Core and narrows the result to a known command. The v10 names (`IUriHandlerAP
 protected, so p6-008 owns moving this surface into Abstractions and freezing it. No `sdk-*` parity
 row is rewritten here.
 
+> **Superseded by p6-008:** the move happened. `IUriHandlerAPI`, its host seam, the route types
+> and DTOs now live in `Playnite.SDK`; `PlayniteUriEventArgs` lives in `Playnite.SDK.Events`;
+> the HTML description contracts live in `Playnite.SDK.Descriptions`. The services remain in
+> `Playnite.Core.UriHandling` and `Playnite.Core.Descriptions`. See `p6-008-sdk-freeze.md`.
+
 ## URI routes
 
 The URI shape is `playnite://` followed by `<source>/<argument>...`, as in v10. The `playnite`
