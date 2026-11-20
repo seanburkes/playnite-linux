@@ -54,6 +54,35 @@ and its ``head_sha`` must equal a head the fragment cites.  A run id from anothe
 repository, a missing run, an unfinished or failed run, an unreachable API or a
 disagreeing head fails closed; the check never caches an API result.
 
+Shared SDK baseline
+-------------------
+``SHARED_BASELINE`` is the single reviewed allowance behind both guards.  It
+names exactly two files, ``src/Playnite.SDK.Abstractions/PublicAPI.Shipped.txt``
+and ``src/Playnite.SDK.Abstractions/PublicAPI.Unshipped.txt``, plus the one
+``src/Playnite.SDK.Abstractions/api-baseline/`` directory.  Any declared unit
+may add or modify them without foreign-ownership or foreign-evidence failures;
+a delete (or type change) still fails.  Nothing else under that project is
+shared, so product code remains ownership-checked.  The paths stay protected
+for the separate ``oracle-change`` gate; this allowance only removes the unit
+ownership charge, it never removes that gate.
+
+Cross-unit moves
+----------------
+A pull request that moves a path out of another unit's ownership may carry a
+head-commit trailer::
+
+    Port-Unit: <moving-unit>
+    Cross-Unit-Move: <owner-unit>:<path>[,<owner-unit>:<path>...]
+
+Every foreign path the pull request edits must appear with its actual owning
+unit and a ``D`` or ``M`` status.  The trailer is not a bypass: the move must
+add at least one new path in the declaring unit's namespace, every listed
+delete needs its own same-basename added counterpart owned by the declaring
+unit, and every listed modification needs its own same-basename listed delete.
+A counterpart cannot be reused: one added path backs at most one delete and one
+delete backs at most one modification.  A manifest that is empty, malformed,
+lists a path the diff does not change, or names the wrong owner fails.
+
 Diff paths are repository-relative with no traversal component.  Renames are
 expanded to an explicit delete plus add, deletions are checked like any other
 change, and every intermediate component of a changed path or symlink target is
@@ -161,6 +190,32 @@ class OwnershipMap:
 
     def owners(self, path: str) -> tuple[OwnershipClaim, ...]:
         return self.claims.get(path, ())
+
+
+@dataclass(frozen=True)
+class SharedBaseline:
+    """The only SDK bookkeeping every unit may change, reviewed as one unit.
+
+    ``files`` holds exact repository-relative paths and ``directory`` holds one
+    directory prefix with its trailing slash.  Nothing else under the SDK
+    Abstractions project is shared, so neither a glob nor a broader prefix can
+    hand out product code by accident.
+    """
+
+    files: frozenset[str]
+    directory: str
+
+    def matches(self, path: str) -> bool:
+        return path in self.files or path.startswith(self.directory)
+
+
+SHARED_BASELINE = SharedBaseline(
+    files=frozenset({
+        "src/Playnite.SDK.Abstractions/PublicAPI.Shipped.txt",
+        "src/Playnite.SDK.Abstractions/PublicAPI.Unshipped.txt",
+    }),
+    directory="src/Playnite.SDK.Abstractions/api-baseline/",
+)
 
 
 def git(repo: Path, *args: str) -> bytes:
@@ -580,11 +635,51 @@ def ownership_candidate(path: str, units: set[str]) -> bool:
 
 
 def product_paths(changes: list[Change], units: set[str]) -> list[str]:
+    """Return product/test/tool changes that need an owner and a declaration.
+
+    Shared SDK baseline bookkeeping is excluded: any unit may update it, so it
+    never demands a declaration or fails another unit's ownership check.
+    """
+
     return [
         change.path
         for change in changes
         if ownership_candidate(change.path, units)
+        and not is_shared_baseline_path(change.path)
     ]
+
+
+def is_shared_baseline_path(path: str) -> bool:
+    """True for exactly the shared SDK baseline bookkeeping paths."""
+
+    return SHARED_BASELINE.matches(path)
+
+
+def shared_baseline_paths(changes: list[Change]) -> frozenset[str]:
+    """Return the changed shared baseline paths, refusing a delete.
+
+    Any unit may add or modify these generated lists and the checked-in
+    baseline they describe.  A ``D`` (or a type change) would remove the shared
+    contract, so only ``A`` and ``M`` are allowed.  These paths remain
+    protected material for the separate ``oracle-change`` gate; this allowance
+    changes only unit ownership, never that gate.
+    """
+
+    allowed: set[str] = set()
+    errors: list[str] = []
+    for change in changes:
+        if not is_shared_baseline_path(change.path):
+            continue
+        if change.status in {"A", "M"}:
+            allowed.add(change.path)
+            continue
+        errors.append(
+            f"{change.path} is shared SDK baseline bookkeeping; a pull request "
+            f"may add or modify it but not {change.status} it"
+        )
+    if errors:
+        raise GuardError("\n".join(errors))
+    return frozenset(allowed)
 
 
 def ownership_map_exists(repo: Path, revision: str) -> bool:
@@ -760,6 +855,295 @@ def claim_owners(claims: tuple[OwnershipClaim, ...]) -> str:
     return ", ".join(claim.unit for claim in claims)
 
 
+def _head_message(repo: Path, head: str) -> str:
+    """Return the pull request head commit message as UTF-8 text."""
+
+    try:
+        return git(repo, "log", "-1", "--format=%B", head).decode("utf-8", "strict")
+    except UnicodeDecodeError as exc:
+        raise GuardError("the pull request head commit message is not valid UTF-8") from exc
+
+
+def cross_unit_move_manifest(
+    repo: Path, head: str, units: set[str]
+) -> dict[str, str] | None:
+    """Parse the ``Cross-Unit-Move`` trailer from the head commit.
+
+    Returns ``None`` when the trailer is absent and a ``path -> owning unit``
+    mapping otherwise.  The manifest is deliberately strict: an empty value, a
+    malformed ``<unit>:<path>`` entry, a non-unit id, an unknown unit, an unsafe
+    path or a repeated path fails closed instead of being skipped.
+    """
+
+    message = _head_message(repo, head)
+    entries: dict[str, str] = {}
+    seen = False
+    for line in message.splitlines():
+        match = re.fullmatch(r"(?i)cross-unit-move\s*:\s*(.*)", line)
+        if not match:
+            continue
+        seen = True
+        value = match.group(1).strip()
+        if not value:
+            raise GuardError(
+                "Cross-Unit-Move trailer is empty; list <unit>:<path> pairs"
+            )
+        if any(character.isspace() for character in value):
+            raise GuardError(
+                f"Cross-Unit-Move trailer contains whitespace in {value!r}; "
+                "the manifest is a comma-separated list with no spaces"
+            )
+        for entry in value.split(","):
+            if not entry:
+                raise GuardError(
+                    f"Cross-Unit-Move trailer {value!r} has an empty entry; "
+                    "expected <unit>:<path>"
+                )
+            unit, separator, path = entry.partition(":")
+            if not separator or not unit or not path:
+                raise GuardError(
+                    f"Cross-Unit-Move trailer entry {entry!r} is not "
+                    "<unit>:<path>"
+                )
+            if not UNIT_ID.fullmatch(unit):
+                raise GuardError(
+                    f"Cross-Unit-Move trailer names invalid unit id {unit!r}; "
+                    "use lowercase letters, digits and hyphens"
+                )
+            if unit not in units:
+                raise GuardError(
+                    f"Cross-Unit-Move trailer names unknown unit {unit!r}; "
+                    "add its queue shard or correct the trailer"
+                )
+            error = path_error(path)
+            if error:
+                raise GuardError(
+                    f"Cross-Unit-Move trailer names invalid path {path!r}: {error}"
+                )
+            if path in entries:
+                raise GuardError(
+                    f"Cross-Unit-Move trailer repeats path {path!r}; list each "
+                    "path once"
+                )
+            entries[path] = unit
+    return entries if seen else None
+
+
+def _added_path_owned_by(
+    path: str,
+    declared: str,
+    units: set[str],
+    ownership: OwnershipMap,
+) -> bool:
+    """True when an added path will belong to the declaring unit.
+
+    A path the base map already knows must allow the declaring unit.  A path it
+    does not know is accepted when it falls in the declaring unit's evidence
+    namespace or is unowned product/test/tool material that this pull request's
+    commit will attribute to the unit after merge.
+    """
+
+    claims = ownership.claims.get(path, ())
+    if claims:
+        return claim_is_allowed(claims, declared)
+    attributed, error = attribute_path(path, units)
+    if error:
+        return False
+    if declared in attributed:
+        return True
+    return not attributed and ownership_candidate(path, units)
+
+
+def validate_cross_unit_move(
+    manifest: dict[str, str],
+    *,
+    declared: str,
+    changes: list[Change],
+    ownership: OwnershipMap,
+    touched: dict[str, list[str]],
+    units: set[str],
+) -> frozenset[str]:
+    """Check a cross-unit move manifest and return the foreign paths it allows.
+
+    The caller allows only these paths through the single-namespace checks; the
+    rest of the guard is unchanged.  The rules are ordered so the reported
+    failure names the most specific violation: a manifest entry must be a
+    changed foreign path with the right owner and a ``D``/``M`` status, every
+    foreign path must be listed, the pull request must add a file in the
+    declaring unit's namespace, each delete must pair one-to-one with its own
+    declaring-unit addition of the same basename, and each modification must
+    pair one-to-one with its own listed delete of the same basename.
+    """
+
+    status_by_path = {change.path: change.status for change in changes}
+    foreign: dict[str, set[str]] = {}
+    for unit, paths in touched.items():
+        if unit == declared:
+            continue
+        for path in paths:
+            foreign.setdefault(path, set()).add(unit)
+    for path, rows in ownership.claims.items():
+        if path not in status_by_path:
+            continue
+        if claim_is_allowed(rows, declared):
+            continue
+        for claim in rows:
+            foreign.setdefault(path, set()).add(claim.unit)
+
+    for path, unit in sorted(manifest.items()):
+        status = status_by_path.get(path)
+        if status is None:
+            raise GuardError(
+                f"cross-unit move lists {path!r}, but the pull request does not "
+                "change it"
+            )
+        if status not in {"D", "M"}:
+            raise GuardError(
+                f"cross-unit move lists {path!r} with status {status!r}; only a "
+                "deleted (D) or modified (M) foreign path may be moved"
+            )
+        owners = foreign.get(path, set())
+        if not owners:
+            raise GuardError(
+                f"cross-unit move lists {path!r}, but it is not owned by another "
+                f"unit; the trailer may name only foreign paths, and {declared} "
+                "may already change this path"
+            )
+        if unit not in owners:
+            actual = ", ".join(sorted(owners))
+            raise GuardError(
+                f"cross-unit move lists {path!r} as owned by {unit}, but its "
+                f"actual owning units are {actual}"
+            )
+
+    unlisted = sorted(path for path in foreign if path not in manifest)
+    if unlisted:
+        detail = "\n".join(
+            f"  {path} (unit {', '.join(sorted(foreign[path]))})"
+            for path in unlisted
+        )
+        raise GuardError(
+            "cross-unit move does not list foreign path(s) the pull request "
+            "edits; every foreign path must appear in the Cross-Unit-Move "
+            "trailer with its actual owning unit:\n" + detail
+        )
+
+    added = [change for change in changes if change.status == "A"]
+    unit_added = sorted(
+        change.path
+        for change in added
+        if _added_path_owned_by(change.path, declared, units, ownership)
+    )
+    if not unit_added:
+        raise GuardError(
+            f"cross-unit move adds no new file under a path owned by {declared}; "
+            "the move must add at least one new path in the declaring unit's "
+            "namespace"
+        )
+
+    # One-to-one pairing.  Each listed delete must own exactly one added
+    # counterpart in the declaring unit, so two deletes with the same basename
+    # cannot share a single add and an add outside the declaring unit cannot
+    # stand in for the move.  Each listed modification must likewise own
+    # exactly one listed delete of the same basename, so a delete cannot back
+    # two in-place edits and an edit with no moved source is refused.
+    missing_counterpart: list[str] = []
+    used_adds: set[str] = set()
+    for path in sorted(manifest):
+        if status_by_path[path] != "D":
+            continue
+        counterpart = next(
+            (
+                candidate
+                for candidate in unit_added
+                if candidate not in used_adds
+                and posixpath.basename(candidate) == posixpath.basename(path)
+            ),
+            None,
+        )
+        if counterpart is None:
+            missing_counterpart.append(path)
+        else:
+            used_adds.add(counterpart)
+    if missing_counterpart:
+        detail = "\n".join(f"  {path}" for path in missing_counterpart)
+        raise GuardError(
+            "cross-unit move deletes path(s) with no same-basename added "
+            f"counterpart owned by {declared}; each listed delete needs its own "
+            "added file under the declaring unit:\n" + detail
+        )
+
+    deleted = [path for path in sorted(manifest) if status_by_path[path] == "D"]
+    unpaired_modified: list[str] = []
+    used_deletes: set[str] = set()
+    for path in sorted(manifest):
+        if status_by_path[path] != "M":
+            continue
+        source = next(
+            (
+                candidate
+                for candidate in deleted
+                if candidate not in used_deletes
+                and posixpath.basename(candidate) == posixpath.basename(path)
+            ),
+            None,
+        )
+        if source is None:
+            unpaired_modified.append(path)
+        else:
+            used_deletes.add(source)
+    if unpaired_modified:
+        detail = "\n".join(f"  {path}" for path in unpaired_modified)
+        raise GuardError(
+            "cross-unit move lists modified path(s) with no unclaimed deleted "
+            "counterpart of the same basename; each listed modification needs its "
+            "own listed delete, so the trailer may not authorise an in-place "
+            "foreign edit:\n" + detail
+        )
+
+    return frozenset(manifest)
+
+
+def authorised_cross_unit_move(
+    repo: Path,
+    head: str,
+    *,
+    declared: str | None,
+    changes: list[Change],
+    ownership: OwnershipMap,
+    touched: dict[str, list[str]],
+    units: set[str],
+) -> tuple[dict[str, str] | None, frozenset[str]]:
+    """Validate the head-commit manifest once for every required guard.
+
+    Both ``check_unit_ownership.py`` and ``check_unit_evidence.py`` call this
+    helper, so the foreign-path exemption and every manifest rule are applied
+    by the same code.  It returns the parsed manifest (``None`` when absent)
+    and exactly the foreign paths the manifest authorises; callers may exempt
+    only those paths from their foreign path checks.  A manifest without a unit
+    declaration fails here, before either caller decides the PR is a process
+    PR.
+    """
+
+    manifest = cross_unit_move_manifest(repo, head, units)
+    if manifest is None:
+        return None, frozenset()
+    if declared is None:
+        raise GuardError(
+            "the Cross-Unit-Move trailer requires a unit declaration; name "
+            "the moving unit with fm/<unit>, a 'Port-Unit: <unit>' "
+            "head-commit trailer, or --unit"
+        )
+    return manifest, validate_cross_unit_move(
+        manifest,
+        declared=declared,
+        changes=changes,
+        ownership=ownership,
+        touched=touched,
+        units=units,
+    )
+
+
 def _tree_entry(repo: Path, revision: str, path: str) -> tuple[str, str] | None:
     output = git(repo, "--literal-pathspecs", "ls-tree", "-z", revision, "--", path)
     entries = [item for item in output.split(b"\0") if item]
@@ -928,10 +1312,7 @@ def symlink_errors(
 def derive_marker_unit(repo: Path, head: str, units: set[str]) -> str | None:
     """Return a ``Port-Unit: <unit>`` trailer from the pull request head commit."""
 
-    try:
-        message = git(repo, "log", "-1", "--format=%B", head).decode("utf-8", "strict")
-    except UnicodeDecodeError as exc:
-        raise GuardError("the pull request head commit message is not valid UTF-8") from exc
+    message = _head_message(repo, head)
     found: set[str] = set()
     for line in message.splitlines():
         match = re.fullmatch(r"(?i)port-unit\s*:\s*(\S+)\s*", line)

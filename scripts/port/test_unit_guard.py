@@ -375,6 +375,25 @@ class OwnershipGuardTests(unittest.TestCase):
         self.assertIn("docs/port/units/p4-003.queue.tsv", result.stdout)
         self.assertIn("at most one unit evidence namespace", result.stderr)
 
+    def test_foreign_unit_evidence_without_a_trailer_fails(self) -> None:
+        # The no-manifest baseline: a unit declaration alone does not allow a
+        # foreign unit-evidence path when the head carries no Cross-Unit-Move
+        # trailer, even if the PR has no evidence of its own.
+        self.fixture.append("docs/port/p4-002-import.md", "foreign\n")
+        head = self.fixture.commit(
+            "a p4-003 PR touching only p4-002 evidence\n\n"
+            "Port-Unit: p4-003"
+        )
+
+        result = self.fixture.ownership(head, "--branch", "fm/p4-003")
+
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertIn(
+            "foreign unit evidence: PR owns p4-003 but touches unit p4-002",
+            result.stderr,
+        )
+        self.assertIn("docs/port/p4-002-import.md (unit p4-002)", result.stdout)
+
     def test_cross_unit_product_file_fails_with_map_evidence(self) -> None:
         path = "src/Playnite.Core/Import/AssetCopy.cs"
         self.fixture = Fixture(
@@ -1013,6 +1032,421 @@ class OwnershipGuardTests(unittest.TestCase):
         self.assertIn(main_side, result.stderr)
 
 
+class CrossUnitMoveTests(unittest.TestCase):
+    """Proofs for the narrowly-scoped ``Cross-Unit-Move`` exception."""
+
+    def fixture_with(self, files, ownership=None) -> Fixture:
+        self.fixture = Fixture(ownership=ownership, files=files)
+        self.addCleanup(self.fixture.cleanup)
+        return self.fixture
+
+    def test_allowed_move_of_foreign_evidence_passes(self) -> None:
+        old = "tests/golden/p4-002-legacy/PROVENANCE.md"
+        new = "tests/golden/p4-003-legacy/PROVENANCE.md"
+        fixture = self.fixture_with({old: "provenance\n"})
+        fixture.git("rm", "-q", old)
+        fixture.write(new, "provenance\n")
+        head = fixture.commit(
+            "move the legacy golden\n\n"
+            "Port-Unit: p4-003\n"
+            f"Cross-Unit-Move: p4-002:{old}"
+        )
+
+        result = fixture.ownership(head, "--branch", "fm/p4-003")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn(f"cross-unit move: {old} (unit p4-002)", result.stdout)
+        self.assertIn(new, result.stdout)
+        self.assertIn("offending paths:\n  (none)", result.stdout)
+
+    def test_allowed_move_of_a_map_owned_product_path_passes(self) -> None:
+        old = "src/Playnite.Core/Import/AssetCopy.cs"
+        new = "src/Playnite.Core/Import/Moved/AssetCopy.cs"
+        fixture = self.fixture_with(
+            {old: "// asset copy\n"},
+            ownership=[
+                claim(old, "p4-005"),
+                claim("src/Playnite.Core/Thing.cs", "p4-002"),
+                claim("tests/golden/p4-002-legacy/PROVENANCE.md", "p4-002"),
+            ],
+        )
+        fixture.git("rm", "-q", old)
+        fixture.write(new, "// asset copy\n")
+        head = fixture.commit(
+            "move a p4-005 product file\n\n"
+            "Port-Unit: p4-003\n"
+            f"Cross-Unit-Move: p4-005:{old}"
+        )
+
+        result = fixture.ownership(head, "--branch", "fm/p4-003")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn(f"cross-unit move: {old} (unit p4-005)", result.stdout)
+
+    def test_unlisted_foreign_path_fails(self) -> None:
+        listed = "tests/golden/p4-002-listed/PROVENANCE.md"
+        unlisted = "tests/golden/p4-005-other/PROVENANCE.md"
+        fixture = self.fixture_with({listed: "listed\n", unlisted: "other\n"})
+        fixture.git("rm", "-q", listed)
+        fixture.write("tests/golden/p4-003-listed/PROVENANCE.md", "listed\n")
+        fixture.append(unlisted, "edited\n")
+        head = fixture.commit(
+            "list only one foreign path\n\n"
+            "Port-Unit: p4-003\n"
+            f"Cross-Unit-Move: p4-002:{listed}"
+        )
+
+        result = fixture.ownership(head, "--branch", "fm/p4-003")
+
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertIn("does not list foreign path", result.stderr)
+        self.assertIn(unlisted, result.stderr)
+        self.assertIn("unit p4-005", result.stderr)
+
+    def test_wrong_owner_fails(self) -> None:
+        old = "tests/golden/p4-002-wrong/PROVENANCE.md"
+        fixture = self.fixture_with({old: "provenance\n"})
+        fixture.git("rm", "-q", old)
+        fixture.write("tests/golden/p4-003-wrong/PROVENANCE.md", "provenance\n")
+        head = fixture.commit(
+            "name the wrong foreign owner\n\n"
+            "Port-Unit: p4-003\n"
+            f"Cross-Unit-Move: p4-005:{old}"
+        )
+
+        result = fixture.ownership(head, "--branch", "fm/p4-003")
+
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertIn(f"lists {old!r} as owned by p4-005", result.stderr)
+        self.assertIn("actual owning units are p4-002", result.stderr)
+
+    def test_move_with_no_added_counterpart_fails(self) -> None:
+        old = "tests/golden/p4-002-orphan/PROVENANCE.md"
+        fixture = self.fixture_with({old: "provenance\n"})
+        fixture.git("rm", "-q", old)
+        # A new file in the declaring unit's namespace satisfies the "new file"
+        # rule, but it is not the moved file's same-basename counterpart.
+        fixture.write("tests/golden/p4-003-orphan/README.md", "unrelated\n")
+        head = fixture.commit(
+            "delete without the matching add\n\n"
+            "Port-Unit: p4-003\n"
+            f"Cross-Unit-Move: p4-002:{old}"
+        )
+
+        result = fixture.ownership(head, "--branch", "fm/p4-003")
+
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertIn("no same-basename added counterpart", result.stderr)
+        self.assertIn(old, result.stderr)
+
+    def test_modified_listing_with_no_delete_fails(self) -> None:
+        path = "src/Playnite.Core/Import/AssetCopy.cs"
+        fixture = self.fixture_with(
+            {path: "// asset copy\n"},
+            ownership=[
+                claim(path, "p4-005"),
+                claim("src/Playnite.Core/Thing.cs", "p4-002"),
+                claim("tests/golden/p4-002-legacy/PROVENANCE.md", "p4-002"),
+            ],
+        )
+        fixture.append(path, "// edited in place\n")
+        fixture.write("tests/fixtures/p4-003-move/README.md", "fixture\n")
+        head = fixture.commit(
+            "edit a foreign file without moving it\n\n"
+            "Port-Unit: p4-003\n"
+            f"Cross-Unit-Move: p4-005:{path}"
+        )
+
+        result = fixture.ownership(head, "--branch", "fm/p4-003")
+
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertIn("no unclaimed deleted counterpart of the same basename", result.stderr)
+        self.assertIn(path, result.stderr)
+
+    def test_modification_paired_with_its_own_delete_passes(self) -> None:
+        edited = "tests/golden/p4-002-edited/PROVENANCE.md"
+        moved = "tests/golden/p4-002-moved/PROVENANCE.md"
+        destination = "tests/golden/p4-003-moved/PROVENANCE.md"
+        fixture = self.fixture_with({edited: "edited\n", moved: "moved\n"})
+        fixture.append(edited, "edited in place, with a real move beside it\n")
+        fixture.git("rm", "-q", moved)
+        fixture.write(destination, "moved\n")
+        head = fixture.commit(
+            "pair one modification with one move\n\n"
+            "Port-Unit: p4-003\n"
+            f"Cross-Unit-Move: p4-002:{moved},p4-002:{edited}"
+        )
+
+        result = fixture.ownership(head, "--branch", "fm/p4-003")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("offending paths:\n  (none)", result.stdout)
+
+    def test_two_modifications_sharing_one_delete_fails(self) -> None:
+        first = "tests/golden/p4-002-first/PROVENANCE.md"
+        second = "tests/golden/p4-002-second/PROVENANCE.md"
+        moved = "tests/golden/p4-002-source/PROVENANCE.md"
+        fixture = self.fixture_with({first: "first\n", second: "second\n", moved: "moved\n"})
+        fixture.append(first, "edited\n")
+        fixture.append(second, "edited\n")
+        fixture.git("rm", "-q", moved)
+        fixture.write("tests/golden/p4-003-source/PROVENANCE.md", "moved\n")
+        head = fixture.commit(
+            "back two edits with one delete\n\n"
+            "Port-Unit: p4-003\n"
+            f"Cross-Unit-Move: p4-002:{moved},p4-002:{first},p4-002:{second}"
+        )
+
+        result = fixture.ownership(head, "--branch", "fm/p4-003")
+
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertIn("no unclaimed deleted counterpart of the same basename", result.stderr)
+        self.assertIn(second, result.stderr)
+        self.assertNotIn(first, result.stderr)
+
+    def test_two_deletes_sharing_one_add_fails(self) -> None:
+        first = "tests/golden/p4-002-first/PROVENANCE.md"
+        second = "tests/golden/p4-002-second/PROVENANCE.md"
+        fixture = self.fixture_with({first: "first\n", second: "second\n"})
+        fixture.git("rm", "-q", first)
+        fixture.git("rm", "-q", second)
+        fixture.write("tests/golden/p4-003-first/PROVENANCE.md", "first\n")
+        head = fixture.commit(
+            "move two files into one\n\n"
+            "Port-Unit: p4-003\n"
+            f"Cross-Unit-Move: p4-002:{first},p4-002:{second}"
+        )
+
+        result = fixture.ownership(head, "--branch", "fm/p4-003")
+
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertIn("no same-basename added counterpart owned by p4-003", result.stderr)
+        self.assertIn(second, result.stderr)
+        self.assertNotIn(first, result.stderr)
+
+    def test_delete_paired_with_an_add_outside_the_declared_unit_fails(self) -> None:
+        moved = "tests/golden/p4-002-source/PROVENANCE.md"
+        fixture = self.fixture_with({moved: "moved\n"})
+        fixture.git("rm", "-q", moved)
+        # Same basename as the deleted file, but this shared path belongs to no
+        # unit, so it is not a counterpart that the declaring unit owns.
+        fixture.write("docs/port/notes/PROVENANCE.md", "moved\n")
+        # A genuine add in the declaring unit satisfies "adds a new file" while
+        # the deleted foreign file still has no counterpart of its own.
+        fixture.write("tests/golden/p4-003-note/README.md", "note\n")
+        head = fixture.commit(
+            "delete a foreign file beside an out-of-unit add\n\n"
+            "Port-Unit: p4-003\n"
+            f"Cross-Unit-Move: p4-002:{moved}"
+        )
+
+        result = fixture.ownership(head, "--branch", "fm/p4-003")
+
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertIn("no same-basename added counterpart owned by p4-003", result.stderr)
+        self.assertIn(moved, result.stderr)
+
+    def test_empty_manifest_fails(self) -> None:
+        fixture = self.fixture_with({})
+        fixture.append("docs/port/p4-003-publication.md", "own\n")
+        head = fixture.commit(
+            "empty manifest\n\nPort-Unit: p4-003\nCross-Unit-Move:"
+        )
+
+        result = fixture.ownership(head, "--branch", "fm/p4-003")
+
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertIn("Cross-Unit-Move trailer is empty", result.stderr)
+
+    def test_malformed_manifest_entry_fails(self) -> None:
+        fixture = self.fixture_with({})
+        fixture.append("docs/port/p4-003-publication.md", "own\n")
+        head = fixture.commit(
+            "malformed manifest\n\n"
+            "Port-Unit: p4-003\n"
+            "Cross-Unit-Move: p4-002"
+        )
+
+        result = fixture.ownership(head, "--branch", "fm/p4-003")
+
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertIn("is not <unit>:<path>", result.stderr)
+
+    def test_added_foreign_path_cannot_be_listed(self) -> None:
+        added = "tests/golden/p4-002-new/PROVENANCE.md"
+        fixture = self.fixture_with({})
+        fixture.write(added, "new foreign evidence\n")
+        fixture.write("tests/golden/p4-003-new/PROVENANCE.md", "own\n")
+        head = fixture.commit(
+            "list an added foreign path\n\n"
+            "Port-Unit: p4-003\n"
+            f"Cross-Unit-Move: p4-002:{added}"
+        )
+
+        result = fixture.ownership(head, "--branch", "fm/p4-003")
+
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertIn(f"lists {added!r} with status 'A'", result.stderr)
+        self.assertIn("only a deleted (D) or modified (M) foreign path", result.stderr)
+
+    def test_manifest_without_a_declaration_fails(self) -> None:
+        old = "tests/golden/p4-002-nodecl/PROVENANCE.md"
+        fixture = self.fixture_with({old: "provenance\n"})
+        fixture.git("rm", "-q", old)
+        fixture.write("tests/golden/p4-003-nodecl/PROVENANCE.md", "provenance\n")
+        head = fixture.commit(
+            "manifest with no moving unit\n\n"
+            f"Cross-Unit-Move: p4-002:{old}"
+        )
+
+        result = fixture.ownership(head, "--branch", "fm/port-u2")
+
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertIn("Cross-Unit-Move trailer requires a unit declaration", result.stderr)
+
+    def _assert_both_fail(self, fixture, head, *expected: str) -> None:
+        ownership = fixture.ownership(head, "--branch", "fm/p4-003")
+        evidence = fixture.evidence(head, "--branch", "fm/p4-003")
+        for result in (ownership, evidence):
+            self.assertEqual(result.returncode, 1, result.stderr)
+            for text in expected:
+                self.assertIn(text, result.stderr)
+
+    def _move_head(self, fixture, implementation: str, old: str, new: str,
+                   trailer: str = "") -> str:
+        """Move ``old`` to ``new`` with valid queue and fragment evidence."""
+
+        fixture.git("rm", "-q", old)
+        fixture.write(new, "moved\n")
+        fixture.set_queue("p4-003", "in-progress")
+        fixture.add_fragment(head=implementation)
+        return fixture.commit(
+            "move a foreign file\n\nPort-Unit: p4-003\n" + trailer
+        )
+
+    def test_paired_evidence_move_passes_both_required_checks(self) -> None:
+        old = "tests/golden/p4-002-legacy/PROVENANCE.md"
+        new = "tests/golden/p4-003-legacy/PROVENANCE.md"
+        fixture = self.fixture_with({old: "provenance\n"})
+        implementation = fixture.commit("implementation head")
+        head = self._move_head(
+            fixture, implementation, old, new,
+            f"Cross-Unit-Move: p4-002:{old}",
+        )
+
+        ownership = fixture.ownership(head, "--branch", "fm/p4-003")
+        evidence = fixture.evidence(head, "--branch", "fm/p4-003")
+
+        self.assertEqual(ownership.returncode, 0, ownership.stderr)
+        self.assertEqual(evidence.returncode, 0, evidence.stderr)
+        self.assertIn(f"cross-unit move: {old} (unit p4-002)", ownership.stdout)
+        self.assertIn(f"fragment: docs/port/units/p4-003.ledger.d/123-evidence.tsv",
+                      evidence.stdout)
+
+    def test_paired_map_owned_move_passes_both_required_checks(self) -> None:
+        old = "src/Playnite.Core/Import/AssetCopy.cs"
+        new = "src/Playnite.Core/Import/Moved/AssetCopy.cs"
+        fixture = self.fixture_with(
+            {old: "// asset copy\n"},
+            ownership=[claim(old, "p4-005")],
+        )
+        implementation = fixture.commit("implementation head")
+        head = self._move_head(
+            fixture, implementation, old, new,
+            f"Cross-Unit-Move: p4-005:{old}",
+        )
+
+        ownership = fixture.ownership(head, "--branch", "fm/p4-003")
+        evidence = fixture.evidence(head, "--branch", "fm/p4-003")
+
+        self.assertEqual(ownership.returncode, 0, ownership.stderr)
+        self.assertEqual(evidence.returncode, 0, evidence.stderr)
+        self.assertIn(f"cross-unit move: {old} (unit p4-005)", ownership.stdout)
+
+    def test_unlisted_foreign_path_fails_both_checks(self) -> None:
+        listed = "tests/golden/p4-002-listed/PROVENANCE.md"
+        unlisted = "tests/golden/p4-005-other/PROVENANCE.md"
+        fixture = self.fixture_with({listed: "listed\n", unlisted: "other\n"})
+        implementation = fixture.commit("implementation head")
+        fixture.git("rm", "-q", listed)
+        fixture.write("tests/golden/p4-003-listed/PROVENANCE.md", "listed\n")
+        fixture.append(unlisted, "edited\n")
+        fixture.set_queue("p4-003", "in-progress")
+        fixture.add_fragment(head=implementation)
+        head = fixture.commit(
+            "list only one foreign path\n\n"
+            "Port-Unit: p4-003\n"
+            f"Cross-Unit-Move: p4-002:{listed}"
+        )
+
+        self._assert_both_fail(
+            fixture, head,
+            "does not list foreign path", unlisted, "unit p4-005",
+        )
+
+    def test_wrong_owner_fails_both_checks(self) -> None:
+        old = "tests/golden/p4-002-wrong/PROVENANCE.md"
+        fixture = self.fixture_with({old: "provenance\n"})
+        implementation = fixture.commit("implementation head")
+        head = self._move_head(
+            fixture, implementation, old,
+            "tests/golden/p4-003-wrong/PROVENANCE.md",
+            f"Cross-Unit-Move: p4-005:{old}",
+        )
+
+        self._assert_both_fail(
+            fixture, head,
+            f"lists {old!r} as owned by p4-005",
+            "actual owning units are p4-002",
+        )
+
+    def test_modified_foreign_path_without_a_delete_fails_both_checks(self) -> None:
+        path = "tests/fixtures/p4-002-source/README.md"
+        fixture = self.fixture_with(
+            {},
+            ownership=[claim(path, "p4-002")],
+        )
+        implementation = fixture.commit("implementation head")
+        fixture.append(path, "edited in place\n")
+        fixture.write("tests/fixtures/p4-003-move/README.md", "fixture\n")
+        fixture.set_queue("p4-003", "in-progress")
+        fixture.add_fragment(head=implementation)
+        head = fixture.commit(
+            "edit a foreign file without moving it\n\n"
+            "Port-Unit: p4-003\n"
+            f"Cross-Unit-Move: p4-002:{path}"
+        )
+
+        self._assert_both_fail(
+            fixture, head,
+            "no unclaimed deleted counterpart of the same basename", path,
+        )
+
+    def test_move_with_no_added_file_fails_both_checks(self) -> None:
+        old = "tests/golden/p4-002-orphan/PROVENANCE.md"
+        fragment = "docs/port/units/p4-003.ledger.d/123-evidence.tsv"
+        fixture = self.fixture_with({
+            old: "provenance\n",
+            # Seed the fragment at the base so the PR only modifies it and adds
+            # no file in the declaring unit's namespace at all.
+            fragment: LEDGER_HEADER + "\n" + ledger_row("p4-003", "seed") + "\n",
+        })
+        implementation = fixture.commit("implementation head")
+        fixture.git("rm", "-q", old)
+        fixture.set_queue("p4-003", "in-progress")
+        fixture.add_fragment(head=implementation)
+        head = fixture.commit(
+            "delete without the matching add\n\n"
+            "Port-Unit: p4-003\n"
+            f"Cross-Unit-Move: p4-002:{old}"
+        )
+
+        self._assert_both_fail(
+            fixture, head,
+            "adds no new file under a path owned by p4-003",
+        )
+
+
 class EvidenceGuardTests(unittest.TestCase):
     def setUp(self) -> None:
         self.fixture = Fixture()
@@ -1166,17 +1600,68 @@ class EvidenceGuardTests(unittest.TestCase):
         self.assertIn("cites CI runs outside example/repo", result.stderr)
 
     def test_foreign_unit_evidence_also_fails_the_evidence_check(self) -> None:
+        # A foreign path is allowed only through a listed, paired
+        # Cross-Unit-Move entry.  Listing it is not enough: an in-place edit
+        # with no listed delete of its own still fails the evidence check.
         implementation = self.fixture.commit("implementation head")
         self.fixture.set_queue("p4-003", "in-progress")
         self.fixture.add_fragment(head=implementation)
         self.fixture.append("docs/port/p4-002-import.md", "foreign\n")
-        head = self.fixture.commit("own evidence plus foreign bytes")
+        head = self.fixture.commit(
+            "own evidence plus an unpaired foreign edit\n\n"
+            "Port-Unit: p4-003\n"
+            "Cross-Unit-Move: p4-002:docs/port/p4-002-import.md"
+        )
+
+        result = self.fixture.evidence(head, "--branch", "fm/p4-003")
+
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertIn("no unclaimed deleted counterpart", result.stderr)
+        self.assertIn("docs/port/p4-002-import.md", result.stderr)
+
+    def test_foreign_unit_evidence_without_a_trailer_fails_the_evidence_check(self) -> None:
+        # The no-manifest baseline: without a Cross-Unit-Move trailer, carrying
+        # its own queue transition and fragment does not let a unit PR touch
+        # another unit's evidence.
+        implementation = self.fixture.commit("implementation head")
+        self.fixture.set_queue("p4-003", "in-progress")
+        self.fixture.add_fragment(head=implementation)
+        self.fixture.append("docs/port/p4-002-import.md", "foreign\n")
+        head = self.fixture.commit(
+            "own evidence plus a foreign edit\n\n"
+            "Port-Unit: p4-003"
+        )
 
         result = self.fixture.evidence(head, "--branch", "fm/p4-003")
 
         self.assertEqual(result.returncode, 1, result.stderr)
         self.assertIn("touches foreign unit evidence", result.stderr)
         self.assertIn("docs/port/p4-002-import.md (unit p4-002)", result.stderr)
+
+    def test_map_owned_foreign_path_without_a_trailer_fails_the_evidence_check(self) -> None:
+        # The map-owned counterpart of the no-manifest baseline: own evidence
+        # does not authorise a path the base map attributes to another unit.
+        path = "src/Playnite.Core/Import/AssetCopy.cs"
+        self.fixture = Fixture(
+            ownership=[claim(path, "p4-005")], files={path: "// asset copy\n"}
+        )
+        self.addCleanup(self.fixture.cleanup)
+        implementation = self.fixture.commit("implementation head")
+        self.fixture.append(path, "// foreign bytes\n")
+        self.fixture.set_queue("p4-003", "in-progress")
+        self.fixture.add_fragment(head=implementation)
+        head = self.fixture.commit(
+            "own evidence plus a foreign owned edit\n\n"
+            "Port-Unit: p4-003"
+        )
+
+        result = self.fixture.evidence(head, "--branch", "fm/p4-003")
+
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertIn(
+            "touches unit-owned paths owned only by another unit", result.stderr
+        )
+        self.assertIn(f"{path} (unit p4-005;", result.stderr)
 
     def test_fragment_must_name_an_ancestor_head(self) -> None:
         self.fixture.set_queue("p4-003", "in-progress")
@@ -1366,6 +1851,130 @@ class EvidenceGuardTests(unittest.TestCase):
 
         self.assertEqual(result.returncode, 1, result.stderr)
         self.assertIn("GitHub API is unreachable", result.stderr)
+
+
+class SharedBaselineTests(unittest.TestCase):
+    """Both guards honour one reviewed allowance for SDK baseline bookkeeping.
+
+    The behaviour proofs drive the real command-line checks; the last case pins
+    the single constant so a later edit cannot widen it into product code.
+    """
+
+    SHIPPED = "src/Playnite.SDK.Abstractions/PublicAPI.Shipped.txt"
+    UNSHIPPED = "src/Playnite.SDK.Abstractions/PublicAPI.Unshipped.txt"
+    BASELINE_README = "src/Playnite.SDK.Abstractions/api-baseline/README.md"
+    BASELINE_DIRECTORY = "src/Playnite.SDK.Abstractions/api-baseline/"
+
+    def _fixture(self, files: dict[str, str]) -> Fixture:
+        fixture = Fixture(
+            ownership=[
+                claim(self.SHIPPED, "p4-005", pull=97),
+                claim(self.UNSHIPPED, "p4-005", pull=97),
+                claim(self.BASELINE_README, "p4-005", pull=97),
+            ],
+            files=files,
+        )
+        self.addCleanup(fixture.cleanup)
+        return fixture
+
+    def _own_evidence(self, fixture: Fixture, message: str) -> str:
+        fixture.set_queue("p4-003", "in-progress")
+        implementation = fixture.commit(message)
+        fixture.add_fragment(head=implementation)
+        return fixture.commit("record the p4-003 evidence")
+
+    def test_baseline_modification_passes_both_guards_for_an_unrelated_unit(self) -> None:
+        baseline = {
+            self.SHIPPED: "shipped\n",
+            self.UNSHIPPED: "unshipped\n",
+            self.BASELINE_README: "baseline\n",
+        }
+
+        for path in (self.SHIPPED, self.UNSHIPPED, self.BASELINE_README):
+            fixture = self._fixture(dict(baseline))
+            fixture.append(path, "regenerated\n")
+            head = self._own_evidence(fixture, "API surface change")
+
+            ownership = fixture.ownership(head, "--branch", "fm/p4-003")
+            evidence = fixture.evidence(head, "--branch", "fm/p4-003")
+
+            self.assertEqual(ownership.returncode, 0, ownership.stderr)
+            self.assertIn("unit: p4-003", ownership.stdout)
+            self.assertIn(path, ownership.stdout)
+            self.assertIn("offending paths:\n  (none)", ownership.stdout)
+            self.assertEqual(evidence.returncode, 0, evidence.stderr)
+            self.assertIn("unit: p4-003", evidence.stdout)
+
+    def test_baseline_delete_fails_both_guards(self) -> None:
+        fixture = self._fixture({
+            self.SHIPPED: "shipped\n",
+            self.UNSHIPPED: "unshipped\n",
+            self.BASELINE_README: "baseline\n",
+        })
+        fixture.git("rm", "-q", self.SHIPPED)
+        head = self._own_evidence(fixture, "delete the baseline")
+
+        ownership = fixture.ownership(head, "--branch", "fm/p4-003")
+        evidence = fixture.evidence(head, "--branch", "fm/p4-003")
+
+        for result in (ownership, evidence):
+            self.assertEqual(result.returncode, 1, result.stderr)
+            self.assertIn(self.SHIPPED, result.stderr)
+            self.assertIn(
+                "is shared SDK baseline bookkeeping; a pull request may add or "
+                "modify it but not D it",
+                result.stderr,
+            )
+
+    def test_unlisted_sdk_product_code_is_still_ownership_checked(self) -> None:
+        product = "src/Playnite.SDK.Abstractions/Models/IIdentifiable.cs"
+        fixture = Fixture(
+            ownership=[claim(product, "p4-005", pull=97)],
+            files={product: "namespace Playnite.SDK.Models;\n"},
+        )
+        self.addCleanup(fixture.cleanup)
+        fixture.append(product, "// foreign product bytes\n")
+        head = self._own_evidence(fixture, "edit an unlisted SDK product file")
+
+        ownership = fixture.ownership(head, "--branch", "fm/p4-003")
+        evidence = fixture.evidence(head, "--branch", "fm/p4-003")
+
+        self.assertEqual(ownership.returncode, 1, ownership.stderr)
+        self.assertIn(f"{product} (unit p4-005;", ownership.stdout)
+        self.assertIn("foreign unit ownership", ownership.stderr)
+        self.assertEqual(evidence.returncode, 1, evidence.stderr)
+        self.assertIn(
+            "touches unit-owned paths owned only by another unit", evidence.stderr
+        )
+        self.assertIn(f"{product} (unit p4-005;", evidence.stderr)
+
+    def test_shared_baseline_constant_is_exactly_the_documented_allowance(self) -> None:
+        from unit_guard_common import SHARED_BASELINE, is_shared_baseline_path
+
+        # A product-code path added here would change this set and fail.  The
+        # directory is exact too: swapping it for the project root would expose
+        # every SDK source file and also fail.
+        self.assertEqual(
+            SHARED_BASELINE.files,
+            frozenset({self.SHIPPED, self.UNSHIPPED}),
+        )
+        self.assertEqual(SHARED_BASELINE.directory, self.BASELINE_DIRECTORY)
+        self.assertTrue(
+            is_shared_baseline_path(
+                self.BASELINE_DIRECTORY + "Playnite.SDK.Abstractions.dll"
+            )
+        )
+        self.assertTrue(is_shared_baseline_path(self.SHIPPED))
+        self.assertFalse(
+            is_shared_baseline_path("src/Playnite.SDK.Abstractions/SdkVersions.cs")
+        )
+        self.assertFalse(is_shared_baseline_path(self.SHIPPED + ".bak"))
+        self.assertFalse(is_shared_baseline_path(self.BASELINE_DIRECTORY.rstrip("/")))
+        self.assertFalse(
+            is_shared_baseline_path(
+                "src/Playnite.SDK.Abstractions/api-baseline-notes/README.md"
+            )
+        )
 
 
 class WorkflowShapeTests(unittest.TestCase):

@@ -114,6 +114,83 @@ must allow every claim in its subtree; mixed ownership is rejected rather than a
 one owner is permitted. The guard fails closed on duplicate map rows for the same owner,
 duplicate diff entries, and unresolvable symlinks.
 
+## Shared SDK baseline bookkeeping
+
+Two files and one directory are shared by every unit because every public-API change regenerates
+the same checked-in lists: `src/Playnite.SDK.Abstractions/PublicAPI.Shipped.txt`,
+`src/Playnite.SDK.Abstractions/PublicAPI.Unshipped.txt`, and everything under
+`src/Playnite.SDK.Abstractions/api-baseline/`. The allowance is the single
+`unit_guard_common.SHARED_BASELINE` constant: an exact file set plus that one directory prefix,
+with no glob or broader project prefix.
+
+Any declared unit may add or modify those paths. Both `unit-ownership` and `unit-evidence` read
+the constant through the shared helper, so an unrelated unit's baseline edit no longer fails
+foreign ownership or foreign unit evidence and does not by itself demand a product-path
+declaration. A delete, or any other status that is not `A` or `M`, still fails with a named
+reason: the checked-in baseline is shared, not disposable. Everything else under
+`src/Playnite.SDK.Abstractions/` stays product material and is still checked against the base
+ownership map, so this allowance cannot be used to edit `SdkVersions.cs` or another unit's
+source file.
+
+This is a unit-ownership allowance only. Those paths remain protected paths for the separate
+`oracle-change` gate, which is unchanged; a pull request still needs the captain's label and
+hand review before it can merge, and the allowance never authorises a broader SDK change.
+
+A test pins the constant to exactly the documented paths and fails if a product-code path or a
+broader directory is added.
+
+## Approved cross-unit moves
+
+A pull request may move a path out of another unit's ownership only with an explicit manifest on
+its head commit. Put the normal moving-unit declaration and the manifest in the same commit:
+
+```
+Port-Unit: p4-003
+Cross-Unit-Move: p4-002:tests/golden/p4-002-legacy/PROVENANCE.md
+```
+
+The value is a comma-separated list of `<owning-unit>:<path>` pairs with no whitespace. The unit
+is the path's actual owner, not the moving unit; the path is repository-relative. Multiple
+`Cross-Unit-Move` lines are concatenated, and a path may appear only once.
+
+Both required guard jobs, `unit-ownership` and `unit-evidence`, read this same head-commit
+manifest through the shared `unit_guard_common.authorised_cross_unit_move` validator. Each job
+exempts exactly the listed, validated foreign paths from its own foreign-path checks, and only
+when all of these hold:
+
+1. Every path the pull request changes that is owned by another unit (through the ownership map
+   or a unit evidence namespace) appears in the manifest with its actual owning unit, and its diff
+   status is `D` (deleted) or `M` (modified). A foreign added path cannot be listed.
+2. The pull request adds at least one new file in the declaring unit's namespace: an
+   evidence-namespace path, a path the base map already allows that unit, or unowned
+   product/test/tool material that the unit's merge will own.
+3. Every listed `D` path pairs one-to-one with its own added path with the same basename, and
+   that added path must be owned by the declaring unit: an evidence-namespace path, a path the
+   base map already allows that unit, or unowned product/test/tool material that the unit's
+   merge will own. One add cannot pair with two deletes, and an add outside the declaring
+   unit's namespace cannot stand in for the moved file.
+4. Every listed `M` path pairs one-to-one with its own listed `D` path with the same basename.
+   No `D` may back two modifications, and an `M` with no paired `D` fails, so the trailer
+   cannot authorise an in-place foreign edit.
+
+An empty or malformed manifest, a path the diff does not change, a wrong owner, a listed added
+foreign path, a delete without its own same-basename declaring-unit counterpart, two deletes
+sharing one add, a modification without its own delete, and two modifications sharing one delete
+all fail closed with a named reason. Because both jobs call that one validator, a manifest cannot
+satisfy the ownership check while being weaker or absent in the evidence check. Both jobs still
+apply their own remaining rules: one unit declaration, the queue transition and fragment, the
+base ownership map, symlink checks and the read-only diff all still apply. For the evidence job
+this means the listed paths are exempt from both its foreign unit-evidence check and its
+map-owned foreign path check, while every unlisted foreign path still fails each job. This
+exception is not a general permission to edit another unit's files.
+
+A cross-unit move is a captain-authorised operation, not something a contributor can
+self-approve. It requires the `oracle-change` label through the protected-path gate, and the
+captain reviews the manifest by hand against the diff: every pair names the real owner and the
+moved file, the added counterpart is in the moving unit's namespace, and no unrelated foreign
+path is covered. CI enforces the shape of the manifest, not the decision; human review of the
+pair against the change is the authority boundary.
+
 A fragment's cited head must be the pull request head, a commit on the pull request's own
 first-parent spine after both the merge base and the event base, or the merge commit the
 fragment describes. A run from an unrelated base-branch ancestor, from a main commit merged
