@@ -72,7 +72,7 @@ None.
 
 ### 6. Scope and protected paths
 
-- The diff is nine new files only: six `docs/port/p6-008-*` / unit-record files and two test files.
+- The diff is nine new files only: seven `docs/port/p6-008-*` / unit-record files and two test files.
   No `legacy/`, `tests/golden/`, `tests/fixtures/`, `tests/baseline.json`, `docs/formal/`,
   `docs/port/surface-parity.tsv`, source, project, or sample file is touched.
 - No skips, suppressions, baseline re-acceptance, or `NotImplementedException`/TODO stubs were added.
