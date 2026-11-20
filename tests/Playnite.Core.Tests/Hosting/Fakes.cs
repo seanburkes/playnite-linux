@@ -1,6 +1,8 @@
 using Playnite.Core.Hosting;
 using Playnite.Core.Models;
 using Playnite.Platform.DesktopIntegration;
+using Playnite.SDK;
+using Playnite.SDK.Models;
 
 namespace Playnite.Core.Tests.Hosting;
 
@@ -78,19 +80,19 @@ internal sealed class FakeMainViewHost : IMainViewHost
     public Func<CancellationToken, Task<MainViewState>> StateHandler { get; set; } =
         _ => Task.FromResult(new MainViewState());
 
-    public Func<CancellationToken, Task<IReadOnlyList<Game>>> SelectedHandler { get; set; } =
-        _ => Task.FromResult<IReadOnlyList<Game>>(Array.Empty<Game>());
+    public Func<CancellationToken, Task<IReadOnlyList<IGameView>>> SelectedHandler { get; set; } =
+        _ => Task.FromResult<IReadOnlyList<IGameView>>(Array.Empty<Game>());
 
-    public Func<CancellationToken, Task<IReadOnlyList<Game>>> FilteredHandler { get; set; } =
-        _ => Task.FromResult<IReadOnlyList<Game>>(Array.Empty<Game>());
+    public Func<CancellationToken, Task<IReadOnlyList<IGameView>>> FilteredHandler { get; set; } =
+        _ => Task.FromResult<IReadOnlyList<IGameView>>(Array.Empty<Game>());
 
     public Task<MainViewState> GetStateAsync(CancellationToken cancellationToken = default)
         => StateHandler(cancellationToken);
 
-    public Task<IReadOnlyList<Game>> GetSelectedGamesAsync(CancellationToken cancellationToken = default)
+    public Task<IReadOnlyList<IGameView>> GetSelectedGamesAsync(CancellationToken cancellationToken = default)
         => SelectedHandler(cancellationToken);
 
-    public Task<IReadOnlyList<Game>> GetFilteredGamesAsync(CancellationToken cancellationToken = default)
+    public Task<IReadOnlyList<IGameView>> GetFilteredGamesAsync(CancellationToken cancellationToken = default)
         => FilteredHandler(cancellationToken);
 }
 

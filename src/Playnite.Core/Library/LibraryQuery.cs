@@ -3,6 +3,7 @@ using System.Text.Json.Serialization;
 using System.Text.Json.Serialization.Metadata;
 using Playnite.Core.Database;
 using Playnite.Core.Queries;
+using Playnite.SDK.Models;
 
 namespace Playnite.Core.Library;
 
@@ -20,24 +21,6 @@ public sealed record LibraryQuery(
 
     /// <summary>Largest accepted explicit page size.</summary>
     public const int MaxLimit = 10_000;
-}
-
-/// <summary>Stored-field grouping keys. Values follow the v10 GroupableField enumeration.</summary>
-public enum LibraryGroupBy
-{
-    None = 0,
-    LastActivity = 4,
-    ReleaseYear = 6,
-    PlayTime = 14,
-    UserScore = 16,
-    CriticScore = 17,
-    CommunityScore = 18,
-    Added = 19,
-    Modified = 20,
-    InstallationStatus = 22,
-    Name = 23,
-    InstallSize = 25,
-    RecentActivity = 26,
 }
 
 /// <summary>One group within a page. Key is null for a missing release year.</summary>

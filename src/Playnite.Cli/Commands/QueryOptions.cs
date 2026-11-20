@@ -1,6 +1,7 @@
 using System.Globalization;
 using Playnite.Core.Library;
 using Playnite.Core.Queries;
+using Playnite.SDK.Models;
 
 namespace Playnite.Cli;
 

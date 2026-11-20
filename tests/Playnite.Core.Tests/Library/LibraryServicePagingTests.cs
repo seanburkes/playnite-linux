@@ -4,6 +4,7 @@ using Playnite.Core.Models;
 using Playnite.Core.Queries;
 using Playnite.Core.Tests.Database;
 using Xunit;
+using Playnite.SDK.Models;
 
 namespace Playnite.Core.Tests.Library;
 

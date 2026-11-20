@@ -187,7 +187,7 @@ namespace Playnite.Core.Models
     /// <summary>
     /// Represents Playnite game object.
     /// </summary>
-    public class Game : DatabaseObject
+    public class Game : DatabaseObject, IGameView
     {
         /// <summary>Creates a game with caller-supplied database and provider identities.</summary>
         public Game(Guid id, string gameId) : base(id)

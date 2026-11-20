@@ -7,6 +7,7 @@ using Playnite.Core.Queries;
 using Playnite.Core.Tests.Database;
 using Playnite.Core.Tests.Serialization;
 using Xunit;
+using Playnite.SDK.Models;
 
 namespace Playnite.Core.Tests.Library;
 
