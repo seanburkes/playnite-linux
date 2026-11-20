@@ -114,6 +114,46 @@ must allow every claim in its subtree; mixed ownership is rejected rather than a
 one owner is permitted. The guard fails closed on duplicate map rows for the same owner,
 duplicate diff entries, and unresolvable symlinks.
 
+## Approved cross-unit moves
+
+A pull request may move a path out of another unit's ownership only with an explicit manifest on
+its head commit. Put the normal moving-unit declaration and the manifest in the same commit:
+
+```
+Port-Unit: p4-003
+Cross-Unit-Move: p4-002:tests/golden/p4-002-legacy/PROVENANCE.md
+```
+
+The value is a comma-separated list of `<owning-unit>:<path>` pairs with no whitespace. The unit
+is the path's actual owner, not the moving unit; the path is repository-relative. Multiple
+`Cross-Unit-Move` lines are concatenated, and a path may appear only once.
+
+The ownership guard allows exactly the foreign paths the manifest covers, and only when all of
+these hold:
+
+1. Every path the pull request changes that is owned by another unit (through the ownership map
+   or a unit evidence namespace) appears in the manifest with its actual owning unit, and its diff
+   status is `D` (deleted) or `M` (modified). A foreign added path cannot be listed.
+2. The pull request adds at least one new file in the declaring unit's namespace: an
+   evidence-namespace path, a path the base map already allows that unit, or unowned
+   product/test/tool material that the unit's merge will own.
+3. Every listed `D` path has an added path with the same basename (the move).
+4. Every listed `M` path has a listed `D` path with the same basename; the trailer cannot
+   authorise an in-place foreign edit.
+
+An empty or malformed manifest, a path the diff does not change, a wrong owner, a listed added
+foreign path, a move without its same-basename counterpart, and a modification without a delete
+all fail closed with a named reason. The rest of the guard is unchanged: one unit declaration,
+the queue transition and fragment, the base ownership map, symlink checks and the read-only diff
+all still apply. This exception is not a general permission to edit another unit's files.
+
+A cross-unit move is a captain-authorised operation, not something a contributor can
+self-approve. It requires the `oracle-change` label through the protected-path gate, and the
+captain reviews the manifest by hand against the diff: every pair names the real owner and the
+moved file, the added counterpart is in the moving unit's namespace, and no unrelated foreign
+path is covered. CI enforces the shape of the manifest, not the decision; human review of the
+pair against the change is the authority boundary.
+
 A fragment's cited head must be the pull request head, a commit on the pull request's own
 first-parent spine after both the merge base and the event base, or the merge commit the
 fragment describes. A run from an unrelated base-branch ancestor, from a main commit merged

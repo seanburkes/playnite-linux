@@ -23,6 +23,14 @@ via the evidence guard, a fragment.  If the base map is missing, empty or
 invalid, product changes fail closed with ``ownership map unavailable`` unless
 the PR is a unit PR with its own evidence.
 
+An approved move out of another unit's ownership may add a head-commit
+``Cross-Unit-Move: <owner>:<path>[,...]`` trailer beside ``Port-Unit``.  The
+manifest must list every foreign path the PR edits with its actual owner and a
+delete or modification status, add at least one new file in the declaring
+unit's namespace, pair each deleted path with a same-basename addition, and
+pair each modified path with a same-basename delete.  Everything else in this
+check still applies.
+
 This script is read-only: it never fetches, checks out, resets, or writes.
 Exit codes: 0 allowed, 1 policy failure including ambiguous or invalid input.
 """
@@ -41,6 +49,7 @@ from unit_guard_common import (  # noqa: E402
     bot_owned_errors,
     changed_paths,
     claim_is_allowed,
+    cross_unit_move_manifest,
     declared_unit,
     first_map_errors,
     format_paths,
@@ -55,6 +64,7 @@ from unit_guard_common import (  # noqa: E402
     resolve_commit,
     symlink_errors,
     touched_units,
+    validate_cross_unit_move,
 )
 
 
@@ -173,6 +183,13 @@ def main(argv: list[str]) -> int:
 
         touched = touched_units(changes, units, declared)
         owned = ownership_hits(changes, ownership)
+        move = cross_unit_move_manifest(repo, head, units)
+        if move is not None and declared is None:
+            raise GuardError(
+                "the Cross-Unit-Move trailer requires a unit declaration; name "
+                "the moving unit with fm/<unit>, a 'Port-Unit: <unit>' "
+                "head-commit trailer, or --unit"
+            )
 
         if declared is None:
             migration = _migration_unit(changes)
@@ -214,40 +231,65 @@ def main(argv: list[str]) -> int:
             print("process PR: no unit-owned or product/test/tool path is touched")
             return 0
 
-        if len(touched) > 1:
-            units_named = ", ".join(touched)
-            print(f"unit: MULTIPLE ({units_named})")
-            print("allowed paths touched:")
-            print(format_paths(touched.get(declared, [])))
-            print("offending paths:")
-            for unit, paths in touched.items():
-                if unit == declared:
-                    continue
-                for path in paths:
-                    print(f"  {path} (unit {unit})")
-            raise GuardError(
-                f"a pull request may carry at most one unit evidence namespace; "
-                f"it touches {len(touched)}: {units_named}"
+        allowed_foreign = (
+            validate_cross_unit_move(
+                move,
+                declared=declared,
+                changes=changes,
+                ownership=ownership,
+                touched=touched,
+                units=units,
             )
+            if move is not None
+            else frozenset()
+        )
+
+        if len(touched) > 1:
+            uncovered = {
+                unit: [path for path in paths if path not in allowed_foreign]
+                for unit, paths in touched.items()
+                if unit != declared
+            }
+            uncovered = {unit: paths for unit, paths in uncovered.items() if paths}
+            if uncovered:
+                units_named = ", ".join(touched)
+                print(f"unit: MULTIPLE ({units_named})")
+                print("allowed paths touched:")
+                print(format_paths(touched.get(declared, [])))
+                print("offending paths:")
+                for unit, paths in uncovered.items():
+                    for path in paths:
+                        print(f"  {path} (unit {unit})")
+                raise GuardError(
+                    f"a pull request may carry at most one unit evidence namespace; "
+                    f"it touches {len(touched)}: {units_named}"
+                )
 
         foreign_owned = {
             path: rows
             for path, rows in owned.items()
             if not claim_is_allowed(rows, declared)
+            and path not in allowed_foreign
         }
-        foreign_evidence = sorted(unit for unit in touched if unit != declared)
+        foreign_evidence = sorted(
+            unit
+            for unit in touched
+            if unit != declared
+            and any(path not in allowed_foreign for path in touched[unit])
+        )
         if foreign_owned or foreign_evidence:
             print(f"unit: {declared}")
             print("allowed paths touched:")
             own_paths = list(touched.get(declared, [])) + [
                 path for path, rows in owned.items()
                 if claim_is_allowed(rows, declared)
-            ]
+            ] + sorted(allowed_foreign)
             print(format_paths(sorted(set(own_paths))))
             print("offending paths:")
             for unit in foreign_evidence:
                 for path in touched[unit]:
-                    print(f"  {path} (unit {unit})")
+                    if path not in allowed_foreign:
+                        print(f"  {path} (unit {unit})")
             print("\n".join(_claim_lines(foreign_owned)))
             if foreign_evidence:
                 raise GuardError(
@@ -276,13 +318,15 @@ def main(argv: list[str]) -> int:
         own_paths = list(touched.get(declared, [])) + [
             path for path, rows in owned.items()
             if claim_is_allowed(rows, declared)
-        ]
+        ] + sorted(allowed_foreign)
         print(format_paths(sorted(set(own_paths))))
         print("offending paths:")
         print("  (none)")
         for path, rows in sorted(owned.items()):
             if claim_is_allowed(rows, declared):
                 print(f"ownership: {path} ({_owners_text(rows)})")
+        for path, unit in sorted((move or {}).items()):
+            print(f"cross-unit move: {path} (unit {unit})")
         return 0
     except GuardError as exc:
         print(f"error: {exc}", file=sys.stderr)

@@ -1013,6 +1013,196 @@ class OwnershipGuardTests(unittest.TestCase):
         self.assertIn(main_side, result.stderr)
 
 
+class CrossUnitMoveTests(unittest.TestCase):
+    """Proofs for the narrowly-scoped ``Cross-Unit-Move`` exception."""
+
+    def fixture_with(self, files, ownership=None) -> Fixture:
+        self.fixture = Fixture(ownership=ownership, files=files)
+        self.addCleanup(self.fixture.cleanup)
+        return self.fixture
+
+    def test_allowed_move_of_foreign_evidence_passes(self) -> None:
+        old = "tests/golden/p4-002-legacy/PROVENANCE.md"
+        new = "tests/golden/p4-003-legacy/PROVENANCE.md"
+        fixture = self.fixture_with({old: "provenance\n"})
+        fixture.git("rm", "-q", old)
+        fixture.write(new, "provenance\n")
+        head = fixture.commit(
+            "move the legacy golden\n\n"
+            "Port-Unit: p4-003\n"
+            f"Cross-Unit-Move: p4-002:{old}"
+        )
+
+        result = fixture.ownership(head, "--branch", "fm/p4-003")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn(f"cross-unit move: {old} (unit p4-002)", result.stdout)
+        self.assertIn(new, result.stdout)
+        self.assertIn("offending paths:\n  (none)", result.stdout)
+
+    def test_allowed_move_of_a_map_owned_product_path_passes(self) -> None:
+        old = "src/Playnite.Core/Import/AssetCopy.cs"
+        new = "src/Playnite.Core/Import/Moved/AssetCopy.cs"
+        fixture = self.fixture_with(
+            {old: "// asset copy\n"},
+            ownership=[
+                claim(old, "p4-005"),
+                claim("src/Playnite.Core/Thing.cs", "p4-002"),
+                claim("tests/golden/p4-002-legacy/PROVENANCE.md", "p4-002"),
+            ],
+        )
+        fixture.git("rm", "-q", old)
+        fixture.write(new, "// asset copy\n")
+        head = fixture.commit(
+            "move a p4-005 product file\n\n"
+            "Port-Unit: p4-003\n"
+            f"Cross-Unit-Move: p4-005:{old}"
+        )
+
+        result = fixture.ownership(head, "--branch", "fm/p4-003")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn(f"cross-unit move: {old} (unit p4-005)", result.stdout)
+
+    def test_unlisted_foreign_path_fails(self) -> None:
+        listed = "tests/golden/p4-002-listed/PROVENANCE.md"
+        unlisted = "tests/golden/p4-005-other/PROVENANCE.md"
+        fixture = self.fixture_with({listed: "listed\n", unlisted: "other\n"})
+        fixture.git("rm", "-q", listed)
+        fixture.write("tests/golden/p4-003-listed/PROVENANCE.md", "listed\n")
+        fixture.append(unlisted, "edited\n")
+        head = fixture.commit(
+            "list only one foreign path\n\n"
+            "Port-Unit: p4-003\n"
+            f"Cross-Unit-Move: p4-002:{listed}"
+        )
+
+        result = fixture.ownership(head, "--branch", "fm/p4-003")
+
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertIn("does not list foreign path", result.stderr)
+        self.assertIn(unlisted, result.stderr)
+        self.assertIn("unit p4-005", result.stderr)
+
+    def test_wrong_owner_fails(self) -> None:
+        old = "tests/golden/p4-002-wrong/PROVENANCE.md"
+        fixture = self.fixture_with({old: "provenance\n"})
+        fixture.git("rm", "-q", old)
+        fixture.write("tests/golden/p4-003-wrong/PROVENANCE.md", "provenance\n")
+        head = fixture.commit(
+            "name the wrong foreign owner\n\n"
+            "Port-Unit: p4-003\n"
+            f"Cross-Unit-Move: p4-005:{old}"
+        )
+
+        result = fixture.ownership(head, "--branch", "fm/p4-003")
+
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertIn(f"lists {old!r} as owned by p4-005", result.stderr)
+        self.assertIn("actual owning units are p4-002", result.stderr)
+
+    def test_move_with_no_added_counterpart_fails(self) -> None:
+        old = "tests/golden/p4-002-orphan/PROVENANCE.md"
+        fixture = self.fixture_with({old: "provenance\n"})
+        fixture.git("rm", "-q", old)
+        # A new file in the declaring unit's namespace satisfies the "new file"
+        # rule, but it is not the moved file's same-basename counterpart.
+        fixture.write("tests/golden/p4-003-orphan/README.md", "unrelated\n")
+        head = fixture.commit(
+            "delete without the matching add\n\n"
+            "Port-Unit: p4-003\n"
+            f"Cross-Unit-Move: p4-002:{old}"
+        )
+
+        result = fixture.ownership(head, "--branch", "fm/p4-003")
+
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertIn("no same-basename added counterpart", result.stderr)
+        self.assertIn(old, result.stderr)
+
+    def test_modified_listing_with_no_delete_fails(self) -> None:
+        path = "src/Playnite.Core/Import/AssetCopy.cs"
+        fixture = self.fixture_with(
+            {path: "// asset copy\n"},
+            ownership=[
+                claim(path, "p4-005"),
+                claim("src/Playnite.Core/Thing.cs", "p4-002"),
+                claim("tests/golden/p4-002-legacy/PROVENANCE.md", "p4-002"),
+            ],
+        )
+        fixture.append(path, "// edited in place\n")
+        fixture.write("tests/fixtures/p4-003-move/README.md", "fixture\n")
+        head = fixture.commit(
+            "edit a foreign file without moving it\n\n"
+            "Port-Unit: p4-003\n"
+            f"Cross-Unit-Move: p4-005:{path}"
+        )
+
+        result = fixture.ownership(head, "--branch", "fm/p4-003")
+
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertIn("no deleted counterpart of the same basename", result.stderr)
+        self.assertIn(path, result.stderr)
+
+    def test_empty_manifest_fails(self) -> None:
+        fixture = self.fixture_with({})
+        fixture.append("docs/port/p4-003-publication.md", "own\n")
+        head = fixture.commit(
+            "empty manifest\n\nPort-Unit: p4-003\nCross-Unit-Move:"
+        )
+
+        result = fixture.ownership(head, "--branch", "fm/p4-003")
+
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertIn("Cross-Unit-Move trailer is empty", result.stderr)
+
+    def test_malformed_manifest_entry_fails(self) -> None:
+        fixture = self.fixture_with({})
+        fixture.append("docs/port/p4-003-publication.md", "own\n")
+        head = fixture.commit(
+            "malformed manifest\n\n"
+            "Port-Unit: p4-003\n"
+            "Cross-Unit-Move: p4-002"
+        )
+
+        result = fixture.ownership(head, "--branch", "fm/p4-003")
+
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertIn("is not <unit>:<path>", result.stderr)
+
+    def test_added_foreign_path_cannot_be_listed(self) -> None:
+        added = "tests/golden/p4-002-new/PROVENANCE.md"
+        fixture = self.fixture_with({})
+        fixture.write(added, "new foreign evidence\n")
+        fixture.write("tests/golden/p4-003-new/PROVENANCE.md", "own\n")
+        head = fixture.commit(
+            "list an added foreign path\n\n"
+            "Port-Unit: p4-003\n"
+            f"Cross-Unit-Move: p4-002:{added}"
+        )
+
+        result = fixture.ownership(head, "--branch", "fm/p4-003")
+
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertIn(f"lists {added!r} with status 'A'", result.stderr)
+        self.assertIn("only a deleted (D) or modified (M) foreign path", result.stderr)
+
+    def test_manifest_without_a_declaration_fails(self) -> None:
+        old = "tests/golden/p4-002-nodecl/PROVENANCE.md"
+        fixture = self.fixture_with({old: "provenance\n"})
+        fixture.git("rm", "-q", old)
+        fixture.write("tests/golden/p4-003-nodecl/PROVENANCE.md", "provenance\n")
+        head = fixture.commit(
+            "manifest with no moving unit\n\n"
+            f"Cross-Unit-Move: p4-002:{old}"
+        )
+
+        result = fixture.ownership(head, "--branch", "fm/port-u2")
+
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertIn("Cross-Unit-Move trailer requires a unit declaration", result.stderr)
+
+
 class EvidenceGuardTests(unittest.TestCase):
     def setUp(self) -> None:
         self.fixture = Fixture()
