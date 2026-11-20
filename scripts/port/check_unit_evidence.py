@@ -62,6 +62,7 @@ from unit_guard_common import (  # noqa: E402
     repo_root,
     repository_slug,
     resolve_commit,
+    shared_baseline_paths,
     symlink_errors,
     touched_units,
     validate_fragment_evidence,
@@ -242,6 +243,7 @@ def main(argv: list[str]) -> int:
         changes = changed_paths(repo, merge, head)
         units = known_units(repo, [base, head, merge])
 
+        shared_baseline = shared_baseline_paths(changes)
         product = product_paths(changes, units)
         map_errors = bot_owned_errors(
             changes,
@@ -367,6 +369,7 @@ def main(argv: list[str]) -> int:
             path: rows for path, rows in owned.items()
             if not claim_is_allowed(rows, expected)
             and path not in allowed_foreign
+            and path not in shared_baseline
         }
         if foreign_owned:
             details = "\n".join(
