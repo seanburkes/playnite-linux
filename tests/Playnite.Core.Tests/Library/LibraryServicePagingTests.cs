@@ -164,6 +164,52 @@ public sealed class LibraryServicePagingTests
     }
 
     [Fact]
+    public async Task Filtered_in_memory_sort_uses_nocase_for_mixed_case_and_accented_names()
+    {
+        using var files = new DatabaseTestDirectory();
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var games = TextGames();
+        var database = await SeedAsync(files, cancellationToken, games);
+        var service = new LibraryService(database);
+        var reader = new PagedLibraryReader(database);
+        // A non-null filter forces the v10 in-memory matcher and sort path.
+        var filter = LibraryFilter.Parse("""{"hidden":false}""");
+
+        Guid[] expected = [Id(14), Id(18), Id(16), Id(17), Id(10), Id(11), Id(15), Id(13), Id(12)];
+        var paged = await reader.ListAsync(new(SortBy: SortOrder.Name, Limit: 20), cancellationToken);
+        var inMemory = await service.ListAsync(
+            new(Filter: filter, SortBy: SortOrder.Name, Limit: 20), cancellationToken);
+
+        Assert.Equal(expected, Ids(paged));
+        Assert.Equal(expected, Ids(inMemory));
+        Assert.Equal(9, inMemory.TotalCount);
+        Assert.Empty(inMemory.Groups);
+    }
+
+    [Fact]
+    public async Task Null_or_blank_search_term_uses_the_paged_window()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var ids = Enumerable.Range(1, 3).Select(Id).ToArray();
+        var session = new SpySession { Total = ids.Length, Ids = ids };
+        var snapshot = new FakeReader(Game(1, "Alpha"), Game(2, "Beta"), Game(3, "Gamma"));
+        var service = new LibraryService(snapshot, new PagedLibraryReader(new SpySessionFactory(session)));
+
+        var nullTerm = await service.SearchAsync(null, cancellationToken: cancellationToken);
+        var blankTerm = await service.SearchAsync(" \t ", cancellationToken: cancellationToken);
+
+        Assert.Equal(2, session.PageReads.Count);
+        Assert.All(session.PageReads, read =>
+        {
+            Assert.Equal(0, read.Offset);
+            Assert.Equal(LibraryQuery.MaxLimit, read.Limit);
+        });
+        Assert.Equal(ids, Ids(nullTerm));
+        Assert.Equal(ids, Ids(blankTerm));
+        Assert.Equal(0, snapshot.ListCalls);
+    }
+
+    [Fact]
     public async Task Non_name_order_matches_the_paged_reader_and_breaks_ties_by_nocase_name()
     {
         using var files = new DatabaseTestDirectory();

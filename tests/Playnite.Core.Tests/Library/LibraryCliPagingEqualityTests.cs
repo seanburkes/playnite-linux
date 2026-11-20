@@ -8,9 +8,9 @@ using Xunit;
 namespace Playnite.Core.Tests.Library;
 
 /// <summary>
-/// Pins the CLI first page on a fixed dataset to the pre-wiring output. The names are distinct
-/// ASCII titles, so the old current-culture order and the adopted NOCASE order agree and the
-/// first page is an equality check rather than a re-baseline.
+/// Pins the CLI first page on a fixed synthetic library to the pre-wiring output. The names are
+/// distinct ASCII titles, so the old current-culture order and the adopted NOCASE order agree and
+/// the first page is an equality check rather than a re-baseline.
 /// </summary>
 public sealed class LibraryCliPagingEqualityTests
 {

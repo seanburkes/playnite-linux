@@ -99,7 +99,7 @@ criteria use the existing `{}` sentinel for missing values.
   the group key still fail before any read. It also pins the NOCASE text order for mixed-case,
   accented and numeric-prefixed titles against `PagedLibraryReader` and `PagedLibraryComparer`.
 - `LibraryCliPagingEqualityTests` runs the real `list` and `search` commands on a fixed
-  library and pins the first page and unpaged list to the pre-wiring output.
+  synthetic library and pins the first page and unpaged list to the pre-wiring output.
 - `LibraryServiceImportTests` runs the existing `import-v10` command on the frozen
   `tests/fixtures/v10/library` oracle and queries the imported SQLite file. It verifies
   persisted IDs, graph detachment, Unicode search, hidden filtering, grouped pages
