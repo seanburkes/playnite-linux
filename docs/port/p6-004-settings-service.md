@@ -69,7 +69,8 @@ overflow.
 
 A UTF-8 BOM is accepted on read and on the compatibility round-trip. A strict
 `System.Text.Json` rejection at the `SettingsMigration.ExportV10` boundary is mapped to
-`Corrupt`; no parser exception escapes the service.
+`Corrupt`; no parser exception escapes the service. That mapping covers both the initial
+read and the consistency check of a rebuilt envelope.
 
 Failures carry a stable category: `Unreadable`, `Corrupt`, `UnsupportedSchema`, `LegacyShape`,
 `InvalidValue`, `AlreadyExists` or `WriteUnavailable`.
@@ -77,7 +78,10 @@ Failures carry a stable category: `Unreadable`, `Corrupt`, `UnsupportedSchema`, 
 ## Update and data preservation
 
 `UpdateAsync` validates typed updates, takes a fresh read of the store, applies only the
-requested known root properties, and rebuilds the envelope. Unknown and unmapped properties
+requested known root properties, and rebuilds the envelope. Each update token is validated
+with the same type/range authority as a load before the store is touched, so an undefined
+enum or a non-finite double is refused as `InvalidValue` instead of being written and then
+rejected on the next read. Unknown and unmapped properties
 remain in `legacy`; unknown properties already in `settings` are never dropped. Updating a
 property preserved in `legacy` moves that property to `settings` and leaves unrelated legacy
 properties untouched. The compatibility bytes are regenerated canonically, so untouched
@@ -103,7 +107,7 @@ storage write. It never overwrites an existing store.
 
 ## Evidence and test map
 
-Local Release checks on this branch: Core **2766 passed**, Architecture **199 passed**, zero
+Local Release checks on this branch: Core **2770 passed**, Architecture **199 passed**, zero
 failed/skipped; build **0 warnings / 0 errors**.
 
 `tests/Playnite.Core.Tests/Settings/SettingsServiceTests.cs` covers every public operation:
@@ -124,6 +128,7 @@ failed/skipped; build **0 warnings / 0 errors**.
 | Numeric range validation | `Out_of_range_integer_is_rejected_at_load_with_the_key_name`, `Out_of_range_integer_in_legacy_is_rejected_at_load`, `Out_of_range_enum_is_rejected_at_load_with_the_key_name`, `Every_documented_key_rejects_an_integer_beyond_its_clr_range`, `Double_range_escape_is_a_typed_error_not_an_overflow`, `Out_of_range_schema_version_is_unsupported_not_an_overflow` |
 | Int/long/double boundaries and exact reads | `Int_boundary_values_are_accepted_and_read_exactly`, `Long_boundary_values_read_exactly_through_a_long_key`, `Out_of_range_long_read_is_a_typed_error_not_an_overflow`, `Double_boundary_values_read_exactly_through_a_double_key` |
 | BOM and strict-parser mapping | `Bom_prefixed_envelope_loads_and_updates_without_a_raw_parser_error`, `Strict_json_parser_failure_is_reported_as_corrupt` |
+| Write-path type/range validation | `Undefined_enum_update_is_rejected_before_any_write`, `Non_finite_double_update_is_rejected_before_any_write` |
 | Unknown-name refusal | `Unknown_property_name_is_not_written_into_settings` |
 | Write/read failure contract | `Write_failure_keeps_the_previous_snapshot_and_does_not_raise`, `Read_failure_is_categorized_and_never_writes` |
 | Atomic-write failure and stage cleanup | `Atomic_write_failure_leaves_the_target_untouched_and_no_stage`, `Unwritable_config_directory_is_reported_before_the_store_exists` |

@@ -530,6 +530,39 @@ public sealed class SettingsServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task Undefined_enum_update_is_rejected_before_any_write()
+    {
+        var storage = new FakeStorage { Contents = await MigratedEnvelopeAsync() };
+        using var service = new PlayniteSettingsService(storage);
+        await service.LoadAsync();
+
+        var exception = await Assert.ThrowsAsync<SettingsException>(() => service.UpdateAsync(
+            [SettingsUpdate.Set(PlayniteSettingsKeys.AutoBackupFrequency, (AutoBackupFrequency)99)]));
+
+        Assert.Equal(SettingsFailure.InvalidValue, exception.Failure);
+        Assert.Contains("AutoBackupFrequency", exception.Message);
+        Assert.Equal(0, storage.Writes);
+    }
+
+    [Theory]
+    [InlineData(double.NaN)]
+    [InlineData(double.PositiveInfinity)]
+    [InlineData(double.NegativeInfinity)]
+    public async Task Non_finite_double_update_is_rejected_before_any_write(double value)
+    {
+        var storage = new FakeStorage { Contents = await MigratedEnvelopeAsync() };
+        using var service = new PlayniteSettingsService(storage);
+        await service.LoadAsync();
+
+        var exception = await Assert.ThrowsAsync<SettingsException>(() => service.UpdateAsync(
+            [SettingsUpdate.Set(new SettingsKey<double>("ItemSpacingMargin", 0), value)]));
+
+        Assert.Equal(SettingsFailure.InvalidValue, exception.Failure);
+        Assert.Contains("ItemSpacingMargin", exception.Message);
+        Assert.Equal(0, storage.Writes);
+    }
+
+    [Fact]
     public async Task Unknown_property_name_is_not_written_into_settings()
     {
         var storage = new FakeStorage { Contents = await MigratedEnvelopeAsync() };

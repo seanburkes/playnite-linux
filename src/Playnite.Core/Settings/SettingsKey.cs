@@ -131,7 +131,12 @@ public sealed class SettingsKey<T> : SettingsKey
                 $"Setting '{Name}' requires a {typeof(T).Name} value, not {value.GetType().Name}.");
         }
 
-        return JToken.FromObject(typed);
+        // Run the same type/range authority the load path uses on the token we are about
+        // to persist. Otherwise an update can write an undefined enum or a non-finite
+        // double that a later load rejects, leaving the store corrupt after a failed call.
+        var token = JToken.FromObject(typed);
+        ValidateToken(token);
+        return token;
     }
 
     internal override object? FromToken(JToken token) => token.ToObject<T>();

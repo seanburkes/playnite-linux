@@ -410,17 +410,7 @@ public sealed class PlayniteSettingsService : IDisposable
             throw new SettingsException(SettingsFailure.Corrupt, "The settings envelope has no report object.");
         }
 
-        try
-        {
-            _ = SettingsMigration.ExportV10(WithoutBom(bytes));
-        }
-        catch (Exception exception) when (exception is InvalidDataException or JsonException
-            or System.Text.Json.JsonException or FormatException or ArgumentException
-            or InvalidOperationException)
-        {
-            throw new SettingsException(SettingsFailure.Corrupt,
-                $"The settings envelope is inconsistent: {exception.Message}", exception);
-        }
+        EnsureEnvelopeRoundTrips(bytes);
 
         foreach (var key in PlayniteSettingsKeys.All)
         {
@@ -484,8 +474,27 @@ public sealed class PlayniteSettingsService : IDisposable
         envelope["legacy"] = legacy;
         envelope["report"] = snapshot.RawReport.DeepClone();
         var bytes = Utf8.GetBytes(envelope.ToString(Formatting.None));
-        _ = SettingsMigration.ExportV10(bytes);
+        EnsureEnvelopeRoundTrips(bytes);
         return (bytes, changed.AsReadOnly());
+    }
+
+    private static void EnsureEnvelopeRoundTrips(byte[] bytes)
+    {
+        try
+        {
+            _ = SettingsMigration.ExportV10(WithoutBom(bytes));
+        }
+        catch (Exception exception) when (exception is InvalidDataException
+            or Newtonsoft.Json.JsonException
+            or System.Text.Json.JsonException
+            or FormatException
+            or ArgumentException
+            or InvalidOperationException
+            or KeyNotFoundException)
+        {
+            throw new SettingsException(SettingsFailure.Corrupt,
+                $"The settings envelope is inconsistent: {exception.Message}", exception);
+        }
     }
 
     private static byte[] WithoutBom(byte[] bytes) =>
