@@ -3,6 +3,8 @@ using Playnite.Core.Models;
 using Playnite.SDK;
 using Playnite.SDK.Models;
 using Xunit;
+using CoreLibraryGroupBy = Playnite.Core.Library.LibraryGroupBy;
+using CoreSortOrder = Playnite.Core.Queries.SortOrder;
 
 namespace Playnite.Core.Tests.SdkContracts;
 
@@ -22,6 +24,40 @@ public sealed class SdkHostContractTests
 
         Assert.Equal(GameId, view.Id);
         Assert.Equal("contract-game", view.Name);
+    }
+
+    [Fact]
+    public void Core_game_is_adapted_to_IGameView_without_changing_the_model()
+    {
+        var game = new Game(GameId, "contract-game", "Contract Game");
+
+        IGameView view = new GameViewAdapter(game);
+
+        Assert.Equal(GameId, view.Id);
+        Assert.Equal("Contract Game", view.Name);
+        Assert.DoesNotContain(typeof(IGameView), typeof(Game).GetInterfaces());
+    }
+
+    [Fact]
+    public void Core_and_SDK_query_enums_round_trip()
+    {
+        foreach (var order in Enum.GetValues<CoreSortOrder>())
+        {
+            Assert.Equal(order.ToString(), MainViewEnumAdapter.ToSdk(order).ToString());
+            Assert.Equal(order, MainViewEnumAdapter.ToCore(MainViewEnumAdapter.ToSdk(order)));
+        }
+
+        foreach (var grouping in Enum.GetValues<CoreLibraryGroupBy>())
+        {
+            Assert.Equal(grouping.ToString(), MainViewEnumAdapter.ToSdk(grouping).ToString());
+            Assert.Equal(grouping, MainViewEnumAdapter.ToCore(MainViewEnumAdapter.ToSdk(grouping)));
+        }
+
+        Assert.Throws<ArgumentOutOfRangeException>(() => MainViewEnumAdapter.ToSdk((CoreSortOrder)99));
+        Assert.Throws<ArgumentOutOfRangeException>(() => MainViewEnumAdapter.ToCore((SortOrder)99));
+        Assert.Throws<ArgumentOutOfRangeException>(() => MainViewEnumAdapter.ToSdk((CoreLibraryGroupBy)99));
+        Assert.Throws<ArgumentOutOfRangeException>(() => MainViewEnumAdapter.ToCore((LibraryGroupBy)99));
+        Assert.Throws<ArgumentNullException>(() => new GameViewAdapter(null!));
     }
 
     [Fact]
@@ -98,11 +134,12 @@ public sealed class SdkHostContractTests
     public async Task IMainViewHost_is_exercised_by_MainViewApi()
     {
         var game = new Game(GameId, "contract-game", "Contract Game");
+        var view = new GameViewAdapter(game);
         var host = new ContractMainViewHost
         {
-            State = new MainViewState(selectedGames: [game], filteredGames: [game]),
-            Selected = [game],
-            Filtered = [game],
+            State = new MainViewState(selectedGames: [view], filteredGames: [view]),
+            Selected = [view],
+            Filtered = [view],
         };
         var api = new MainViewApi(host);
 
@@ -118,11 +155,12 @@ public sealed class SdkHostContractTests
     public async Task IMainViewAPI_every_member_is_exercised()
     {
         var game = new Game(GameId, "contract-game", "Contract Game");
+        var view = new GameViewAdapter(game);
         IMainViewAPI api = new MainViewApi(new ContractMainViewHost
         {
-            State = new MainViewState(selectedGames: [game], filteredGames: [game]),
-            Selected = [game],
-            Filtered = [game],
+            State = new MainViewState(selectedGames: [view], filteredGames: [view]),
+            Selected = [view],
+            Filtered = [view],
         });
 
         var state = await api.GetStateAsync();

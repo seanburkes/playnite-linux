@@ -1,7 +1,5 @@
 using Playnite.Core.Hosting;
-using Playnite.Core.Library;
 using Playnite.Core.Models;
-using Playnite.Core.Queries;
 using Xunit;
 using Playnite.SDK;
 using Playnite.SDK.Models;
@@ -23,8 +21,8 @@ public sealed class MainViewApiTests
             SortOrder.LastActivity,
             sortDescending: true,
             LibraryGroupBy.Name,
-            [game],
-            [game]);
+            [new GameViewAdapter(game)],
+            [new GameViewAdapter(game)]);
         var host = new FakeMainViewHost { StateHandler = _ => Task.FromResult(state) };
         var api = new MainViewApi(host);
 
@@ -106,8 +104,8 @@ public sealed class MainViewApiTests
         var filtered = Game("Filtered");
         var host = new FakeMainViewHost
         {
-            SelectedHandler = _ => Task.FromResult<IReadOnlyList<IGameView>>([selected]),
-            FilteredHandler = _ => Task.FromResult<IReadOnlyList<IGameView>>([filtered]),
+            SelectedHandler = _ => Task.FromResult<IReadOnlyList<IGameView>>([new GameViewAdapter(selected)]),
+            FilteredHandler = _ => Task.FromResult<IReadOnlyList<IGameView>>([new GameViewAdapter(filtered)]),
         };
         var api = new MainViewApi(host);
 
@@ -171,8 +169,11 @@ public sealed class MainViewApiTests
     [Fact]
     public async Task ResponsesCopyTheHostList()
     {
-        var games = new List<Game> { Game("Portal 2") };
-        var host = new FakeMainViewHost { FilteredHandler = _ => Task.FromResult<IReadOnlyList<IGameView>>(games) };
+        var games = new List<IGameView> { new GameViewAdapter(Game("Portal 2")) };
+        var host = new FakeMainViewHost
+        {
+            FilteredHandler = _ => Task.FromResult<IReadOnlyList<IGameView>>(games),
+        };
         var api = new MainViewApi(host);
 
         var response = await api.GetFilteredGamesAsync();
@@ -195,7 +196,7 @@ public sealed class MainViewApiTests
     [Fact]
     public void MainViewStateValidatesAndCopiesItsInputs()
     {
-        var games = new List<Game> { Game("Portal 2") };
+        var games = new List<IGameView> { new GameViewAdapter(Game("Portal 2")) };
 
         var state = new MainViewState(filteredGames: games);
         games.Clear();

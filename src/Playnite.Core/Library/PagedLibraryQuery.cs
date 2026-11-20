@@ -1,5 +1,4 @@
 using Playnite.Core.Queries;
-using Playnite.SDK.Models;
 
 namespace Playnite.Core.Library;
 

@@ -1,9 +1,19 @@
 using System.Collections;
 using System.Globalization;
 using Playnite.Core.Models;
-using Playnite.SDK.Models;
 
 namespace Playnite.Core.Queries;
+
+// Stored-field subset; numeric values from PlayniteSDK/Models/FilterPreset.cs:11-44.
+// Metadata/library-name sort keys remain deferred, not reinterpreted as ID sorts.
+public enum SortOrder
+{
+    Name = 0, LastActivity = 4, ReleaseDate = 6, Version = 12,
+    PlayCount = 15, Playtime = 16, UserScore = 18,
+    CriticScore = 19, CommunityScore = 20, Added = 21, Modified = 22,
+    IsInstalled = 23, Hidden = 24, Favorite = 25, InstallDirectory = 26,
+    InstallSize = 28, RecentActivity = 29, RomList = 30
+}
 
 // DesktopCollectionView.cs:230-234 and FullscreenCollectionView.cs:59-62:
 // direction applies only to the primary key; Name is always ascending on ties.

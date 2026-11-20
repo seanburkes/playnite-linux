@@ -50,17 +50,16 @@ public sealed class SdkHostSurfaceTests
             .ToHashSet(StringComparer.Ordinal);
         Assert.All(expected, type => Assert.Contains(type, exported));
 
+        // Core keeps its own SortOrder/LibraryGroupBy and Game; the SDK declares host-facing
+        // copies and Core.Hosting adapts between them, so no foreign-owned file changes.
         var core = typeof(Playnite.Core.Hosting.NotificationsApi).Assembly;
         var oldNames = core.GetExportedTypes()
             .Select(type => type.FullName!)
-            .Where(type => type.StartsWith("Playnite.Core.Hosting.", StringComparison.Ordinal)
-                || type is "Playnite.Core.Queries.SortOrder" or "Playnite.Core.Library.LibraryGroupBy")
+            .Where(type => type.StartsWith("Playnite.Core.Hosting.", StringComparison.Ordinal))
             .ToArray();
         Assert.DoesNotContain("Playnite.Core.Hosting.INotificationsAPI", oldNames);
         Assert.DoesNotContain("Playnite.Core.Hosting.IDialogsFactory", oldNames);
         Assert.DoesNotContain("Playnite.Core.Hosting.IMainViewAPI", oldNames);
-        Assert.DoesNotContain("Playnite.Core.Queries.SortOrder", oldNames);
-        Assert.DoesNotContain("Playnite.Core.Library.LibraryGroupBy", oldNames);
     }
 
     [Fact]

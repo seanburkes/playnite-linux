@@ -3,7 +3,6 @@ using System.Globalization;
 using Playnite.Core.Models;
 using Playnite.Core.Queries;
 using Xunit;
-using Playnite.SDK.Models;
 
 namespace Playnite.Core.Tests;
 

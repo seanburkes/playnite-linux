@@ -1,5 +1,4 @@
 using Playnite.Core.Hosting;
-using Playnite.Core.Models;
 using Playnite.Platform.DesktopIntegration;
 using Playnite.SDK;
 using Playnite.SDK.Models;
@@ -81,10 +80,10 @@ internal sealed class FakeMainViewHost : IMainViewHost
         _ => Task.FromResult(new MainViewState());
 
     public Func<CancellationToken, Task<IReadOnlyList<IGameView>>> SelectedHandler { get; set; } =
-        _ => Task.FromResult<IReadOnlyList<IGameView>>(Array.Empty<Game>());
+        _ => Task.FromResult<IReadOnlyList<IGameView>>(Array.Empty<IGameView>());
 
     public Func<CancellationToken, Task<IReadOnlyList<IGameView>>> FilteredHandler { get; set; } =
-        _ => Task.FromResult<IReadOnlyList<IGameView>>(Array.Empty<Game>());
+        _ => Task.FromResult<IReadOnlyList<IGameView>>(Array.Empty<IGameView>());
 
     public Task<MainViewState> GetStateAsync(CancellationToken cancellationToken = default)
         => StateHandler(cancellationToken);

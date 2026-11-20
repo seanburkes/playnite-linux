@@ -1,7 +1,67 @@
+using Playnite.Core.Models;
 using Playnite.SDK;
 using Playnite.SDK.Models;
+using CoreLibraryGroupBy = Playnite.Core.Library.LibraryGroupBy;
+using CoreSortOrder = Playnite.Core.Queries.SortOrder;
 
 namespace Playnite.Core.Hosting;
+
+/// <summary>
+/// Projects a Core game onto the SDK's read-only view. The Core model stays free of the
+/// abstraction's types; a host wraps a game when it hands one to <see cref="IMainViewAPI"/>.
+/// </summary>
+public sealed class GameViewAdapter : IGameView
+{
+    private readonly Game game;
+
+    /// <summary>Wraps an existing Core game.</summary>
+    public GameViewAdapter(Game game) =>
+        this.game = game ?? throw new ArgumentNullException(nameof(game));
+
+    /// <inheritdoc />
+    public Guid Id => game.Id;
+
+    /// <inheritdoc />
+    public string Name => game.Name ?? string.Empty;
+}
+
+/// <summary>
+/// Maps Core query enums to and from the SDK host enums. Both keep the same v10 values, so a
+/// host can translate a Core query without redefining either contract.
+/// </summary>
+public static class MainViewEnumAdapter
+{
+    /// <summary>Maps a Core sort order to the SDK contract.</summary>
+    public static SortOrder ToSdk(CoreSortOrder order) =>
+        Checked<SortOrder>((int)order, nameof(order));
+
+    /// <summary>Maps an SDK sort order to the Core enum.</summary>
+    public static CoreSortOrder ToCore(SortOrder order) =>
+        Checked<CoreSortOrder>((int)order, nameof(order));
+
+    /// <summary>Maps a Core grouping key to the SDK contract.</summary>
+    public static LibraryGroupBy ToSdk(CoreLibraryGroupBy grouping) =>
+        Checked<LibraryGroupBy>((int)grouping, nameof(grouping));
+
+    /// <summary>Maps an SDK grouping key to the Core enum.</summary>
+    public static CoreLibraryGroupBy ToCore(LibraryGroupBy grouping) =>
+        Checked<CoreLibraryGroupBy>((int)grouping, nameof(grouping));
+
+    private static TEnum Checked<TEnum>(int value, string parameter)
+        where TEnum : struct, Enum
+    {
+        var mapped = (TEnum)Enum.ToObject(typeof(TEnum), value);
+        if (!Enum.IsDefined(mapped))
+        {
+            throw new ArgumentOutOfRangeException(
+                parameter,
+                value,
+                "Unknown " + parameter + " value.");
+        }
+
+        return mapped;
+    }
+}
 
 /// <summary>Delegates every query to an optional main-view host.</summary>
 public sealed class MainViewApi : IMainViewAPI

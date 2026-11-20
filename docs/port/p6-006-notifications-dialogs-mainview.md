@@ -15,9 +15,12 @@ p5-007a desktop notification service without adding Avalonia to the graph.
 request/response DTO are public members of `Playnite.SDK.Abstractions`. They were moved out of
 `Playnite.Core` in this unit, not redefined: the v10 names and shapes are retained where they map
 cleanly, but this is the headless v11 surface, not a byte-for-byte v10 clone. `SortOrder` and
-`LibraryGroupBy` moved to `Playnite.SDK.Models` so `MainViewState` keeps every shell field, and
-`IMainViewAPI` no longer names the Core `Game` type: it returns `Playnite.SDK.Models.IGameView`,
-which `Playnite.Core.Models.Game` implements. The concrete services (`NotificationsApi`,
+`LibraryGroupBy` are declared in `Playnite.SDK.Models` so `MainViewState` keeps every shell
+field; Core keeps its own query enums and `MainViewEnumAdapter` maps between the two.
+`IMainViewAPI` no longer names the Core `Game` type: it returns
+`Playnite.SDK.Models.IGameView`, and `GameViewAdapter` projects a
+`Playnite.Core.Models.Game` onto it, leaving the Core model untouched. The concrete services
+(`NotificationsApi`,
 `DialogsFactory`, `MainViewApi`, `HostApis`) stay in Core because they are host implementations,
 not contracts.
 
@@ -78,7 +81,9 @@ button/image sets.
 type: active desktop and fullscreen views, an abstraction-level `SortOrder` plus
 `bool SortDescending`, an abstraction-level `LibraryGroupBy`, the current selection and the games
 visible in the library view. Games are exposed as `IGameView` (`Id`, `Name`), so the contract has
-no dependency on the Core database model; `IMainViewHost` supplies the snapshot and the API copies
+no dependency on the Core database model; `GameViewAdapter` wraps a Core game and
+`MainViewEnumAdapter` maps the SDK sort and grouping values to the Core enums, so no
+foreign-owned Core file changes. `IMainViewHost` supplies the snapshot and the API copies
 the lists so a host cannot mutate an answer after it returns. Missing host, a null state and a
 null game list are `Unavailable`/`Failed` results, never startup exceptions.
 
@@ -106,7 +111,8 @@ explicitly degraded surfaces.
 The fake hosts are in `Fakes.cs`; no test needs a desktop session, D-Bus, a window or a dialog.
 `tests/Playnite.Core.Tests/SdkContracts/SdkHostContractTests` adds one compile-time fake for
 `IGameView`, `INotificationHost`, `INotificationsAPI`, `IDialogHost`, `IDialogsFactory`,
-`IMainViewHost` and `IMainViewAPI`, exercising every member through the real Core service.
+`IMainViewHost` and `IMainViewAPI`, exercising every member through the real Core service, and
+covers `GameViewAdapter` plus the Core↔SDK enum mapping in both directions.
 `tests/Playnite.Architecture.Tests/SdkHostSurfaceTests` asserts the moved types live in the
 Abstractions assembly and compiles a sample plugin against that assembly alone (no Core, no
 Avalonia), including the reshaped `IGameView` main-view surface.
