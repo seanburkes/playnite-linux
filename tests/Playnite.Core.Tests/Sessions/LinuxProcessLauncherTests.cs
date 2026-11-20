@@ -643,25 +643,18 @@ public sealed class LinuxProcessLauncherTests
             && row.IsRunning;
     }
 
-    private static async Task AssertProcessGoneAsync(ProcessIdentity identity)
+    private static Task AssertProcessGoneAsync(ProcessIdentity identity)
     {
-        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(5);
-        while (DateTime.UtcNow < deadline)
+        // Every caller has already awaited a stop that verifies the tracked identities are gone,
+        // so this is a postcondition check rather than another observation wait.
+        if (TryReadIdentity(identity.ProcessId, out var stat)
+            && stat.StartTimeTicks == identity.StartTimeTicks
+            && stat.IsRunning)
         {
-            if (!TryReadIdentity(identity.ProcessId, out var stat) || stat.StartTimeTicks != identity.StartTimeTicks)
-            {
-                return;
-            }
-
-            if (!stat.IsRunning)
-            {
-                return;
-            }
-
-            await Task.Delay(10);
+            Assert.Fail($"Process {identity.ProcessId} with start ticks {identity.StartTimeTicks} survived.");
         }
 
-        Assert.Fail($"Process {identity.ProcessId} with start ticks {identity.StartTimeTicks} survived.");
+        return Task.CompletedTask;
     }
 
     private static bool TryReadIdentity(int processId, out ProcStat stat)
