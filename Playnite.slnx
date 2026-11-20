@@ -15,9 +15,15 @@
     <Project Path="tests/Playnite.Core.Tests/Playnite.Core.Tests.csproj" />
     <Project Path="tests/Playnite.Architecture.Tests/Playnite.Architecture.Tests.csproj" />
     <Project Path="tests/Playnite.Smoke.Tests/Playnite.Smoke.Tests.csproj" />
+    <Project Path="tests/Playnite.Plugin.Tests/Playnite.Plugin.Tests.csproj" />
   </Folder>
   <Folder Name="/tools/">
     <Project Path="tools/Playnite.Fuzz/Playnite.Fuzz.csproj" />
     <Project Path="tools/p5-008-steam-portal/Playnite.Steam.Import.csproj" />
+  </Folder>
+  <Folder Name="/samples/">
+    <Project Path="samples/Playnite.Sample.HelloWorld/Playnite.Sample.HelloWorld.csproj" />
+    <Project Path="samples/Playnite.Sample.LibraryProvider/Playnite.Sample.LibraryProvider.csproj" />
+    <Project Path="samples/Playnite.Sample.MetadataProvider/Playnite.Sample.MetadataProvider.csproj" />
   </Folder>
 </Solution>
