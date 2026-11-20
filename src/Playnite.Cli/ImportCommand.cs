@@ -4,9 +4,13 @@ using Playnite.Core.Import;
 
 namespace Playnite.Cli;
 
-internal static class ImportCommand
+internal sealed class ImportCommand : ICliCommand
 {
-    internal static async Task<int> RunAsync(string[] args)
+    public string Name => "import-v10";
+
+    public Task<int> RunAsync(string[] args) => ExecuteAsync(args);
+
+    private static async Task<int> ExecuteAsync(string[] args)
     {
         try
         {
