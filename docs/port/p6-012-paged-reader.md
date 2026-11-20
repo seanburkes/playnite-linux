@@ -1,8 +1,11 @@
 # p6-012 — bounded ordered paging
 
 `Playnite.Core.Library.PagedLibraryReader` reads one page of the stored library in a total
-order computed by SQLite. It is additive: `LibraryService` and `GameRepository` keep their
-existing contracts and are not edited by this unit.
+order computed by SQLite. p6-001 wired it into the library service in
+[#172](https://github.com/seanburkes/playnite-linux/pull/172): an unfiltered, ungrouped list
+and a blank or null search now page through the reader instead of materialising the full
+library. `GameRepository` keeps its existing contract, and a text term, filter or group keeps
+the p6-001 in-memory path.
 
 ## Operations
 
@@ -36,8 +39,10 @@ ascending and last descending.
 Text columns (`Name`, `Version`, `InstallDirectory`, `RomList`) order with SQLite's NOCASE
 collation. `PagedLibraryComparer` is the in-memory mirror: it folds ASCII `A`-`Z` and compares
 code units, exactly matching NOCASE, so SQL and the comparer share one canonical text order.
-`GameComparer`/`LibraryService` in p6-001 keep current-culture text order; this unit does not
-change that comparator. Numeric, date and flag keys match `GameComparer`.
+p6-001 adopted `PagedLibraryComparer` in
+[#172](https://github.com/seanburkes/playnite-linux/pull/172), so both the SQL page and the
+in-memory filter, search and group path use this order. Numeric, date and flag keys match
+`GameComparer`.
 
 ## SQL and memory
 
@@ -64,10 +69,16 @@ cancelled call throws `OperationCanceledException` without a partial page.
 
 ## Boundary
 
-This unit is a paging primitive only; no production caller is wired in this PR. Wiring it into
-`LibraryService.ListAsync`/`SearchAsync` is a p6-001 follow-up and requires editing that
-p6-001-owned file, so list and search still read the full snapshot until then. Filters, v10
-text search and grouping stay with p6-001/p6-011.
+p6-001 wired the reader into `LibraryService` in
+[#172](https://github.com/seanburkes/playnite-linux/pull/172): `ListAsync` with no filter or
+group, and `SearchAsync` with a null or blank term, run one ordered `LIMIT`/`OFFSET` window
+through this reader, so list and search no longer read the full snapshot. A null limit asks
+for the whole remainder and is read as one window while it fits the 10,000-row page cap; a
+larger remainder keeps the p6-001 one-snapshot in-memory path. The same in-memory path serves
+any text term, filter or group, because the v10 matcher, filter helpers and group keys are not
+stored SQL expressions. The wiring lives in the p6-001-owned `LibraryService`; this unit owns
+only the reader and leaves `GameRepository` unchanged. Filters, v10 text search and grouping
+stay with p6-001/p6-011.
 
 ## Tests
 
@@ -82,3 +93,7 @@ BINARY order; and a total-order test that reads the stored `Id` text and pins th
 final ordinal identity key. Every game in that test ties on the primary key and the name and is
 inserted in reverse text order, so dropping the identity key leaves the stable sort in insertion
 order and fails the test; the same holds for both directions.
+
+The p6-001 wiring is covered by that unit's `LibraryServicePagingTests`, which proves a
+bounded list reads only the requested window and loads only that page's graphs, and by
+`LibraryCliPagingEqualityTests`, which pins the CLI list and search first page.
