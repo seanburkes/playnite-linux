@@ -1,0 +1,74 @@
+# p6-012 — bounded ordered paging
+
+`Playnite.Core.Library.PagedLibraryReader` reads one page of the stored library in a total
+order computed by SQLite. It is additive: `LibraryService` and `GameRepository` keep their
+existing contracts and are not edited by this unit.
+
+## Operations
+
+| Operation | Result |
+| --- | --- |
+| `ListAsync(query)` | A page of `StoredGame` graphs in the requested total order, with the pre-page count. Groups are always empty. |
+
+`PagedLibraryQuery` carries `SortBy`, `Descending`, zero-based `Offset` and a required
+`Limit` (default 100). A null limit is not representable, so a page is always bounded.
+
+## Ordering
+
+The page statement orders in SQL by the stored sort value, then the effective name
+(`COALESCE(NULLIF(SortingName, ''), Name)`) when the primary key is not name, then the
+stored identity ascending. This is the same shape as `LibraryService`: direction applies
+only to the primary key; name and identity ties stay ascending. Null primaries sort first
+ascending and last descending.
+
+| `SortOrder` | Stored order value |
+| --- | --- |
+| `Name` | effective name |
+| `LastActivity`, `Added`, `Modified` | UTC ISO-8601 column |
+| `ReleaseDate` | null flag, year, month (default 1), day (default 1) |
+| `Version`, `InstallDirectory` | text column |
+| `PlayCount`, `Playtime`, `InstallSize` | fixed-width decimal column |
+| `UserScore`, `CriticScore`, `CommunityScore` | integer column |
+| `IsInstalled`, `Hidden`, `Favorite` | integer flag |
+| `RecentActivity` | `CASE` reproducing `GetGameRecentActivity` |
+| `RomList` | ordered ROM paths joined with `", "` |
+
+Text columns use SQLite's BINARY collation. `GameComparer` in p6-001 compares text with the
+current culture; the paged path is deterministic across runs and locales, and the two paths
+coincide for the stored numeric and date keys. `PagedLibraryReaderTests` pins the shared
+order for every sort key with duplicate keys and nulls.
+
+## SQL and memory
+
+One snapshot is used for both statements:
+
+```sql
+SELECT COUNT(*) FROM game;
+SELECT game.Id FROM game ORDER BY <terms> LIMIT @Limit OFFSET @Offset;
+```
+
+Ordering, `LIMIT` and `OFFSET` run in SQLite, so the full table is never materialised in the
+process. Game graphs are loaded only for the returned page identities. The final tie-breaker
+is `game.Id ASC`, which makes a page stable when a primary key repeats.
+
+## Bounds and cancellation
+
+`Offset` is accepted from 0 to `LibraryQuery.MaxOffset` (1,000,000); `Limit` from 1 to
+`LibraryQuery.MaxLimit` (10,000). Values outside those ranges and undefined `SortOrder`
+values throw `ArgumentOutOfRangeException` before a destination is opened. The
+`CancellationToken` reaches the snapshot, each SQL command and the per-page graph loads; a
+cancelled call throws `OperationCanceledException` without a partial page.
+
+## Boundary
+
+Filters, v10 text search and grouping stay with p6-001/p6-011. The v10 matcher and grouping
+keys are not SQL-translatable here, and this unit owns only the ordered repository page.
+Callers page the full stored order; the query shape and comparers remain in p6-001.
+
+## Tests
+
+`PagedLibraryReaderTests` covers first, middle, last, empty and past-end pages; offset and
+limit bounds; duplicate primary keys with name and identity ties; descending null order;
+determinism across repeated calls and reversed insertion order; cancellation; the generated
+statement's `LIMIT`/`OFFSET`/tie-breaker; and parity with `LibraryService` for every
+`SortOrder` in both directions.
