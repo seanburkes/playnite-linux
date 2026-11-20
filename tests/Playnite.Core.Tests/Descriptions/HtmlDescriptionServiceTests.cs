@@ -1,4 +1,5 @@
 using Playnite.Core.Descriptions;
+using Playnite.SDK.Descriptions;
 using Xunit;
 
 namespace Playnite.Core.Tests.Descriptions;

@@ -5,15 +5,53 @@ routes. `Playnite.Core.Descriptions` turns an untrusted game description into th
 HTML subset. Both are headless: no Avalonia type, no network call, no child process and no shell.
 Every boundary is an injectable seam with a fake in the tests.
 
-## Why Core
+## Why Abstractions
 
 The platform layer already validates the raw URI before it crosses a process boundary
 (`Playnite.Platform.Linux.Integration.PlayniteUri`, p5-005a). Core cannot reference that project,
-and the route table is an SDK harness concern, so this unit keeps an independent, stricter parser
-in Core and narrows the result to a known command. The v10 names (`IUriHandlerAPI`,
-`PlayniteUriEventArgs`) are kept where they map cleanly. The public Abstractions files are
-protected, so p6-008 owns moving this surface into Abstractions and freezing it. No `sdk-*` parity
-row is rewritten here.
+and the route table is an SDK harness concern, so the parser is an independent, stricter
+implementation that narrows the result to a known command.
+
+The plugin-facing half of the unit is the contract, not the implementation, so it lives in
+`Playnite.SDK.Abstractions` where a plugin can consume it with a reference to that assembly
+alone. The concrete services (`UriHandlerApi`, `HtmlDescriptionService`, `HtmlDescriptionSanitizer`)
+stay in Core because they are host implementations. The v10 names (`IUriHandlerAPI`,
+`PlayniteUriEventArgs`) and their v10 namespaces are kept exactly.
+
+## SDK Abstractions move
+
+The move is a namespace move, not a redefinition: every moved type keeps its member set, defaults
+and behaviour. `Playnite.Core` keeps the concrete services and now references the contracts from
+`Playnite.SDK.Abstractions` only; Abstractions references no other `Playnite.*` assembly and no
+Avalonia package.
+
+| Old namespace | New namespace | Types |
+| --- | --- | --- |
+| `Playnite.Core.UriHandling` | `Playnite.SDK` | `IUriHandlerAPI`, `IUriCommandHost`, `UriCommandStatus`, `UriCommandResult`, `UriDispatchStatus`, `UriDispatchResult`, `PlayniteUriTarget`, `PlayniteViewTarget`, `PlayniteFilterField`, `PlayniteFilterTarget`, `PlayniteUriRoute` |
+| `Playnite.Core.UriHandling` | `Playnite.SDK.Events` | `PlayniteUriEventArgs` (the v10 namespace for the type) |
+| `Playnite.Core.Descriptions` | `Playnite.SDK.Descriptions` | `IHtmlDescriptionProvider`, `IHtmlSanitizer`, `HtmlDescriptionStatus`, `HtmlDescriptionSourceResult`, `HtmlDescriptionResult`, `HtmlSanitizationResult` |
+
+`PlayniteUriRoute` moves with the dispatch result because the result carries a route and
+Abstractions may not reference Core. The v7 text surface is declared in
+`PublicAPI.Unshipped.txt`; `PublicAPI.Shipped.txt` and its checksum are unchanged.
+
+### ApiCompat v6→v7 delta
+
+The move restores the v10 names and namespaces, so it removes ApiCompat differences instead of
+introducing any. Running Microsoft.DotNet.ApiCompat 11.0.100 against the published
+`PlayniteSDK` 6.18.0 baseline (`lib/net462/Playnite.SDK.dll`, SHA-256
+`ce7511941aba4d4b17dd7b226fadfd0ecefdf51ab73775b25631089fd7542fc7`) and this branch's
+Abstractions sources compiled as `Playnite.SDK` reports 216 `CP0001` differences, down from the
+218 recorded before the move; no member-level break (`CP0002`/`CP0006`/`CP0009`) is reported and
+no suppression is needed or added. The two entries the move removes are:
+
+```text
+CP0001: Type 'Playnite.SDK.IUriHandlerAPI' exists on v6-baseline but not on v7-candidate
+CP0001: Type 'Playnite.SDK.Events.PlayniteUriEventArgs' exists on v6-baseline but not on v7-candidate
+```
+
+The complete v6→v7 report remains the p6-008 freeze artifact; this unit records only the delta
+its moved members produce. See `p6-007-apicompat-v6-v7-delta.txt` for the command and counts.
 
 ## URI routes
 
@@ -112,18 +150,25 @@ smuggled through. Malformed markup is escaped or dropped, depth is bounded at 64
 
 ## Evidence
 
-- Product: `src/Playnite.Core/UriHandling/` and `src/Playnite.Core/Descriptions/`.
+- Product contracts: `src/Playnite.SDK.Abstractions/UriHandling/`, `Events/` and `Descriptions/`;
+  concrete services: `src/Playnite.Core/UriHandling/UriHandlerApi.cs`,
+  `src/Playnite.Core/Descriptions/`.
 - Unit tests: `tests/Playnite.Core.Tests/UriHandling/` (route parse/validation and
-  dispatch matrix, including malformed, traversal, injection, entity and cancellation cases) and
+  dispatch matrix, including malformed, traversal, injection, entity and cancellation cases),
   `tests/Playnite.Core.Tests/Descriptions/` (script, handlers, `javascript:`/`data:`/`file:`
-  links, iframe, style, active content, entity bypasses, malformed markup, depth and truncation,
-  plus provider/sanitiser contract tests through fakes). Zero skips.
-- `dotnet test tests/Playnite.Core.Tests --filter "FullyQualifiedName~UriHandling"`: 102 passed.
-- `dotnet test tests/Playnite.Core.Tests --filter "FullyQualifiedName~Descriptions"`: 62 passed.
-- Warning-free build: `dotnet build src/Playnite.Core/Playnite.Core.csproj -c Release` and
+  links, iframe, style, active content, entity bypasses, malformed markup, depth and truncation)
+  and `tests/Playnite.Core.Tests/SdkContracts/UriHtmlContractTests.cs` (each moved interface
+  exercised through the real Core service and a recording fake host). Zero skips.
+- `dotnet test tests/Playnite.Core.Tests -c Release`: 3044 passed, zero failures, zero skips.
+- `dotnet test tests/Playnite.Architecture.Tests -c Release`: 199 passed, zero skips (PublicAPI,
+  deterministic build and ApiCompat baseline checks included).
+- Warning-free build: `dotnet build src/Playnite.SDK.Abstractions/Playnite.SDK.Abstractions.csproj
+  -c Release`, `dotnet build src/Playnite.Core/Playnite.Core.csproj -c Release` and
   `dotnet build tests/Playnite.Core.Tests/Playnite.Core.Tests.csproj -c Release` report zero
   warnings and zero errors.
-- No network, no Avalonia, no banned API, no protected oracle, baseline or aggregate edit.
+- ApiCompat: 216 `CP0001` v6→v7 differences after the move (218 before), no member-level break,
+  no suppressions; the delta is in `p6-007-apicompat-v6-v7-delta.txt`.
+- No network, no Avalonia, no banned API, no aggregate edit.
 
 ## Deliberate boundaries
 
@@ -132,4 +177,4 @@ smuggled through. Malformed markup is escaped or dropped, depth is bounded at 64
 - No live metadata fetch: p6-005 owns metadata resolution; this unit consumes a description
   through the provider seam.
 - No plugin-source store or persistence: registration is in-memory, as v10's dictionary was.
-- `sdk-*` parity rows and the Abstractions freeze stay with p6-008.
+- `sdk-*` parity rows and the complete v6→v7 freeze report stay with p6-008.
