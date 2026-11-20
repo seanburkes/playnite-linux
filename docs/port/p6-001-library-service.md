@@ -64,11 +64,6 @@ one-snapshot in-memory path so the "one snapshot per call" guarantee still holds
 filters and grouping also keep the one-snapshot in-memory path, because the v10 matcher, filter
 helpers and group keys are not stored SQL expressions; their paging bounds are unchanged.
 
-The p6-012 reader contract still says "primitive only, no production caller" at this head.
-Updating that note and the p6-012 queue shard to "wired via p6-001" is a p6-012-owned follow-up
-PR merged immediately after this one: the one-unit evidence guard forbids a p6-001 pull request
-from editing `docs/port/p6-012-*` or `docs/port/units/p6-012.*`.
-
 The grouping keys cover name, release year, installation status, playtime, user, critic
 and community score, install size, last and recent activity, added and modified. Plugin
 display names, metadata-name sorting, and multi-membership groups are outside this
