@@ -48,6 +48,12 @@ public static class SteamSyncReasons
     /// unknown rather than absent.
     /// </summary>
     public const string LibraryAppsUnknown = "library-apps-unknown";
+
+    /// <summary>
+    /// A declared library's app set is empty while nothing was enumerated there either, so an
+    /// emptied block is indistinguishable from a lost one. Its apps are unknown, not absent.
+    /// </summary>
+    public const string LibraryAppsEmptied = "library-apps-emptied";
 }
 
 /// <summary>One app that was not written. The id is always the app the caller can act on.</summary>
@@ -59,9 +65,11 @@ public sealed record SteamSyncIssue(string Reason, uint? AppId = null, string? D
 /// <summary>
 /// One read-only discovery of the installed Steam library. <see cref="Skipped"/> covers every app
 /// found in a library manifest list that could not be projected. <see cref="CanReconcile"/> is
-/// false when the observation cannot prove which apps are absent (for example, no Steam root, an
-/// unreadable library directory, or a library file that did not parse completely), so the sync
-/// must not mark anything uninstalled.
+/// true only on positive proof of a complete, non-empty enumeration: a parsed library file, every
+/// declared entry projected, every unavailable library declaring a non-empty app set, and at
+/// least one observed app. Anything less means the observation cannot prove which apps are absent
+/// (for example, no Steam root, an unreadable library directory, or a library file that did not
+/// parse completely), so the sync must not mark anything uninstalled.
 /// </summary>
 public sealed record SteamSyncDiscovery(
     IReadOnlyList<SteamApp> Apps,

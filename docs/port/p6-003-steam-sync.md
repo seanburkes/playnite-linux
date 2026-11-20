@@ -45,7 +45,7 @@ The service writes only provider-owned fields:
 | Field | Rule |
 | --- | --- |
 | `Name` | Current Steam manifest name. |
-| `InstallDirectory` | `<library>/steamapps/common/<installdir>`. |
+| `InstallDirectory` | `<library>/steamapps/common/<installdir>`, unless `OverrideInstallState` is set. |
 | `InstallSize` | Manifest `SizeOnDisk` when present; a missing value never clears a stored size. |
 | `IsInstalled` | `Installed` or `UpdatePending` is installed; `Broken`, `Unknown` and absent are not. |
 | `Added` | Set once, when the record is created. |
@@ -57,8 +57,8 @@ genres, links, actions, ROMs, scripts and `LegacyJson`. A record is never delete
 belongs to the local session tracker (p5-004), not to Steam, so sync does not write it.
 
 `Game.OverrideInstallState` is the model's explicit user override. While it is set, the sync
-never changes `IsInstalled` for that record, including on removal. The override is not cleared
-by the sync.
+never changes `IsInstalled` or `InstallDirectory` for that record, including on removal. Name and
+install size remain provider metadata and still update. The override is not cleared by the sync.
 
 ### Removal
 
@@ -68,17 +68,20 @@ observed as installed before and is absent from a complete discovery is marked
 again if the app reappears.
 
 Removal runs only when the discovery is authoritative (`CanReconcile`), which the production
-host grants only for a complete observation: a Steam root, one parsed library file, every
-declared entry projected, and every available library enumerated. An unavailable library's apps
-are reported as skipped rather than treated as absent, so a detached drive cannot uninstall
-those games. The host withdraws authority and reports a degraded issue whenever the declared
-library set is not known to be complete:
+host grants only on positive proof of a complete, non-empty observation: a Steam root, one parsed
+library file, every declared entry projected, every library either enumerated or declaring a
+non-empty app set, and at least one app observed. An unavailable library's apps are reported as
+skipped rather than treated as absent, so a detached drive cannot uninstall those games. An empty
+result proves nothing, because it is equally consistent with a library the user emptied or lost.
+The host withdraws authority and reports a degraded issue whenever the declared library set is
+not known to be complete:
 
 | Degraded issue | Cause |
 | --- | --- |
 | `library-file-rejected` | The library file was not parsed, so the declared library list is unknown. p5-002 names a copy as selected even when the parser rejects it; the root library is still enumerated, so its apps are observed while every other library may be missing. |
 | `library-entry-dropped` | The parser dropped a declared entry (its path is not absolute), so neither its path nor its declared apps reached discovery. |
 | `library-apps-unknown` | An unavailable library did not declare its app set, so the apps that lived there are unknown rather than absent. |
+| `library-apps-emptied` | A declared library's app set is empty and nothing was enumerated there either, so an emptied block cannot be told apart from a lost one. |
 
 A run that suppresses removal still adds and updates every observed app; it reports
 `Reconciled = false`, `Removed = 0` and the issue naming the cause. When a rejected primary copy
@@ -100,7 +103,7 @@ Every app that is not written appears in `Skipped` with its numeric app id and a
 | `appid-duplicate` | The same app id was already projected from an earlier library. |
 | `invalid-install-path` | The parsed install directory does not produce a safe path under the library. |
 | `identity-conflict`, `duplicate-library-record` | Library reconciliation found an ambiguous record; see above. |
-| `library-file-rejected`, `library-entry-dropped`, `library-apps-unknown` | The observation is incomplete, so removal is suppressed; see Removal. |
+| `library-file-rejected`, `library-entry-dropped`, `library-apps-unknown`, `library-apps-emptied` | The observation is incomplete, so removal is suppressed; see Removal. |
 
 Global `Issues` carry discovery parse diagnostics, a missing Steam root, a library enumeration
 failure and their optional app id/detail. No skip is silent.
@@ -115,8 +118,8 @@ assert this at both the contract and real-corpus levels.
 
 `Reconciled` mirrors the discovery's `CanReconcile`: a false value means absent records were
 not marked uninstalled, not that the sync failed. A degraded discovery (missing root, rejected
-or dropped library declaration, unknown app set, or a library that could not be enumerated)
-reports `Reconciled = false` together with an issue naming the cause.
+or dropped library declaration, unknown or emptied app set, no observed app, or a library that
+could not be enumerated) reports `Reconciled = false` together with an issue naming the cause.
 
 ## Tests
 
@@ -128,6 +131,7 @@ reports `Reconciled = false` together with an issue naming the cause.
 | `SteamLibrarySyncServiceTests.Reappearing_app_is_installed_again_without_duplicating_the_record` | Symmetric reinstall without a new record. |
 | `SteamLibrarySyncServiceTests.Unreconcilable_or_unavailable_discovery_never_marks_a_game_uninstalled` | No-root and unavailable-library safety. |
 | `SteamLibrarySyncServiceTests.OverrideInstallState_is_respected_for_both_provider_state_and_removal` | The model's explicit install-state override. |
+| `SteamLibrarySyncServiceTests.OverrideInstallState_protects_the_install_directory_from_a_provider_path_change` | The override also protects `InstallDirectory`, not only `IsInstalled`. |
 | `SteamLibrarySyncServiceTests.Missing_install_size_does_not_clear_a_stored_size` | Missing is not zero. |
 | `SteamLibrarySyncServiceTests.Every_skipped_app_is_reported_with_its_id_and_reason` | Per-app skip reporting and issue passthrough. |
 | `SteamLibrarySyncServiceTests.Duplicate_library_records_are_reported_and_the_extra_record_is_untouched` | Duplicate identities are visible and safe. |
@@ -137,6 +141,8 @@ reports `Reconciled = false` together with an issue naming the cause.
 | `SteamLibrarySyncIntegrationTests.Real_corpus_syncs_four_manifests_reports_every_other_declared_app_and_is_idempotent` | The redacted real corpus: 4 manifest apps added, every other declared app reported, unavailable external library preserved, second sync zero changes. |
 | `SteamLibrarySyncIntegrationTests.Truncated_library_file_suppresses_removal_and_reports_a_degraded_sync` | A truncated library file hides a second library: `Removed = 0`, the unobserved app stays installed, `Reconciled = false` and `library-file-rejected`. |
 | `SteamLibrarySyncIntegrationTests.Dropped_library_entry_suppresses_removal_and_reports_a_degraded_sync` | A declared entry the parser drops leaves its app unobserved: `Removed = 0` and `library-entry-dropped`. |
+| `SteamLibrarySyncIntegrationTests.Emptied_library_app_set_suppresses_removal_and_reports_a_degraded_sync` | A detached library whose app set was emptied: `Removed = 0` and `library-apps-emptied`. |
+| `SteamLibrarySyncIntegrationTests.Emptied_app_set_on_a_reachable_library_suppresses_removal` | An emptied declaration on a reachable library with no manifest is still no proof: `Removed = 0` and `library-apps-emptied`. |
 | `SteamLibrarySyncIntegrationTests.Unavailable_library_without_a_declared_app_set_suppresses_removal` | A detached library that declares no app set: `Removed = 0` and `library-apps-unknown`. |
 
 The integration test copies `tests/fixtures/steam/real` into a temporary home, verifies every

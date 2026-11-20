@@ -8,8 +8,8 @@ namespace Playnite.Steam.Sync;
 
 /// <summary>
 /// Reconciles the discovered Steam library with the SQLite game library. It only writes provider
-/// fields (<see cref="Game.Name"/>, <see cref="Game.InstallDirectory"/>,
-/// <see cref="Game.InstallSize"/> and, unless <see cref="Game.OverrideInstallState"/> is set,
+/// fields (<see cref="Game.Name"/>, <see cref="Game.InstallSize"/> and, unless
+/// <see cref="Game.OverrideInstallState"/> is set, <see cref="Game.InstallDirectory"/> and
 /// <see cref="Game.IsInstalled"/>), never deletes a record and never writes outside the supplied
 /// <see cref="LibraryDatabase"/>. A second run over unchanged discovery is a no-op.
 /// </summary>
@@ -192,22 +192,23 @@ public sealed class SteamLibrarySyncService
             changed = true;
         }
 
-        if (!string.Equals(game.InstallDirectory, app.InstallPath, StringComparison.Ordinal))
-        {
-            game.InstallDirectory = app.InstallPath;
-            changed = true;
-        }
-
         if (app.SizeOnDisk is { } size && game.InstallSize != size)
         {
             game.InstallSize = size;
             changed = true;
         }
 
-        // OverrideInstallState is the model's explicit user override: provider install state is
-        // ignored while it is set, exactly as the library plugin contract requires.
+        // OverrideInstallState is the model's explicit user override: both install-state fields,
+        // InstallDirectory and IsInstalled, are ignored while it is set, exactly as the library
+        // plugin contract requires.
         if (!game.OverrideInstallState)
         {
+            if (!string.Equals(game.InstallDirectory, app.InstallPath, StringComparison.Ordinal))
+            {
+                game.InstallDirectory = app.InstallPath;
+                changed = true;
+            }
+
             var installed = IsInstalled(app.State);
             if (game.IsInstalled != installed)
             {

@@ -218,6 +218,106 @@ public sealed class SteamLibrarySyncIntegrationTests
         }
     }
 
+    // A declared library whose app set is emptied and whose directory no longer holds a manifest
+    // is indistinguishable from a lost declaration. Treating the empty set as proof of absence
+    // would uninstall the game that lived there.
+    [Fact]
+    public async Task Emptied_library_app_set_suppresses_removal_and_reports_a_degraded_sync()
+    {
+        var home = Directory.CreateTempSubdirectory("playnite-steam-emptied-").FullName;
+        try
+        {
+            var root = Path.Combine(home, ".local", "share", "Steam");
+            var external = Path.Combine(home, "mnt", "external", "SteamLibrary");
+            InstallManifest(root, 427520, "Factorio");
+            InstallManifest(external, 105600, "Terraria");
+            var libraryFile = Path.Combine(root, "steamapps", "libraryfolders.vdf");
+            File.WriteAllText(libraryFile, TwoLibraryDeclaration(root, external));
+
+            var host = ProductionHost(home);
+            using var files = new DatabaseTestDirectory();
+            var database = await LibraryDatabase.OpenAsync(files.PathFor());
+            var service = new SteamLibrarySyncService(host, new FixedTimeProvider());
+
+            var first = await service.SyncAsync(database, TestContext.Current.CancellationToken);
+            Assert.Equal(2, first.Added);
+            Assert.True(first.Reconciled);
+
+            // The external block still exists, but it no longer names its apps. The library is
+            // reachable yet holds no manifest, exactly the shape of an emptied declaration.
+            File.Delete(Path.Combine(external, "steamapps", "appmanifest_105600.acf"));
+            File.WriteAllText(libraryFile,
+                TwoLibraryDeclaration(root, external, declareExternalApps: false, emptyExternalApps: true));
+
+            var snapshot = host.Discover(TestContext.Current.CancellationToken);
+            Assert.False(snapshot.CanReconcile);
+            Assert.Contains(snapshot.Issues, issue => issue.Reason == SteamSyncReasons.LibraryAppsEmptied);
+            Assert.DoesNotContain(snapshot.Apps, app => app.AppId == 105600);
+            Assert.DoesNotContain(snapshot.Skipped, skip => skip.AppId == 105600);
+
+            var degraded = await service.SyncAsync(database, TestContext.Current.CancellationToken);
+
+            Assert.Equal(0, degraded.Removed);
+            Assert.Equal(0, degraded.Changes);
+            Assert.False(degraded.Reconciled);
+            var stored = (await ReadAll(database)).OrderBy(game => uint.Parse(game.Value.GameId!)).ToArray();
+            Assert.Equal(["105600", "427520"], stored.Select(game => game.Value.GameId));
+            Assert.All(stored, game => Assert.True(game.Value.IsInstalled,
+                "an emptied library declaration must not uninstall a game"));
+        }
+        finally
+        {
+            Directory.Delete(home, recursive: true);
+        }
+    }
+
+    // The same emptied declaration while the library is still reachable is not proof either: the
+    // manifest is gone and the block names nothing, so the app is unknown, not absent.
+    [Fact]
+    public async Task Emptied_app_set_on_a_reachable_library_suppresses_removal()
+    {
+        var home = Directory.CreateTempSubdirectory("playnite-steam-emptied-live-").FullName;
+        try
+        {
+            var root = Path.Combine(home, ".local", "share", "Steam");
+            var external = Path.Combine(home, "mnt", "external", "SteamLibrary");
+            InstallManifest(root, 427520, "Factorio");
+            InstallManifest(external, 105600, "Terraria");
+            var libraryFile = Path.Combine(root, "steamapps", "libraryfolders.vdf");
+            File.WriteAllText(libraryFile, TwoLibraryDeclaration(root, external));
+
+            var host = ProductionHost(home);
+            using var files = new DatabaseTestDirectory();
+            var database = await LibraryDatabase.OpenAsync(files.PathFor());
+            var service = new SteamLibrarySyncService(host, new FixedTimeProvider());
+
+            var first = await service.SyncAsync(database, TestContext.Current.CancellationToken);
+            Assert.Equal(2, first.Added);
+            Assert.True(first.Reconciled);
+
+            File.Delete(Path.Combine(external, "steamapps", "appmanifest_105600.acf"));
+            File.WriteAllText(libraryFile,
+                TwoLibraryDeclaration(root, external, declareExternalApps: false, emptyExternalApps: true));
+
+            var snapshot = host.Discover(TestContext.Current.CancellationToken);
+            Assert.False(snapshot.CanReconcile);
+            Assert.Contains(snapshot.Issues, issue => issue.Reason == SteamSyncReasons.LibraryAppsEmptied);
+
+            var degraded = await service.SyncAsync(database, TestContext.Current.CancellationToken);
+
+            Assert.Equal(0, degraded.Removed);
+            Assert.Equal(0, degraded.Changes);
+            Assert.False(degraded.Reconciled);
+            var stored = (await ReadAll(database)).OrderBy(game => uint.Parse(game.Value.GameId!)).ToArray();
+            Assert.Equal(["105600", "427520"], stored.Select(game => game.Value.GameId));
+            Assert.All(stored, game => Assert.True(game.Value.IsInstalled));
+        }
+        finally
+        {
+            Directory.Delete(home, recursive: true);
+        }
+    }
+
     // An unavailable library that declares no app set gives discovery nothing to report, so its
     // stored games are unknown rather than absent. A declared app set (the real corpus case) is
     // still safe, because every declared id is reported as skipped and stays observed.
@@ -283,7 +383,8 @@ public sealed class SteamLibrarySyncIntegrationTests
 
     // A root library plus a second library. A non-absolute path is a declaration the parser
     // rejects, and an omitted apps object leaves the second library's app set unknown.
-    private static string TwoLibraryDeclaration(string root, string externalPath, bool declareExternalApps = true)
+    private static string TwoLibraryDeclaration(string root, string externalPath, bool declareExternalApps = true,
+        bool emptyExternalApps = false)
     {
         var lines = new List<string>
         {
@@ -302,6 +403,12 @@ public sealed class SteamLibrarySyncIntegrationTests
             lines.Add("\t\t\"apps\"");
             lines.Add("\t\t{");
             lines.Add("\t\t\t\"105600\"\t\t\"831365954\"");
+            lines.Add("\t\t}");
+        }
+        else if (emptyExternalApps)
+        {
+            lines.Add("\t\t\"apps\"");
+            lines.Add("\t\t{");
             lines.Add("\t\t}");
         }
 

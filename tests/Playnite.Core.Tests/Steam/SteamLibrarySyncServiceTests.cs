@@ -239,6 +239,40 @@ public sealed class SteamLibrarySyncServiceTests
     }
 
     [Fact]
+    public async Task OverrideInstallState_protects_the_install_directory_from_a_provider_path_change()
+    {
+        using var files = new DatabaseTestDirectory();
+        var database = await LibraryDatabase.OpenAsync(files.PathFor());
+        var id = Guid.Parse("34343434-3434-3434-3434-343434343434");
+        var modified = new DateTime(2020, 5, 6, 7, 8, 9, DateTimeKind.Utc);
+        const string userPath = "/mnt/user-chosen/Alpha";
+        await database.WriteAsync(async session =>
+        {
+            await session.Games.AddAsync(new StoredGame(new Game(id, "10", "Alpha")
+            {
+                PluginId = Steam,
+                IsInstalled = true,
+                OverrideInstallState = true,
+                InstallDirectory = userPath,
+                InstallSize = 100,
+                Modified = modified,
+            }));
+            return 0;
+        });
+
+        var result = await Service(new FakeDiscovery(
+            Discovery(App(10, "Alpha", "Alpha", SteamAppState.Installed, 100)))).SyncAsync(database);
+
+        Assert.Equal(0, result.Updated);
+        Assert.Equal(1, result.Unchanged);
+        var stored = Assert.Single(await ReadAll(database));
+        Assert.Equal(userPath, stored.Value.InstallDirectory);
+        Assert.True(stored.Value.OverrideInstallState);
+        Assert.True(stored.Value.IsInstalled);
+        Assert.Equal(modified, stored.Value.Modified);
+    }
+
+    [Fact]
     public async Task Missing_install_size_does_not_clear_a_stored_size()
     {
         using var files = new DatabaseTestDirectory();

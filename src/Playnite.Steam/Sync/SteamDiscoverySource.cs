@@ -45,23 +45,24 @@ public sealed class SteamDiscoverySource : ISteamSyncDiscovery
             return new(apps.AsReadOnly(), skipped.AsReadOnly(), issues.AsReadOnly(), false);
         }
 
-        // Removal is only safe when the observation can prove which apps are absent. p5-002 names
-        // a library file as selected as soon as a copy was seen, even when the parser rejected it,
-        // so a non-null LibraryFilePath is not proof that the declared library list is known. A
-        // rejected file, a dropped entry and an unavailable library whose declared app set is
-        // missing each leave libraries unobserved; an app missing from the result then proves
-        // nothing, so authority is withdrawn instead of treating it as absent.
-        var canReconcile = result.LibraryFilePath is not null;
-        if (canReconcile && LibraryFileRejection(result.Issues) is { } rejection)
+        // Removal is only safe on positive proof that the observation is a complete, non-empty
+        // enumeration. p5-002 names a library file as selected as soon as a copy was seen, even
+        // when the parser rejected it, so a non-null LibraryFilePath is not proof that the declared
+        // library list is known. A rejected file, a dropped entry and an unavailable library whose
+        // declared app set is missing all leave libraries unobserved. An empty app set on a
+        // library that also enumerated nothing is treated the same way: an emptied block is
+        // indistinguishable from a lost one, and guessing would uninstall its games.
+        var complete = result.LibraryFilePath is not null;
+        if (complete && LibraryFileRejection(result.Issues) is { } rejection)
         {
             issues.Add(new(SteamSyncReasons.LibraryFileRejected, null, rejection.Reason));
-            canReconcile = false;
+            complete = false;
         }
 
-        if (canReconcile && DroppedLibraryEntry(result.Issues) is { } dropped)
+        if (complete && DroppedLibraryEntry(result.Issues) is { } dropped)
         {
             issues.Add(new(SteamSyncReasons.LibraryEntryDropped, null, dropped.Identity));
-            canReconcile = false;
+            complete = false;
         }
 
         var seenApps = new HashSet<uint>();
@@ -72,10 +73,15 @@ public sealed class SteamDiscoverySource : ISteamSyncDiscovery
             if (!library.IsAvailable)
             {
                 var reason = ReasonFor(library.Status);
-                if (library.Apps is null && canReconcile)
+                if (library.Apps is null)
                 {
                     issues.Add(new(SteamSyncReasons.LibraryAppsUnknown, null, library.Index));
-                    canReconcile = false;
+                    complete = false;
+                }
+                else if (library.Apps.Count == 0)
+                {
+                    issues.Add(new(SteamSyncReasons.LibraryAppsEmptied, null, library.Index));
+                    complete = false;
                 }
 
                 foreach (var appId in declared)
@@ -96,13 +102,21 @@ public sealed class SteamDiscoverySource : ISteamSyncDiscovery
             catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
             {
                 issues.Add(new(SteamSyncReasons.LibraryEnumerationFailed, null, exception.GetType().Name));
-                canReconcile = false;
+                complete = false;
                 foreach (var appId in declared)
                 {
                     skipped.Add(new(appId, SteamSyncReasons.ManifestUnreadable));
                 }
 
                 continue;
+            }
+
+            // An available library that declares no apps and holds no manifest has nothing to
+            // prove it was enumerated completely; it may be a block Steam just emptied.
+            if (library.Apps is not { Count: > 0 } && files.Length == 0)
+            {
+                issues.Add(new(SteamSyncReasons.LibraryAppsEmptied, null, library.Index));
+                complete = false;
             }
 
             Array.Sort(files, StringComparer.Ordinal);
@@ -193,6 +207,9 @@ public sealed class SteamDiscoverySource : ISteamSyncDiscovery
             var id = left.AppId.CompareTo(right.AppId);
             return id != 0 ? id : string.CompareOrdinal(left.Reason, right.Reason);
         });
+        // Both lists empty is no evidence at all: it is equally consistent with a library the
+        // user emptied. Authority needs something observed, not merely nothing disproved.
+        var canReconcile = complete && apps.Count + skipped.Count > 0;
         return new(apps.AsReadOnly(), skipped.AsReadOnly(), issues.AsReadOnly(), canReconcile);
     }
 
