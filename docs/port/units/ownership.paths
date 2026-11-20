@@ -36,6 +36,11 @@ src/Playnite.Core/Database/StorageValues.cs	p4-001	ff928db55f998fd65c51f61599453
 src/Playnite.Core/DateTimes.cs	*	29f665a47aa385cafbf87538c4465a8ee70badef	pull/67
 src/Playnite.Core/Extensions/EnumExtensions.cs	*	29f665a47aa385cafbf87538c4465a8ee70badef	pull/67
 src/Playnite.Core/Extensions/StringExtensions.cs	*	29f665a47aa385cafbf87538c4465a8ee70badef	pull/67
+src/Playnite.Core/Hosting/Dialogs.cs	p6-006	c8b8b685b3fb46aacdb0118099ef2b45f48023cb	pull/190
+src/Playnite.Core/Hosting/HostApis.cs	p6-006	c8b8b685b3fb46aacdb0118099ef2b45f48023cb	pull/190
+src/Playnite.Core/Hosting/HostOperations.cs	p6-006	c8b8b685b3fb46aacdb0118099ef2b45f48023cb	pull/190
+src/Playnite.Core/Hosting/MainView.cs	p6-006	c8b8b685b3fb46aacdb0118099ef2b45f48023cb	pull/190
+src/Playnite.Core/Hosting/Notifications.cs	p6-006	c8b8b685b3fb46aacdb0118099ef2b45f48023cb	pull/190
 src/Playnite.Core/IEnvironment.cs	*	d6401f1f07c69474d0ce395797ab694bedf019e7	pull/68
 src/Playnite.Core/IFileSystem.cs	*	d6401f1f07c69474d0ce395797ab694bedf019e7	pull/68
 src/Playnite.Core/IPaths.cs	p5-002	a37890f33110c70b8411bac4457d16e0aa41822f	pull/116
@@ -165,6 +170,7 @@ src/Playnite.Platform/DesktopIntegration/DesktopCapability.cs	p5-007a	60e71ca950
 src/Playnite.Platform/DesktopIntegration/DesktopSession.cs	p5-007a	60e71ca950a21b72a08165e60c0e8066905ffed3	pull/121
 src/Playnite.Platform/DesktopIntegration/ExternalCommand.cs	p5-007a	60e71ca950a21b72a08165e60c0e8066905ffed3	pull/121
 src/Playnite.Platform/DesktopIntegration/NotificationService.cs	p5-007a	60e71ca950a21b72a08165e60c0e8066905ffed3	pull/121
+src/Playnite.Platform/DesktopIntegration/NotificationServiceHost.cs	p6-006	c8b8b685b3fb46aacdb0118099ef2b45f48023cb	pull/190
 src/Playnite.Platform/DesktopIntegration/SessionSleepInhibition.cs	p5-007a	60e71ca950a21b72a08165e60c0e8066905ffed3	pull/121
 src/Playnite.Platform/DesktopIntegration/SleepInhibition.cs	p5-007a	60e71ca950a21b72a08165e60c0e8066905ffed3	pull/121
 src/Playnite.Platform/DesktopIntegration/TrayService.cs	p5-007a	60e71ca950a21b72a08165e60c0e8066905ffed3	pull/121
@@ -286,6 +292,12 @@ tests/Playnite.Core.Tests/DesktopIntegration/LinuxTrayTests.cs	p5-007a	60e71ca95
 tests/Playnite.Core.Tests/DesktopIntegration/SleepInhibitionAndDiagnosticsTests.cs	p5-007a	60e71ca950a21b72a08165e60c0e8066905ffed3	pull/121
 tests/Playnite.Core.Tests/DesktopIntegration/SleepInhibitionTests.cs	p5-007a	60e71ca950a21b72a08165e60c0e8066905ffed3	pull/121
 tests/Playnite.Core.Tests/FileSystemTests.cs	*	d6401f1f07c69474d0ce395797ab694bedf019e7	pull/68
+tests/Playnite.Core.Tests/Hosting/DialogsFactoryTests.cs	p6-006	c8b8b685b3fb46aacdb0118099ef2b45f48023cb	pull/190
+tests/Playnite.Core.Tests/Hosting/Fakes.cs	p6-006	c8b8b685b3fb46aacdb0118099ef2b45f48023cb	pull/190
+tests/Playnite.Core.Tests/Hosting/HostApiTests.cs	p6-006	c8b8b685b3fb46aacdb0118099ef2b45f48023cb	pull/190
+tests/Playnite.Core.Tests/Hosting/MainViewApiTests.cs	p6-006	c8b8b685b3fb46aacdb0118099ef2b45f48023cb	pull/190
+tests/Playnite.Core.Tests/Hosting/NotificationServiceHostTests.cs	p6-006	c8b8b685b3fb46aacdb0118099ef2b45f48023cb	pull/190
+tests/Playnite.Core.Tests/Hosting/NotificationsApiTests.cs	p6-006	c8b8b685b3fb46aacdb0118099ef2b45f48023cb	pull/190
 tests/Playnite.Core.Tests/Import/AssetCopyTests.cs	p4-005	f12a4325c58cf66d47b93c5768e46861696d3052	pull/96
 tests/Playnite.Core.Tests/Import/LibraryImportServiceIntegrationTests.cs	p6-002	c051da647f058b815254cc11e4e4b971860651d0	pull/173
 tests/Playnite.Core.Tests/Import/LibraryImportServiceTests.cs	p6-002	c051da647f058b815254cc11e4e4b971860651d0	pull/173
