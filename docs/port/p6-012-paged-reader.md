@@ -23,21 +23,21 @@ ascending and last descending.
 
 | `SortOrder` | Stored order value |
 | --- | --- |
-| `Name` | effective name |
+| `Name` | effective name (NOCASE) |
 | `LastActivity`, `Added`, `Modified` | UTC ISO-8601 column |
 | `ReleaseDate` | null flag, year (0 maps to 1 so `Empty` ties with year 1), month (default 1), day (default 1) |
-| `Version`, `InstallDirectory` | text column |
+| `Version`, `InstallDirectory` | text column (NOCASE) |
 | `PlayCount`, `Playtime`, `InstallSize` | fixed-width decimal column |
 | `UserScore`, `CriticScore`, `CommunityScore` | integer column |
 | `IsInstalled`, `Hidden`, `Favorite` | integer flag |
 | `RecentActivity` | `CASE` reproducing `GetGameRecentActivity` |
-| `RomList` | ordered ROM paths joined with `", "` |
+| `RomList` | ordered ROM paths joined with `", "` (NOCASE) |
 
-Text columns (`Name`, `Version`, `InstallDirectory`, `RomList`) use SQLite's BINARY
-collation. `GameComparer` in p6-001 compares text with the current culture; the paged path is
-deterministic across runs and locales and does not claim that text order matches it. The two
-paths coincide for the stored numeric, date and flag keys. `PagedLibraryReaderTests` pins the
-numeric/date parity and the documented BINARY text order separately.
+Text columns (`Name`, `Version`, `InstallDirectory`, `RomList`) order with SQLite's NOCASE
+collation. `PagedLibraryComparer` is the in-memory mirror: it folds ASCII `A`-`Z` and compares
+code units, exactly matching NOCASE, so SQL and the comparer share one canonical text order.
+`GameComparer`/`LibraryService` in p6-001 keep current-culture text order; this unit does not
+change that comparator. Numeric, date and flag keys match `GameComparer`.
 
 ## SQL and memory
 
@@ -64,9 +64,10 @@ cancelled call throws `OperationCanceledException` without a partial page.
 
 ## Boundary
 
-Filters, v10 text search and grouping stay with p6-001/p6-011. The v10 matcher and grouping
-keys are not SQL-translatable here, and this unit owns only the ordered repository page.
-Callers page the full stored order; the query shape and comparers remain in p6-001.
+This unit is a paging primitive only; no production caller is wired in this PR. Wiring it into
+`LibraryService.ListAsync`/`SearchAsync` is a p6-001 follow-up and requires editing that
+p6-001-owned file, so list and search still read the full snapshot until then. Filters, v10
+text search and grouping stay with p6-001/p6-011.
 
 ## Tests
 
@@ -75,5 +76,6 @@ limit bounds; duplicate primary keys with name and identity ties; descending nul
 determinism across repeated calls and reversed insertion order; pre-read and mid-load
 cancellation; the generated statement's `LIMIT`/`OFFSET`/tie-breaker; an instrumented session
 seam proving a page of N requests only the N-row window; numeric and date parity with
-`LibraryService` in both directions; and explicit BINARY-order coverage for every text key,
-including case, accent, null and duplicate values.
+`LibraryService` in both directions; and text order against `PagedLibraryComparer` for
+mixed-case, accented and numeric-prefixed titles, including a case-only test that fails under
+BINARY order.

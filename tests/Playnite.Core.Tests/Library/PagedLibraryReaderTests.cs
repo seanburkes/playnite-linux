@@ -205,7 +205,7 @@ public sealed class PagedLibraryReaderTests
             Assert.EndsWith("game.Id ASC LIMIT @Limit OFFSET @Offset;", sql);
             if (sort != SortOrder.Name)
             {
-                Assert.Contains("COALESCE(NULLIF(game.SortingName, ''), game.Name) ASC", sql);
+                Assert.Contains("COALESCE(NULLIF(game.SortingName, ''), game.Name) COLLATE NOCASE ASC", sql);
             }
         }
         Assert.Equal("SELECT COUNT(*) FROM game;", PagedLibraryReader.CountSql);
@@ -251,33 +251,39 @@ public sealed class PagedLibraryReaderTests
     [InlineData(SortOrder.Version)]
     [InlineData(SortOrder.InstallDirectory)]
     [InlineData(SortOrder.RomList)]
-    public async Task Text_orders_follow_the_documented_binary_collation(SortOrder sort)
+    public async Task Text_orders_match_the_canonical_in_memory_comparer(SortOrder sort)
+    {
+        using var files = new DatabaseTestDirectory();
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var games = TextGames();
+        var database = await SeedAsync(files, cancellationToken, games);
+        var reader = new PagedLibraryReader(database);
+
+        foreach (var descending in new[] { false, true })
+        {
+            var expected = games.Select(stored => stored.Value)
+                .OrderBy(game => game, new PagedLibraryComparer(sort, descending))
+                .ThenBy(game => game.Id)
+                .Select(game => game.Id);
+            var actual = await reader.ListAsync(
+                new(SortBy: sort, Descending: descending, Limit: 20), cancellationToken);
+
+            Assert.Equal(expected, Ids(actual));
+        }
+    }
+
+    [Fact]
+    public async Task Case_only_name_differences_break_by_identity_not_by_bytes()
     {
         using var files = new DatabaseTestDirectory();
         var cancellationToken = TestContext.Current.CancellationToken;
         var database = await SeedAsync(files, cancellationToken, TextGames());
         var reader = new PagedLibraryReader(database);
 
-        Guid[] ascending = sort switch
-        {
-            SortOrder.Name => [Id(14), Id(11), Id(13), Id(10), Id(12)],
-            SortOrder.Version => [Id(14), Id(10), Id(11), Id(12), Id(13)],
-            SortOrder.InstallDirectory => [Id(13), Id(10), Id(11), Id(14), Id(12)],
-            SortOrder.RomList => [Id(14), Id(10), Id(11), Id(12), Id(13)],
-            _ => throw new ArgumentOutOfRangeException(nameof(sort)),
-        };
-        Guid[] descending = sort switch
-        {
-            SortOrder.Name => [Id(12), Id(10), Id(13), Id(11), Id(14)],
-            SortOrder.Version => [Id(13), Id(11), Id(12), Id(14), Id(10)],
-            SortOrder.InstallDirectory => [Id(12), Id(14), Id(11), Id(13), Id(10)],
-            SortOrder.RomList => [Id(13), Id(11), Id(12), Id(14), Id(10)],
-            _ => throw new ArgumentOutOfRangeException(nameof(sort)),
-        };
+        var page = await reader.ListAsync(new(SortBy: SortOrder.Name, Limit: 20), cancellationToken);
 
-        Assert.Equal(ascending, Ids(await reader.ListAsync(new(SortBy: sort, Limit: 10), cancellationToken)));
-        Assert.Equal(descending, Ids(await reader.ListAsync(
-            new(SortBy: sort, Descending: true, Limit: 10), cancellationToken)));
+        Assert.Equal([Id(10), Id(11), Id(15)],
+            Ids(page).Where(id => id == Id(10) || id == Id(11) || id == Id(15)));
     }
 
     private static StoredGame[] TieGames() =>
@@ -433,12 +439,19 @@ public sealed class PagedLibraryReaderTests
             InstallDirectory = "C:/Games/A",
             Roms = [new GameRom("a", "rom-a")],
         }),
+        new(new Game(Id(15), "15")
+        {
+            Name = "APPLE",
+            Version = "1.0",
+            InstallDirectory = "C:/Games/a",
+            Roms = [new GameRom("a", "rom-a")],
+        }),
         new(new Game(Id(12), "12")
         {
             Name = "Éclair",
             Version = "1.0",
-            InstallDirectory = "C:/Games/a",
-            Roms = [new GameRom("a", "rom-a")],
+            InstallDirectory = "C:/Games/É",
+            Roms = [new GameRom("b", "rom-b")],
         }),
         new(new Game(Id(13), "13")
         {
@@ -449,6 +462,24 @@ public sealed class PagedLibraryReaderTests
         new(new Game(Id(14), "14")
         {
             InstallDirectory = "C:/Games/B",
+        }),
+        new(new Game(Id(16), "16")
+        {
+            Name = "10 Games",
+            Version = "10.0",
+            InstallDirectory = "C:/Games/10",
+        }),
+        new(new Game(Id(17), "17")
+        {
+            Name = "2 Games",
+            Version = "2.0",
+            InstallDirectory = "C:/Games/2",
+        }),
+        new(new Game(Id(18), "18")
+        {
+            Name = "1 Game",
+            Version = "1.0",
+            InstallDirectory = "C:/Games/1",
         }),
     ];
 

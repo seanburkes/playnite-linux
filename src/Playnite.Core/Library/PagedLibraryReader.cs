@@ -16,7 +16,7 @@ public sealed class PagedLibraryReader
 {
     internal const string CountSql = "SELECT COUNT(*) FROM game;";
 
-    private const string NameExpression = "COALESCE(NULLIF(game.SortingName, ''), game.Name)";
+    private const string NameExpression = "COALESCE(NULLIF(game.SortingName, ''), game.Name) COLLATE NOCASE";
 
     private const string RecentActivityExpression = """
         (CASE WHEN game.LastActivity IS NULL THEN game.Added
@@ -27,7 +27,7 @@ public sealed class PagedLibraryReader
 
     private const string RomListExpression = """
         (SELECT COALESCE(group_concat(COALESCE(roms.Path, ''), ', '), '')
-         FROM (SELECT r.Path FROM game_rom r WHERE r.GameId = game.Id ORDER BY r.Position) AS roms)
+         FROM (SELECT r.Path FROM game_rom r WHERE r.GameId = game.Id ORDER BY r.Position) AS roms) COLLATE NOCASE
         """;
 
     private readonly IPagedLibrarySessionFactory sessionFactory;
@@ -121,7 +121,7 @@ public sealed class PagedLibraryReader
             "COALESCE(game.ReleaseMonth, 1)",
             "COALESCE(game.ReleaseDay, 1)",
         ],
-        SortOrder.Version => ["game.Version"],
+        SortOrder.Version => ["game.Version COLLATE NOCASE"],
         SortOrder.PlayCount => ["game.PlayCount"],
         SortOrder.Playtime => ["game.Playtime"],
         SortOrder.UserScore => ["game.UserScore"],
@@ -132,7 +132,7 @@ public sealed class PagedLibraryReader
         SortOrder.IsInstalled => ["game.IsInstalled"],
         SortOrder.Hidden => ["game.Hidden"],
         SortOrder.Favorite => ["game.Favorite"],
-        SortOrder.InstallDirectory => ["game.InstallDirectory"],
+        SortOrder.InstallDirectory => ["game.InstallDirectory COLLATE NOCASE"],
         SortOrder.InstallSize => ["game.InstallSize"],
         SortOrder.RecentActivity => [RecentActivityExpression],
         SortOrder.RomList => [RomListExpression],
