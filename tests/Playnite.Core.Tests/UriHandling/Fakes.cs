@@ -1,4 +1,5 @@
 using Playnite.Core.UriHandling;
+using Playnite.SDK;
 
 namespace Playnite.Core.Tests.UriHandling;
 

@@ -1,0 +1,48 @@
+# p6-007b — ApiCompat v6→v7 delta for the moved URI/description surface
+
+The complete v6→v7 breaking-change report is the p6-008 freeze artifact. This file records only
+the delta produced by moving the p6-007 contracts into `Playnite.SDK.Abstractions`.
+
+## Baseline and method
+
+| Item | Value |
+| --- | --- |
+| Tool | Microsoft.DotNet.ApiCompat 11.0.100 (`11.0.100+297acf930fb0f5c07fd4e51d78e521b4ad2e5d1f`) |
+| Left (v6) | `PlayniteSDK` 6.18.0 NuGet, `lib/net462/Playnite.SDK.dll` |
+| Left SHA-256 | `ce7511941aba4d4b17dd7b226fadfd0ecefdf51ab73775b25631089fd7542fc7` |
+| Right (v7) | this branch's `src/Playnite.SDK.Abstractions/**/*.cs` compiled with `AssemblyName=Playnite.SDK`, `Version=7.0.0.0`, `net11.0` |
+
+The right side is a scratch compilation of the committed Abstractions sources; only the assembly
+name is changed, because ApiCompat matches assemblies by simple name while the shipped v7
+assembly is called `Playnite.SDK.Abstractions`. The scratch build is not committed.
+
+```sh
+apicompat \
+  --left  <playnitesdk-6.18.0>/lib/net462/Playnite.SDK.dll \
+  --right <scratch>/Playnite.SDK.dll \
+  --roslyn-assemblies-path <sdk>/Roslyn/bincore
+```
+
+## Result
+
+| Code | Before the move | After the move | Meaning |
+| --- | ---: | ---: | --- |
+| `CP0001` | 218 | 216 | v6 type outside the v7 abstraction surface |
+| `CP0002` | 0 | 0 | v6 member deliberately replaced |
+| `CP0006` | 0 | 0 | asynchronous member added to a moved v6-named host interface |
+| `CP0009` | 0 | 0 | change to a type's inheritance/sealed shape |
+
+The move restores v10 names and namespaces, so it removes two `CP0001` rows and adds no break:
+
+```text
+CP0001: Type 'Playnite.SDK.IUriHandlerAPI' exists on v6-baseline but not on v7-candidate
+CP0001: Type 'Playnite.SDK.Events.PlayniteUriEventArgs' exists on v6-baseline but not on v7-candidate
+```
+
+`IUriHandlerAPI.RegisterSource`/`RemoveSource` and `PlayniteUriEventArgs.Arguments` match the v6
+signatures exactly, so they produce no member-level difference. No compatibility suppression is
+needed for any p6-007 member, and none is added.
+
+The remaining 216 `CP0001` rows are v6 types outside every frozen unit so far (UI extension
+points, WebView, database/logging/infrastructure facades). Each is classified by p6-008 when the
+freeze report is produced; this unit neither reclassifies nor suppresses them.
