@@ -19,11 +19,6 @@ ApiCompat report. Putting the service surface in Core now keeps this unit additi
 also needs the Core `Game` model, which Abstractions may not reference. The
 `sdk-002`/`sdk-003`/`sdk-004` parity rows stay `planned` until that move.
 
-> **Superseded by p6-008:** the move happened. The interfaces, host seams and DTOs now live in
-> `Playnite.SDK`, `SortOrder`/`LibraryGroupBy`/`IGameView` in `Playnite.SDK.Models`, and
-> `IMainViewAPI` no longer depends on the Core `Game` type; the concrete services remain in
-> `Playnite.Core.Hosting`. See `p6-008-sdk-freeze.md`.
-
 ## Notification API
 
 | v10 | v11 |
