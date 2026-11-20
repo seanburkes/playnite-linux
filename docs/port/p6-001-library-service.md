@@ -20,15 +20,27 @@ game affects that object only. Callers can pass a cancellation token and receive
 `OperationCanceledException` without a partial result. A later request reads a fresh
 snapshot, so a write between requests can change page membership.
 
+An unfiltered, ungrouped list delegates to `PagedLibraryReader`, which runs the total order,
+`LIMIT` and `OFFSET` in SQL and loads game graphs only for the requested window. A text term,
+filter or grouping keeps the v10 in-memory semantics and evaluates one snapshot, because the
+v10 matcher and filter helpers are not expressible in the stored SQL columns.
+
 1. Search and any supplied filter both have to match. Name search supports the v10
    case-insensitive fuzzy, acronym, and word matching. The library page uses the selected
    sort order and has no quick-search result cap.
 2. Sort by a defined `Playnite.Core.Queries.SortOrder` key. The default is ascending name
-   using the current culture and the game's sorting-name override when present. Sort keys
-   other than name break ties by ascending name. The final tie-breaker is ascending GUID.
-   Null primary fields sort first ascending and last descending. For ROM list sorting,
-   null and empty lists use the empty string as their sort value. Undefined sort and
-   group enum values throw `ArgumentOutOfRangeException`.
+   using SQLite's NOCASE collation over the game's sorting-name override when present.
+   NOCASE folds ASCII `A`-`Z` and then compares code units, so mixed-case titles compare
+   equal and accented or non-ASCII titles order by their code units. Sort keys other than
+   name break ties by ascending NOCASE name. The final tie-breaker is the stored identity
+   text in ordinal order. Null primary fields sort first ascending and last descending. For
+   ROM list sorting, null and empty lists use the empty string as their sort value. Undefined
+   sort and group enum values throw `ArgumentOutOfRangeException`.
+
+   This replaces the earlier current-culture text order. The change is deliberate: the paging
+   reader and `PagedLibraryComparer` define one canonical text order so an in-memory page and
+   a SQL page cannot disagree. Numeric, date and flag keys are unchanged, and case-only titles
+   now tie on the name and break by stored identity instead of culture rules.
 3. When grouping, the group order takes precedence over the game sort. Release year,
    playtime, and score groups descend. The remaining groups ascend by their key. Year
    groups use an integer and missing years use null. Name groups use the v10 initial
@@ -44,9 +56,13 @@ snapshot, so a write between requests can change page membership.
    Group results contain the members on the current page and preserve their order.
    Ungrouped queries return an empty group list.
 
-In v1, each list or search reads the full game snapshot into memory before applying the
-v10 query helpers. The bounds cap the supplied paging arguments, so a small explicit page
-size still incurs the cost of loading the snapshot.
+A bounded unfiltered, ungrouped list never materialises the library: `PagedLibraryReader`
+issues `COUNT(*)` and one ordered `LIMIT`/`OFFSET` statement in the same snapshot, then loads
+only the window's game graphs. A null limit asks for the remainder; when that remainder fits
+the reader's 10,000-row page cap it is read as one window, and a larger remainder keeps the
+one-snapshot in-memory path so the "one snapshot per call" guarantee still holds. Text search,
+filters and grouping also keep the one-snapshot in-memory path, because the v10 matcher, filter
+helpers and group keys are not stored SQL expressions; their paging bounds are unchanged.
 
 The grouping keys cover name, release year, installation status, playtime, user, critic
 and community score, install size, last and recent activity, added and modified. Plugin
@@ -77,6 +93,13 @@ criteria use the existing `{}` sentinel for missing values.
   The query helpers from p3-006 already port their headless behaviour.
 - `LibraryServiceContractTests` uses a fake reader to cover list, ID lookup, search,
   strict filter binding, sort ties and nulls, grouping, paging and cancellation.
+- `LibraryServicePagingTests` proves through an instrumented paged-reader session that a
+  bounded unfiltered list requests only its window, that search and grouping stay on the
+  snapshot path, that a remainder beyond the page cap falls back once, and that bounds and
+  the group key still fail before any read. It also pins the NOCASE text order for mixed-case,
+  accented and numeric-prefixed titles against `PagedLibraryReader` and `PagedLibraryComparer`.
+- `LibraryCliPagingEqualityTests` runs the real `list` and `search` commands on a fixed
+  synthetic library and pins the first page and unpaged list to the pre-wiring output.
 - `LibraryServiceImportTests` runs the existing `import-v10` command on the frozen
   `tests/fixtures/v10/library` oracle and queries the imported SQLite file. It verifies
   persisted IDs, graph detachment, Unicode search, hidden filtering, grouped pages

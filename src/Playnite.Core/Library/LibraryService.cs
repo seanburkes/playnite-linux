@@ -8,17 +8,24 @@ namespace Playnite.Core.Library;
 public sealed class LibraryService
 {
     private readonly ILibraryGameReader reader;
+    private readonly PagedLibraryReader? pagedReader;
     private readonly TimeProvider timeProvider;
 
     /// <summary>Uses the existing database and optional local time source for date-based queries.</summary>
     public LibraryService(LibraryDatabase database, TimeProvider? timeProvider = null)
-        : this(new SqliteLibraryGameReader(database), timeProvider)
+        : this(new SqliteLibraryGameReader(database), new PagedLibraryReader(database), timeProvider)
     {
     }
 
     internal LibraryService(ILibraryGameReader reader, TimeProvider? timeProvider = null)
+        : this(reader, null, timeProvider)
+    {
+    }
+
+    internal LibraryService(ILibraryGameReader reader, PagedLibraryReader? pagedReader, TimeProvider? timeProvider = null)
     {
         this.reader = reader;
+        this.pagedReader = pagedReader;
         this.timeProvider = timeProvider ?? TimeProvider.System;
     }
 
@@ -31,7 +38,12 @@ public sealed class LibraryService
         return game;
     }
 
-    /// <summary>Lists a snapshot with optional filtering, sorting, grouping and paging.</summary>
+    /// <summary>Lists a page with optional filtering, sorting, grouping and paging.</summary>
+    /// <remarks>
+    /// An unfiltered, ungrouped list reads only the requested window through
+    /// <see cref="PagedLibraryReader"/>. Filters, text search and grouping keep their v10
+    /// in-memory semantics and read one snapshot.
+    /// </remarks>
     public Task<LibraryPage> ListAsync(LibraryQuery? query = null, CancellationToken cancellationToken = default)
         => QueryAsync(null, query ?? new(), cancellationToken);
 
@@ -54,11 +66,28 @@ public sealed class LibraryService
         {
             throw new ArgumentOutOfRangeException(nameof(query.SortBy), query.SortBy, "Unknown library sort key.");
         }
+        if (!Enum.IsDefined(query.GroupBy))
+        {
+            throw new ArgumentOutOfRangeException(nameof(query.GroupBy), query.GroupBy, "Unknown library group key.");
+        }
 
-        var comparer = new GameComparer(query.SortBy, query.Descending);
         var dates = new QueryDates(timeProvider);
         var groupKey = GetGroupKey(query.GroupBy, dates);
         var filter = query.Filter?.CreateMatcher(dates, dates);
+        if (pagedReader is not null && string.IsNullOrEmpty(term) && filter is null && groupKey is null)
+        {
+            var window = await pagedReader.ListAsync(
+                new PagedLibraryQuery(query.SortBy, query.Descending, query.Offset, query.Limit ?? LibraryQuery.MaxLimit),
+                cancellationToken).ConfigureAwait(false);
+            // The reader caps one page at MaxLimit. A null limit asks for the whole remainder,
+            // so a larger remainder keeps the one-snapshot in-memory path.
+            if (query.Limit is not null || query.Offset + window.Games.Count >= window.TotalCount)
+            {
+                return window;
+            }
+        }
+
+        var comparer = new PagedLibraryComparer(query.SortBy, query.Descending);
         var snapshot = await reader.ListAsync(cancellationToken).ConfigureAwait(false);
         var matches = new List<StoredGame>();
         foreach (var game in snapshot)
@@ -71,7 +100,7 @@ public sealed class LibraryService
             }
         }
 
-        var sorted = matches.OrderBy(game => game.Value, comparer).ThenBy(game => game.Value.Id);
+        var sorted = matches.OrderBy(game => game.Value, comparer);
         LibraryPage page;
         if (groupKey is null)
         {
