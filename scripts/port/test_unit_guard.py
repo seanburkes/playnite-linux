@@ -1141,8 +1141,91 @@ class CrossUnitMoveTests(unittest.TestCase):
         result = fixture.ownership(head, "--branch", "fm/p4-003")
 
         self.assertEqual(result.returncode, 1, result.stderr)
-        self.assertIn("no deleted counterpart of the same basename", result.stderr)
+        self.assertIn("no unclaimed deleted counterpart of the same basename", result.stderr)
         self.assertIn(path, result.stderr)
+
+    def test_modification_paired_with_its_own_delete_passes(self) -> None:
+        edited = "tests/golden/p4-002-edited/PROVENANCE.md"
+        moved = "tests/golden/p4-002-moved/PROVENANCE.md"
+        destination = "tests/golden/p4-003-moved/PROVENANCE.md"
+        fixture = self.fixture_with({edited: "edited\n", moved: "moved\n"})
+        fixture.append(edited, "edited in place, with a real move beside it\n")
+        fixture.git("rm", "-q", moved)
+        fixture.write(destination, "moved\n")
+        head = fixture.commit(
+            "pair one modification with one move\n\n"
+            "Port-Unit: p4-003\n"
+            f"Cross-Unit-Move: p4-002:{moved},p4-002:{edited}"
+        )
+
+        result = fixture.ownership(head, "--branch", "fm/p4-003")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("offending paths:\n  (none)", result.stdout)
+
+    def test_two_modifications_sharing_one_delete_fails(self) -> None:
+        first = "tests/golden/p4-002-first/PROVENANCE.md"
+        second = "tests/golden/p4-002-second/PROVENANCE.md"
+        moved = "tests/golden/p4-002-source/PROVENANCE.md"
+        fixture = self.fixture_with({first: "first\n", second: "second\n", moved: "moved\n"})
+        fixture.append(first, "edited\n")
+        fixture.append(second, "edited\n")
+        fixture.git("rm", "-q", moved)
+        fixture.write("tests/golden/p4-003-source/PROVENANCE.md", "moved\n")
+        head = fixture.commit(
+            "back two edits with one delete\n\n"
+            "Port-Unit: p4-003\n"
+            f"Cross-Unit-Move: p4-002:{moved},p4-002:{first},p4-002:{second}"
+        )
+
+        result = fixture.ownership(head, "--branch", "fm/p4-003")
+
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertIn("no unclaimed deleted counterpart of the same basename", result.stderr)
+        self.assertIn(second, result.stderr)
+        self.assertNotIn(first, result.stderr)
+
+    def test_two_deletes_sharing_one_add_fails(self) -> None:
+        first = "tests/golden/p4-002-first/PROVENANCE.md"
+        second = "tests/golden/p4-002-second/PROVENANCE.md"
+        fixture = self.fixture_with({first: "first\n", second: "second\n"})
+        fixture.git("rm", "-q", first)
+        fixture.git("rm", "-q", second)
+        fixture.write("tests/golden/p4-003-first/PROVENANCE.md", "first\n")
+        head = fixture.commit(
+            "move two files into one\n\n"
+            "Port-Unit: p4-003\n"
+            f"Cross-Unit-Move: p4-002:{first},p4-002:{second}"
+        )
+
+        result = fixture.ownership(head, "--branch", "fm/p4-003")
+
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertIn("no same-basename added counterpart owned by p4-003", result.stderr)
+        self.assertIn(second, result.stderr)
+        self.assertNotIn(first, result.stderr)
+
+    def test_delete_paired_with_an_add_outside_the_declared_unit_fails(self) -> None:
+        moved = "tests/golden/p4-002-source/PROVENANCE.md"
+        fixture = self.fixture_with({moved: "moved\n"})
+        fixture.git("rm", "-q", moved)
+        # Same basename as the deleted file, but this shared path belongs to no
+        # unit, so it is not a counterpart that the declaring unit owns.
+        fixture.write("docs/port/notes/PROVENANCE.md", "moved\n")
+        # A genuine add in the declaring unit satisfies "adds a new file" while
+        # the deleted foreign file still has no counterpart of its own.
+        fixture.write("tests/golden/p4-003-note/README.md", "note\n")
+        head = fixture.commit(
+            "delete a foreign file beside an out-of-unit add\n\n"
+            "Port-Unit: p4-003\n"
+            f"Cross-Unit-Move: p4-002:{moved}"
+        )
+
+        result = fixture.ownership(head, "--branch", "fm/p4-003")
+
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertIn("no same-basename added counterpart owned by p4-003", result.stderr)
+        self.assertIn(moved, result.stderr)
 
     def test_empty_manifest_fails(self) -> None:
         fixture = self.fixture_with({})

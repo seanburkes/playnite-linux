@@ -27,9 +27,10 @@ An approved move out of another unit's ownership may add a head-commit
 ``Cross-Unit-Move: <owner>:<path>[,...]`` trailer beside ``Port-Unit``.  The
 manifest must list every foreign path the PR edits with its actual owner and a
 delete or modification status, add at least one new file in the declaring
-unit's namespace, pair each deleted path with a same-basename addition, and
-pair each modified path with a same-basename delete.  Everything else in this
-check still applies.
+unit's namespace, pair each deleted path one-to-one with its own same-basename
+addition owned by the declaring unit, and pair each modified path one-to-one
+with its own same-basename delete.  Everything else in this check still
+applies.
 
 This script is read-only: it never fetches, checks out, resets, or writes.
 Exit codes: 0 allowed, 1 policy failure including ambiguous or invalid input.

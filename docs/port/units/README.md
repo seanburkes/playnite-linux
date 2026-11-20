@@ -137,12 +137,18 @@ these hold:
 2. The pull request adds at least one new file in the declaring unit's namespace: an
    evidence-namespace path, a path the base map already allows that unit, or unowned
    product/test/tool material that the unit's merge will own.
-3. Every listed `D` path has an added path with the same basename (the move).
-4. Every listed `M` path has a listed `D` path with the same basename; the trailer cannot
-   authorise an in-place foreign edit.
+3. Every listed `D` path pairs one-to-one with its own added path with the same basename, and
+   that added path must be owned by the declaring unit: an evidence-namespace path, a path the
+   base map already allows that unit, or unowned product/test/tool material that the unit's
+   merge will own. One add cannot pair with two deletes, and an add outside the declaring
+   unit's namespace cannot stand in for the moved file.
+4. Every listed `M` path pairs one-to-one with its own listed `D` path with the same basename.
+   No `D` may back two modifications, and an `M` with no paired `D` fails, so the trailer
+   cannot authorise an in-place foreign edit.
 
 An empty or malformed manifest, a path the diff does not change, a wrong owner, a listed added
-foreign path, a move without its same-basename counterpart, and a modification without a delete
+foreign path, a delete without its own same-basename declaring-unit counterpart, two deletes
+sharing one add, a modification without its own delete, and two modifications sharing one delete
 all fail closed with a named reason. The rest of the guard is unchanged: one unit declaration,
 the queue transition and fragment, the base ownership map, symlink checks and the read-only diff
 all still apply. This exception is not a general permission to edit another unit's files.

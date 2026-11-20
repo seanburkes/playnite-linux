@@ -65,9 +65,11 @@ head-commit trailer::
 Every foreign path the pull request edits must appear with its actual owning
 unit and a ``D`` or ``M`` status.  The trailer is not a bypass: the move must
 add at least one new path in the declaring unit's namespace, every listed
-delete needs a same-basename added counterpart, and a listed modification needs
-a same-basename listed delete.  A manifest that is empty, malformed, lists a
-path the diff does not change, or names the wrong owner fails.
+delete needs its own same-basename added counterpart owned by the declaring
+unit, and every listed modification needs its own same-basename listed delete.
+A counterpart cannot be reused: one added path backs at most one delete and one
+delete backs at most one modification.  A manifest that is empty, malformed,
+lists a path the diff does not change, or names the wrong owner fails.
 
 Diff paths are repository-relative with no traversal component.  Renames are
 expanded to an explicit delete plus add, deletions are checked like any other
@@ -890,7 +892,9 @@ def validate_cross_unit_move(
     failure names the most specific violation: a manifest entry must be a
     changed foreign path with the right owner and a ``D``/``M`` status, every
     foreign path must be listed, the pull request must add a file in the
-    declaring unit's namespace, and each moved file must have its counterpart.
+    declaring unit's namespace, each delete must pair one-to-one with its own
+    declaring-unit addition of the same basename, and each modification must
+    pair one-to-one with its own listed delete of the same basename.
     """
 
     status_by_path = {change.path: change.status for change in changes}
@@ -947,47 +951,75 @@ def validate_cross_unit_move(
         )
 
     added = [change for change in changes if change.status == "A"]
-    if not any(
-        _added_path_owned_by(change.path, declared, units, ownership)
+    unit_added = sorted(
+        change.path
         for change in added
-    ):
+        if _added_path_owned_by(change.path, declared, units, ownership)
+    )
+    if not unit_added:
         raise GuardError(
             f"cross-unit move adds no new file under a path owned by {declared}; "
             "the move must add at least one new path in the declaring unit's "
             "namespace"
         )
 
-    added_basenames = {posixpath.basename(change.path) for change in added}
-    missing_counterpart = [
-        path
-        for path in sorted(manifest)
-        if status_by_path[path] == "D"
-        and posixpath.basename(path) not in added_basenames
-    ]
+    # One-to-one pairing.  Each listed delete must own exactly one added
+    # counterpart in the declaring unit, so two deletes with the same basename
+    # cannot share a single add and an add outside the declaring unit cannot
+    # stand in for the move.  Each listed modification must likewise own
+    # exactly one listed delete of the same basename, so a delete cannot back
+    # two in-place edits and an edit with no moved source is refused.
+    missing_counterpart: list[str] = []
+    used_adds: set[str] = set()
+    for path in sorted(manifest):
+        if status_by_path[path] != "D":
+            continue
+        counterpart = next(
+            (
+                candidate
+                for candidate in unit_added
+                if candidate not in used_adds
+                and posixpath.basename(candidate) == posixpath.basename(path)
+            ),
+            None,
+        )
+        if counterpart is None:
+            missing_counterpart.append(path)
+        else:
+            used_adds.add(counterpart)
     if missing_counterpart:
         detail = "\n".join(f"  {path}" for path in missing_counterpart)
         raise GuardError(
             "cross-unit move deletes path(s) with no same-basename added "
-            "counterpart; a move must add the file under the declaring unit:\n"
-            + detail
+            f"counterpart owned by {declared}; each listed delete needs its own "
+            "added file under the declaring unit:\n" + detail
         )
 
-    deleted_basenames = {
-        posixpath.basename(path)
-        for path in manifest
-        if status_by_path[path] == "D"
-    }
-    unpaired_modified = [
-        path
-        for path in sorted(manifest)
-        if status_by_path[path] == "M"
-        and posixpath.basename(path) not in deleted_basenames
-    ]
+    deleted = [path for path in sorted(manifest) if status_by_path[path] == "D"]
+    unpaired_modified: list[str] = []
+    used_deletes: set[str] = set()
+    for path in sorted(manifest):
+        if status_by_path[path] != "M":
+            continue
+        source = next(
+            (
+                candidate
+                for candidate in deleted
+                if candidate not in used_deletes
+                and posixpath.basename(candidate) == posixpath.basename(path)
+            ),
+            None,
+        )
+        if source is None:
+            unpaired_modified.append(path)
+        else:
+            used_deletes.add(source)
     if unpaired_modified:
         detail = "\n".join(f"  {path}" for path in unpaired_modified)
         raise GuardError(
-            "cross-unit move lists modified path(s) with no deleted counterpart "
-            "of the same basename; the trailer may not authorise an in-place "
+            "cross-unit move lists modified path(s) with no unclaimed deleted "
+            "counterpart of the same basename; each listed modification needs its "
+            "own listed delete, so the trailer may not authorise an in-place "
             "foreign edit:\n" + detail
         )
 
