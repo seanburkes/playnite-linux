@@ -79,4 +79,6 @@ seam proving a page of N requests only the N-row window; numeric and date parity
 `LibraryService` in both directions; text order against `PagedLibraryComparer` for
 mixed-case, accented and numeric-prefixed titles, including a case-only test that fails under
 BINARY order; and a total-order test that reads the stored `Id` text and pins the comparer's
-final ordinal identity key against the paged order.
+final ordinal identity key. Every game in that test ties on the primary key and the name and is
+inserted in reverse text order, so dropping the identity key leaves the stable sort in insertion
+order and fails the test; the same holds for both directions.

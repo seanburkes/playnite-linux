@@ -299,6 +299,68 @@ public sealed class PagedLibraryReaderTests
     }
 
     [Fact]
+    public async Task Comparer_final_key_is_stored_identity_text_and_breaks_every_tie()
+    {
+        using var files = new DatabaseTestDirectory();
+        var cancellationToken = TestContext.Current.CancellationToken;
+
+        // Guid.CompareTo compares Data1, Data2 and Data3 as unsigned integers and then the eight
+        // trailing bytes. For the canonical lowercase "D" text the schema stores, that is exactly
+        // ordinal text order, so the stored TEXT order and Guid.CompareTo cannot be made to
+        // disagree. The identity key is still observable: insert in the reverse of the text order,
+        // so a comparer that drops the final key leaves the games in insertion order and every
+        // assertion below fails.
+        Guid a = Guid.Parse("00000001-0000-0000-0000-000000000000");
+        Guid b = Guid.Parse("7fffffff-0000-0000-0000-000000000000");
+        Guid c = Guid.Parse("80000000-0000-0000-0000-000000000000");
+        Guid d = Guid.Parse("ffffffff-0000-0000-0000-000000000000");
+        Guid[] textOrder = [a, b, c, d];
+        var games = textOrder.Reverse()
+            .Select(id => new StoredGame(
+                new Game(id, id.ToString("D")) { Name = "Tie", UserScore = 50 }))
+            .ToArray();
+        var database = await SeedAsync(files, cancellationToken, games);
+        var reader = new PagedLibraryReader(database);
+
+        using (var connection = DatabaseTestDirectory.Connect(files.PathFor()))
+        {
+            var stored = (await connection.QueryAsync<string>("SELECT Id FROM game ORDER BY Id;")).ToArray();
+            Assert.Equal(textOrder.Select(id => id.ToString("D")), stored);
+        }
+
+        Assert.Equal(textOrder, games.Select(stored => stored.Value.Id).OrderBy(id => id).ToArray());
+
+        var byId = games.ToDictionary(stored => stored.Value.Id, stored => stored.Value);
+        var insertionOrder = games.Select(stored => stored.Value.Id).ToArray();
+        Assert.NotEqual(insertionOrder, textOrder);
+
+        foreach (var descending in new[] { false, true })
+        {
+            var comparer = new PagedLibraryComparer(SortOrder.UserScore, descending);
+            for (var index = 1; index < textOrder.Length; index++)
+            {
+                // Each pair ties on the primary key and the name; only the stored text decides.
+                Assert.True(comparer.Compare(byId[textOrder[index - 1]], byId[textOrder[index]]) < 0);
+            }
+
+            var page = await reader.ListAsync(
+                new(SortBy: SortOrder.UserScore, Descending: descending, Limit: 10), cancellationToken);
+            var comparerOrder = games.Select(stored => stored.Value)
+                .OrderBy(game => game, comparer)
+                .Select(game => game.Id)
+                .ToArray();
+
+            // Identity ties stay ascending in both directions, so both orders are the stored
+            // TEXT order and neither preserves the insertion order.
+            Assert.Equal(textOrder, Ids(page).ToArray());
+            Assert.NotEqual(insertionOrder, Ids(page).ToArray());
+            Assert.Equal(textOrder, comparerOrder);
+            Assert.NotEqual(insertionOrder, comparerOrder);
+            Assert.Equal(4, page.TotalCount);
+        }
+    }
+
+    [Fact]
     public async Task Case_only_name_differences_break_by_identity_not_by_bytes()
     {
         using var files = new DatabaseTestDirectory();
