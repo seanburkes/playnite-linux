@@ -4,13 +4,13 @@
 - Pull request: https://github.com/seanburkes/playnite-linux/pull/212
 - Reviewed head: `1f34164b2b12ba7ce0ad64b12349c72c61e7bcaf`
 - Base: `6ef2ca5de741e3edd13018d56d579b064de6e485` (`origin/main`)
-- Candidate diff: `/home/sean/src/firstmate/data/p6-212/candidate.diff`
+- Candidate diff: `data/p6-212/candidate.diff`
 - Candidate diff SHA-256: `7889fd19807182657a18df9023188e76abeb2728c9c673912a7e06984cb5a40b`
 - Size: 27 files, +1004/−0
 - Method: checked out the reviewed head in a disposable worktree, restored and built the sample
   and test projects with warnings as errors, ran the plugin and architecture suites, replayed the
-  CI evidence from the forge, and ran negative load/discovery probes. Proof output is under
-  `/tmp/opencode/p1-review-cc/`, outside the worktree.
+  CI evidence from the forge, and ran negative load/discovery probes. Proof output is kept in a
+  local directory outside the worktree.
 - Verdict: **no blocking P1/P2 findings; recommend merge.**
 
 ## Blocking findings
