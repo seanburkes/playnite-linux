@@ -150,6 +150,7 @@ public sealed class SettingsSnapshot
 public sealed class PlayniteSettingsService : IDisposable
 {
     private static readonly UTF8Encoding Utf8 = new(false, true);
+    private static readonly byte[] Utf8Bom = [0xef, 0xbb, 0xbf];
     private readonly ISettingsStorage storage;
     private readonly SemaphoreSlim gate = new(1, 1);
     private bool disposed;
@@ -411,10 +412,11 @@ public sealed class PlayniteSettingsService : IDisposable
 
         try
         {
-            _ = SettingsMigration.ExportV10(bytes);
+            _ = SettingsMigration.ExportV10(WithoutBom(bytes));
         }
         catch (Exception exception) when (exception is InvalidDataException or JsonException
-            or FormatException or ArgumentException or InvalidOperationException)
+            or System.Text.Json.JsonException or FormatException or ArgumentException
+            or InvalidOperationException)
         {
             throw new SettingsException(SettingsFailure.Corrupt,
                 $"The settings envelope is inconsistent: {exception.Message}", exception);
@@ -436,7 +438,9 @@ public sealed class PlayniteSettingsService : IDisposable
     private static (byte[]? Bytes, IReadOnlyList<string> Changed) BuildReplacement(
         SettingsSnapshot snapshot, IReadOnlyList<SettingsUpdate> updates)
     {
-        var archivedBytes = snapshot.SourceBytes is null ? null : SettingsMigration.ExportV10(snapshot.SourceBytes);
+        var archivedBytes = snapshot.SourceBytes is null
+            ? null
+            : SettingsMigration.ExportV10(WithoutBom(snapshot.SourceBytes));
         var archived = archivedBytes is null ? new JObject() : ReadArchived(archivedBytes);
         var legacy = (JObject)snapshot.RawLegacy.DeepClone();
         var changed = new List<string>();
@@ -483,6 +487,9 @@ public sealed class PlayniteSettingsService : IDisposable
         _ = SettingsMigration.ExportV10(bytes);
         return (bytes, changed.AsReadOnly());
     }
+
+    private static byte[] WithoutBom(byte[] bytes) =>
+        bytes.AsSpan().StartsWith(Utf8Bom) ? bytes[3..] : bytes;
 
     private static JObject ReadArchived(byte[] bytes)
     {

@@ -169,6 +169,12 @@ public sealed class SettingsKey<T> : SettingsKey
             return;
         }
 
+        if (type == typeof(double))
+        {
+            ValidateDouble(token);
+            return;
+        }
+
         if (type == typeof(int) || type == typeof(long) || type.IsEnum)
         {
             ValidateInteger(type, token);
@@ -176,6 +182,29 @@ public sealed class SettingsKey<T> : SettingsKey
         }
 
         throw InvalidType(token);
+    }
+
+    private void ValidateDouble(JToken token)
+    {
+        if (token.Type is not (JTokenType.Integer or JTokenType.Float))
+        {
+            throw InvalidType(token);
+        }
+
+        double value;
+        try
+        {
+            value = token.ToObject<double>();
+        }
+        catch (Exception exception) when (exception is OverflowException or InvalidCastException or FormatException)
+        {
+            throw OutOfRange(typeof(double), token);
+        }
+
+        if (!double.IsFinite(value))
+        {
+            throw OutOfRange(typeof(double), token);
+        }
     }
 
     private void ValidateInteger(Type type, JToken token)

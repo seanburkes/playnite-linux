@@ -24,12 +24,17 @@ public sealed class SettingsServiceTests : IDisposable
         Assert.False(snapshot.Exists);
         Assert.Equal(7, snapshot.Get(PlayniteSettingsKeys.Version));
         Assert.False(snapshot.Get(PlayniteSettingsKeys.StartInFullscreen));
+        Assert.False(snapshot.Get(PlayniteSettingsKeys.StartMinimized));
+        Assert.False(snapshot.Get(PlayniteSettingsKeys.MinimizeToTray));
         Assert.True(snapshot.Get(PlayniteSettingsKeys.CloseToTray));
         Assert.True(snapshot.Get(PlayniteSettingsKeys.EnableTray));
+        Assert.True(snapshot.Get(PlayniteSettingsKeys.ShowSidebar));
+        Assert.False(snapshot.Get(PlayniteSettingsKeys.FirstTimeWizardComplete));
         Assert.Equal("english", snapshot.Get(PlayniteSettingsKeys.Language));
         Assert.Equal("Playnite_builtin_DefaultDesktop", snapshot.Get(PlayniteSettingsKeys.Theme));
         Assert.Null(snapshot.Get(PlayniteSettingsKeys.DatabasePath));
         Assert.Null(snapshot.Get(PlayniteSettingsKeys.InstallInstanceId));
+        Assert.False(snapshot.Get(PlayniteSettingsKeys.AutoBackupEnabled));
         Assert.Equal(AutoBackupFrequency.OnceAWeek, snapshot.Get(PlayniteSettingsKeys.AutoBackupFrequency));
         Assert.Equal(UpdateCheckFrequency.OnEveryStartup, snapshot.Get(PlayniteSettingsKeys.CheckForProgramUpdates));
         Assert.False(File.Exists(Store));
@@ -384,6 +389,144 @@ public sealed class SettingsServiceTests : IDisposable
         var exception = await Assert.ThrowsAsync<SettingsException>(() => service.LoadAsync());
 
         Assert.Equal(SettingsFailure.UnsupportedSchema, exception.Failure);
+    }
+
+    public static IEnumerable<object[]> EveryDocumentedKeyWithAWrongJsonType()
+    {
+        yield return ["Version", "\"7\""];
+        yield return ["StartInFullscreen", "1"];
+        yield return ["StartMinimized", "\"false\""];
+        yield return ["MinimizeToTray", "[]"];
+        yield return ["CloseToTray", "{}"];
+        yield return ["EnableTray", "0"];
+        yield return ["ShowSidebar", "\"true\""];
+        yield return ["FirstTimeWizardComplete", "1"];
+        yield return ["Language", "1"];
+        yield return ["Theme", "false"];
+        yield return ["DatabasePath", "[]"];
+        yield return ["InstallInstanceId", "{}"];
+        yield return ["AutoBackupEnabled", "\"true\""];
+        yield return ["AutoBackupFrequency", "\"OnceAWeek\""];
+        yield return ["CheckForProgramUpdates", "1.5"];
+    }
+
+    [Theory]
+    [MemberData(nameof(EveryDocumentedKeyWithAWrongJsonType))]
+    public async Task Every_documented_key_rejects_a_wrong_json_type(string name, string value)
+    {
+        var archived = $$"""{"{{name}}":{{value}}}""";
+        var storage = new FakeStorage
+        {
+            Contents = Encoding.UTF8.GetBytes(Envelope(archived, "{}", Encoding.UTF8.GetBytes(archived))),
+        };
+        using var service = new PlayniteSettingsService(storage);
+
+        var exception = await Assert.ThrowsAsync<SettingsException>(() => service.LoadAsync());
+
+        Assert.Equal(SettingsFailure.InvalidValue, exception.Failure);
+        Assert.Contains(name, exception.Message);
+    }
+
+    public static IEnumerable<object[]> EveryDocumentedKeyWithAnOverflowInteger()
+    {
+        foreach (var name in new[]
+                 {
+                     "Version", "StartInFullscreen", "StartMinimized", "MinimizeToTray", "CloseToTray",
+                     "EnableTray", "ShowSidebar", "FirstTimeWizardComplete", "Language", "Theme",
+                     "DatabasePath", "InstallInstanceId", "AutoBackupEnabled", "AutoBackupFrequency",
+                     "CheckForProgramUpdates",
+                 })
+        {
+            yield return [name, "9223372036854775808"];
+        }
+    }
+
+    [Theory]
+    [MemberData(nameof(EveryDocumentedKeyWithAnOverflowInteger))]
+    public async Task Every_documented_key_rejects_an_integer_beyond_its_clr_range(string name, string value)
+    {
+        var archived = $$"""{"{{name}}":{{value}}}""";
+        var storage = new FakeStorage
+        {
+            Contents = Encoding.UTF8.GetBytes(Envelope(archived, "{}", Encoding.UTF8.GetBytes(archived))),
+        };
+        using var service = new PlayniteSettingsService(storage);
+
+        var exception = await Assert.ThrowsAsync<SettingsException>(() => service.LoadAsync());
+
+        Assert.Equal(SettingsFailure.InvalidValue, exception.Failure);
+        Assert.Contains(name, exception.Message);
+    }
+
+    [Theory]
+    [InlineData("1.7976931348623157E+308", double.MaxValue)]
+    [InlineData("-1.7976931348623157E+308", double.MinValue)]
+    [InlineData("0.5", 0.5)]
+    [InlineData("7", 7.0)]
+    public async Task Double_boundary_values_read_exactly_through_a_double_key(string value, double expected)
+    {
+        var archived = $$"""{"UnmodeledDouble":{{value}}}""";
+        var storage = new FakeStorage
+        {
+            Contents = Encoding.UTF8.GetBytes(Envelope(archived, "{}", Encoding.UTF8.GetBytes(archived))),
+        };
+        using var service = new PlayniteSettingsService(storage);
+
+        var snapshot = await service.LoadAsync();
+
+        Assert.Equal(expected, snapshot.Get(new SettingsKey<double>("UnmodeledDouble", 0)));
+    }
+
+    [Theory]
+    [InlineData("1e400")]
+    [InlineData("-1e400")]
+    public async Task Double_range_escape_is_a_typed_error_not_an_overflow(string value)
+    {
+        var archived = $$"""{"UnmodeledDouble":{{value}}}""";
+        var storage = new FakeStorage
+        {
+            Contents = Encoding.UTF8.GetBytes(Envelope(archived, "{}", Encoding.UTF8.GetBytes(archived))),
+        };
+        using var service = new PlayniteSettingsService(storage);
+        var snapshot = await service.LoadAsync();
+
+        var exception = Assert.Throws<SettingsException>(
+            () => snapshot.Get(new SettingsKey<double>("UnmodeledDouble", 0)));
+
+        Assert.Equal(SettingsFailure.InvalidValue, exception.Failure);
+        Assert.Contains("UnmodeledDouble", exception.Message);
+    }
+
+    [Fact]
+    public async Task Bom_prefixed_envelope_loads_and_updates_without_a_raw_parser_error()
+    {
+        var envelope = await MigratedEnvelopeAsync();
+        var storage = new FakeStorage { Contents = [0xef, 0xbb, 0xbf, .. envelope] };
+        using var service = new PlayniteSettingsService(storage);
+
+        var loaded = await service.LoadAsync();
+        var updated = await service.UpdateAsync(
+            [SettingsUpdate.Set(PlayniteSettingsKeys.Language, "german")]);
+
+        Assert.Equal(7, loaded.Get(PlayniteSettingsKeys.Version));
+        Assert.Equal("german", updated.Get(PlayniteSettingsKeys.Language));
+    }
+
+    [Fact]
+    public async Task Strict_json_parser_failure_is_reported_as_corrupt()
+    {
+        var archived = Encoding.UTF8.GetBytes("""{"Version":7}""");
+        var envelope = $$$"""
+            {"schemaVersion":1,"settings":{"Version":7,"UnmodeledDouble":NaN},"legacy":{},"settingsUtf8":"{{{Convert.ToBase64String(archived)}}}","report":{"rewrittenPaths":[],"unmappedPaths":[],"preservedUnknownProperties":[]}}
+            """;
+        var storage = new FakeStorage { Contents = Encoding.UTF8.GetBytes(envelope) };
+        using var service = new PlayniteSettingsService(storage);
+
+        var exception = await Assert.ThrowsAsync<SettingsException>(() => service.LoadAsync());
+
+        Assert.Equal(SettingsFailure.Corrupt, exception.Failure);
+        // Newtonsoft accepts the lenient literal; the strict System.Text.Json boundary rejects it.
+        Assert.IsAssignableFrom<System.Text.Json.JsonException>(exception.InnerException);
     }
 
     [Fact]

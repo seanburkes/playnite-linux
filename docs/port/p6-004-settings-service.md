@@ -44,7 +44,8 @@ read or by an unrelated update. The modeled keys are:
 
 `SettingsSnapshot.Settings`, `.Legacy` and `.Report` expose copies of the remaining graph, so
 unmodeled v10 properties remain readable. The key type is extensible for a known v10 root
-property; unknown names are rejected on update and stay in `legacy`.
+property and supports `int`, `long`, `double`, `bool`, `string` and enums; unknown names are
+rejected on update and stay in `legacy`.
 
 ## Read and validation
 
@@ -61,7 +62,14 @@ property; unknown names are rejected on update and stay in `legacy`.
 An integer outside the key's CLR range is rejected at load as `InvalidValue` naming the key, so
 a raw `settings` or `legacy` value such as `"Version": 2147483648` cannot reach a typed read.
 The range check reads the token as `BigInteger`, so a value beyond `long` cannot overflow
-either. An out-of-range `schemaVersion` is `UnsupportedSchema` rather than an overflow.
+either; `double` keys accept only finite values. Every documented key is validated in both
+`settings` and `legacy`, and a malformed value of any key type is that same typed error rather
+than a raw cast. An out-of-range `schemaVersion` is `UnsupportedSchema` rather than an
+overflow.
+
+A UTF-8 BOM is accepted on read and on the compatibility round-trip. A strict
+`System.Text.Json` rejection at the `SettingsMigration.ExportV10` boundary is mapped to
+`Corrupt`; no parser exception escapes the service.
 
 Failures carry a stable category: `Unreadable`, `Corrupt`, `UnsupportedSchema`, `LegacyShape`,
 `InvalidValue`, `AlreadyExists` or `WriteUnavailable`.
@@ -95,7 +103,7 @@ storage write. It never overwrites an existing store.
 
 ## Evidence and test map
 
-Local Release checks on this branch: Core **2728 passed**, Architecture **199 passed**, zero
+Local Release checks on this branch: Core **2766 passed**, Architecture **199 passed**, zero
 failed/skipped; build **0 warnings / 0 errors**.
 
 `tests/Playnite.Core.Tests/Settings/SettingsServiceTests.cs` covers every public operation:
@@ -112,9 +120,10 @@ failed/skipped; build **0 warnings / 0 errors**.
 | Corrupt JSON refusal without overwrite | `Corrupt_json_fails_with_a_clear_category_and_is_never_overwritten` |
 | Explicit v10 boundary | `Raw_v10_config_is_refused_as_an_explicit_migration_boundary` |
 | Schema refusal | `Unsupported_schema_is_refused_without_writing` |
-| Typed-value validation | `Wrong_typed_value_is_rejected_by_load_validation`, `Malformed_typed_values_are_rejected_at_load_with_the_key_name` |
-| Numeric range validation | `Out_of_range_integer_is_rejected_at_load_with_the_key_name`, `Out_of_range_integer_in_legacy_is_rejected_at_load`, `Out_of_range_enum_is_rejected_at_load_with_the_key_name`, `Out_of_range_schema_version_is_unsupported_not_an_overflow` |
-| Int/long boundaries and exact reads | `Int_boundary_values_are_accepted_and_read_exactly`, `Long_boundary_values_read_exactly_through_a_long_key`, `Out_of_range_long_read_is_a_typed_error_not_an_overflow` |
+| Typed-value validation | `Wrong_typed_value_is_rejected_by_load_validation`, `Malformed_typed_values_are_rejected_at_load_with_the_key_name`, `Every_documented_key_rejects_a_wrong_json_type` |
+| Numeric range validation | `Out_of_range_integer_is_rejected_at_load_with_the_key_name`, `Out_of_range_integer_in_legacy_is_rejected_at_load`, `Out_of_range_enum_is_rejected_at_load_with_the_key_name`, `Every_documented_key_rejects_an_integer_beyond_its_clr_range`, `Double_range_escape_is_a_typed_error_not_an_overflow`, `Out_of_range_schema_version_is_unsupported_not_an_overflow` |
+| Int/long/double boundaries and exact reads | `Int_boundary_values_are_accepted_and_read_exactly`, `Long_boundary_values_read_exactly_through_a_long_key`, `Out_of_range_long_read_is_a_typed_error_not_an_overflow`, `Double_boundary_values_read_exactly_through_a_double_key` |
+| BOM and strict-parser mapping | `Bom_prefixed_envelope_loads_and_updates_without_a_raw_parser_error`, `Strict_json_parser_failure_is_reported_as_corrupt` |
 | Unknown-name refusal | `Unknown_property_name_is_not_written_into_settings` |
 | Write/read failure contract | `Write_failure_keeps_the_previous_snapshot_and_does_not_raise`, `Read_failure_is_categorized_and_never_writes` |
 | Atomic-write failure and stage cleanup | `Atomic_write_failure_leaves_the_target_untouched_and_no_stage`, `Unwritable_config_directory_is_reported_before_the_store_exists` |
