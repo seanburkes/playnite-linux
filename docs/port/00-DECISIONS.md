@@ -640,6 +640,18 @@ zero third-party plugins is a claim without a corpus.
 - v1 ships a preview SDK with honest claims.
 - The add-on ecosystem migration is a post-v1 project.
 
+### ADR-023 addendum (2026-11-20) — headless preview plugin surface
+
+p6-009 found that the p6-008 freeze had classified the whole `Playnite.SDK.Plugins` extension
+surface as `deferred`, so no sample plugin could compile against the SDK. The resolution keeps
+the frozen Abstractions unchanged and adds a minimal, explicitly **unfrozen** headless plugin
+surface to `Playnite.SDK`, the preview assembly: `IPlayniteExtension`, `Plugin`,
+`GenericPlugin`, `LibraryPlugin.GetGames`, `MetadataPlugin.GetMetadata` and
+`SupportedFields`, `GetMetadataArgs`, and `GameMetadata`. It carries no `IPlayniteAPI` god
+object, no host service the port cannot implement honestly, and no UI types. It is not covered
+by the Abstractions PublicAPI/ApiCompat baseline and may change before v1. UI extension points
+remain deferred to p8-007; this addendum does not freeze them.
+
 ---
 
 ## ADR-024 — Single-owner review model
