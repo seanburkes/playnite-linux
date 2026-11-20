@@ -13,7 +13,14 @@ public sealed record LibraryQuery(
     bool Descending = false,
     LibraryGroupBy GroupBy = LibraryGroupBy.None,
     int Offset = 0,
-    int? Limit = null);
+    int? Limit = null)
+{
+    /// <summary>Largest accepted zero-based offset.</summary>
+    public const int MaxOffset = 1_000_000;
+
+    /// <summary>Largest accepted explicit page size.</summary>
+    public const int MaxLimit = 10_000;
+}
 
 /// <summary>Stored-field grouping keys. Values follow the v10 GroupableField enumeration.</summary>
 public enum LibraryGroupBy

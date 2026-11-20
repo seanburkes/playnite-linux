@@ -50,7 +50,36 @@ public sealed class LibraryServiceImportTests
         Assert.Equal(new ReleaseDate(2019, 7), game.ReleaseDate);
     }
 
-    private static async Task<LibraryService> ImportAsync(string destination, CancellationToken cancellationToken)
+    [Fact]
+    public async Task Imported_utc_activity_filters_and_groups_by_the_local_calendar_day()
+    {
+        using var temporary = new DatabaseTestDirectory();
+        var timeZone = TimeZoneInfo.FindSystemTimeZoneById("America/Los_Angeles");
+        // The fixture's activity at 04:05 UTC on February 3 is on February 2 in Los Angeles.
+        // At 12:00 UTC both UTC and a sign-flipped offset put both instants on February 3.
+        var clock = new FixedTimeProvider(new DateTimeOffset(2020, 2, 3, 12, 0, 0, TimeSpan.Zero), timeZone);
+        var service = await ImportAsync(temporary.PathFor(), TestContext.Current.CancellationToken, clock);
+
+        var page = await service.ListAsync(new(GroupBy: LibraryGroupBy.LastActivity));
+        Assert.Collection(page.Groups,
+            group =>
+            {
+                Assert.Equal(PastTimeSegment.Yesterday, Assert.IsType<PastTimeSegment>(group.Key));
+                Assert.Equal("220", Assert.Single(group.Games).Value.GameId);
+            },
+            group =>
+            {
+                Assert.Equal(PastTimeSegment.Never, Assert.IsType<PastTimeSegment>(group.Key));
+                Assert.Equal(2, group.Games.Count);
+            });
+
+        var yesterday = LibraryFilter.FromSettings(new() { LastActivity = new() { Values = [(int)PastTimeSegment.Yesterday] } });
+        var filtered = await service.ListAsync(new(Filter: yesterday));
+        Assert.Equal("220", Assert.Single(filtered.Games).Value.GameId);
+    }
+
+    private static async Task<LibraryService> ImportAsync(string destination, CancellationToken cancellationToken,
+        TimeProvider? timeProvider = null)
     {
         var configuration = typeof(LibraryServiceImportTests).Assembly.GetCustomAttribute<AssemblyConfigurationAttribute>()!.Configuration;
         string Product(string name) => RepositoryPaths.Combine("src", name, "bin", configuration, "net11.0", name + ".dll");
@@ -86,6 +115,12 @@ public sealed class LibraryServiceImportTests
         }
         Assert.True(process.ExitCode == 0, await errors);
         Assert.Contains("\"ImportedSteam\":3", await output);
-        return new(await LibraryDatabase.OpenAsync(destination, cancellationToken));
+        return new(await LibraryDatabase.OpenAsync(destination, cancellationToken), timeProvider);
+    }
+
+    private sealed class FixedTimeProvider(DateTimeOffset utcNow, TimeZoneInfo zone) : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow() => utcNow;
+        public override TimeZoneInfo LocalTimeZone => zone;
     }
 }

@@ -1,10 +1,11 @@
 # Library service contract
 
-`Playnite.Core.Library.LibraryService` is the read surface for the CLI and Desktop. Create it
-with the `LibraryDatabase` opened by the host. The CLI unit can call `ListAsync` for list,
-`SearchAsync` for search, and `GetAsync` to resolve a game before a launch dry-run. It can
-consume the returned `StoredGame.Value` for game fields and actions. The Core project
-supplies all of these types and can be loaded headlessly.
+`Playnite.Core.Library.LibraryService` is a read surface in Core. Create it with the
+`LibraryDatabase` opened by the host. The returned `StoredGame.Value` contains game
+fields and actions. Core supplies these types and can be loaded headlessly.
+
+The CLI query commands belong to p6-011. That unit can call `ListAsync` for list,
+`SearchAsync` for search, and `GetAsync` to resolve a game before a launch dry-run.
 
 ## Operations and query order
 
@@ -33,13 +34,19 @@ snapshot, so a write between requests can change page membership.
    groups use an integer and missing years use null. Name groups use the v10 initial
    character, with `#` for missing names, punctuation-only names, or digit initials.
    Other groups use their corresponding Core model enums, including `Never` for missing
-   dates. Date filters and groups convert the stored UTC dates to the host's time zone
-   and use one clock reading per request. The host can inject a `TimeProvider` to control
-   the time zone and reading.
-4. Page the ordered results by zero-based `Offset` and optional positive `Limit`. A null
-   limit returns the remainder. An offset past the end returns an empty page with the
-   pre-page count. Group results contain the members on the current page and preserve
-   their order. Ungrouped queries return an empty group list.
+   dates and `DateTime.MinValue`. Date filters and groups treat stored ticks as UTC,
+   convert them to the host's time zone, and use one clock reading per request.
+   The host can inject a `TimeProvider` to control the time zone and reading.
+4. Page the ordered results by zero-based `Offset` (0 to 1,000,000) and optional
+   `Limit` (1 to 10,000). Values outside those ranges throw
+   `ArgumentOutOfRangeException` before reading SQLite. A null limit returns the
+   remainder. An offset past the end returns an empty page with the pre-page count.
+   Group results contain the members on the current page and preserve their order.
+   Ungrouped queries return an empty group list.
+
+In v1, each list or search reads the full game snapshot into memory before applying the
+v10 query helpers. The bounds cap the supplied paging arguments, so a small explicit page
+size still incurs the cost of loading the snapshot.
 
 The grouping keys cover name, release year, installation status, playtime, user, critic
 and community score, install size, last and recent activity, added and modified. Plugin
@@ -72,4 +79,5 @@ criteria use the existing `{}` sentinel for missing values.
   strict filter binding, sort ties and nulls, grouping, paging and cancellation.
 - `LibraryServiceImportTests` runs the existing `import-v10` command on the frozen
   `tests/fixtures/v10/library` oracle and queries the imported SQLite file. It verifies
-  persisted IDs, graph detachment, Unicode search, hidden filtering and grouped pages.
+  persisted IDs, graph detachment, Unicode search, hidden filtering, grouped pages
+  and UTC activity grouped and filtered by local calendar day.

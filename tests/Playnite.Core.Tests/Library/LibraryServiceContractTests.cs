@@ -136,30 +136,46 @@ public sealed class LibraryServiceContractTests
     }
 
     [Fact]
-    public async Task Date_filter_and_group_use_the_same_injected_local_clock()
+    public async Task Date_filter_and_group_use_the_local_day_across_utc_midnight()
     {
-        var played = Game(1, "Alpha");
-        played.Value.LastActivity = new DateTime(2026, 11, 19, 1, 0, 0, DateTimeKind.Utc);
-        var neverPlayed = Game(2, "Beta");
+        // These straddle UTC midnight and both belong to November 18 at UTC−07.
+        // They also straddle midnight if the zone is applied with the wrong sign.
+        var beforeUtcMidnight = Game(1, "Alpha");
+        beforeUtcMidnight.Value.LastActivity = new DateTime(2026, 11, 18, 16, 0, 0, DateTimeKind.Unspecified);
+        var afterUtcMidnight = Game(2, "Beta");
+        afterUtcMidnight.Value.LastActivity = new DateTime(2026, 11, 19, 1, 0, 0, DateTimeKind.Utc);
+        var neverPlayed = Game(3, "Gamma");
+        neverPlayed.Value.LastActivity = DateTime.MinValue;
+        var missingActivity = Game(4, "Delta");
         var zone = TimeZoneInfo.CreateCustomTimeZone("Test-West", TimeSpan.FromHours(-7), "Test West", "Test West");
         var time = new FixedTimeProvider(new DateTimeOffset(2026, 11, 19, 6, 0, 0, TimeSpan.Zero), zone);
-        var service = new LibraryService(new FakeReader(neverPlayed, played), time);
+        var service = new LibraryService(new FakeReader(neverPlayed, afterUtcMidnight, beforeUtcMidnight, missingActivity), time);
         var filter = LibraryFilter.FromSettings(new() { LastActivity = new() { Values = [(int)PastTimeSegment.Today] } });
 
-        var page = await service.ListAsync(new(Filter: filter, GroupBy: LibraryGroupBy.LastActivity));
+        var groups = (await service.ListAsync(new(GroupBy: LibraryGroupBy.LastActivity))).Groups;
+        Assert.Collection(groups,
+            group =>
+            {
+                Assert.Equal(PastTimeSegment.Today, Assert.IsType<PastTimeSegment>(group.Key));
+                Assert.Equal([Id(1), Id(2)], group.Games.Select(game => game.Value.Id));
+            },
+            group =>
+            {
+                Assert.Equal(PastTimeSegment.Never, Assert.IsType<PastTimeSegment>(group.Key));
+                Assert.Equal([Id(4), Id(3)], group.Games.Select(game => game.Value.Id));
+            });
 
-        Assert.Equal([Id(1)], Ids(page));
-        Assert.Equal(PastTimeSegment.Today, Assert.IsType<PastTimeSegment>(Assert.Single(page.Groups).Key));
+        Assert.Equal([Id(1), Id(2)], Ids(await service.ListAsync(new(Filter: filter))));
     }
 
     [Fact]
-    public async Task Flat_pages_have_no_gaps_and_past_end_retains_total_without_overflow()
+    public async Task Flat_pages_have_no_gaps_and_the_largest_valid_offset_retains_total()
     {
         var service = new LibraryService(new FakeReader(Game(3, "Gamma"), Game(2, "Beta"), Game(1, "Alpha")));
 
         Assert.Equal([Id(1), Id(2)], Ids(await service.ListAsync(new(Offset: 0, Limit: 2))));
         Assert.Equal([Id(3)], Ids(await service.ListAsync(new(Offset: 2, Limit: 2))));
-        var pastEnd = await service.ListAsync(new(Offset: int.MaxValue, Limit: int.MaxValue));
+        var pastEnd = await service.ListAsync(new(Offset: LibraryQuery.MaxOffset, Limit: LibraryQuery.MaxLimit));
         Assert.Equal(3, pastEnd.TotalCount);
         Assert.Empty(pastEnd.Games);
         Assert.Empty(pastEnd.Groups);
@@ -181,6 +197,8 @@ public sealed class LibraryServiceContractTests
     [InlineData(0, 123, 0, 1, "GroupBy", "Unknown library group key")]
     [InlineData(0, 0, -1, 1, "Offset", "-1")]
     [InlineData(0, 0, 0, 0, "Limit", "0")]
+    [InlineData(0, 0, LibraryQuery.MaxOffset + 1, 1, "Offset", "1000001")]
+    [InlineData(0, 0, 0, LibraryQuery.MaxLimit + 1, "Limit", "10001")]
     public async Task Invalid_query_keys_and_bounds_fail_before_read(
         int sort, int group, int offset, int limit, string parameter, string message)
     {

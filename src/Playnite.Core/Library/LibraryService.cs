@@ -44,9 +44,11 @@ public sealed class LibraryService
     {
         cancellationToken.ThrowIfCancellationRequested();
         ArgumentOutOfRangeException.ThrowIfNegative(query.Offset, nameof(query.Offset));
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(query.Offset, LibraryQuery.MaxOffset, nameof(query.Offset));
         if (query.Limit is int limit)
         {
             ArgumentOutOfRangeException.ThrowIfNegativeOrZero(limit, nameof(query.Limit));
+            ArgumentOutOfRangeException.ThrowIfGreaterThan(limit, LibraryQuery.MaxLimit, nameof(query.Limit));
         }
         if (!Enum.IsDefined(query.SortBy))
         {
@@ -126,15 +128,20 @@ public sealed class LibraryService
         public QueryDates(TimeProvider provider)
         {
             zone = provider.LocalTimeZone;
-            Now = TimeZoneInfo.ConvertTime(provider.GetUtcNow(), zone).DateTime;
+            Now = TimeZoneInfo.ConvertTimeFromUtc(provider.GetUtcNow().UtcDateTime, zone);
         }
 
         public DateTime Now { get; }
 
         public PastTimeSegment GetSegment(DateTime? value, DateTime now)
         {
-            // SQLite returns UTC timestamps. v10 segments compare local calendar dates.
-            var local = value is DateTime date ? TimeZoneInfo.ConvertTime(date, zone) : value;
+            if (value is not DateTime date || date == DateTime.MinValue)
+            {
+                return PastTimeSegment.Never;
+            }
+
+            // Stored ticks represent UTC, including when a reader omits the DateTime kind.
+            var local = TimeZoneInfo.ConvertTimeFromUtc(DateTime.SpecifyKind(date, DateTimeKind.Utc), zone);
             return Segments.GetSegment(local, now);
         }
     }
