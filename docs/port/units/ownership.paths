@@ -234,7 +234,7 @@ tests/Playnite.Architecture.Tests/SourcePolicy.cs	p2-guard-wording2	9a4c79f7a916
 tests/Playnite.Architecture.Tests/SourcePolicyTests.cs	p2-002	df9d089fd82efb1456f751f51a43c2a4aee56681	pull/32
 tests/Playnite.Core.Tests/ArchiveTestData.cs	p3-008b	e71ad0db1445f0e382485eaa2a4624d5ec8eb88a	pull/79
 tests/Playnite.Core.Tests/ArchiveTests.cs	p3-008b	e71ad0db1445f0e382485eaa2a4624d5ec8eb88a	pull/79
-tests/Playnite.Core.Tests/Artwork/ArtworkTests.cs	p5-003	22f051a92b6b5a82566fd382a04f9848c30ed756	pull/118
+tests/Playnite.Core.Tests/Artwork/ArtworkTests.cs	p5-003	5a01d39fdf99787f9a265b9f8391b39db2849c78	pull/162
 tests/Playnite.Core.Tests/Artwork/RealArtworkIdentityTests.cs	p5-003	74475aef9353c4a7459ca838d9c3736b1be5a189	pull/152
 tests/Playnite.Core.Tests/AssemblyMarker.cs	p2-001	9afd818ae8a695e921bb98f386bfceb83d0059db	pull/29
 tests/Playnite.Core.Tests/BackupTests.cs	p3-008b	e71ad0db1445f0e382485eaa2a4624d5ec8eb88a	pull/79
