@@ -429,6 +429,106 @@ public sealed class NotificationsApiTests
     }
 
     [Fact]
+    public async Task DismissAllRecordsANullHostResultAndDismissesTheRemainingMessages()
+    {
+        var host = new FakeNotificationHost
+        {
+            DismissHandler = (id, _) => Task.FromResult(id == "two"
+                ? null!
+                : new NotificationHostResult(NotificationHostStatus.Presented)),
+        };
+        var api = new NotificationsApi(host);
+        await api.PublishAsync(Message("one"));
+        await api.PublishAsync(Message("two"));
+        await api.PublishAsync(Message("three"));
+
+        var result = await api.DismissAllAsync();
+
+        Assert.Equal(3, result.Dismissed);
+        Assert.True(result.HasFailures);
+        var failure = Assert.Single(result.Failures);
+        Assert.Equal("two", failure.Id);
+        Assert.Equal(NotificationHostStatus.Failed, failure.Status);
+        Assert.False(failure.Threw);
+        Assert.Equal("The notification host returned no dismissal result.", failure.Diagnostic);
+        Assert.Contains("two", result.Diagnostic, StringComparison.Ordinal);
+        Assert.Equal(new[] { "one", "two", "three" }, host.Dismissed);
+        Assert.Empty(api.Messages);
+    }
+
+    [Fact]
+    public async Task DismissAllRecordsAHostCanceledDismissalAndContinuesWithTheRest()
+    {
+        var host = new FakeNotificationHost
+        {
+            DismissHandler = (id, _) => id == "two"
+                ? throw new OperationCanceledException("the host canceled itself")
+                : Task.FromResult(new NotificationHostResult(NotificationHostStatus.Presented)),
+        };
+        var api = new NotificationsApi(host);
+        await api.PublishAsync(Message("one"));
+        await api.PublishAsync(Message("two"));
+        await api.PublishAsync(Message("three"));
+
+        var result = await api.DismissAllAsync();
+
+        Assert.Equal(3, result.Dismissed);
+        var failure = Assert.Single(result.Failures);
+        Assert.Equal("two", failure.Id);
+        Assert.Equal(NotificationHostStatus.Failed, failure.Status);
+        Assert.True(failure.Threw);
+        Assert.Equal("the host canceled itself", failure.Diagnostic);
+        Assert.Contains("two", result.Diagnostic, StringComparison.Ordinal);
+        Assert.Equal(new[] { "one", "two", "three" }, host.Dismissed);
+        Assert.Empty(api.Messages);
+    }
+
+    [Fact]
+    public async Task DismissAllAggregatesNullReturnedThrownAndCanceledHostOutcomes()
+    {
+        var host = new FakeNotificationHost
+        {
+            DismissHandler = (id, _) => id switch
+            {
+                "null" => Task.FromResult<NotificationHostResult>(null!),
+                "returned" => Task.FromResult(
+                    new NotificationHostResult(NotificationHostStatus.Unavailable, "no transport")),
+                "threw" => Task.FromException<NotificationHostResult>(
+                    new InvalidOperationException("the host exploded")),
+                "canceled" => Task.FromException<NotificationHostResult>(
+                    new OperationCanceledException("the host canceled")),
+                _ => Task.FromResult(new NotificationHostResult(NotificationHostStatus.Presented)),
+            },
+        };
+        var api = new NotificationsApi(host);
+        foreach (var id in new[] { "null", "returned", "threw", "canceled", "ok" })
+        {
+            await api.PublishAsync(Message(id));
+        }
+
+        var result = await api.DismissAllAsync();
+
+        Assert.Equal(5, result.Dismissed);
+        Assert.Equal(4, result.FailedCount);
+        Assert.Equal(
+            new[] { "null", "returned", "threw", "canceled" },
+            result.Failures.Select(item => item.Id));
+        Assert.Equal(
+            new[]
+            {
+                NotificationHostStatus.Failed,
+                NotificationHostStatus.Unavailable,
+                NotificationHostStatus.Failed,
+                NotificationHostStatus.Failed,
+            },
+            result.Failures.Select(item => item.Status));
+        Assert.Equal(new[] { false, false, true, true }, result.Failures.Select(item => item.Threw));
+        Assert.Equal("no transport", result.Failures[1].Diagnostic);
+        Assert.Equal(new[] { "null", "returned", "threw", "canceled", "ok" }, host.Dismissed);
+        Assert.Empty(api.Messages);
+    }
+
+    [Fact]
     public async Task DismissAllCancellationThrowsAfterClearingTheLocalList()
     {
         using var source = new CancellationTokenSource();
@@ -447,6 +547,28 @@ public sealed class NotificationsApiTests
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => api.DismissAllAsync(source.Token));
 
+        Assert.Empty(api.Messages);
+    }
+
+    [Fact]
+    public async Task DismissAllStopsWhenTheCallerCancelsBetweenHostCalls()
+    {
+        using var source = new CancellationTokenSource();
+        var host = new FakeNotificationHost
+        {
+            DismissHandler = (_, _) =>
+            {
+                source.Cancel();
+                return Task.FromResult(new NotificationHostResult(NotificationHostStatus.Presented));
+            },
+        };
+        var api = new NotificationsApi(host);
+        await api.PublishAsync(Message("one"));
+        await api.PublishAsync(Message("two"));
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => api.DismissAllAsync(source.Token));
+
+        Assert.Single(host.Dismissed);
         Assert.Empty(api.Messages);
     }
 

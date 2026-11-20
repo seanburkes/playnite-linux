@@ -411,6 +411,27 @@ public sealed class NotificationsApi : INotificationsAPI
             try
             {
                 result = await host.DismissAsync(id, cancellationToken).ConfigureAwait(false);
+                if (result is null)
+                {
+                    failures.Add(new NotificationDismissFailure(
+                        id,
+                        NotificationHostStatus.Failed,
+                        "The notification host returned no dismissal result.",
+                        Threw: false));
+                    diagnostics.Add($"{id}: the notification host returned no dismissal result.");
+                    continue;
+                }
+            }
+            catch (OperationCanceledException exception) when (!cancellationToken.IsCancellationRequested)
+            {
+                // A host that cancels its own work is a host failure; only the caller's token aborts.
+                failures.Add(new NotificationDismissFailure(
+                    id,
+                    NotificationHostStatus.Failed,
+                    exception.Message,
+                    Threw: true));
+                diagnostics.Add($"{id}: {exception.Message}");
+                continue;
             }
             catch (OperationCanceledException)
             {
