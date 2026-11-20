@@ -1026,6 +1026,46 @@ def validate_cross_unit_move(
     return frozenset(manifest)
 
 
+def authorised_cross_unit_move(
+    repo: Path,
+    head: str,
+    *,
+    declared: str | None,
+    changes: list[Change],
+    ownership: OwnershipMap,
+    touched: dict[str, list[str]],
+    units: set[str],
+) -> tuple[dict[str, str] | None, frozenset[str]]:
+    """Validate the head-commit manifest once for every required guard.
+
+    Both ``check_unit_ownership.py`` and ``check_unit_evidence.py`` call this
+    helper, so the foreign-path exemption and every manifest rule are applied
+    by the same code.  It returns the parsed manifest (``None`` when absent)
+    and exactly the foreign paths the manifest authorises; callers may exempt
+    only those paths from their foreign path checks.  A manifest without a unit
+    declaration fails here, before either caller decides the PR is a process
+    PR.
+    """
+
+    manifest = cross_unit_move_manifest(repo, head, units)
+    if manifest is None:
+        return None, frozenset()
+    if declared is None:
+        raise GuardError(
+            "the Cross-Unit-Move trailer requires a unit declaration; name "
+            "the moving unit with fm/<unit>, a 'Port-Unit: <unit>' "
+            "head-commit trailer, or --unit"
+        )
+    return manifest, validate_cross_unit_move(
+        manifest,
+        declared=declared,
+        changes=changes,
+        ownership=ownership,
+        touched=touched,
+        units=units,
+    )
+
+
 def _tree_entry(repo: Path, revision: str, path: str) -> tuple[str, str] | None:
     output = git(repo, "--literal-pathspecs", "ls-tree", "-z", revision, "--", path)
     entries = [item for item in output.split(b"\0") if item]

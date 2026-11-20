@@ -15,8 +15,15 @@ A unit PR must, in the diff from the merge base to the PR head:
 
 A process PR that touches no unit evidence needs neither.  The check never
 writes, never flips state, and fails closed whenever the owning unit is
-ambiguous.  ``--verify-ci`` resolves every cited run through the read-only
-GitHub API: the run must exist in this repository, be a completed successful
+ambiguous.
+
+The head-commit ``Cross-Unit-Move`` trailer is validated by the same shared
+helper as the ownership guard.  Exactly the listed foreign paths it authorises
+are exempt from both the foreign unit-evidence check and the map-owned foreign
+path check; an unlisted path, a wrong owner, or an unpaired entry still fails.
+
+``--verify-ci`` resolves every cited run through the read-only GitHub API: the
+run must exist in this repository, be a completed successful
 ``linux-ci`` run, and its ``head_sha`` must equal a head the fragment cites.
 The workflow always enables it.
 
@@ -37,6 +44,7 @@ from unit_guard_common import (  # noqa: E402
     REAL_QUEUE_STATES,
     OwnershipMap,
     GuardError,
+    authorised_cross_unit_move,
     bot_owned_errors,
     changed_paths,
     claim_is_allowed,
@@ -280,6 +288,15 @@ def main(argv: list[str]) -> int:
 
         touched = touched_units(changes, units, expected)
         owned = ownership_hits(changes, ownership)
+        _, allowed_foreign = authorised_cross_unit_move(
+            repo,
+            head,
+            declared=expected,
+            changes=changes,
+            ownership=ownership,
+            touched=touched,
+            units=units,
+        )
         if expected is None:
             if touched or owned or product:
                 details = "\n".join(
@@ -330,12 +347,18 @@ def main(argv: list[str]) -> int:
                    "; product paths changed:\n" + "\n".join(
                        f"  {path}" for path in product))
             )
-        foreign = sorted(unit for unit in touched if unit != expected)
+        foreign = sorted(
+            unit
+            for unit in touched
+            if unit != expected
+            and any(path not in allowed_foreign for path in touched[unit])
+        )
         if foreign:
             details = "\n".join(
                 f"  {path} (unit {unit})"
                 for unit in foreign
                 for path in touched[unit]
+                if path not in allowed_foreign
             )
             raise GuardError(
                 f"unit PR {expected} touches foreign unit evidence:\n{details}"
@@ -343,6 +366,7 @@ def main(argv: list[str]) -> int:
         foreign_owned = {
             path: rows for path, rows in owned.items()
             if not claim_is_allowed(rows, expected)
+            and path not in allowed_foreign
         }
         if foreign_owned:
             details = "\n".join(

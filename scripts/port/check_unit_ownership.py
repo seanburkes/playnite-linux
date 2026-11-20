@@ -47,10 +47,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from unit_guard_common import (  # noqa: E402
     OwnershipMap,
     GuardError,
+    authorised_cross_unit_move,
     bot_owned_errors,
     changed_paths,
     claim_is_allowed,
-    cross_unit_move_manifest,
     declared_unit,
     first_map_errors,
     format_paths,
@@ -65,7 +65,6 @@ from unit_guard_common import (  # noqa: E402
     resolve_commit,
     symlink_errors,
     touched_units,
-    validate_cross_unit_move,
 )
 
 
@@ -184,13 +183,15 @@ def main(argv: list[str]) -> int:
 
         touched = touched_units(changes, units, declared)
         owned = ownership_hits(changes, ownership)
-        move = cross_unit_move_manifest(repo, head, units)
-        if move is not None and declared is None:
-            raise GuardError(
-                "the Cross-Unit-Move trailer requires a unit declaration; name "
-                "the moving unit with fm/<unit>, a 'Port-Unit: <unit>' "
-                "head-commit trailer, or --unit"
-            )
+        move, allowed_foreign = authorised_cross_unit_move(
+            repo,
+            head,
+            declared=declared,
+            changes=changes,
+            ownership=ownership,
+            touched=touched,
+            units=units,
+        )
 
         if declared is None:
             migration = _migration_unit(changes)
@@ -231,19 +232,6 @@ def main(argv: list[str]) -> int:
             print("unit: (none)")
             print("process PR: no unit-owned or product/test/tool path is touched")
             return 0
-
-        allowed_foreign = (
-            validate_cross_unit_move(
-                move,
-                declared=declared,
-                changes=changes,
-                ownership=ownership,
-                touched=touched,
-                units=units,
-            )
-            if move is not None
-            else frozenset()
-        )
 
         if len(touched) > 1:
             uncovered = {

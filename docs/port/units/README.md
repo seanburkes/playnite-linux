@@ -128,8 +128,10 @@ The value is a comma-separated list of `<owning-unit>:<path>` pairs with no whit
 is the path's actual owner, not the moving unit; the path is repository-relative. Multiple
 `Cross-Unit-Move` lines are concatenated, and a path may appear only once.
 
-The ownership guard allows exactly the foreign paths the manifest covers, and only when all of
-these hold:
+Both required guard jobs, `unit-ownership` and `unit-evidence`, read this same head-commit
+manifest through the shared `unit_guard_common.authorised_cross_unit_move` validator. Each job
+exempts exactly the listed, validated foreign paths from its own foreign-path checks, and only
+when all of these hold:
 
 1. Every path the pull request changes that is owned by another unit (through the ownership map
    or a unit evidence namespace) appears in the manifest with its actual owning unit, and its diff
@@ -149,9 +151,13 @@ these hold:
 An empty or malformed manifest, a path the diff does not change, a wrong owner, a listed added
 foreign path, a delete without its own same-basename declaring-unit counterpart, two deletes
 sharing one add, a modification without its own delete, and two modifications sharing one delete
-all fail closed with a named reason. The rest of the guard is unchanged: one unit declaration,
-the queue transition and fragment, the base ownership map, symlink checks and the read-only diff
-all still apply. This exception is not a general permission to edit another unit's files.
+all fail closed with a named reason. Because both jobs call that one validator, a manifest cannot
+satisfy the ownership check while being weaker or absent in the evidence check. Both jobs still
+apply their own remaining rules: one unit declaration, the queue transition and fragment, the
+base ownership map, symlink checks and the read-only diff all still apply. For the evidence job
+this means the listed paths are exempt from both its foreign unit-evidence check and its
+map-owned foreign path check, while every unlisted foreign path still fails each job. This
+exception is not a general permission to edit another unit's files.
 
 A cross-unit move is a captain-authorised operation, not something a contributor can
 self-approve. It requires the `oracle-change` label through the protected-path gate, and the
