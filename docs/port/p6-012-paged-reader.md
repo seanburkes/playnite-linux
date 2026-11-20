@@ -1,8 +1,8 @@
 # p6-012 — bounded ordered paging
 
 `Playnite.Core.Library.PagedLibraryReader` reads one page of the stored library in a total
-order computed by SQLite. This unit adds the reader without editing `LibraryService` or
-`GameRepository`; a later p6-001 change wires the unfiltered, ungrouped list path to it.
+order computed by SQLite. It is additive: `LibraryService` and `GameRepository` keep their
+existing contracts and are not edited by this unit.
 
 ## Operations
 
@@ -36,8 +36,8 @@ ascending and last descending.
 Text columns (`Name`, `Version`, `InstallDirectory`, `RomList`) order with SQLite's NOCASE
 collation. `PagedLibraryComparer` is the in-memory mirror: it folds ASCII `A`-`Z` and compares
 code units, exactly matching NOCASE, so SQL and the comparer share one canonical text order.
-The p6-001 adoption now uses this canonical order in `LibraryService` too, replacing the old
-current-culture text comparer; numeric, date and flag keys are unchanged.
+`GameComparer`/`LibraryService` in p6-001 keep current-culture text order; this unit does not
+change that comparator. Numeric, date and flag keys match `GameComparer`.
 
 ## SQL and memory
 
@@ -64,11 +64,10 @@ cancelled call throws `OperationCanceledException` without a partial page.
 
 ## Boundary
 
-Wiring status: **wired**. The p6-001 follow-up makes `LibraryService.ListAsync` delegate an
-unfiltered, ungrouped list to this reader, so a bounded page reads only its window and a null
-limit reads the remainder as one window while it fits the page cap. Filters, v10 text search
-and grouping stay with p6-001 and keep their one-snapshot in-memory path, because the v10
-matcher, filter helpers and group keys are not stored SQL expressions.
+This unit is a paging primitive only; no production caller is wired in this PR. Wiring it into
+`LibraryService.ListAsync`/`SearchAsync` is a p6-001 follow-up and requires editing that
+p6-001-owned file, so list and search still read the full snapshot until then. Filters, v10
+text search and grouping stay with p6-001/p6-011.
 
 ## Tests
 
@@ -83,8 +82,3 @@ BINARY order; and a total-order test that reads the stored `Id` text and pins th
 final ordinal identity key. Every game in that test ties on the primary key and the name and is
 inserted in reverse text order, so dropping the identity key leaves the stable sort in insertion
 order and fails the test; the same holds for both directions.
-
-`LibraryServicePagingTests` covers the adoption: an instrumented reader session records the
-requested offset and limit for `LibraryService.ListAsync`, and the mixed-case, accented and
-numeric-prefixed text order is compared across `LibraryService`, `PagedLibraryReader` and
-`PagedLibraryComparer`.
