@@ -6,6 +6,8 @@ namespace Playnite.Core.Library;
 /// <summary>
 /// In-memory mirror of the paged reader's total order. Text fields compare with
 /// <see cref="AsciiCaseInsensitiveComparer"/>, which reproduces SQLite's NOCASE collation.
+/// The final tie-breaker compares the stored identity as ordinal text, matching
+/// <c>game.Id ASC</c>.
 /// </summary>
 public sealed class PagedLibraryComparer : IComparer<Game>
 {
@@ -35,8 +37,21 @@ public sealed class PagedLibraryComparer : IComparer<Game>
             return descending ? -Math.Sign(result) : Math.Sign(result);
         }
 
-        return order == SortOrder.Name ? 0 : AsciiCaseInsensitiveComparer.Instance.Compare(Name(x), Name(y));
+        if (order != SortOrder.Name)
+        {
+            result = AsciiCaseInsensitiveComparer.Instance.Compare(Name(x), Name(y));
+            if (result != 0)
+            {
+                return Math.Sign(result);
+            }
+        }
+
+        // The reader closes every ORDER BY with `game.Id ASC`, comparing the canonical stored
+        // text (Guid.ToString("D"), lowercase) under SQLite's BINARY collation, i.e. ordinal.
+        return Math.Sign(string.CompareOrdinal(StoredIdentity(x), StoredIdentity(y)));
     }
+
+    private static string StoredIdentity(Game game) => game.Id.ToString("D");
 
     private static string? Name(Game game)
         => string.IsNullOrEmpty(game.SortingName) ? game.Name : game.SortingName;

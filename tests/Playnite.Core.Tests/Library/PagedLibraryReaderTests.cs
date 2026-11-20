@@ -263,12 +263,41 @@ public sealed class PagedLibraryReaderTests
         {
             var expected = games.Select(stored => stored.Value)
                 .OrderBy(game => game, new PagedLibraryComparer(sort, descending))
-                .ThenBy(game => game.Id)
                 .Select(game => game.Id);
             var actual = await reader.ListAsync(
                 new(SortBy: sort, Descending: descending, Limit: 20), cancellationToken);
 
             Assert.Equal(expected, Ids(actual));
+        }
+    }
+
+    [Theory]
+    [InlineData(SortOrder.Name)]
+    [InlineData(SortOrder.UserScore)]
+    public async Task Comparer_order_equals_paged_order_when_sort_keys_are_tied(SortOrder sort)
+    {
+        using var files = new DatabaseTestDirectory();
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var games = IdentityTieGames();
+        var database = await SeedAsync(files, cancellationToken, games);
+
+        var stored = (await database.ReadAsync(
+            session => session.QueryAsync<string>("SELECT Id FROM game;"), cancellationToken)).ToArray();
+        Assert.All(stored, id => Assert.Equal(Guid.Parse(id).ToString("D"), id));
+        var expected = stored.OrderBy(id => id, StringComparer.Ordinal).Select(Guid.Parse).ToArray();
+
+        var reader = new PagedLibraryReader(database);
+        foreach (var descending in new[] { false, true })
+        {
+            var actual = await reader.ListAsync(
+                new PagedLibraryQuery(SortBy: sort, Descending: descending, Limit: 20), cancellationToken);
+            var comparer = games.Select(storedGame => storedGame.Value)
+                .OrderBy(game => game, new PagedLibraryComparer(sort, descending))
+                .Select(game => game.Id)
+                .ToArray();
+
+            Assert.Equal(expected, Ids(actual));
+            Assert.Equal(Ids(actual), comparer);
         }
     }
 
@@ -295,6 +324,23 @@ public sealed class PagedLibraryReaderTests
         new(new Game(Id(7), "7") { Name = "Tie B", UserScore = 50 }),
         new(new Game(Id(9), "9") { Name = "Tie A", UserScore = 50 }),
     ];
+
+    // Every game shares a sort key, so the page is ordered wholly by stored identity. These
+    // identities are inserted out of TEXT order, and expected order comes from the stored
+    // identity strings themselves rather than Guid.CompareTo.
+    private static StoredGame[] IdentityTieGames()
+    {
+        Guid[] ids =
+        [
+            Guid.Parse("80000000-0000-0000-0000-000000000000"),
+            Guid.Parse("00000000-0000-0000-0000-000000000001"),
+            Guid.Parse("7fffffff-0000-0000-0000-000000000000"),
+            Guid.Parse("00000000-8000-0000-0000-000000000000"),
+            Guid.Parse("00000000-7fff-0000-0000-000000000000"),
+        ];
+        return ids.Select(id => new StoredGame(
+            new Game(id, id.ToString("D")) { Name = "Tie", UserScore = 50 })).ToArray();
+    }
 
     private static StoredGame[] ComparisonGames() =>
     [

@@ -36,8 +36,11 @@ ascending and last descending.
 Text columns (`Name`, `Version`, `InstallDirectory`, `RomList`) order with SQLite's NOCASE
 collation. `PagedLibraryComparer` is the in-memory mirror: it folds ASCII `A`-`Z` and compares
 code units, exactly matching NOCASE, so SQL and the comparer share one canonical text order.
-`GameComparer`/`LibraryService` in p6-001 keep current-culture text order; this unit does not
-change that comparator. Numeric, date and flag keys match `GameComparer`.
+The identity tie-breaker is not NOCASE: `game.Id ASC` compares the canonical stored text
+(`Guid.ToString("D")`, lowercase) under BINARY collation, so the comparer compares that same
+ordinal text rather than `Guid.CompareTo`, whose field ordering differs. `GameComparer`/
+`LibraryService` in p6-001 keep current-culture text order; this unit does not change that
+comparator. Numeric, date and flag keys match `GameComparer`.
 
 ## SQL and memory
 
@@ -76,6 +79,8 @@ limit bounds; duplicate primary keys with name and identity ties; descending nul
 determinism across repeated calls and reversed insertion order; pre-read and mid-load
 cancellation; the generated statement's `LIMIT`/`OFFSET`/tie-breaker; an instrumented session
 seam proving a page of N requests only the N-row window; numeric and date parity with
-`LibraryService` in both directions; and text order against `PagedLibraryComparer` for
+`LibraryService` in both directions; text order against `PagedLibraryComparer` for
 mixed-case, accented and numeric-prefixed titles, including a case-only test that fails under
-BINARY order.
+BINARY order; and comparer parity with the paged order on a fully tied data set, pinning the
+identity tie-break to the stored TEXT representation rather than insertion order or
+`Guid.CompareTo`.

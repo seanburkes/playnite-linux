@@ -9,8 +9,11 @@ namespace Playnite.Core.Library;
 /// graphs are loaded.
 /// </summary>
 /// <remarks>
-/// Text columns order with SQLite's BINARY collation, so a page is stable across runs and
-/// locales. The final tie-breaker is the stored identity, ascending.
+/// Text sort keys and the effective-name fallback order with SQLite's NOCASE collation, so a
+/// page is stable across runs and locales. The requested direction applies only to the primary
+/// key; the effective name and identity fallbacks always ascend. The final tie-breaker compares
+/// the stored identity as canonical lowercase text (<c>Guid.ToString("D")</c>) under BINARY
+/// collation.
 /// </remarks>
 public sealed class PagedLibraryReader
 {
