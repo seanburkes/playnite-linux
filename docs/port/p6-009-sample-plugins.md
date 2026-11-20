@@ -96,6 +96,12 @@ dotnet test --project tests/Playnite.Architecture.Tests/Playnite.Architecture.Te
   total 210, failed 0, succeeded 210, skipped 0
 ```
 
+Real linux-ci: [run 44836110479](https://github.com/seanburkes/playnite-linux/actions/runs/44836110479)
+on head `2cb6ce6b39a278a42ddf93d42c574322e3d9dfd5`, based on main `6ef2ca5`, completed
+successfully. The downloaded `linux-test-results` artifact reports Core 3066/3066,
+Architecture 210/210, Smoke 4/4 and Plugin 15/15 total/executed/passed, every suite 0 failed
+and 0 skipped with exit 0.
+
 ## 5. Shared solution edit
 
 `Playnite.slnx` is shared build metadata outside the ownership map. This unit adds one
