@@ -63,16 +63,16 @@ Phase 6 (Core services and SDK v7) is next. The acceptance record is
 | Status | Units |
 | --- | ---: |
 | deferred | 1 |
-| done | 77 |
+| done | 78 |
 | in-progress | 3 |
-| todo | 25 |
+| todo | 24 |
 
 ## Ledger
 
 | Metric | Value |
 | --- | ---: |
-| Ledger rows | 320 |
-| Ledger fragments | 93 |
+| Ledger rows | 323 |
+| Ledger fragments | 96 |
 
 ## Units
 
@@ -160,7 +160,7 @@ Phase 6 (Core services and SDK v7) is next. The acceptance record is
 | p6-001 | W6 | core | Library service | done | `units/p6-001.*`; 2 ledger rows |
 | p6-002 | W6 | core | Import service | done | `units/p6-002.*`; 2 ledger rows |
 | p6-003 | W6 | core | Settings/metadata services | todo | `units/p6-003.*`; 0 ledger rows |
-| p6-004 | W6 | sdk | SDK v7 contracts | todo | `units/p6-004.*`; 0 ledger rows |
+| p6-004 | W6 | core | Settings service | done | `units/p6-004.*`; 3 ledger rows |
 | p6-005 | W6 | sdk | Sample plugins | todo | `units/p6-005.*`; 0 ledger rows |
 | p6-011 | W6 | core | CLI query surface | done | `units/p6-011.*`; 2 ledger rows |
 | p6-012 | W6 | core | Repository-level ordered paging for list/search | done | `units/p6-012.*`; 3 ledger rows |
