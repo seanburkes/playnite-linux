@@ -108,7 +108,10 @@ src/Playnite.Core/Serialization/TomlSerialization.cs	p3-003c	0f1c774400a829cd45e
 src/Playnite.Core/Serialization/YamlDepthGuard.cs	p3-003c	0f1c774400a829cd45e1647245bf0a802e237ebb	pull/69
 src/Playnite.Core/Serialization/YamlNullGuard.cs	p3-003c	0f1c774400a829cd45e1647245bf0a802e237ebb	pull/69
 src/Playnite.Core/Serialization/YamlSerialization.cs	p3-003c	0f1c774400a829cd45e1647245bf0a802e237ebb	pull/69
+src/Playnite.Core/Settings/SettingsKey.cs	p6-004	c5ac0c7707f33702aa490b442a9aba983c9280bd	pull/181
 src/Playnite.Core/Settings/SettingsMigration.cs	p4-004	a6f8bfc7e3cf94a37c5c043da6f2e90609b2ba6b	pull/91
+src/Playnite.Core/Settings/SettingsService.cs	p6-004	c5ac0c7707f33702aa490b442a9aba983c9280bd	pull/181
+src/Playnite.Core/Settings/SettingsStorage.cs	p6-004	c5ac0c7707f33702aa490b442a9aba983c9280bd	pull/181
 src/Playnite.Core/Settings/V10SettingsProperties.cs	p4-004	704b7b83e69aee31ebfd5f32c83eccee8e0ae657	pull/89
 src/Playnite.Desktop/App.cs	p2-004	34af4f0fb6430fbc585d3b76ce85094390a26467	pull/34
 src/Playnite.Desktop/AssemblyMarker.cs	p2-001	9afd818ae8a695e921bb98f386bfceb83d0059db	pull/29
@@ -323,6 +326,7 @@ tests/Playnite.Core.Tests/Sessions/LinuxProcessLauncherTests.cs	p5-004	5c4d11a68
 tests/Playnite.Core.Tests/Sessions/ProcessTestDoubles.cs	p5-004	064e261b5bffa6c434515b9851160a21fd0e317d	pull/120
 tests/Playnite.Core.Tests/Sessions/SessionEventRecorder.cs	p5-004	064e261b5bffa6c434515b9851160a21fd0e317d	pull/120
 tests/Playnite.Core.Tests/Sessions/SessionTestDoubles.cs	p5-004	35b61264636fe22d012ee06c439b9d2f178bebb5	pull/164
+tests/Playnite.Core.Tests/Settings/SettingsServiceTests.cs	p6-004	c5ac0c7707f33702aa490b442a9aba983c9280bd	pull/181
 tests/Playnite.Core.Tests/SettingsMigrationTests.cs	p4-004	a6f8bfc7e3cf94a37c5c043da6f2e90609b2ba6b	pull/91
 tests/Playnite.Core.Tests/Steam/SteamDiscoveryTests.cs	p5-002	f8aed2fe6b29918fbe6bc29dd5f3b54a7af6fcee	pull/112
 tests/Playnite.Core.Tests/Steam/SteamParserTests.cs	p5-001	777578cc81efb0130b41924c282542f0b346836c	pull/109
