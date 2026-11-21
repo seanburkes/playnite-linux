@@ -67,16 +67,16 @@ in [`gates/P5-pending.md`](gates/P5-pending.md).
 | Status | Units |
 | --- | ---: |
 | deferred | 1 |
-| done | 88 |
+| done | 89 |
 | in-progress | 5 |
-| todo | 19 |
+| todo | 18 |
 
 ## Ledger
 
 | Metric | Value |
 | --- | ---: |
-| Ledger rows | 352 |
-| Ledger fragments | 125 |
+| Ledger rows | 355 |
+| Ledger fragments | 128 |
 
 ## Units
 
@@ -179,7 +179,7 @@ in [`gates/P5-pending.md`](gates/P5-pending.md).
 | p7-001 | W7 | ui | Bootstrap/DI/theme/localisation | done | `units/p7-001.*`; 2 ledger rows |
 | p7-002 | W7 | ui | Shell/main window | done | `units/p7-002.*`; 3 ledger rows |
 | p7-003 | W7 | ui | Library grid/list/details | done | `units/p7-003.*`; 4 ledger rows |
-| p7-004 | W7 | ui | Search/filter/sort | todo | `units/p7-004.*`; 0 ledger rows |
+| p7-004 | W7 | ui | Search/filter/sort | done | `units/p7-004.*`; 3 ledger rows |
 | p7-005 | W7 | ui | Game edit/metadata | todo | `units/p7-005.*`; 0 ledger rows |
 | p7-006 | W7 | ui | Settings/first-run/import | todo | `units/p7-006.*`; 0 ledger rows |
 | p7-007 | W7 | ui | Tray/protocol/keyboard | todo | `units/p7-007.*`; 0 ledger rows |
