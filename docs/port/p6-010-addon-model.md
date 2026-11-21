@@ -185,13 +185,19 @@ dotnet test tests/Playnite.Architecture.Tests -c Release
   total 210, failed 0, succeeded 210, skipped 0
 ```
 
-Real linux-ci: [run 44840650650](https://github.com/seanburkes/playnite-linux/actions/runs/44840650650)
-on head `b67d995653fe7f376e629a96615ab75832603544`, based on main `8bb2617`, completed
-successfully. The downloaded `linux-test-results` artifact reports Core 3113/3113,
-Architecture 210/210, Smoke 4/4 and Plugin 15/15 total/executed/passed, every suite 0 failed
-and 0 skipped with exit 0. That run predates the follow-up commits that add recursive discovery,
-FIFO rejection, the rollback test and the theme deferral; the follow-up head's run is recorded
-in this unit's ledger fragment.
+The first linux-ci run on the original head was
+[run 44840650650](https://github.com/seanburkes/playnite-linux/actions/runs/44840650650) on head
+`b67d995653fe7f376e629a96615ab75832603544`, based on main `8bb2617`, completed successfully.
+Its downloaded `linux-test-results` artifact reports Core 3113/3113, Architecture 210/210,
+Smoke 4/4 and Plugin 15/15 total/executed/passed, every suite 0 failed and 0 skipped with exit 0.
+
+That run predates the follow-up commits that add recursive discovery, FIFO rejection, the
+rollback test and the theme deferral. The final code head
+`6daf89e60f7a46e40519a3b28fa82b27656cd7d4` was built and tested by
+[linux-ci run 44847415395](https://github.com/seanburkes/playnite-linux/actions/runs/44847415395),
+whose `head_sha` equals that head; it completed successfully. All 8 PR checks pass on the same
+head (`gh-axi pr checks 215`: 8 passed, 0 failed). The local runs quoted above were made on that
+same head after restoring the mutated predicate.
 
 ## 6. Out of scope
 
