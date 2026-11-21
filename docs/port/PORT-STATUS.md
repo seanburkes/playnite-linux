@@ -7,9 +7,11 @@
 
 **Phase state:** Phase 5 was accepted 2026-11-19 on the owner-approved launch-only Flatpak scope.
 Phase 6 core services and SDK v7 are merged, and the Phase 6 exit-gate evidence assessment is
-recorded in [`gates/P6-pending.md`](gates/P6-pending.md): **3 PROVEN / 1 PARTIAL / 0 DEFERRED**.
-Phase 6 evidence is **pending captain acceptance**; the gate is not claimed and
-`gates/P6-accepted.md` is intentionally not written. Phase 7 is next. The Phase 5 acceptance record
+recorded in [`gates/P6-pending.md`](gates/P6-pending.md): **4 PROVEN / 0 PARTIAL / 0 DEFERRED**.
+Criterion 1 was closed by the merged process-level launch `--dry-run` proof (#220, `6a2672a`),
+which shows a real child CLI process printing a `started:false` plan; the other three criteria were
+re-verified at the current `main`. Phase 6 evidence is **pending captain acceptance**; the gate is
+not claimed and `gates/P6-accepted.md` is intentionally not written. Phase 7 is next. The Phase 5 acceptance record
 remains [`gates/P5-accepted.md`](gates/P5-accepted.md) with supporting evidence in
 [`gates/P5-pending.md`](gates/P5-pending.md).
 
