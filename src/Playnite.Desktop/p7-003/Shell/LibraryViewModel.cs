@@ -20,6 +20,7 @@ public sealed class LibraryViewModel
     private readonly string databasePath;
     private LibraryDatabase? database;
     private LibraryService? service;
+    private int pageOffset;
 
     public LibraryViewModel(string databasePath)
     {
@@ -34,6 +35,16 @@ public sealed class LibraryViewModel
     public int TotalCount { get; private set; }
 
     public string Status { get; private set; } = "unloaded";
+
+    public int PageCount => TotalCount == 0 ? 1 : (TotalCount + PageSize - 1) / PageSize;
+
+    public int CurrentPage => pageOffset / PageSize + 1;
+
+    public bool CanGoPrevious => CurrentPage > 1;
+
+    public bool CanGoNext => CurrentPage < PageCount;
+
+    public string PageIndicator => $"Page {CurrentPage} / {PageCount}";
 
     public async Task LoadAsync(CancellationToken cancellationToken = default)
     {
@@ -55,6 +66,7 @@ public sealed class LibraryViewModel
             new LibraryQuery(Offset: offset, Limit: PageSize, SortBy: SortOrder.Name),
             cancellationToken).ConfigureAwait(false);
 
+        pageOffset = offset;
         TotalCount = page.TotalCount;
         Rows = page.Games
             .Select(game => new LibraryRow(game.Value.Id, game.Value.Name ?? "(unnamed)", game.Value.GameId))
@@ -62,6 +74,39 @@ public sealed class LibraryViewModel
         var first = Rows.Count > 0 ? Rows[0] : null;
         Selected = first is null ? null : await LoadDetailsAsync(first, cancellationToken).ConfigureAwait(false);
         Status = TotalCount == 0 ? "empty" : "loaded";
+    }
+
+    /// <summary>Loads the selected row's details through the service; used by the real row control.</summary>
+    public async Task SelectAsync(LibraryRow? row, CancellationToken cancellationToken = default)
+    {
+        if (row is null)
+        {
+            Selected = null;
+            return;
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
+        Selected = await LoadDetailsAsync(row, cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task NextPageAsync(CancellationToken cancellationToken = default)
+    {
+        if (!CanGoNext)
+        {
+            return;
+        }
+
+        await LoadPageAsync(CurrentPage * PageSize, cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task PreviousPageAsync(CancellationToken cancellationToken = default)
+    {
+        if (!CanGoPrevious)
+        {
+            return;
+        }
+
+        await LoadPageAsync((CurrentPage - 2) * PageSize, cancellationToken).ConfigureAwait(false);
     }
 
     private async Task<LibraryRow> LoadDetailsAsync(LibraryRow row, CancellationToken cancellationToken)

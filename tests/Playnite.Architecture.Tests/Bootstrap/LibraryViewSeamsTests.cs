@@ -1,5 +1,7 @@
 using System.Diagnostics;
 using System.Reflection;
+using Playnite.Core.Database;
+using Playnite.Core.Models;
 using Playnite.Desktop.Shell;
 using Xunit;
 
@@ -46,6 +48,67 @@ public sealed class LibraryViewSeamsTests
         await model.LoadPageAsync(0);
         Assert.Equal(firstIds, model.Rows.Select(row => row.Id).ToArray());
         Assert.Equal("220", model.Selected?.GameId);
+    }
+
+    [Fact]
+    public async Task Selecting_a_non_first_row_loads_its_actual_details_through_the_service()
+    {
+        using var temp = new TemporaryLibrary();
+        var destination = Path.Combine(temp.Root, "playnite", "library.sqlite");
+        Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
+        await ImportFixtureAsync(destination);
+        var model = new LibraryViewModel(destination);
+        await model.LoadAsync();
+        Assert.Equal("Synthetic Steam Installed", model.Selected?.Name);
+
+        var third = model.Rows[2];
+        await model.SelectAsync(third);
+
+        Assert.Equal(third.Id, model.Selected?.Id);
+        Assert.Equal("Synthetic Steam Uninstalled", model.Selected?.Name);
+        Assert.Equal("570", model.Selected?.GameId);
+    }
+
+    [Fact]
+    public async Task Page_navigation_is_bounded_and_returns_distinct_ordered_windows()
+    {
+        using var temp = new TemporaryLibrary();
+        var destination = Path.Combine(temp.Root, "playnite", "library.sqlite");
+        Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
+        var database = await LibraryDatabase.OpenAsync(destination);
+        for (var number = 1; number <= 60; number++)
+        {
+            var id = new Guid($"10000000-0000-0000-0000-{number:X12}");
+            var game = new Game(id, "game-" + number.ToString("D3"), $"Seeded Game {number:D3}");
+            await database.WriteAsync(async session =>
+            {
+                await session.Games.AddAsync(new StoredGame(game));
+                return true;
+            });
+        }
+
+        var model = new LibraryViewModel(destination);
+        await model.LoadAsync();
+        Assert.Equal(2, model.PageCount);
+        Assert.Equal("Page 1 / 2", model.PageIndicator);
+        Assert.False(model.CanGoPrevious);
+        Assert.True(model.CanGoNext);
+        Assert.Equal(["Seeded Game 001", "Seeded Game 050"], [model.Rows[0].Name, model.Rows[^1].Name]);
+
+        await model.PreviousPageAsync();
+        Assert.Equal("Page 1 / 2", model.PageIndicator);
+
+        await model.NextPageAsync();
+        Assert.Equal("Page 2 / 2", model.PageIndicator);
+        Assert.Equal(["Seeded Game 051", "Seeded Game 060"], [model.Rows[0].Name, model.Rows[^1].Name]);
+
+        await model.NextPageAsync();
+        Assert.Equal("Page 2 / 2", model.PageIndicator);
+
+        await model.PreviousPageAsync();
+        Assert.Equal("Page 1 / 2", model.PageIndicator);
+        Assert.Equal("Seeded Game 001", model.Rows[0].Name);
+        Assert.DoesNotContain(model.Rows, row => row.Name == "Seeded Game 051");
     }
 
     [Fact]

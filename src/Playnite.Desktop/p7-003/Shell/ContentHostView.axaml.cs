@@ -41,7 +41,7 @@ public sealed partial class ContentHostView : UserControl
             grid.Apply(model);
             if (smoke)
             {
-                EmitLibrarySmoke();
+                await EmitLibrarySmokeAsync();
             }
         }
         catch (Exception exception)
@@ -56,38 +56,94 @@ public sealed partial class ContentHostView : UserControl
         model.Dispose();
     }
 
-    /// <summary>Reads the real applied controls and their semantic names before emitting markers.</summary>
-    private void EmitLibrarySmoke()
+    /// <summary>
+    /// Drives the real ListBox and pager buttons through their routed events, then reads the real
+    /// applied controls before emitting each marker. Removing either event wiring fails the smoke.
+    /// </summary>
+    private async Task EmitLibrarySmokeAsync()
     {
-        var rows = grid.FindControl<StackPanel>("Rows")!;
-        var firstRow = rows.Children.OfType<TextBlock>().FirstOrDefault();
-        var header = grid.FindControl<TextBlock>("HeaderText")!;
-        var detailsName = grid.FindControl<TextBlock>("DetailsName")!;
-        var detailsId = grid.FindControl<TextBlock>("DetailsId")!;
+        var allValid = EmitPage("page1");
+        var list = grid.FindControl<ListBox>("GameList")!;
+        if (list.Items.Count > 1)
+        {
+            var index = Math.Min(2, list.Items.Count - 1);
+            grid.SelectRowForSmoke(index);
+            await grid.SelectionTask;
+            allValid &= EmitSelection(index, "selection");
+        }
 
-        var firstText = firstRow?.Text;
-        var firstSemantic = firstRow is null ? null : AutomationProperties.GetName(firstRow);
-        var expectedFirst = model.Rows.Count > 0 ? model.Rows[0] : null;
-        var valid =
-            string.Equals(header.Text, "Library", StringComparison.Ordinal)
-            && (expectedFirst is null
-                ? firstRow is null && string.Equals(detailsName.Text, "(none)", StringComparison.Ordinal)
-                : firstRow is not null
-                    && string.Equals(firstText, expectedFirst.Name, StringComparison.Ordinal)
-                    && string.Equals(firstSemantic, expectedFirst.Name, StringComparison.Ordinal)
-                    && string.Equals(detailsName.Text, model.Selected?.Name, StringComparison.Ordinal)
-                    && string.Equals(detailsId.Text, model.Selected?.GameId, StringComparison.Ordinal))
-            && rows.Children.Count == model.Rows.Count;
+        grid.ClickNextForSmoke();
+        await grid.NavigationTask;
+        allValid &= EmitPage("next-result");
 
-        Console.WriteLine(
-            $"library: status={model.Status};count={rows.Children.Count};total={model.TotalCount};"
-            + $"first={firstText ?? "<missing>"};details={detailsName.Text}|{detailsId.Text};"
-            + $"semantic={AutomationProperties.GetName(header)}|{firstSemantic ?? "<missing>"}|"
-            + $"{AutomationProperties.GetName(detailsName)}|{AutomationProperties.GetName(detailsId)};"
-            + $"valid={valid.ToString().ToLowerInvariant()}");
-        if (valid)
+        // A second Next at the last page, and a Previous at the first page, must be no-ops.
+        grid.ClickNextForSmoke();
+        await grid.NavigationTask;
+        allValid &= EmitPage("next-at-last");
+
+        grid.ClickPreviousForSmoke();
+        await grid.NavigationTask;
+        allValid &= EmitPage("back");
+
+        grid.ClickPreviousForSmoke();
+        await grid.NavigationTask;
+        allValid &= EmitPage("prev-at-first");
+
+        if (allValid)
         {
             Console.WriteLine("library: grid-loaded");
         }
+    }
+
+    private bool EmitPage(string key)
+    {
+        var list = grid.FindControl<ListBox>("GameList")!;
+        var firstItem = list.Items.OfType<ListBoxItem>().FirstOrDefault();
+        var firstBlock = firstItem?.Content as TextBlock;
+        var pageText = grid.FindControl<TextBlock>("PageText")!;
+        var previous = grid.FindControl<Button>("PreviousButton")!;
+        var next = grid.FindControl<Button>("NextButton")!;
+        var expectedFirst = model.Rows.Count > 0 ? model.Rows[0] : null;
+        var valid =
+            list.Items.Count == model.Rows.Count
+            && string.Equals(pageText.Text, model.PageIndicator, StringComparison.Ordinal)
+            && previous.IsEnabled == model.CanGoPrevious
+            && next.IsEnabled == model.CanGoNext
+            && (expectedFirst is null
+                ? firstBlock is null
+                : firstBlock is not null
+                    && string.Equals(firstBlock.Text, expectedFirst.Name, StringComparison.Ordinal)
+                    && string.Equals(AutomationProperties.GetName(firstItem!), expectedFirst.Name, StringComparison.Ordinal));
+
+        Console.WriteLine(
+            $"library: {key}=count:{list.Items.Count};total:{model.TotalCount};page:{pageText.Text};"
+            + $"first:{firstBlock?.Text ?? "<missing>"};prev:{previous.IsEnabled.ToString().ToLowerInvariant()};"
+            + $"next:{next.IsEnabled.ToString().ToLowerInvariant()};"
+            + $"semantic:{AutomationProperties.GetName(pageText)};"
+            + $"valid:{valid.ToString().ToLowerInvariant()}");
+        return valid;
+    }
+
+    private bool EmitSelection(int index, string key)
+    {
+        var list = grid.FindControl<ListBox>("GameList")!;
+        var item = (ListBoxItem)list.Items[index]!;
+        var block = item.Content as TextBlock;
+        var expected = model.Rows[index];
+        var detailsName = grid.FindControl<TextBlock>("DetailsName")!;
+        var detailsId = grid.FindControl<TextBlock>("DetailsId")!;
+        var valid =
+            string.Equals(block?.Text, expected.Name, StringComparison.Ordinal)
+            && string.Equals(AutomationProperties.GetName(item), expected.Name, StringComparison.Ordinal)
+            && model.Selected?.Id == expected.Id
+            && string.Equals(detailsName.Text, model.Selected?.Name, StringComparison.Ordinal)
+            && string.Equals(detailsId.Text, model.Selected?.GameId, StringComparison.Ordinal);
+
+        Console.WriteLine(
+            $"library: {key}=index:{index};row:{block?.Text ?? "<missing>"};"
+            + $"details:{detailsName.Text}|{detailsId.Text};"
+            + $"semantic:{AutomationProperties.GetName(item)}|{AutomationProperties.GetName(detailsName)}|"
+            + $"{AutomationProperties.GetName(detailsId)};valid:{valid.ToString().ToLowerInvariant()}");
+        return valid;
     }
 }

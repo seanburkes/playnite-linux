@@ -1,5 +1,7 @@
 using System.Diagnostics;
 using System.Reflection;
+using Playnite.Core.Database;
+using Playnite.Core.Models;
 using Xunit;
 
 namespace Playnite.Smoke.Tests;
@@ -8,57 +10,78 @@ namespace Playnite.Smoke.Tests;
 public sealed class LibrarySmokeTests
 {
     private const string FirstFixtureGame = "Synthetic Steam Installed";
-    private const string FixtureGameId = "220";
-    private const string EmptyMarker =
-        "library: status=empty;count=0;total=0;first=<missing>;details=(none)|(none);"
-        + "semantic=Library header|<missing>|Details name|Details id;valid=true";
-    private const string LoadedMarkerPrefix =
-        "library: status=loaded;count=3;total=3;first=" + FirstFixtureGame + ";details=";
-    private const string LoadedSemantic =
-        "semantic=Library header|Synthetic Steam Installed|Details name|Details id;valid=true";
+    private const string ThirdFixtureGame = "Synthetic Steam Uninstalled";
 
     [Fact]
     public async Task Headless_empty_library_shows_an_empty_grid_in_an_isolated_profile()
     {
         using var profile = new IsolatedProfile();
-        var result = await RunDesktopAsync(profile, seedFixture: false);
+        var result = await RunDesktopAsync(profile, seed: null);
 
-        Assert.Equal(0, result.ExitCode);
-        Assert.Equal(string.Empty, result.Error);
+        AssertHost(result);
         var lines = Lines(result.Output);
-        Assert.Contains("Window opened: Playnite", lines);
-        Assert.Contains(EmptyMarker, lines);
+        Assert.Contains("library: page1=count:0;total:0;page:Page 1 / 1;first:<missing>;prev:false;next:false;semantic:Page indicator;valid:true", lines);
         Assert.Contains("library: grid-loaded", lines);
         profile.AssertWritesStayIsolated();
     }
 
     [Fact]
-    public async Task Headless_fixture_imported_library_shows_rows_details_and_stable_first_page()
+    public async Task Headless_fixture_imported_library_selects_a_non_first_row_and_updates_details()
     {
         using var profile = new IsolatedProfile();
-        var result = await RunDesktopAsync(profile, seedFixture: true);
+        var result = await RunDesktopAsync(profile, seed: ProfileSeed.Fixture);
 
-        Assert.Equal(0, result.ExitCode);
-        Assert.Equal(string.Empty, result.Error);
+        AssertHost(result);
         var lines = Lines(result.Output);
-        Assert.Contains("Window opened: Playnite", lines);
-        Assert.Contains(lines, line => line.StartsWith(LoadedMarkerPrefix, StringComparison.Ordinal)
-            && line.Contains(FirstFixtureGame + "|" + FixtureGameId, StringComparison.Ordinal)
-            && line.EndsWith(LoadedSemantic, StringComparison.Ordinal));
+        Assert.Contains("library: page1=count:3;total:3;page:Page 1 / 1;first:" + FirstFixtureGame + ";prev:false;next:false;semantic:Page indicator;valid:true", lines);
+        Assert.Contains("library: selection=index:2;row:" + ThirdFixtureGame + ";details:" + ThirdFixtureGame + "|570;semantic:" + ThirdFixtureGame + "|Details name|Details id;valid:true", lines);
         Assert.Contains("library: grid-loaded", lines);
         profile.AssertWritesStayIsolated();
+    }
+
+    [Fact]
+    public async Task Headless_paged_library_navigates_selects_and_refuses_out_of_range_pages()
+    {
+        using var profile = new IsolatedProfile();
+        var result = await RunDesktopAsync(profile, seed: ProfileSeed.SixtyGames);
+
+        AssertHost(result);
+        var lines = Lines(result.Output);
+        Assert.Contains("library: page1=count:50;total:60;page:Page 1 / 2;first:Seeded Game 001;prev:false;next:true;semantic:Page indicator;valid:true", lines);
+        Assert.Contains("library: selection=index:2;row:Seeded Game 003;details:Seeded Game 003|game-003;semantic:Seeded Game 003|Details name|Details id;valid:true", lines);
+        Assert.Contains("library: next-result=count:10;total:60;page:Page 2 / 2;first:Seeded Game 051;prev:true;next:false;semantic:Page indicator;valid:true", lines);
+        Assert.Contains("library: next-at-last=count:10;total:60;page:Page 2 / 2;first:Seeded Game 051;prev:true;next:false;semantic:Page indicator;valid:true", lines);
+        Assert.Contains("library: back=count:50;total:60;page:Page 1 / 2;first:Seeded Game 001;prev:false;next:true;semantic:Page indicator;valid:true", lines);
+        Assert.Contains("library: prev-at-first=count:50;total:60;page:Page 1 / 2;first:Seeded Game 001;prev:false;next:true;semantic:Page indicator;valid:true", lines);
+        Assert.Contains("library: grid-loaded", lines);
+        profile.AssertWritesStayIsolated();
+    }
+
+    private static void AssertHost((int ExitCode, string Output, string Error) result)
+    {
+        Assert.Equal(0, result.ExitCode);
+        Assert.Equal(string.Empty, result.Error);
+        Assert.Contains("Window opened: Playnite", Lines(result.Output));
     }
 
     private static string[] Lines(string output) => output.Split(
         '\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 
     private static async Task<(int ExitCode, string Output, string Error)> RunDesktopAsync(
-        IsolatedProfile profile, bool seedFixture)
+        IsolatedProfile profile, ProfileSeed? seed)
     {
-        if (seedFixture)
+        if (seed is not null)
         {
             Directory.CreateDirectory(Path.GetDirectoryName(profile.LibraryPath)!);
-            await ImportFixtureAsync(profile.LibraryPath);
+            switch (seed)
+            {
+                case ProfileSeed.Fixture:
+                    await ImportFixtureAsync(profile.LibraryPath);
+                    break;
+                case ProfileSeed.SixtyGames:
+                    await SeedGamesAsync(profile.LibraryPath, 60);
+                    break;
+            }
         }
 
         var start = new ProcessStartInfo("dotnet")
@@ -97,6 +120,21 @@ public sealed class LibrarySmokeTests
         }
 
         return (process.ExitCode, await output, await error);
+    }
+
+    private static async Task SeedGamesAsync(string path, int count)
+    {
+        var database = await LibraryDatabase.OpenAsync(path);
+        for (var number = 1; number <= count; number++)
+        {
+            var id = new Guid($"10000000-0000-0000-0000-{number:X12}");
+            var game = new Game(id, "game-" + number.ToString("D3"), $"Seeded Game {number:D3}");
+            await database.WriteAsync(async session =>
+            {
+                await session.Games.AddAsync(new StoredGame(game));
+                return true;
+            });
+        }
     }
 
     private static async Task ImportFixtureAsync(string destination)
@@ -146,6 +184,12 @@ public sealed class LibrarySmokeTests
         }
 
         return Path.Combine([root?.FullName ?? throw new InvalidOperationException("Cannot locate Playnite.slnx"), .. segments]);
+    }
+
+    private enum ProfileSeed
+    {
+        Fixture,
+        SixtyGames,
     }
 
     private sealed class IsolatedProfile : IDisposable

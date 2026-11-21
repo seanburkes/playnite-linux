@@ -33,17 +33,29 @@ p7-009.
 
 ## Behaviour contract
 
-- Rows come from `LibraryService.ListAsync(new LibraryQuery(Offset, Limit: 50, SortBy: Name))` in
-  one bounded p6-012 SQLite window; repeated first-page loads return the same ordered identities.
-- A selected first row's details are read back through `LibraryService.GetAsync` and applied to the
-  real details TextBlocks. An empty library renders zero rows and `(none)` details.
-- The view applies row text and `AutomationProperties.Name` from the view-model; the headless
-  `--library-smoke` marker is emitted only after the real applied controls match the model.
+- Rows are real, accessible `ListBoxItem` controls in a single-selection `ListBox`, each with an
+  explicit `AutomationProperties.Name`. Rows come from
+  `LibraryService.ListAsync(new LibraryQuery(Offset, Limit: 50, SortBy: Name))` in one bounded
+  p6-012 SQLite window; repeated first-page loads return the same ordered identities.
+- Selecting any row (not only the first) raises the ListBox `SelectionChanged` event, routes through
+  `LibraryViewModel.SelectAsync`, reads that game's details with `LibraryService.GetAsync` and
+  applies the result to the real details TextBlocks and semantic names. An empty library renders
+  zero rows and `(none)` details.
+- Paging is bounded at `PageSize = 50`: `PreviousPage`/`NextPage` buttons are enabled from
+  `CanGoPrevious`/`CanGoNext` and route through `LoadPageAsync`; requests beyond page 1 or the last
+  page are no-ops. The page indicator reports `Page n / m` from the real total. No search, filter
+  or sort control exists (p7-004).
+- The headless `--library-smoke` sequence drives the actual ListBox selection and button click
+  routed events, then emits markers only after the real applied controls match the view-model.
 
 ## Evidence
 
-- `tests/Playnite.Architecture.Tests/Bootstrap/LibraryViewSeamsTests.cs` — empty new library,
-  fixture-imported rows/details with repeated paged loads, instance-ownership constructor guard.
-- `tests/Playnite.Smoke.Tests/LibrarySmokeTests.cs` — headless empty and fixture-backed loads with
-  isolated XDG roots; mutation of one semantic-name assignment was shown to fail the smoke and the
-  restored file passes. Zero skips; UI executed-case count non-decreasing.
+- `tests/Playnite.Architecture.Tests/Bootstrap/LibraryViewSeamsTests.cs` (5) — empty new library,
+  fixture-imported rows/details including a non-first selection, bounded 60-game page navigation
+  with distinct ordered windows, repeated stable pages, instance-ownership constructor guard.
+- `tests/Playnite.Smoke.Tests/LibrarySmokeTests.cs` (3) — headless empty, fixture-backed non-first
+  selection, and a 60-game XDG-owned library with page 1/2 rows, page 2/2 rows, back navigation and
+  out-of-range no-ops, under isolated XDG roots. The fixture is read-only.
+- Mutation proofs: removing the ListBox `SelectionChanged` wiring and removing the Next button
+  `Click` wiring each make the smoke fail; restored files pass. Zero skips; UI executed-case count
+  non-decreasing.
