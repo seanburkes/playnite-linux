@@ -43,7 +43,6 @@ public sealed partial class MainWindow : Window
     {
         Opened += (_, _) =>
         {
-            Console.WriteLine("shell: regions=" + string.Join(",", RegionNames));
             Console.WriteLine("shell: about-title=" + Shell.AboutTitle);
             Console.WriteLine("shell: semantic=" + DescribeSemanticTree(this));
 
@@ -102,9 +101,6 @@ public sealed partial class MainWindow : Window
             valid);
     }
 
-    private static readonly string[] RegionNames =
-        ["TopPanel", "Sidebar", "ContentHost", "Notifications"];
-
     /// <summary>A name/role projection of the live visual tree, used by the headless smoke.</summary>
     private static string DescribeSemanticTree(Control root)
     {
@@ -120,7 +116,8 @@ public sealed partial class MainWindow : Window
                 {
                     parts.Add(name + ":" + control.GetType().Name + ":x:Name");
                 }
-                else if (!string.IsNullOrEmpty(automationName))
+
+                if (!string.IsNullOrEmpty(automationName))
                 {
                     parts.Add(automationName + ":" + control.GetType().Name + ":automation");
                 }

@@ -10,6 +10,8 @@ public sealed class ShellSmokeTests
     private const string ControlledTitle = "About From Controlled Catalog";
     private const string ControlledAuthor = "Author From Controlled Catalog";
     private static readonly string[] Regions = ["TopPanel", "Sidebar", "ContentHost", "Notifications"];
+    private static readonly string[] RegionAutomationNames =
+        ["Top panel", "Sidebar", "Content host", "Notifications"];
 
     [Fact]
     public async Task Headless_shell_exposes_named_regions_and_the_about_messagebox_pilot()
@@ -58,16 +60,16 @@ public sealed class ShellSmokeTests
                 lines);
             Assert.Contains("shell: pilot=about,messagebox", lines);
 
-            var regions = Assert.Single(lines.Where(line => line.StartsWith("shell: regions=", StringComparison.Ordinal)));
-            foreach (var region in Regions)
-            {
-                Assert.Contains(region, regions);
-            }
-
+            // Region evidence comes only from the live visual tree projection: retain the visible
+            // x:Name assertions and add the AutomationProperties.Name assertions for each region.
             var semantic = Assert.Single(lines.Where(line => line.StartsWith("shell: semantic=", StringComparison.Ordinal)));
             foreach (var region in Regions)
             {
-                Assert.Contains(region + ":", semantic);
+                Assert.Contains(region + ":Border:x:Name", semantic);
+            }
+            foreach (var automationName in RegionAutomationNames)
+            {
+                Assert.Contains(automationName + ":Border:automation", semantic);
             }
             Assert.Contains("AboutButton:Button:", semantic);
             Assert.Contains("MessageBoxButton:Button:", semantic);
