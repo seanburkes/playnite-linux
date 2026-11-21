@@ -67,16 +67,16 @@ in [`gates/P5-pending.md`](gates/P5-pending.md).
 | Status | Units |
 | --- | ---: |
 | deferred | 1 |
-| done | 85 |
+| done | 86 |
 | in-progress | 5 |
-| todo | 22 |
+| todo | 21 |
 
 ## Ledger
 
 | Metric | Value |
 | --- | ---: |
-| Ledger rows | 343 |
-| Ledger fragments | 116 |
+| Ledger rows | 345 |
+| Ledger fragments | 118 |
 
 ## Units
 
@@ -176,7 +176,7 @@ in [`gates/P5-pending.md`](gates/P5-pending.md).
 | p6-guard-baseline | W6 | repo | Shared SDK baseline ownership allowance | in-progress | `units/p6-guard-baseline.*`; 1 ledger rows |
 | p6-guard-move2 | W6 | repo | Cross-Unit-Move ownership exception | in-progress | `units/p6-guard-move2.*`; 1 ledger rows |
 | p6-shards | W6 | repo | Phase 6 core services and SDK v7 board | done | `units/p6-shards.*`; 7 ledger rows |
-| p7-001 | W7 | ui | Bootstrap/DI/theme/localisation | todo | `units/p7-001.*`; 0 ledger rows |
+| p7-001 | W7 | ui | Bootstrap/DI/theme/localisation | done | `units/p7-001.*`; 2 ledger rows |
 | p7-002 | W7 | ui | Shell/main window | todo | `units/p7-002.*`; 0 ledger rows |
 | p7-003 | W7 | ui | Library grid/list/details | todo | `units/p7-003.*`; 0 ledger rows |
 | p7-004 | W7 | ui | Search/filter/sort | todo | `units/p7-004.*`; 0 ledger rows |
