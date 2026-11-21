@@ -2,20 +2,22 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Styling;
+using Playnite.Core;
 
 namespace Playnite.Desktop.Bootstrap;
 
 /// <summary>
-/// What happened when the startup theme was applied. <see cref="StyleApplied"/> is true only when
-/// the parsed on-disk override was added to the application's live Styles collection; a fallback
-/// to the built-in Fluent theme reports false.
+/// What happened when the startup theme was applied. <see cref="StyleRegistered"/> records only
+/// that the parsed override was added to the application's Styles collection; it deliberately does
+/// not claim the style took effect on any control. The headless smoke separately asserts the real
+/// main window's resolved FontSize.
 /// </summary>
 public sealed record ThemeLoadResult(
     string Name,
     string Diagnostic,
     bool Applied,
     string Source,
-    bool StyleApplied);
+    bool StyleRegistered);
 
 /// <summary>
 /// Applies a functional override from an on-disk theme to the application styles. Avalonia 12's
@@ -27,7 +29,8 @@ public sealed record ThemeLoadResult(
 /// </summary>
 public static class BootstrapTheme
 {
-    public static ThemeLoadResult Apply(Application application, string? themePath, IAppLogger logger)
+    public static ThemeLoadResult Apply(
+        Application application, string? themePath, IAppLogger logger, IRegularFileProbe probe)
     {
         ArgumentNullException.ThrowIfNull(application);
         ArgumentNullException.ThrowIfNull(logger);
@@ -49,7 +52,7 @@ public static class BootstrapTheme
 
         try
         {
-            var theme = ThemeFile.Read(fullPath);
+            var theme = ThemeFile.Read(fullPath, probe);
             var style = new Style(selector => selector.OfType<Window>());
             style.Setters.Add(new Setter(TemplatedControl.FontSizeProperty, theme.FontSize));
             application.Styles.Add(style);

@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text;
+using Playnite.Core;
 
 namespace Playnite.Desktop.Bootstrap;
 
@@ -29,10 +30,10 @@ public sealed class FileAppLogger : IAppLogger
     private readonly object gate = new();
     private bool disposed;
 
-    public FileAppLogger(string path)
+    public FileAppLogger(string path, IRegularFileProbe probe)
     {
         ArgumentException.ThrowIfNullOrEmpty(path);
-        var fullPath = Path.GetFullPath(path);
+        var fullPath = BootstrapFiles.IsRegular(path, probe);
         var directory = Path.GetDirectoryName(fullPath)
             ?? throw new ArgumentException("The log path has no parent directory.", nameof(path));
         Directory.CreateDirectory(directory);

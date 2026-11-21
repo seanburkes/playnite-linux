@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Playnite.Core;
 
 namespace Playnite.Desktop.Bootstrap;
 
@@ -24,21 +25,22 @@ public sealed class BootstrapLocalization
 
     public string Resolve(string key) => LocalizationKeySet.English.Resolve(key, catalog);
 
-    public static BootstrapLocalization Load(string? catalogPath)
+    public static BootstrapLocalization Load(string? catalogPath, IRegularFileProbe probe)
     {
-        if (string.IsNullOrWhiteSpace(catalogPath) || !File.Exists(catalogPath))
+        var existing = BootstrapFiles.ExistingRegular(catalogPath, probe);
+        if (existing is null)
         {
             return new BootstrapLocalization();
         }
 
-        var file = new FileInfo(catalogPath);
+        var file = new FileInfo(existing);
         if (file.Length > MaxCatalogBytes)
         {
             throw new InvalidDataException($"Localisation catalog {catalogPath} exceeds {MaxCatalogBytes} bytes.");
         }
 
-        var entries = JsonSerializer.Deserialize<Dictionary<string, string>>(File.ReadAllText(catalogPath))
-            ?? throw new InvalidDataException($"Localisation catalog {catalogPath} is empty.");
-        return new BootstrapLocalization(new LocalizationKeySet(entries), Path.GetFullPath(catalogPath));
+        var entries = JsonSerializer.Deserialize<Dictionary<string, string>>(File.ReadAllText(existing))
+            ?? throw new InvalidDataException($"Localisation catalog {existing} is empty.");
+        return new BootstrapLocalization(new LocalizationKeySet(entries), existing);
     }
 }

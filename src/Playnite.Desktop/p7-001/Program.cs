@@ -1,6 +1,9 @@
+using System.Globalization;
 using Avalonia;
+using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Headless;
+using Playnite.Core;
 using Playnite.Desktop.Bootstrap;
 using Playnite.Platform.Linux;
 using Playnite.Platform.Linux.Integration;
@@ -21,14 +24,20 @@ internal static class Program
 
         var directories = XdgDirectories.Resolve(new LinuxEnvironment());
         var services = new ServiceRegistry();
-        services.AddSingleton<IAppLogger>(_ =>
-            new FileAppLogger(Path.Combine(directories.State, "playnite.log")));
-        services.AddSingleton(_ =>
-            BootstrapLocalization.Load(Path.Combine(directories.Config, "Localization", "en.json")));
+        services.AddSingleton<IRegularFileProbe>(_ => new LinuxRegularFileProbe());
+        services.AddSingleton<IAppLogger>(registry =>
+            new FileAppLogger(
+                Path.Combine(directories.State, "playnite.log"),
+                registry.GetRequiredService<IRegularFileProbe>()));
+        services.AddSingleton(registry =>
+            BootstrapLocalization.Load(
+                Path.Combine(directories.Config, "Localization", "en.json"),
+                registry.GetRequiredService<IRegularFileProbe>()));
         services.AddSingleton(registry => new DesktopBootstrapper(
             registry.GetRequiredService<IAppLogger>(),
             registry.GetRequiredService<BootstrapLocalization>(),
-            ResolveThemePath(directories)));
+            ResolveThemePath(directories, services.GetRequiredService<IRegularFileProbe>()),
+            registry.GetRequiredService<IRegularFileProbe>()));
 
         using var logger = services.GetRequiredService<IAppLogger>();
         var bootstrapper = services.GetRequiredService<DesktopBootstrapper>();
@@ -65,12 +74,18 @@ internal static class Program
                 ?? throw new InvalidOperationException("The Avalonia application was not initialised.");
             bootstrapper.Apply(application);
 
+            double? observedFontSize = null;
+            if (bootstrapSmoke && lifetime.MainWindow is Window smokeWindow)
+            {
+                smokeWindow.Opened += (_, _) => observedFontSize = smokeWindow.FontSize;
+            }
+
             if (bootstrapSmoke)
             {
                 var theme = bootstrapper.AppliedTheme;
                 Console.WriteLine($"bootstrap: theme={theme?.Name ?? "unknown"}");
                 Console.WriteLine($"bootstrap: theme-applied={theme?.Applied.ToString().ToLowerInvariant() ?? "false"}");
-                Console.WriteLine($"bootstrap: theme-style-applied={theme?.StyleApplied.ToString().ToLowerInvariant() ?? "false"}");
+                Console.WriteLine($"bootstrap: theme-style-registered={theme?.StyleRegistered.ToString().ToLowerInvariant() ?? "false"}");
                 Console.WriteLine($"bootstrap: theme-source={theme?.Source ?? "none"}");
                 Console.WriteLine($"bootstrap: localisation={bootstrapper.LocalisedProbe}");
                 Console.WriteLine($"bootstrap: localisation-source={bootstrapper.LocalisationSource}");
@@ -80,6 +95,12 @@ internal static class Program
             }
 
             var exitCode = lifetime.Start();
+            if (bootstrapSmoke)
+            {
+                Console.WriteLine("bootstrap: window-font-size="
+                    + (observedFontSize?.ToString(CultureInfo.InvariantCulture) ?? "none"));
+            }
+
             return exitCode == 0 && smoke && !((App)application).SmokeSucceeded ? 1 : exitCode;
         }
         finally
@@ -91,10 +112,11 @@ internal static class Program
         }
     }
 
-    private static string? ResolveThemePath(XdgDirectories directories)
+    private static string? ResolveThemePath(XdgDirectories directories, IRegularFileProbe probe)
     {
         var themesRoot = Path.Combine(directories.Config, "Themes");
-        return ThemePaths.TryResolve(themesRoot, "Default", out var path, out _) && File.Exists(path)
+        return ThemePaths.TryResolve(themesRoot, "Default", out var path, out _)
+            && BootstrapFiles.ExistingRegular(path, probe) is not null
             ? path
             : null;
     }

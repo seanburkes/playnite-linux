@@ -1,5 +1,8 @@
+using System.Diagnostics;
+using Playnite.Core;
 using Playnite.Desktop.Bootstrap;
 using Playnite.Platform.Integration;
+using Playnite.Platform.Linux;
 using Xunit;
 
 namespace Playnite.Desktop.Tests;
@@ -7,6 +10,8 @@ namespace Playnite.Desktop.Tests;
 /// <summary>p7-001 bootstrap seams: each test states one startup behaviour.</summary>
 public sealed class BootstrapSeamsTests
 {
+    private static readonly IRegularFileProbe Probe = new LinuxRegularFileProbe();
+
     [Fact]
     public void Service_registry_returns_the_same_singleton_for_repeated_resolution()
     {
@@ -50,7 +55,7 @@ public sealed class BootstrapSeamsTests
         var path = Path.Combine(Path.GetTempPath(), "playnite-p7-001-" + Path.GetRandomFileName() + ".log");
         try
         {
-            using (var logger = new FileAppLogger(path))
+            using (var logger = new FileAppLogger(path, Probe))
             {
                 logger.Info("first");
                 logger.Error("second");
@@ -104,7 +109,7 @@ public sealed class BootstrapSeamsTests
                 </Styles>
                 """);
 
-            Assert.Equal(21, ThemeFile.Read(path).FontSize);
+            Assert.Equal(21, ThemeFile.Read(path, Probe).FontSize);
         }
         finally
         {
@@ -123,7 +128,7 @@ public sealed class BootstrapSeamsTests
         {
             File.WriteAllText(path, document);
 
-            Assert.Throws<FormatException>(() => ThemeFile.Read(path));
+            Assert.Throws<FormatException>(() => ThemeFile.Read(path, Probe));
         }
         finally
         {
@@ -134,13 +139,13 @@ public sealed class BootstrapSeamsTests
     [Fact]
     public void Localization_source_names_the_loaded_catalog()
     {
-        Assert.Equal("embedded", BootstrapLocalization.Load(null).Source);
+        Assert.Equal("embedded", BootstrapLocalization.Load(null, Probe).Source);
 
         var path = Path.Combine(Path.GetTempPath(), "playnite-loc-" + Path.GetRandomFileName() + ".json");
         try
         {
             File.WriteAllText(path, "{\"LOCAboutWindowTitle\":\"From catalog\"}");
-            Assert.Equal(path, BootstrapLocalization.Load(path).Source);
+            Assert.Equal(path, BootstrapLocalization.Load(path, Probe).Source);
         }
         finally
         {
@@ -151,7 +156,7 @@ public sealed class BootstrapSeamsTests
     [Fact]
     public void Localization_resolves_frozen_english_and_marks_unknown_keys()
     {
-        var localization = BootstrapLocalization.Load(null);
+        var localization = BootstrapLocalization.Load(null, Probe);
 
         Assert.Equal("About Playnite", localization.Resolve(LOC.AboutWindowTitle));
         Assert.Equal("<!LOCMissingKey!>", localization.Resolve("LOCMissingKey"));
@@ -193,6 +198,86 @@ public sealed class BootstrapSeamsTests
         await bootstrap.DisposeAsync();
 
         Assert.True(instance.Disposed);
+    }
+
+    [Fact]
+    public async Task Fifo_theme_is_rejected_without_blocking_startup()
+    {
+        if (!OperatingSystem.IsLinux())
+        {
+            return;
+        }
+
+        var path = CreateFifo("theme");
+        try
+        {
+            await Assert.ThrowsAsync<FileNotFoundException>(
+                () => Task.Run(() => ThemeFile.Read(path, Probe)))
+                .WaitAsync(TimeSpan.FromSeconds(5));
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public async Task Fifo_localisation_catalog_falls_back_without_blocking_startup()
+    {
+        if (!OperatingSystem.IsLinux())
+        {
+            return;
+        }
+
+        var path = CreateFifo("loc");
+        try
+        {
+            var result = await Task.Run(() => BootstrapLocalization.Load(path, Probe))
+                .WaitAsync(TimeSpan.FromSeconds(5));
+            Assert.Equal("embedded", result.Source);
+            Assert.Equal(LocalizationKeySet.English.Resolve(LOC.APIKey), result.Resolve(LOC.APIKey));
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public async Task Fifo_log_path_fails_fast_without_blocking_startup()
+    {
+        if (!OperatingSystem.IsLinux())
+        {
+            return;
+        }
+
+        var path = CreateFifo("log");
+        try
+        {
+            await Assert.ThrowsAsync<InvalidDataException>(
+                () => Task.Run(() => new FileAppLogger(path, Probe)))
+                .WaitAsync(TimeSpan.FromSeconds(5));
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    private static string CreateFifo(string name)
+    {
+        var path = Path.Combine(Path.GetTempPath(), "playnite-p7-001-" + name + "-" + Path.GetRandomFileName());
+        var start = new ProcessStartInfo("mkfifo")
+        {
+            RedirectStandardError = true,
+            UseShellExecute = false
+        };
+        start.ArgumentList.Add(path);
+        using var process = Process.Start(start)
+            ?? throw new InvalidOperationException("mkfifo could not be started.");
+        Assert.True(process.WaitForExit(5000), "mkfifo did not finish within five seconds.");
+        Assert.Equal(0, process.ExitCode);
+        return path;
     }
 
     private sealed class RecordingLogger : IAppLogger

@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Xml;
 using System.Xml.Linq;
+using Playnite.Core;
 
 namespace Playnite.Desktop.Bootstrap;
 
@@ -18,9 +19,10 @@ public static class ThemeFile
     private const double MinFontSize = 1;
     private const double MaxFontSize = 384;
 
-    public static ThemeOverride Read(string path)
+    public static ThemeOverride Read(string path, IRegularFileProbe probe)
     {
-        var fullPath = Path.GetFullPath(path);
+        var fullPath = BootstrapFiles.ExistingRegular(path, probe)
+            ?? throw new FileNotFoundException($"Theme {path} is not a regular file.", path);
         var file = new FileInfo(fullPath);
         if (file.Length > MaxDocumentBytes)
         {

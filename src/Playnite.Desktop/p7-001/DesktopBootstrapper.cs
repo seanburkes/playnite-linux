@@ -1,4 +1,5 @@
 using Avalonia;
+using Playnite.Core;
 
 namespace Playnite.Desktop.Bootstrap;
 
@@ -14,12 +15,18 @@ public sealed class DesktopBootstrapper
     private readonly IAppLogger logger;
     private readonly BootstrapLocalization localization;
     private readonly string? themePath;
+    private readonly IRegularFileProbe probe;
 
-    public DesktopBootstrapper(IAppLogger logger, BootstrapLocalization localization, string? themePath)
+    public DesktopBootstrapper(
+        IAppLogger logger,
+        BootstrapLocalization localization,
+        string? themePath,
+        IRegularFileProbe probe)
     {
         this.logger = logger ?? throw new ArgumentNullException(nameof(logger));
         this.localization = localization ?? throw new ArgumentNullException(nameof(localization));
         this.themePath = themePath;
+        this.probe = probe ?? throw new ArgumentNullException(nameof(probe));
     }
 
     public ThemeLoadResult? AppliedTheme { get; private set; }
@@ -31,7 +38,7 @@ public sealed class DesktopBootstrapper
     public void Apply(Application application)
     {
         ArgumentNullException.ThrowIfNull(application);
-        AppliedTheme = BootstrapTheme.Apply(application, themePath, logger);
+        AppliedTheme = BootstrapTheme.Apply(application, themePath, logger, probe);
         logger.Info($"localisation: {LocalisationKey}={LocalisedProbe}");
     }
 }

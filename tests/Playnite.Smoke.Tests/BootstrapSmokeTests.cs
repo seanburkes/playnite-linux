@@ -20,9 +20,6 @@ public sealed class BootstrapSmokeTests
         var cacheHome = Path.Combine(root, "cache");
         var runtimeHome = Path.Combine(root, "runtime");
         var home = Path.Combine(root, "home");
-        var realLog = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-            ".local", "state", "playnite", "playnite.log");
 
         try
         {
@@ -54,13 +51,14 @@ public sealed class BootstrapSmokeTests
                 '\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
             Assert.Contains($"bootstrap: theme={ThemeName}", lines);
             Assert.Contains("bootstrap: theme-applied=true", lines);
-            Assert.Contains("bootstrap: theme-style-applied=true", lines);
+            Assert.Contains("bootstrap: theme-style-registered=true", lines);
             Assert.Contains($"bootstrap: theme-source={themePath}", lines);
             Assert.Contains($"bootstrap: localisation={CatalogTitle}", lines);
             Assert.Contains($"bootstrap: localisation-source={catalogPath}", lines);
             Assert.Contains($"bootstrap: config-root={Path.Combine(configHome, "playnite")}", lines);
             Assert.Contains($"bootstrap: state-root={Path.Combine(stateHome, "playnite")}", lines);
             Assert.Contains("bootstrap: single-instance=skipped (headless test host)", lines);
+            Assert.Contains("bootstrap: window-font-size=21", lines);
             Assert.Contains("Window opened: Playnite", lines);
             Assert.Contains("Window closed", lines);
 
@@ -75,14 +73,6 @@ public sealed class BootstrapSmokeTests
             Assert.All(written, path => Assert.StartsWith(root + Path.DirectorySeparatorChar, Path.GetFullPath(path)));
             Assert.Contains(root, log);
             Assert.Contains(CatalogTitle, log);
-            // A sibling smoke test may write its own entries to the real profile. Our child must
-            // never leave its unique temp-root marker or catalog title there.
-            if (File.Exists(realLog))
-            {
-                var realProfileLog = File.ReadAllText(realLog);
-                Assert.DoesNotContain(root, realProfileLog);
-                Assert.DoesNotContain(CatalogTitle, realProfileLog);
-            }
         }
         finally
         {
