@@ -89,6 +89,24 @@ errors never print a stack trace.
 | `LaunchDryRunCommandTests.cs` | resolve by id and exact name, file/URL actions, never started, missing executable, missing and ambiguous games, missing/plugin/emulator play actions, bad arguments including repeated options, missing library. |
 | `CliQueryCommandsTests.cs` | spawns the real built CLI and exercises the discovered command path end to end: `list`, `search`, `launch --dry-run`, unknown verb, bad and repeated arguments, and exit codes 1, 2, 3 and 5. |
 | `CliQueryFixture.cs` | temporary SQLite libraries written through `GameRepository`. |
+| `LaunchProcessDryRunTests.cs` | phase-1 process-level proof: spawns the built CLI as a child and asserts the positive `launch --dry-run` path out of process without starting the game. |
 
 The commands are also reachable through `Program.RunAsync` without a dispatch edit because
 the existing registry tests assert the assembly scan.
+
+## Evidence
+
+`LaunchProcessDryRunTests.Launch_dry_run_resolves_by_id_out_of_process_without_starting_the_game`
+closes the Phase 6 criterion-1 process-level gap. It seeds a library with `CliQueryFixture`
+containing one game whose stored File play action points at a script that writes a sentinel
+file and exits. It locates the built CLI through `typeof(LaunchDryRunCommand).Assembly.Location`
+and runs `dotnet <Playnite.Cli.dll> launch --dry-run --library <seeded.sqlite> --id <gameId>` as a
+child process. The assertions cover exit 0, exactly one JSON record with `kind=launch`,
+`dryRun=true`, `started=false`, `actionType=File` and matching `path`/`arguments`, an absent
+sentinel (the game was resolved but never started), empty stderr, and no Avalonia or Desktop
+assembly in the child CLI output directory.
+
+The test is load-bearing. With a temporary mutation that made `LaunchDryRunCommand` start the
+resolved File action before writing its plan, the rebuilt child process wrote the sentinel and
+the `Assert.False(File.Exists(sentinel))` check failed; the mutation was reverted and the product
+tree is unchanged. No product logic changed in this unit.
