@@ -15,6 +15,13 @@ src/Playnite.Cli/LegacyLibraryReaderProcess.cs	p6-002	c051da647f058b815254cc11e4
 src/Playnite.Cli/Program.cs	p2-001	9afd818ae8a695e921bb98f386bfceb83d0059db	pull/29
 src/Playnite.Cli/Program.cs	p2-004	34af4f0fb6430fbc585d3b76ce85094390a26467	pull/34
 src/Playnite.Cli/Program.cs	p4-002	9f81d30b3cc4a6beb0e15f39610ecd219ebc19f7	pull/94
+src/Playnite.Core/Addons/AddonDiagnostic.cs	p6-010	8f8f89e0d9081e45d72e175296ffa76890f3669d	pull/215
+src/Playnite.Core/Addons/AddonInstallLayout.cs	p6-010	8f8f89e0d9081e45d72e175296ffa76890f3669d	pull/215
+src/Playnite.Core/Addons/AddonInstaller.cs	p6-010	8f8f89e0d9081e45d72e175296ffa76890f3669d	pull/215
+src/Playnite.Core/Addons/AddonManifestValidator.cs	p6-010	8f8f89e0d9081e45d72e175296ffa76890f3669d	pull/215
+src/Playnite.Core/Addons/AddonOperationResults.cs	p6-010	8f8f89e0d9081e45d72e175296ffa76890f3669d	pull/215
+src/Playnite.Core/Addons/AddonPathSafety.cs	p6-010	8f8f89e0d9081e45d72e175296ffa76890f3669d	pull/215
+src/Playnite.Core/Addons/AddonValidationResult.cs	p6-010	8f8f89e0d9081e45d72e175296ffa76890f3669d	pull/215
 src/Playnite.Core/Archive.cs	p3-008b	e71ad0db1445f0e382485eaa2a4624d5ec8eb88a	pull/79
 src/Playnite.Core/AssemblyMarker.cs	p2-001	9afd818ae8a695e921bb98f386bfceb83d0059db	pull/29
 src/Playnite.Core/AssemblyMarker.cs	p2-002	abdb82bedd0bcadfe93c1fc6f11937c55b116b7c	pull/37
@@ -46,6 +53,7 @@ src/Playnite.Core/Hosting/Notifications.cs	p6-006	d1d57be20f50e1832e0b0c59835358
 src/Playnite.Core/IEnvironment.cs	*	d6401f1f07c69474d0ce395797ab694bedf019e7	pull/68
 src/Playnite.Core/IFileSystem.cs	*	d6401f1f07c69474d0ce395797ab694bedf019e7	pull/68
 src/Playnite.Core/IPaths.cs	p5-002	a37890f33110c70b8411bac4457d16e0aa41822f	pull/116
+src/Playnite.Core/IRegularFileProbe.cs	p6-010	8f8f89e0d9081e45d72e175296ffa76890f3669d	pull/215
 src/Playnite.Core/Import/AssetCopy.cs	p4-005	f12a4325c58cf66d47b93c5768e46861696d3052	pull/96
 src/Playnite.Core/Import/LibraryImportService.cs	p6-002	c051da647f058b815254cc11e4e4b971860651d0	pull/173
 src/Playnite.Core/Import/LibraryMigration.cs	p4-002	9f81d30b3cc4a6beb0e15f39610ecd219ebc19f7	pull/94
@@ -158,6 +166,7 @@ src/Playnite.Platform.Linux/LinuxBoundedFileReader.cs	p5-002	c057be0f3e548ac31ac
 src/Playnite.Platform.Linux/LinuxEnvironment.cs	*	d6401f1f07c69474d0ce395797ab694bedf019e7	pull/68
 src/Playnite.Platform.Linux/LinuxFileSystem.cs	*	d6401f1f07c69474d0ce395797ab694bedf019e7	pull/68
 src/Playnite.Platform.Linux/LinuxPaths.cs	p5-002	a37890f33110c70b8411bac4457d16e0aa41822f	pull/116
+src/Playnite.Platform.Linux/LinuxRegularFileProbe.cs	p6-010	8f8f89e0d9081e45d72e175296ffa76890f3669d	pull/215
 src/Playnite.Platform.Linux/Sessions/LinuxGameProcess.cs	p5-004	064e261b5bffa6c434515b9851160a21fd0e317d	pull/120
 src/Playnite.Platform.Linux/Sessions/LinuxProcStat.cs	p5-004	064e261b5bffa6c434515b9851160a21fd0e317d	pull/120
 src/Playnite.Platform.Linux/Sessions/LinuxProcStatReader.cs	p5-004	5c4d11a68fd716b4be169b994ae71b27f7a105a2	pull/125
@@ -298,6 +307,9 @@ tests/Playnite.Architecture.Tests/SourcePolicy.cs	p2-006	7c31729c5d61d1a45edf5a4
 tests/Playnite.Architecture.Tests/SourcePolicy.cs	p2-006-harden	9d27f7a5689dd4c981f3b5695a689aee87a00282	pull/48
 tests/Playnite.Architecture.Tests/SourcePolicy.cs	p2-guard-wording2	9a4c79f7a91644063f1eb8a5a496968b54b63c20	pull/55
 tests/Playnite.Architecture.Tests/SourcePolicyTests.cs	p2-002	df9d089fd82efb1456f751f51a43c2a4aee56681	pull/32
+tests/Playnite.Core.Tests/Addons/AddonInstallLayoutTests.cs	p6-010	8f8f89e0d9081e45d72e175296ffa76890f3669d	pull/215
+tests/Playnite.Core.Tests/Addons/AddonInstallationTests.cs	p6-010	8f8f89e0d9081e45d72e175296ffa76890f3669d	pull/215
+tests/Playnite.Core.Tests/Addons/AddonManifestValidationTests.cs	p6-010	8f8f89e0d9081e45d72e175296ffa76890f3669d	pull/215
 tests/Playnite.Core.Tests/ArchiveTestData.cs	p3-008b	e71ad0db1445f0e382485eaa2a4624d5ec8eb88a	pull/79
 tests/Playnite.Core.Tests/ArchiveTests.cs	p3-008b	e71ad0db1445f0e382485eaa2a4624d5ec8eb88a	pull/79
 tests/Playnite.Core.Tests/Artwork/ArtworkTests.cs	p5-003	5a01d39fdf99787f9a265b9f8391b39db2849c78	pull/162
