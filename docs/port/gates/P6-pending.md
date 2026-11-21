@@ -364,11 +364,21 @@ missing: **0 PARTIAL** within this criterion.
 ## Validation of this assessment's own change set
 
 The change set is docs-only and confined to `p6-shards` evidence: this gate doc, the `p6-shards`
-queue shard notes (status stays `done`), one new `p6-shards.ledger.d/<pr>-p6-gate-reassessment.tsv`
-fragment, and the hand-written narrative window of `docs/port/PORT-STATUS.md`. The exact
-ownership/shard/shape checks, the PR URL, and the pushed-head linux-ci run id and head SHA are
-recorded in the ledger fragment for this PR (added after the CI run, as a docs-only delta,
-following the established `p6-shards` fragment pattern).
+queue shard notes (status stays `done`), one new `p6-shards.ledger.d/221-p6-gate-reassessment.tsv`
+fragment, and the hand-written narrative window of `docs/port/PORT-STATUS.md`.
+
+- PR: https://github.com/seanburkes/playnite-linux/pull/221 (base `main`, head `fm/p6-shards6`).
+- Validated pushed head: `687a1278b4f6f76e1caccff91070298d75d5b040`.
+- linux-ci run: https://github.com/seanburkes/playnite-linux/actions/runs/44854628319
+  (`ci_run=44854628319`), workflow `linux-ci`, event `pull_request`, on that exact head;
+  `gh-axi run view 44854628319` reported `status: completed`, `conclusion: success`,
+  job `linux-build-and-test` (ID 136693814581) `completed/success`.
+- Local guard checks on the validated head: `python3 scripts/port/build_port_index.py check
+  --shards-only --against origin/main --forbid-aggregate-changes` → exit 0;
+  `python3 scripts/port/check_unit_ownership.py --base origin/main --head HEAD --unit p6-shards
+  --branch fm/p6-shards6` → exit 0 with `offending paths: (none)`.
+- The ledger fragment is a docs-only delta added after that run, following the established
+  `p6-shards` fragment pattern; the head-commit `Port-Unit: p6-shards` trailer is present.
 
 No acceptance is written here. `P6-accepted.md` is deliberately not created; the captain decides
 after review.
