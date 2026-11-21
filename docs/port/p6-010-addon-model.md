@@ -97,6 +97,15 @@ No package code is loaded or executed. The filesystem work is bounded to the ext
 and uses `System.IO` plus the host entry-type probe; no shell or network API is used during
 install.
 
+The `AddonPathSafety` lexical rules are the primary install-path guard: every package entry is
+rejected unless it is a relative path whose segments are all safe, so a `..` component or an
+absolute path never reaches a target. `AddonInstallLayout.IsWithin` is a second, normalized
+containment check that verifies a candidate path resolves below its expected directory. It is
+defense-in-depth rather than the guard a hostile manifest meets first, and it is proven directly
+by `AddonInstallLayoutTests.Containment_check_*`: a valid child, a sibling that only shares the
+root's textual prefix, `..` traversal, an absolute path outside the root, and a root written
+with a trailing separator. No stronger claim is made for it.
+
 ### Why themes are not installed here
 
 v10 inserts a mode level for themes and does not discover them recursively. `InstallPackedTheme`
@@ -143,6 +152,7 @@ An installed extension is expected to load through the same contract proved by p
 | --- | --- |
 | `tests/Playnite.Core.Tests/Addons/AddonManifestValidationTests.cs` | Real `tests/golden/manifests/*.yaml`, the frozen extension/theme fixtures and the synthetic catalogue fixture; malformed fields with member diagnostics; hostile ids, modules and icons; the v10 omitted-`Type` compatibility rule; valid nested paths. |
 | `tests/Playnite.Core.Tests/Addons/AddonInstallationTests.cs` | Install into a temporary root; deterministic id/version path across roots; uninstall and residue; duplicate id; id traversal and absolute id; module traversal and absolute module; manifest/version mismatch; package symlink; a real FIFO entry and a real FIFO `extension.yaml`, both rejected without blocking; a late copy failure that must roll back the whole id directory; discovery of a v10 `<id>/extension.yaml` add-on and its uninstall; a symlinked discovery directory; the discovery depth bound; installed manifest/module discovery. |
+| `tests/Playnite.Core.Tests/Addons/AddonInstallLayoutTests.cs` | Direct proof of the normalized containment predicate: a valid child, a `..` traversal that normalizes outside, an absolute outside path, a sibling that shares only the root's textual prefix, and a root with a trailing separator. |
 
 Evidence: `tests/Playnite.Core.Tests/Playnite.Core.Tests.csproj` copies
 `tests/golden/manifests/*` read-only into the test output as `golden-manifests/`; the existing
@@ -158,6 +168,9 @@ Two negative proofs were run locally, then the product code was restored:
   `Install_rejects_a_fifo_without_blocking_on_it` and
   `Install_rejects_a_fifo_manifest_without_blocking_on_it` fail at their 10-second bound,
   because `File.Copy`/`File.ReadAllText` blocks reading the FIFO.
+- Replacing `AddonInstallLayout.IsWithin` with `return true` makes four
+  `AddonInstallLayoutTests` cases fail: the sibling prefix collision, the absolute outside
+  path, and both `..` traversal cases. Restoring the predicate makes them pass.
 
 Local evidence:
 
@@ -166,7 +179,7 @@ dotnet build src/Playnite.Platform.Linux/Playnite.Platform.Linux.csproj -c Relea
   0 Warning(s), 0 Error(s)
 
 dotnet test tests/Playnite.Core.Tests -c Release
-  total 3118, failed 0, succeeded 3118, skipped 0
+  total 3125, failed 0, succeeded 3125, skipped 0
 
 dotnet test tests/Playnite.Architecture.Tests -c Release
   total 210, failed 0, succeeded 210, skipped 0
