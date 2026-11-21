@@ -4,17 +4,25 @@ namespace Playnite.Core.Addons;
 
 /// <summary>
 /// Deterministic install and uninstall over <see cref="AddonInstallLayout"/>. A package is a
-/// directory that contains the v10 manifest file (<c>extension.yaml</c> or <c>theme.yaml</c>);
-/// the manifest is parsed and validated first, then every entry is checked before any target
-/// directory is created. There is no download, catalogue or update path in v1.
+/// directory that contains the v10 manifest file (<c>extension.yaml</c>); the manifest is parsed
+/// and validated first, then every entry is checked before any target directory is created.
+/// Entry checks use the injected <see cref="IRegularFileProbe"/> because Unix reports a FIFO,
+/// socket or device as a <see cref="FileInfo"/>, and copying such an entry can block forever.
+/// There is no download, catalogue or update path in v1.
 /// </summary>
 public sealed class AddonInstaller
 {
+    private readonly IRegularFileProbe fileTypeProbe;
+
     /// <summary>Creates an installer over one extensions root.</summary>
-    public AddonInstaller(AddonInstallLayout layout)
+    /// <param name="layout">Directory model for the extensions root.</param>
+    /// <param name="fileTypeProbe">Host entry-type classifier used to reject non-regular files.</param>
+    public AddonInstaller(AddonInstallLayout layout, IRegularFileProbe fileTypeProbe)
     {
         ArgumentNullException.ThrowIfNull(layout);
+        ArgumentNullException.ThrowIfNull(fileTypeProbe);
         Layout = layout;
+        this.fileTypeProbe = fileTypeProbe;
     }
 
     /// <summary>Gets the directory model used by this installer.</summary>
@@ -24,13 +32,7 @@ public sealed class AddonInstaller
     /// <param name="sourceDirectory">Unpacked package directory.</param>
     /// <param name="expectedVersion">Optional version the caller requested; a mismatch is refused.</param>
     public AddonInstallResult InstallExtension(string sourceDirectory, Version? expectedVersion = null) =>
-        InstallCore(sourceDirectory, AddonInstallLayout.ExtensionManifestFileName, isTheme: false, expectedVersion);
-
-    /// <summary>Installs a directory containing <c>theme.yaml</c>.</summary>
-    /// <param name="sourceDirectory">Unpacked package directory.</param>
-    /// <param name="expectedVersion">Optional version the caller requested; a mismatch is refused.</param>
-    public AddonInstallResult InstallTheme(string sourceDirectory, Version? expectedVersion = null) =>
-        InstallCore(sourceDirectory, AddonInstallLayout.ThemeManifestFileName, isTheme: true, expectedVersion);
+        InstallCore(sourceDirectory, expectedVersion);
 
     /// <summary>Removes every version of one add-on id.</summary>
     public AddonUninstallResult Uninstall(string addonId)
@@ -77,11 +79,7 @@ public sealed class AddonInstaller
         return new AddonUninstallResult(true, addonDirectory, Array.Empty<AddonDiagnostic>());
     }
 
-    private AddonInstallResult InstallCore(
-        string sourceDirectory,
-        string manifestFileName,
-        bool isTheme,
-        Version? expectedVersion)
+    private AddonInstallResult InstallCore(string sourceDirectory, Version? expectedVersion)
     {
         if (string.IsNullOrWhiteSpace(sourceDirectory))
         {
@@ -94,13 +92,13 @@ public sealed class AddonInstaller
             return Fail("missing-source", "$", $"Package directory '{source}' does not exist.");
         }
 
-        var sourceManifest = Path.Combine(source, manifestFileName);
+        var sourceManifest = Path.Combine(source, AddonInstallLayout.ExtensionManifestFileName);
         if (!File.Exists(sourceManifest))
         {
             return Fail(
                 "missing-manifest",
                 "$",
-                $"Package directory '{source}' has no {manifestFileName}.");
+                $"Package directory '{source}' has no {AddonInstallLayout.ExtensionManifestFileName}.");
         }
 
         string document;
@@ -116,24 +114,12 @@ public sealed class AddonInstaller
                 $"Could not read '{sourceManifest}': {exception.Message}");
         }
 
-        BaseExtensionManifest? manifest;
-        IReadOnlyList<AddonDiagnostic> validationDiagnostics;
-        if (isTheme)
+        var validation = AddonManifestValidator.ValidateExtension(
+            document,
+            AddonInstallLayout.ExtensionManifestFileName);
+        if (validation.Value is not { } manifest || validation.Diagnostics.Count > 0)
         {
-            var validation = AddonManifestValidator.ValidateTheme(document, manifestFileName);
-            manifest = validation.Value;
-            validationDiagnostics = validation.Diagnostics;
-        }
-        else
-        {
-            var validation = AddonManifestValidator.ValidateExtension(document, manifestFileName);
-            manifest = validation.Value;
-            validationDiagnostics = validation.Diagnostics;
-        }
-
-        if (manifest is null || validationDiagnostics.Count > 0)
-        {
-            return new AddonInstallResult(false, manifest, null, null, validationDiagnostics);
+            return new AddonInstallResult(false, validation.Value, null, null, validation.Diagnostics);
         }
 
         // The p3-005 parser guarantees a real Version and a non-empty id here.
@@ -143,7 +129,7 @@ public sealed class AddonInstaller
             return Fail(
                 "version-mismatch",
                 "$.Version",
-                $"{manifestFileName}: manifest version {manifestVersion} does not match requested {expectedVersion}.",
+                $"{AddonInstallLayout.ExtensionManifestFileName}: manifest version {manifestVersion} does not match requested {expectedVersion}.",
                 manifest);
         }
 
@@ -236,11 +222,11 @@ public sealed class AddonInstaller
             true,
             manifest,
             versionDirectory,
-            Path.Combine(versionDirectory!, manifestFileName),
+            Path.Combine(versionDirectory!, AddonInstallLayout.ExtensionManifestFileName),
             Array.Empty<AddonDiagnostic>());
     }
 
-    private static (List<SourceEntry>? Entries, AddonDiagnostic? Diagnostic) ListEntries(string source)
+    private (List<SourceEntry>? Entries, AddonDiagnostic? Diagnostic) ListEntries(string source)
     {
         var entries = new List<SourceEntry>();
         var pending = new Stack<DirectoryInfo>();
@@ -274,9 +260,13 @@ public sealed class AddonInstaller
                     case DirectoryInfo childDirectory:
                         pending.Push(childDirectory);
                         break;
-                    case FileInfo file:
+
+                    // Unix reports a FIFO, socket or device as a FileInfo, so the managed type
+                    // alone cannot tell a copyable file from an entry that would block forever.
+                    case FileInfo file when fileTypeProbe.IsRegularFile(file.FullName):
                         entries.Add(new SourceEntry(file.FullName, relativePath));
                         break;
+
                     default:
                         return (null, new AddonDiagnostic(
                             "unsupported-entry",

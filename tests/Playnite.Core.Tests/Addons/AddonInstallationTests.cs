@@ -1,5 +1,8 @@
+using System.Diagnostics;
+using System.Runtime.Versioning;
 using Playnite.Core.Addons;
 using Playnite.Core.Manifests;
+using Playnite.Platform.Linux;
 using Xunit;
 
 namespace Playnite.Core.Tests.Addons;
@@ -12,7 +15,7 @@ public sealed class AddonInstallationTests
         using var temp = new TempDirectory();
         var source = CreatePackage(temp, "Test_Plugin", "1.0");
         var root = Path.Combine(temp.FullPath, "Extensions");
-        var installer = new AddonInstaller(new AddonInstallLayout(root));
+        var installer = CreateInstaller(root);
 
         var result = installer.InstallExtension(source);
 
@@ -35,8 +38,8 @@ public sealed class AddonInstallationTests
         var firstRoot = Path.Combine(temp.FullPath, "root-a");
         var secondRoot = Path.Combine(temp.FullPath, "root-b");
 
-        var first = new AddonInstaller(new AddonInstallLayout(firstRoot)).InstallExtension(source);
-        var second = new AddonInstaller(new AddonInstallLayout(secondRoot)).InstallExtension(source);
+        var first = CreateInstaller(firstRoot).InstallExtension(source);
+        var second = CreateInstaller(secondRoot).InstallExtension(source);
 
         Assert.True(first.Succeeded, Describe(first.Diagnostics));
         Assert.True(second.Succeeded, Describe(second.Diagnostics));
@@ -58,7 +61,7 @@ public sealed class AddonInstallationTests
         using var temp = new TempDirectory();
         var source = CreatePackage(temp, "Test_Plugin", "1.0");
         var root = Path.Combine(temp.FullPath, "Extensions");
-        var installer = new AddonInstaller(new AddonInstallLayout(root));
+        var installer = CreateInstaller(root);
         var install = installer.InstallExtension(source);
         Assert.True(install.Succeeded, Describe(install.Diagnostics));
 
@@ -77,7 +80,7 @@ public sealed class AddonInstallationTests
         using var temp = new TempDirectory();
         var source = CreatePackage(temp, "Test_Plugin", "1.0");
         var root = Path.Combine(temp.FullPath, "Extensions");
-        var installer = new AddonInstaller(new AddonInstallLayout(root));
+        var installer = CreateInstaller(root);
         var first = installer.InstallExtension(source);
         Assert.True(first.Succeeded, Describe(first.Diagnostics));
 
@@ -100,7 +103,7 @@ public sealed class AddonInstallationTests
         using var temp = new TempDirectory();
         var source = CreatePackage(temp, id, "1.0");
         var root = Path.Combine(temp.FullPath, "Extensions");
-        var installer = new AddonInstaller(new AddonInstallLayout(root));
+        var installer = CreateInstaller(root);
 
         var result = installer.InstallExtension(source);
 
@@ -119,7 +122,7 @@ public sealed class AddonInstallationTests
         using var temp = new TempDirectory();
         var source = CreatePackage(temp, "Test_Plugin", "1.0", module);
         var root = Path.Combine(temp.FullPath, "Extensions");
-        var installer = new AddonInstaller(new AddonInstallLayout(root));
+        var installer = CreateInstaller(root);
 
         var result = installer.InstallExtension(source);
 
@@ -135,7 +138,7 @@ public sealed class AddonInstallationTests
         using var temp = new TempDirectory();
         var source = CreatePackage(temp, "Test_Plugin", "1.0");
         var root = Path.Combine(temp.FullPath, "Extensions");
-        var installer = new AddonInstaller(new AddonInstallLayout(root));
+        var installer = CreateInstaller(root);
 
         var result = installer.InstallExtension(source, new Version(2, 0));
 
@@ -154,7 +157,7 @@ public sealed class AddonInstallationTests
         File.WriteAllText(outside, "outside");
         File.CreateSymbolicLink(Path.Combine(source, "linked.dll"), outside);
         var root = Path.Combine(temp.FullPath, "Extensions");
-        var installer = new AddonInstaller(new AddonInstallLayout(root));
+        var installer = CreateInstaller(root);
 
         var result = installer.InstallExtension(source);
 
@@ -164,11 +167,58 @@ public sealed class AddonInstallationTests
     }
 
     [Fact]
+    [SupportedOSPlatform("linux")]
+    public async Task Install_rejects_a_fifo_without_blocking_on_it()
+    {
+        using var temp = new TempDirectory();
+        var source = CreatePackage(temp, "Test_Plugin", "1.0");
+        CreateFifo(Path.Combine(source, "z-pipe"));
+        var root = Path.Combine(temp.FullPath, "Extensions");
+        var installer = CreateInstaller(root);
+
+        // Unix reports a FIFO as a FileInfo and File.Copy would block forever reading it, so
+        // this regression test must complete rather than hang when the type check is missing.
+        var install = Task.Run(() => installer.InstallExtension(source));
+        var finished = await Task.WhenAny(install, Task.Delay(TimeSpan.FromSeconds(10)));
+
+        Assert.Same(install, finished);
+        var result = await install;
+        Assert.False(result.Succeeded);
+        Assert.Equal("unsupported-entry", result.Diagnostic!.Code);
+        AssertNoResidue(root);
+    }
+
+    [Fact]
+    [SupportedOSPlatform("linux")]
+    public void Install_removes_the_partial_add_on_when_a_later_copy_fails()
+    {
+        using var temp = new TempDirectory();
+        var source = CreatePackage(temp, "Test_Plugin", "1.0");
+        File.WriteAllText(Path.Combine(source, "a-first.dll"), "first");
+
+        // Copy order is ordinal by relative path, so the unreadable file is reached only after
+        // another file has already been written into the target directory.
+        var unreadable = Path.Combine(source, "z-locked.dll");
+        File.WriteAllText(unreadable, "locked");
+        File.SetUnixFileMode(unreadable, UnixFileMode.None);
+        var root = Path.Combine(temp.FullPath, "Extensions");
+        var installer = CreateInstaller(root);
+
+        var result = installer.InstallExtension(source);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("install-failed", result.Diagnostic!.Code);
+        Assert.Contains("z-locked.dll", result.Diagnostic.Message, StringComparison.Ordinal);
+        Assert.False(Directory.Exists(Path.Combine(root, "Test_Plugin")));
+        AssertNoResidue(root);
+    }
+
+    [Fact]
     public void Uninstall_refuses_an_id_that_is_not_one_safe_segment()
     {
         using var temp = new TempDirectory();
         var root = Path.Combine(temp.FullPath, "Extensions");
-        var installer = new AddonInstaller(new AddonInstallLayout(root));
+        var installer = CreateInstaller(root);
 
         var result = installer.Uninstall("../escape");
 
@@ -178,25 +228,51 @@ public sealed class AddonInstallationTests
     }
 
     [Fact]
-    public void Themes_use_the_same_id_and_version_layout()
+    public void GetInstalled_discovers_an_add_on_in_the_v10_one_directory_layout()
     {
         using var temp = new TempDirectory();
-        var source = Path.Combine(temp.FullPath, "theme");
-        Directory.CreateDirectory(source);
-        File.WriteAllText(
-            Path.Combine(source, "theme.yaml"),
-            "Id: 'Test_Theme'\nName: Test\nAuthor: Test\nVersion: 1.0\nMode: Fullscreen\nThemeApiVersion: 2.0.0\n");
-        File.WriteAllText(Path.Combine(source, "index.xaml"), "<Theme />");
         var root = Path.Combine(temp.FullPath, "Extensions");
-        var installer = new AddonInstaller(new AddonInstallLayout(root));
+        var v10Directory = Path.Combine(root, "V10_Addon");
+        WriteManifest(v10Directory, "V10_Addon", "2.3");
+        var installer = CreateInstaller(root);
 
-        var result = installer.InstallTheme(source);
-
-        Assert.True(result.Succeeded, Describe(result.Diagnostics));
-        Assert.Equal(Path.Combine(root, "Test_Theme", "1.0"), result.Directory);
         var installed = Assert.Single(installer.Layout.GetInstalled());
-        Assert.Equal(Path.Combine(result.Directory!, "theme.yaml"), installed.ManifestPath);
-        Assert.True(File.Exists(Path.Combine(result.Directory!, "index.xaml")));
+        Assert.Equal("V10_Addon", installed.AddonId);
+        Assert.Equal(new Version(2, 3), installed.Version);
+        Assert.Equal(v10Directory, installed.Directory);
+        Assert.Equal(Path.Combine(v10Directory, "extension.yaml"), installed.ManifestPath);
+
+        var uninstall = installer.Uninstall("V10_Addon");
+        Assert.True(uninstall.Succeeded, Describe(uninstall.Diagnostics));
+        Assert.False(Directory.Exists(v10Directory));
+    }
+
+    [Fact]
+    public void GetInstalled_does_not_follow_a_symlinked_directory()
+    {
+        using var temp = new TempDirectory();
+        var outside = Path.Combine(temp.FullPath, "outside");
+        WriteManifest(outside, "Outside_Addon");
+        var root = Path.Combine(temp.FullPath, "Extensions");
+        Directory.CreateDirectory(root);
+        Directory.CreateSymbolicLink(Path.Combine(root, "linked"), outside);
+
+        Assert.Empty(CreateInstaller(root).Layout.GetInstalled());
+    }
+
+    [Fact]
+    public void GetInstalled_stops_at_the_maximum_discovery_depth()
+    {
+        using var temp = new TempDirectory();
+        var root = Path.Combine(temp.FullPath, "Extensions");
+        WriteManifest(Path.Combine(root, "Shallow_Addon", "1.0"), "Shallow_Addon");
+        var deepRelative = string.Join(
+            Path.DirectorySeparatorChar,
+            Enumerable.Repeat("nested", AddonInstallLayout.MaxDiscoveryDepth + 1));
+        WriteManifest(Path.Combine(root, deepRelative), "Deep_Addon");
+
+        var installed = Assert.Single(CreateInstaller(root).Layout.GetInstalled());
+        Assert.Equal("Shallow_Addon", installed.AddonId);
     }
 
     [Fact]
@@ -205,7 +281,7 @@ public sealed class AddonInstallationTests
         using var temp = new TempDirectory();
         var source = CreatePackage(temp, "Test_Plugin", "1.0");
         var root = Path.Combine(temp.FullPath, "Extensions");
-        var installer = new AddonInstaller(new AddonInstallLayout(root));
+        var installer = CreateInstaller(root);
         var install = installer.InstallExtension(source);
         Assert.True(install.Succeeded, Describe(install.Diagnostics));
 
@@ -222,6 +298,9 @@ public sealed class AddonInstallationTests
         Assert.StartsWith(installed.Directory + Path.DirectorySeparatorChar, module, StringComparison.Ordinal);
     }
 
+    private static AddonInstaller CreateInstaller(string root) =>
+        new(new AddonInstallLayout(root), new LinuxRegularFileProbe());
+
     private static string CreatePackage(
         TempDirectory temp,
         string id,
@@ -230,14 +309,34 @@ public sealed class AddonInstallationTests
         string type = "GenericPlugin")
     {
         var source = Path.Combine(temp.FullPath, "package-" + Path.GetRandomFileName());
-        Directory.CreateDirectory(source);
-        File.WriteAllText(
-            Path.Combine(source, "extension.yaml"),
-            $"Id: '{id}'\nName: Test\nAuthor: Test\nVersion: {version}\nModule: '{module}'\nType: {type}\n");
-        File.WriteAllText(Path.Combine(source, "Plugin.dll"), "plugin");
+        WriteManifest(source, id, version, module, type);
         Directory.CreateDirectory(Path.Combine(source, "data"));
         File.WriteAllText(Path.Combine(source, "data", "config.json"), "{}");
         return source;
+    }
+
+    private static void WriteManifest(
+        string directory,
+        string id,
+        string version = "1.0",
+        string module = "Plugin.dll",
+        string type = "GenericPlugin")
+    {
+        Directory.CreateDirectory(directory);
+        File.WriteAllText(
+            Path.Combine(directory, "extension.yaml"),
+            $"Id: '{id}'\nName: Test\nAuthor: Test\nVersion: {version}\nModule: '{module}'\nType: {type}\n");
+        File.WriteAllText(Path.Combine(directory, "Plugin.dll"), "plugin");
+    }
+
+    private static void CreateFifo(string path)
+    {
+        var startInfo = new ProcessStartInfo("mkfifo") { UseShellExecute = false };
+        startInfo.ArgumentList.Add(path);
+        using var process = Process.Start(startInfo);
+        Assert.NotNull(process);
+        process!.WaitForExit();
+        Assert.Equal(0, process.ExitCode);
     }
 
     private static string[] RelativeFiles(string root) =>

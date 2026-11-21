@@ -28,7 +28,7 @@ public sealed class AddonInstallResult
     /// <summary>Gets the stable <c>&lt;root&gt;/&lt;id&gt;/&lt;version&gt;</c> directory.</summary>
     public string? Directory { get; }
 
-    /// <summary>Gets the installed <c>extension.yaml</c> or <c>theme.yaml</c> path.</summary>
+    /// <summary>Gets the installed <c>extension.yaml</c> path.</summary>
     public string? ManifestPath { get; }
 
     /// <summary>Gets every validation, conflict or filesystem failure.</summary>
