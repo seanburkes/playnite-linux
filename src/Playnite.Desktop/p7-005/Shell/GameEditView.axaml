@@ -1,0 +1,50 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="Playnite.Desktop.Shell.GameEditView">
+  <ScrollViewer Width="360" AutomationProperties.Name="Game edit panel">
+    <StackPanel Margin="8" Orientation="Vertical">
+      <TextBlock Text="Game edit" FontWeight="Bold" AutomationProperties.Name="Game edit header" />
+      <TextBlock x:Name="GameIdText" Text="(none)" AutomationProperties.Name="Edited game id" />
+
+      <TextBlock Text="Name" AutomationProperties.Name="Name label" />
+      <TextBox x:Name="NameBox" AutomationProperties.Name="Game name" />
+
+      <TextBlock Text="Description" AutomationProperties.Name="Description label" />
+      <TextBox x:Name="DescriptionBox" Height="72" AcceptsReturn="True"
+               AutomationProperties.Name="Game description" />
+
+      <TextBlock Text="Version" AutomationProperties.Name="Version label" />
+      <TextBox x:Name="VersionBox" AutomationProperties.Name="Game version" />
+
+      <TextBlock Text="Install directory" AutomationProperties.Name="Install directory label" />
+      <TextBox x:Name="InstallDirectoryBox" AutomationProperties.Name="Game install directory" />
+
+      <CheckBox x:Name="InstalledCheck" Content="Installed" AutomationProperties.Name="Game installed" />
+      <CheckBox x:Name="HiddenCheck" Content="Hidden" AutomationProperties.Name="Game hidden" />
+      <CheckBox x:Name="FavoriteCheck" Content="Favorite" AutomationProperties.Name="Game favorite" />
+
+      <TextBlock Text="User score" AutomationProperties.Name="User score label" />
+      <TextBox x:Name="UserScoreBox" AutomationProperties.Name="Game user score" />
+      <TextBlock x:Name="UserScoreErrorText" IsVisible="False" Foreground="Red"
+                 AutomationProperties.Name="User score validation error" />
+
+      <TextBlock Text="Icon reference" AutomationProperties.Name="Icon reference label" />
+      <TextBox x:Name="IconBox" AutomationProperties.Name="Game icon reference" />
+      <TextBlock Text="Cover reference" AutomationProperties.Name="Cover reference label" />
+      <TextBox x:Name="CoverImageBox" AutomationProperties.Name="Game cover reference" />
+      <TextBlock Text="Background reference" AutomationProperties.Name="Background reference label" />
+      <TextBox x:Name="BackgroundImageBox" AutomationProperties.Name="Game background reference" />
+
+      <TextBlock x:Name="MetadataText" Text="(none)" TextWrapping="Wrap"
+                 AutomationProperties.Name="Read-only game metadata" />
+      <TextBlock x:Name="StatusText" Text="empty" AutomationProperties.Name="Game edit status" />
+
+      <StackPanel Orientation="Horizontal" AutomationProperties.Name="Game edit actions">
+        <Button x:Name="SaveButton" Content="Save" Margin="0,4,8,4"
+                AutomationProperties.Name="Save game" />
+        <Button x:Name="CancelButton" Content="Cancel" Margin="0,4"
+                AutomationProperties.Name="Cancel edit" />
+      </StackPanel>
+    </StackPanel>
+  </ScrollViewer>
+</UserControl>
