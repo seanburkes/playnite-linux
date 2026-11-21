@@ -5,9 +5,12 @@
 <!-- port-status:narrative:start -->
 ## Hand-written narrative
 
-**Phase state:** Phase 5 accepted 2026-11-19 on the owner-approved launch-only Flatpak scope;
-Phase 6 (Core services and SDK v7) is next. The acceptance record is
-[`gates/P5-accepted.md`](gates/P5-accepted.md); the supporting evidence assessment is
+**Phase state:** Phase 5 was accepted 2026-11-19 on the owner-approved launch-only Flatpak scope.
+Phase 6 core services and SDK v7 are merged, and the Phase 6 exit-gate evidence assessment is
+recorded in [`gates/P6-pending.md`](gates/P6-pending.md): **3 PROVEN / 1 PARTIAL / 0 DEFERRED**.
+Phase 6 evidence is **pending captain acceptance**; the gate is not claimed and
+`gates/P6-accepted.md` is intentionally not written. Phase 7 is next. The Phase 5 acceptance record
+remains [`gates/P5-accepted.md`](gates/P5-accepted.md) with supporting evidence in
 [`gates/P5-pending.md`](gates/P5-pending.md).
 
 ## Deferred / known limitations
@@ -48,10 +51,11 @@ Phase 6 (Core services and SDK v7) is next. The acceptance record is
 - No open Phase 3 blocker: the owner accepted the Phase 3 exit on 2026-11-16 with the
   deferrals and uncovered items recorded in `gates/P3-leaves.md`. Library-open and the
   negative-proof-log residual remain explicitly unproven.
-- **Change-control gap:** culture handling and the `Playnite.SDK.Abstractions` v7 freeze /
-  ApiCompat report have no Phase 3 unit. The owner granted an explicit scope waiver for both
-  on 2026-11-16; the plan update remains a Phase 4 dependency for those two items, and the
-  v7 freeze is scheduled as `p6-004` in Phase 6. Neither is delivered or claimed.
+- **Change-control gap (historical):** culture handling and the `Playnite.SDK.Abstractions` v7
+  freeze / ApiCompat report had no Phase 3 unit; the owner granted an explicit scope waiver for
+  both on 2026-11-16. The v7 freeze and ApiCompat report were since delivered as `p6-008`
+  (merged #208) and are assessed, unaccepted, in `gates/P6-pending.md`; this supersedes the old
+  "scheduled as `p6-004`" note. Culture handling remains outside a dedicated unit.
 - Release work still needs dependency redistribution/license review. Steam remains greenfield
   with corpus/real-install acceptance rather than a v10 implementation diff; neither is an
   unreported scaffolding test pass.
