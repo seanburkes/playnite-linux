@@ -101,6 +101,16 @@ public sealed class AddonInstaller
                 $"Package directory '{source}' has no {AddonInstallLayout.ExtensionManifestFileName}.");
         }
 
+        // The manifest is read before the entry walk, so it needs the same type check: reading
+        // a FIFO named extension.yaml would block forever.
+        if (!fileTypeProbe.IsRegularFile(sourceManifest))
+        {
+            return Fail(
+                "unsupported-entry",
+                "$",
+                $"Package manifest '{sourceManifest}' is not a regular file.");
+        }
+
         string document;
         try
         {

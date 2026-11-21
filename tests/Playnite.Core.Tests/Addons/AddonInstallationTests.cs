@@ -176,13 +176,27 @@ public sealed class AddonInstallationTests
         var root = Path.Combine(temp.FullPath, "Extensions");
         var installer = CreateInstaller(root);
 
-        // Unix reports a FIFO as a FileInfo and File.Copy would block forever reading it, so
-        // this regression test must complete rather than hang when the type check is missing.
-        var install = Task.Run(() => installer.InstallExtension(source));
-        var finished = await Task.WhenAny(install, Task.Delay(TimeSpan.FromSeconds(10)));
+        var result = await InstallWithoutBlocking(installer, source);
 
-        Assert.Same(install, finished);
-        var result = await install;
+        Assert.False(result.Succeeded);
+        Assert.Equal("unsupported-entry", result.Diagnostic!.Code);
+        AssertNoResidue(root);
+    }
+
+    [Fact]
+    [SupportedOSPlatform("linux")]
+    public async Task Install_rejects_a_fifo_manifest_without_blocking_on_it()
+    {
+        using var temp = new TempDirectory();
+        var source = CreatePackage(temp, "Test_Plugin", "1.0");
+        var manifest = Path.Combine(source, "extension.yaml");
+        File.Delete(manifest);
+        CreateFifo(manifest);
+        var root = Path.Combine(temp.FullPath, "Extensions");
+        var installer = CreateInstaller(root);
+
+        var result = await InstallWithoutBlocking(installer, source);
+
         Assert.False(result.Succeeded);
         Assert.Equal("unsupported-entry", result.Diagnostic!.Code);
         AssertNoResidue(root);
@@ -300,6 +314,18 @@ public sealed class AddonInstallationTests
 
     private static AddonInstaller CreateInstaller(string root) =>
         new(new AddonInstallLayout(root), new LinuxRegularFileProbe());
+
+    // A FIFO has no writer, so File.Copy or File.ReadAllText on it never returns. The regression
+    // must fail within a bound instead of hanging the suite when a type check is missing.
+    private static async Task<AddonInstallResult> InstallWithoutBlocking(
+        AddonInstaller installer,
+        string source)
+    {
+        var install = Task.Run(() => installer.InstallExtension(source));
+        var finished = await Task.WhenAny(install, Task.Delay(TimeSpan.FromSeconds(10)));
+        Assert.Same(install, finished);
+        return await install;
+    }
 
     private static string CreatePackage(
         TempDirectory temp,

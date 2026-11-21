@@ -81,7 +81,8 @@ The layout is `AddonInstallLayout(extensionsRoot)`:
 
 `AddonInstaller.InstallExtension` takes an unpacked package directory:
 
-1. Read the manifest and run the validator above.
+1. Check that `extension.yaml` is a regular file, then read it and run the validator above.
+   The check comes first because reading a FIFO named `extension.yaml` would block forever.
 2. Refuse a version that differs from the caller's requested version (`version-mismatch`).
 3. Refuse an existing `<id>` directory (`duplicate-addon`); v1 has no update path.
 4. Walk the package, reject symlinks (`symlink`), reject unsafe relative entries
@@ -141,7 +142,7 @@ An installed extension is expected to load through the same contract proved by p
 | Test file | Coverage |
 | --- | --- |
 | `tests/Playnite.Core.Tests/Addons/AddonManifestValidationTests.cs` | Real `tests/golden/manifests/*.yaml`, the frozen extension/theme fixtures and the synthetic catalogue fixture; malformed fields with member diagnostics; hostile ids, modules and icons; the v10 omitted-`Type` compatibility rule; valid nested paths. |
-| `tests/Playnite.Core.Tests/Addons/AddonInstallationTests.cs` | Install into a temporary root; deterministic id/version path across roots; uninstall and residue; duplicate id; id traversal and absolute id; module traversal and absolute module; manifest/version mismatch; package symlink; a real FIFO that must be rejected without blocking; a late copy failure that must roll back the whole id directory; discovery of a v10 `<id>/extension.yaml` add-on and its uninstall; a symlinked discovery directory; the discovery depth bound; installed manifest/module discovery. |
+| `tests/Playnite.Core.Tests/Addons/AddonInstallationTests.cs` | Install into a temporary root; deterministic id/version path across roots; uninstall and residue; duplicate id; id traversal and absolute id; module traversal and absolute module; manifest/version mismatch; package symlink; a real FIFO entry and a real FIFO `extension.yaml`, both rejected without blocking; a late copy failure that must roll back the whole id directory; discovery of a v10 `<id>/extension.yaml` add-on and its uninstall; a symlinked discovery directory; the discovery depth bound; installed manifest/module discovery. |
 
 Evidence: `tests/Playnite.Core.Tests/Playnite.Core.Tests.csproj` copies
 `tests/golden/manifests/*` read-only into the test output as `golden-manifests/`; the existing
@@ -154,8 +155,9 @@ Two negative proofs were run locally, then the product code was restored:
   `Install_removes_the_partial_add_on_when_a_later_copy_fails` fail because `Test_Plugin`
   remains under the root.
 - Removing the `IRegularFileProbe` guard makes
-  `Install_rejects_a_fifo_without_blocking_on_it` fail at its 10-second bound, because
-  `File.Copy` blocks reading the FIFO.
+  `Install_rejects_a_fifo_without_blocking_on_it` and
+  `Install_rejects_a_fifo_manifest_without_blocking_on_it` fail at their 10-second bound,
+  because `File.Copy`/`File.ReadAllText` blocks reading the FIFO.
 
 Local evidence:
 
@@ -164,7 +166,7 @@ dotnet build src/Playnite.Platform.Linux/Playnite.Platform.Linux.csproj -c Relea
   0 Warning(s), 0 Error(s)
 
 dotnet test tests/Playnite.Core.Tests -c Release
-  total 3117, failed 0, succeeded 3117, skipped 0
+  total 3118, failed 0, succeeded 3118, skipped 0
 
 dotnet test tests/Playnite.Architecture.Tests -c Release
   total 210, failed 0, succeeded 210, skipped 0
