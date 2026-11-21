@@ -1,4 +1,3 @@
-using System.Globalization;
 using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
@@ -15,6 +14,7 @@ namespace Playnite.Desktop.Shell;
 public sealed partial class GameEditView : UserControl
 {
     private GameEditViewModel? model;
+    private bool refreshing;
 
     public event EventHandler? SaveRequested;
     public event EventHandler? CancelRequested;
@@ -24,6 +24,7 @@ public sealed partial class GameEditView : UserControl
         AvaloniaXamlLoader.Load(this);
         this.FindControl<Button>("SaveButton")!.Click += OnSaveClick;
         this.FindControl<Button>("CancelButton")!.Click += OnCancelClick;
+        this.FindControl<TextBox>("UserScoreBox")!.TextChanged += OnUserScoreTextChanged;
     }
 
     public void Apply(GameEditViewModel viewModel)
@@ -40,19 +41,29 @@ public sealed partial class GameEditView : UserControl
             return;
         }
 
-        this.FindControl<TextBlock>("GameIdText")!.Text = model.IsLoaded ? model.GameIdentity : "(none)";
-        this.FindControl<TextBox>("NameBox")!.Text = model.Name;
-        this.FindControl<TextBox>("DescriptionBox")!.Text = model.Description;
-        this.FindControl<TextBox>("VersionBox")!.Text = model.Version;
-        this.FindControl<TextBox>("InstallDirectoryBox")!.Text = model.InstallDirectory;
-        this.FindControl<CheckBox>("InstalledCheck")!.IsChecked = model.IsInstalled;
-        this.FindControl<CheckBox>("HiddenCheck")!.IsChecked = model.Hidden;
-        this.FindControl<CheckBox>("FavoriteCheck")!.IsChecked = model.Favorite;
-        this.FindControl<TextBox>("UserScoreBox")!.Text = model.UserScore?.ToString(CultureInfo.InvariantCulture) ?? string.Empty;
-        this.FindControl<TextBox>("IconBox")!.Text = model.Icon;
-        this.FindControl<TextBox>("CoverImageBox")!.Text = model.CoverImage;
-        this.FindControl<TextBox>("BackgroundImageBox")!.Text = model.BackgroundImage;
-        this.FindControl<TextBlock>("MetadataText")!.Text = model.MetadataSummary;
+        refreshing = true;
+        try
+        {
+            this.FindControl<TextBlock>("GameIdText")!.Text = model.IsLoaded ? model.GameIdentity : "(none)";
+            this.FindControl<TextBox>("NameBox")!.Text = model.Name;
+            this.FindControl<TextBox>("DescriptionBox")!.Text = model.Description;
+            this.FindControl<TextBox>("VersionBox")!.Text = model.Version;
+            this.FindControl<TextBox>("InstallDirectoryBox")!.Text = model.InstallDirectory;
+            this.FindControl<CheckBox>("InstalledCheck")!.IsChecked = model.IsInstalled;
+            this.FindControl<CheckBox>("HiddenCheck")!.IsChecked = model.Hidden;
+            this.FindControl<CheckBox>("FavoriteCheck")!.IsChecked = model.Favorite;
+            this.FindControl<TextBox>("UserScoreBox")!.Text = model.UserScoreInput;
+            this.FindControl<TextBox>("IconBox")!.Text = model.Icon;
+            this.FindControl<TextBox>("CoverImageBox")!.Text = model.CoverImage;
+            this.FindControl<TextBox>("BackgroundImageBox")!.Text = model.BackgroundImage;
+            this.FindControl<TextBlock>("MetadataText")!.Text = model.MetadataSummary;
+        }
+        finally
+        {
+            refreshing = false;
+        }
+
+        UpdateUserScoreValidation();
         this.FindControl<TextBlock>("StatusText")!.Text = model.Status;
 
         var loaded = model.IsLoaded;
@@ -67,7 +78,11 @@ public sealed partial class GameEditView : UserControl
             return;
         }
 
-        CollectFields();
+        if (!CollectFields())
+        {
+            return;
+        }
+
         SaveRequested?.Invoke(this, EventArgs.Empty);
     }
 
@@ -81,9 +96,16 @@ public sealed partial class GameEditView : UserControl
         CancelRequested?.Invoke(this, EventArgs.Empty);
     }
 
-    private void CollectFields()
+    private bool CollectFields()
     {
         var current = model!;
+        current.UserScoreInput = this.FindControl<TextBox>("UserScoreBox")!.Text ?? string.Empty;
+        if (!current.TryGetValidatedUserScore(out var score))
+        {
+            UpdateUserScoreValidation();
+            return false;
+        }
+
         current.Name = this.FindControl<TextBox>("NameBox")!.Text ?? string.Empty;
         current.Description = this.FindControl<TextBox>("DescriptionBox")!.Text ?? string.Empty;
         current.Version = this.FindControl<TextBox>("VersionBox")!.Text ?? string.Empty;
@@ -91,13 +113,36 @@ public sealed partial class GameEditView : UserControl
         current.IsInstalled = this.FindControl<CheckBox>("InstalledCheck")!.IsChecked ?? false;
         current.Hidden = this.FindControl<CheckBox>("HiddenCheck")!.IsChecked ?? false;
         current.Favorite = this.FindControl<CheckBox>("FavoriteCheck")!.IsChecked ?? false;
-        var score = this.FindControl<TextBox>("UserScoreBox")!.Text;
-        current.UserScore = int.TryParse(score, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed)
-            ? parsed
-            : null;
+        current.UserScore = score;
         current.Icon = this.FindControl<TextBox>("IconBox")!.Text ?? string.Empty;
         current.CoverImage = this.FindControl<TextBox>("CoverImageBox")!.Text ?? string.Empty;
         current.BackgroundImage = this.FindControl<TextBox>("BackgroundImageBox")!.Text ?? string.Empty;
+        return true;
+    }
+
+    private void OnUserScoreTextChanged(object? sender, TextChangedEventArgs eventArgs)
+    {
+        if (refreshing || model is null)
+        {
+            return;
+        }
+
+        model.UserScoreInput = this.FindControl<TextBox>("UserScoreBox")!.Text ?? string.Empty;
+        model.TryGetValidatedUserScore(out _);
+        UpdateUserScoreValidation();
+    }
+
+    private void UpdateUserScoreValidation()
+    {
+        if (model is null)
+        {
+            return;
+        }
+
+        var error = this.FindControl<TextBlock>("UserScoreErrorText")!;
+        error.Text = model.UserScoreValidationError ?? string.Empty;
+        error.IsVisible = model.UserScoreValidationError is not null;
+        this.FindControl<TextBlock>("StatusText")!.Text = model.Status;
     }
 
     // Smoke-only drivers: they raise the same routed events a user raises, so removing the button
@@ -117,6 +162,8 @@ public sealed partial class GameEditView : UserControl
         this.FindControl<Button>("SaveButton")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
 
     internal string TextOf(string name) => this.FindControl<TextBlock>(name)!.Text ?? string.Empty;
+
+    internal bool IsVisibleOf(string name) => this.FindControl<Control>(name)!.IsVisible;
 
     internal string InputTextOf(string name) => this.FindControl<TextBox>(name)!.Text ?? string.Empty;
 }

@@ -26,6 +26,17 @@ public sealed class GameEditMetadataSmokeTests
         Assert.Contains(
             "game-edit: saved=id:game-001;name:Edited Smoke Game;stored:Edited Smoke Game;score:77;detail:Edited Smoke Game;valid:true",
             lines);
+        Assert.Contains(
+            "game-edit: invalid-score=abc;status:invalid-user-score;error:true;persisted-score:77;valid:true",
+            lines);
+        Assert.Contains(
+            "game-edit: invalid-score=-1;status:invalid-user-score;error:true;persisted-score:77;valid:true",
+            lines);
+        Assert.Contains(
+            "game-edit: invalid-score=101;status:invalid-user-score;error:true;persisted-score:77;valid:true",
+            lines);
+        Assert.Contains("game-edit: blank-score-cleared=true", lines);
+        Assert.Contains("game-edit: score-boundaries=true", lines);
         Assert.Contains("game-edit: controls-loaded", lines);
         Assert.DoesNotContain("game-edit: save-failed=", result.Output);
         Assert.DoesNotContain("game-edit: load-failed=", result.Output);

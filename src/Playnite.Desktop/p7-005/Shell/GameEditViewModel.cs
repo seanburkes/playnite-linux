@@ -16,6 +16,7 @@ public sealed class GameEditViewModel
     private readonly GameEditStore store;
     private StoredGame? original;
     private Game? draft;
+    private string userScoreInput = string.Empty;
 
     public GameEditViewModel(GameEditStore store)
     {
@@ -78,7 +79,50 @@ public sealed class GameEditViewModel
     public int? UserScore
     {
         get => draft?.UserScore;
-        set => Draft.UserScore = value;
+        set
+        {
+            Draft.UserScore = value;
+            UserScoreInput = value?.ToString(CultureInfo.InvariantCulture) ?? string.Empty;
+        }
+    }
+
+    public string UserScoreInput
+    {
+        get => userScoreInput;
+        set
+        {
+            userScoreInput = value ?? string.Empty;
+            UserScoreValidationError = null;
+            if (Status == "invalid-user-score")
+            {
+                Status = "loaded";
+            }
+        }
+    }
+
+    public string? UserScoreValidationError { get; private set; }
+
+    public bool TryGetValidatedUserScore(out int? score)
+    {
+        if (string.IsNullOrWhiteSpace(UserScoreInput))
+        {
+            score = null;
+            ClearUserScoreValidation();
+            return true;
+        }
+
+        if (int.TryParse(UserScoreInput, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed)
+            && parsed is >= 0 and <= 100)
+        {
+            score = parsed;
+            ClearUserScoreValidation();
+            return true;
+        }
+
+        score = null;
+        UserScoreValidationError = "Enter a whole number from 0 to 100, or leave blank to clear.";
+        Status = "invalid-user-score";
+        return false;
     }
 
     // Raw references only: this unit has no image picker, byte loading or download (captain ruling).
@@ -134,6 +178,7 @@ public sealed class GameEditViewModel
 
         original = stored;
         draft = stored.Value.GetCopy();
+        UserScoreInput = stored.Value.UserScore?.ToString(CultureInfo.InvariantCulture) ?? string.Empty;
         Status = "loaded";
     }
 
@@ -151,6 +196,11 @@ public sealed class GameEditViewModel
         }
 
         cancellationToken.ThrowIfCancellationRequested();
+        if (!TryGetValidatedUserScore(out var userScore))
+        {
+            return false;
+        }
+
         var name = draft.Name?.Trim() ?? string.Empty;
         if (name.Length == 0)
         {
@@ -159,6 +209,7 @@ public sealed class GameEditViewModel
         }
 
         draft.Name = name;
+        draft.UserScore = userScore;
         var updated = new StoredGame(draft, original.LegacyJson);
         await store.UpdateAsync(updated, cancellationToken).ConfigureAwait(false);
         original = updated;
@@ -171,6 +222,17 @@ public sealed class GameEditViewModel
     {
         original = null;
         draft = null;
+        UserScoreInput = string.Empty;
+        UserScoreValidationError = null;
         Status = "empty";
+    }
+
+    private void ClearUserScoreValidation()
+    {
+        UserScoreValidationError = null;
+        if (Status == "invalid-user-score")
+        {
+            Status = "loaded";
+        }
     }
 }

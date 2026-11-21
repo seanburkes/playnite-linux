@@ -359,9 +359,82 @@ public sealed partial class ContentHostView : UserControl
             + $"detail:{model.Selected?.Name ?? "(none)"};"
             + $"valid:{savedValid.ToString().ToLowerInvariant()}");
 
-        if (savedValid)
+        var invalidScoresRejected = true;
+        foreach (var invalidScore in new[] { "abc", "-1", "101" })
+        {
+            var invalidValid = await RejectInvalidUserScoreAsync(invalidScore);
+            invalidScoresRejected &= invalidValid;
+            Console.WriteLine(
+                $"game-edit: invalid-score={invalidScore};status:{editView.TextOf("StatusText")};"
+                + $"error:{editView.IsVisibleOf("UserScoreErrorText").ToString().ToLowerInvariant()};"
+                + $"persisted-score:{(await editStore!.GetAsync(editModel.GameId, lifetime.Token))?.Value.UserScore?.ToString() ?? "<none>"};"
+                + $"valid:{invalidValid.ToString().ToLowerInvariant()}");
+        }
+
+        editView.SetTextForSmoke("NameBox", "Edited Smoke Game");
+        editView.SetTextForSmoke("DescriptionBox", "edited description");
+        editView.SetCheckForSmoke("FavoriteCheck", true);
+        editView.SetTextForSmoke("UserScoreBox", string.Empty);
+        editView.ClickSaveForSmoke();
+        await EditSaveTask;
+        var clearedScore = await editStore!.GetAsync(editModel.GameId, lifetime.Token);
+        var blankCleared = clearedScore is not null
+            && clearedScore.Value.UserScore is null
+            && string.Equals(clearedScore.Value.Name, "Edited Smoke Game", StringComparison.Ordinal)
+            && string.Equals(clearedScore.Value.Description, "edited description", StringComparison.Ordinal)
+            && clearedScore.Value.Favorite;
+        Console.WriteLine($"game-edit: blank-score-cleared={blankCleared.ToString().ToLowerInvariant()}");
+
+        var boundariesValid = true;
+        foreach (var boundary in new[] { (Text: "0", Value: 0), (Text: "100", Value: 100) })
+        {
+            editView.SetTextForSmoke("UserScoreBox", boundary.Text);
+            editView.ClickSaveForSmoke();
+            await EditSaveTask;
+            var boundaryStored = await editStore.GetAsync(editModel.GameId, lifetime.Token);
+            boundariesValid &= boundaryStored?.Value.UserScore == boundary.Value;
+        }
+        Console.WriteLine($"game-edit: score-boundaries={boundariesValid.ToString().ToLowerInvariant()}");
+
+        if (savedValid && invalidScoresRejected && blankCleared && boundariesValid)
         {
             Console.WriteLine("game-edit: controls-loaded");
         }
+    }
+
+    private async Task<bool> RejectInvalidUserScoreAsync(string input)
+    {
+        var before = await editStore!.GetAsync(editModel!.GameId, lifetime.Token);
+        var previousSaveTask = EditSaveTask;
+        editView.SetTextForSmoke("NameBox", "Must not be saved");
+        editView.SetTextForSmoke("DescriptionBox", "Must not be saved");
+        editView.SetCheckForSmoke("FavoriteCheck", false);
+        editView.SetTextForSmoke("UserScoreBox", input);
+        editView.ClickSaveForSmoke();
+        await EditSaveTask;
+
+        var after = await editStore.GetAsync(editModel.GameId, lifetime.Token);
+        var noSaveRouted = ReferenceEquals(previousSaveTask, EditSaveTask);
+        var persistedUnchanged = before is not null && after is not null
+            && string.Equals(after.Value.Name, before.Value.Name, StringComparison.Ordinal)
+            && string.Equals(after.Value.Description, before.Value.Description, StringComparison.Ordinal)
+            && string.Equals(after.Value.Version, before.Value.Version, StringComparison.Ordinal)
+            && string.Equals(after.Value.InstallDirectory, before.Value.InstallDirectory, StringComparison.Ordinal)
+            && after.Value.IsInstalled == before.Value.IsInstalled
+            && after.Value.Hidden == before.Value.Hidden
+            && after.Value.Favorite == before.Value.Favorite
+            && after.Value.UserScore == before.Value.UserScore
+            && string.Equals(after.Value.Icon, before.Value.Icon, StringComparison.Ordinal)
+            && string.Equals(after.Value.CoverImage, before.Value.CoverImage, StringComparison.Ordinal)
+            && string.Equals(after.Value.BackgroundImage, before.Value.BackgroundImage, StringComparison.Ordinal)
+            && string.Equals(after.LegacyJson, before.LegacyJson, StringComparison.Ordinal)
+            && (after.Value.TagIds ?? []).SequenceEqual(before.Value.TagIds ?? []);
+        return noSaveRouted
+            && persistedUnchanged
+            && string.Equals(editModel.Name, before?.Value.Name, StringComparison.Ordinal)
+            && string.Equals(editModel.Description, before?.Value.Description, StringComparison.Ordinal)
+            && string.Equals(editView.InputTextOf("UserScoreBox"), input, StringComparison.Ordinal)
+            && string.Equals(editView.TextOf("StatusText"), "invalid-user-score", StringComparison.Ordinal)
+            && editView.IsVisibleOf("UserScoreErrorText");
     }
 }

@@ -25,6 +25,8 @@
 
       <TextBlock Text="User score" AutomationProperties.Name="User score label" />
       <TextBox x:Name="UserScoreBox" AutomationProperties.Name="Game user score" />
+      <TextBlock x:Name="UserScoreErrorText" IsVisible="False" Foreground="Red"
+                 AutomationProperties.Name="User score validation error" />
 
       <TextBlock Text="Icon reference" AutomationProperties.Name="Icon reference label" />
       <TextBox x:Name="IconBox" AutomationProperties.Name="Game icon reference" />

@@ -95,6 +95,79 @@ public sealed class GameEditMetadataSeamsTests
         Assert.Equal(new[] { TagId }, stored.Value.TagIds);
     }
 
+    [Theory]
+    [InlineData("abc")]
+    [InlineData("-1")]
+    [InlineData("101")]
+    public async Task Saving_an_invalid_user_score_keeps_the_existing_record_unchanged(string input)
+    {
+        using var temp = new TemporaryLibrary();
+        await SeedAsync(temp.LibraryPath);
+        var store = await GameEditStore.OpenAsync(temp.LibraryPath);
+        var model = new GameEditViewModel(store);
+        await model.LoadAsync(GameId);
+
+        model.Name = "Must not be saved";
+        model.Description = "Must not be saved";
+        model.Favorite = true;
+        model.UserScoreInput = input;
+
+        Assert.False(await model.SaveAsync());
+        Assert.Equal("invalid-user-score", model.Status);
+        Assert.NotNull(model.UserScoreValidationError);
+        Assert.Equal(55, model.UserScore);
+
+        var stored = await store.GetAsync(GameId);
+        Assert.NotNull(stored);
+        Assert.Equal("Alpha Game", stored!.Value.Name);
+        Assert.Equal("original description", stored.Value.Description);
+        Assert.Equal("1.0", stored.Value.Version);
+        Assert.Equal("/games/alpha", stored.Value.InstallDirectory);
+        Assert.True(stored.Value.IsInstalled);
+        Assert.False(stored.Value.Hidden);
+        Assert.False(stored.Value.Favorite);
+        Assert.Equal(55, stored.Value.UserScore);
+        Assert.Equal("icon-original", stored.Value.Icon);
+        Assert.Equal("cover-original", stored.Value.CoverImage);
+        Assert.Equal("background-original", stored.Value.BackgroundImage);
+        Assert.Equal("untouched notes", stored.Value.Notes);
+        Assert.Equal("Alpha Sorting", stored.Value.SortingName);
+        Assert.Equal(Legacy, stored.LegacyJson);
+        Assert.Equal(new[] { TagId }, stored.Value.TagIds);
+    }
+
+    [Fact]
+    public async Task Saving_a_blank_user_score_clears_it_to_null()
+    {
+        using var temp = new TemporaryLibrary();
+        await SeedAsync(temp.LibraryPath);
+        var store = await GameEditStore.OpenAsync(temp.LibraryPath);
+        var model = new GameEditViewModel(store);
+        await model.LoadAsync(GameId);
+
+        model.UserScoreInput = string.Empty;
+
+        Assert.True(await model.SaveAsync());
+        Assert.Null((await store.GetAsync(GameId))!.Value.UserScore);
+    }
+
+    [Theory]
+    [InlineData("0", 0)]
+    [InlineData("100", 100)]
+    public async Task Saving_user_score_boundaries_succeeds(string input, int expected)
+    {
+        using var temp = new TemporaryLibrary();
+        await SeedAsync(temp.LibraryPath);
+        var store = await GameEditStore.OpenAsync(temp.LibraryPath);
+        var model = new GameEditViewModel(store);
+        await model.LoadAsync(GameId);
+
+        model.UserScoreInput = input;
+
+        Assert.True(await model.SaveAsync());
+        Assert.Equal(expected, (await store.GetAsync(GameId))!.Value.UserScore);
+    }
+
     [Fact]
     public async Task Saving_a_blank_name_is_rejected_without_a_write()
     {
