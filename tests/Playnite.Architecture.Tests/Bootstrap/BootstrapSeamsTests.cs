@@ -93,6 +93,62 @@ public sealed class BootstrapSeamsTests
     }
 
     [Fact]
+    public void Theme_file_reads_a_window_font_size_override()
+    {
+        var path = Path.Combine(Path.GetTempPath(), "playnite-theme-" + Path.GetRandomFileName() + ".axaml");
+        try
+        {
+            File.WriteAllText(path, """
+                <Styles xmlns="https://github.com/avaloniaui">
+                  <Style Selector="Window"><Setter Property="FontSize" Value="21" /></Style>
+                </Styles>
+                """);
+
+            Assert.Equal(21, ThemeFile.Read(path).FontSize);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Theory]
+    [InlineData("<Styles xmlns=\"https://github.com/avaloniaui\"><Style Selector=\"Button\"><Setter Property=\"FontSize\" Value=\"21\" /></Style></Styles>")]
+    [InlineData("<Styles xmlns=\"https://github.com/avaloniaui\"><Style Selector=\"Window\"><Setter Property=\"Opacity\" Value=\"0.5\" /></Style></Styles>")]
+    [InlineData("<Styles xmlns=\"https://github.com/avaloniaui\"><Style Selector=\"Window\"><Setter Property=\"FontSize\" Value=\"0\" /></Style></Styles>")]
+    public void Theme_file_rejects_unsupported_or_invalid_overrides(string document)
+    {
+        var path = Path.Combine(Path.GetTempPath(), "playnite-theme-" + Path.GetRandomFileName() + ".axaml");
+        try
+        {
+            File.WriteAllText(path, document);
+
+            Assert.Throws<FormatException>(() => ThemeFile.Read(path));
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void Localization_source_names_the_loaded_catalog()
+    {
+        Assert.Equal("embedded", BootstrapLocalization.Load(null).Source);
+
+        var path = Path.Combine(Path.GetTempPath(), "playnite-loc-" + Path.GetRandomFileName() + ".json");
+        try
+        {
+            File.WriteAllText(path, "{\"LOCAboutWindowTitle\":\"From catalog\"}");
+            Assert.Equal(path, BootstrapLocalization.Load(path).Source);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
     public void Localization_resolves_frozen_english_and_marks_unknown_keys()
     {
         var localization = BootstrapLocalization.Load(null);

@@ -26,6 +26,8 @@ public sealed class DesktopBootstrapper
 
     public string LocalisedProbe => localization.Resolve(LocalisationKey);
 
+    public string LocalisationSource => localization.Source;
+
     public void Apply(Application application)
     {
         ArgumentNullException.ThrowIfNull(application);

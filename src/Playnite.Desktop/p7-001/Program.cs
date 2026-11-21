@@ -67,8 +67,15 @@ internal static class Program
 
             if (bootstrapSmoke)
             {
-                Console.WriteLine($"bootstrap: theme={bootstrapper.AppliedTheme?.Name ?? "unknown"}");
+                var theme = bootstrapper.AppliedTheme;
+                Console.WriteLine($"bootstrap: theme={theme?.Name ?? "unknown"}");
+                Console.WriteLine($"bootstrap: theme-applied={theme?.Applied.ToString().ToLowerInvariant() ?? "false"}");
+                Console.WriteLine($"bootstrap: theme-style-applied={theme?.StyleApplied.ToString().ToLowerInvariant() ?? "false"}");
+                Console.WriteLine($"bootstrap: theme-source={theme?.Source ?? "none"}");
                 Console.WriteLine($"bootstrap: localisation={bootstrapper.LocalisedProbe}");
+                Console.WriteLine($"bootstrap: localisation-source={bootstrapper.LocalisationSource}");
+                Console.WriteLine($"bootstrap: config-root={directories.Config}");
+                Console.WriteLine($"bootstrap: state-root={directories.State}");
                 Console.WriteLine("bootstrap: single-instance=skipped (headless test host)");
             }
 

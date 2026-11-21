@@ -13,9 +13,13 @@ public sealed class BootstrapLocalization
 
     private readonly LocalizationKeySet catalog;
 
-    public BootstrapLocalization(LocalizationKeySet? catalog = null)
+    /// <summary>The loaded catalog path, or <c>embedded</c> when no file was read.</summary>
+    public string Source { get; }
+
+    public BootstrapLocalization(LocalizationKeySet? catalog = null, string? source = null)
     {
         this.catalog = catalog ?? LocalizationKeySet.English;
+        Source = source ?? "embedded";
     }
 
     public string Resolve(string key) => LocalizationKeySet.English.Resolve(key, catalog);
@@ -35,6 +39,6 @@ public sealed class BootstrapLocalization
 
         var entries = JsonSerializer.Deserialize<Dictionary<string, string>>(File.ReadAllText(catalogPath))
             ?? throw new InvalidDataException($"Localisation catalog {catalogPath} is empty.");
-        return new BootstrapLocalization(new LocalizationKeySet(entries));
+        return new BootstrapLocalization(new LocalizationKeySet(entries), Path.GetFullPath(catalogPath));
     }
 }
