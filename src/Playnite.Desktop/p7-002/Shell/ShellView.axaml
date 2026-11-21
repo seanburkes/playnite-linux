@@ -1,0 +1,19 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:shell="using:Playnite.Desktop.Shell"
+             x:Class="Playnite.Desktop.Shell.ShellView">
+  <DockPanel LastChildFill="True">
+    <Border x:Name="TopPanel" DockPanel.Dock="Top" AutomationProperties.Name="Top panel">
+      <shell:TopPanelView />
+    </Border>
+    <Border x:Name="Notifications" DockPanel.Dock="Right" AutomationProperties.Name="Notifications">
+      <shell:NotificationsView />
+    </Border>
+    <Border x:Name="Sidebar" DockPanel.Dock="Left" AutomationProperties.Name="Sidebar">
+      <shell:SidebarView />
+    </Border>
+    <Border x:Name="ContentHost" AutomationProperties.Name="Content host">
+      <shell:ContentHostView />
+    </Border>
+  </DockPanel>
+</UserControl>

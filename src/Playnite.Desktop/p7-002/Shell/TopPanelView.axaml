@@ -1,0 +1,13 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:shell="using:Playnite.Desktop.Shell"
+             x:Class="Playnite.Desktop.Shell.TopPanelView"
+             x:DataType="shell:ShellViewModel">
+  <StackPanel Orientation="Horizontal">
+    <TextBlock x:Name="TitleText" Text="PLAYNITE" />
+    <Button x:Name="AboutButton" Content="About" AutomationProperties.Name="About"
+            Command="{Binding AboutCommand}" />
+    <Button x:Name="MessageBoxButton" Content="Message" AutomationProperties.Name="Show message"
+            Command="{Binding MessageBoxCommand}" />
+  </StackPanel>
+</UserControl>

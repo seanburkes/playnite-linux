@@ -1,11 +1,11 @@
 using Avalonia.Controls;
 using Avalonia.Markup.Xaml;
 
-namespace Playnite.Desktop;
+namespace Playnite.Desktop.Shell;
 
-public sealed partial class MainWindow : Window
+public sealed partial class ShellView : UserControl
 {
-    public MainWindow()
+    public ShellView()
     {
         AvaloniaXamlLoader.Load(this);
     }

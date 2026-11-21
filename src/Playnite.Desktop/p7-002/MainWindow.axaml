@@ -1,4 +1,7 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:shell="using:Playnite.Desktop.Shell"
         x:Class="Playnite.Desktop.MainWindow"
-        Title="Playnite" />
+        Title="Playnite">
+  <shell:ShellView x:Name="ShellRoot" />
+</Window>

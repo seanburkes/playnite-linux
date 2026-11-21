@@ -1,0 +1,8 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="Playnite.Desktop.Shell.MessageBoxView">
+  <StackPanel>
+    <TextBlock x:Name="MessageBoxTitleText" AutomationProperties.Name="Message title" />
+    <TextBlock x:Name="MessageBoxMessageText" AutomationProperties.Name="Message text" />
+  </StackPanel>
+</UserControl>
