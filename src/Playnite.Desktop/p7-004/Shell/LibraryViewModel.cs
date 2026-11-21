@@ -33,7 +33,18 @@ public sealed class LibraryViewModel
     private LibraryService? service;
     private int pageOffset;
     private CancellationToken lifetimeToken;
+    private CancellationToken currentQueryToken;
     private CancellationTokenSource? queryCts;
+    private long generation;
+
+    /// <summary>
+    /// Test-only seam: when set, the query pipeline is replaced so a test can hold one query in
+    /// flight while a superseding query completes. Production always uses the p6-001 service.
+    /// </summary>
+    internal Func<LibraryQuery, CancellationToken, Task<LibraryPage>>? QueryExecutor { get; set; }
+
+    /// <summary>The token of the most recently started query, for targeted supersession handling.</summary>
+    internal CancellationToken QueryToken => currentQueryToken;
 
     public LibraryViewModel(string databasePath)
     {
@@ -87,7 +98,10 @@ public sealed class LibraryViewModel
         await LoadPageAsync(0, cancellationToken).ConfigureAwait(false);
     }
 
-    public async Task LoadPageAsync(int offset, CancellationToken cancellationToken = default)
+    public Task LoadPageAsync(int offset, CancellationToken cancellationToken = default)
+        => LoadPageAsyncCore(offset, cancellationToken, Interlocked.Increment(ref generation));
+
+    private async Task LoadPageAsyncCore(int offset, CancellationToken cancellationToken, long requestGeneration)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(offset);
         var service = this.service ?? throw new InvalidOperationException("The library has not been opened.");
@@ -100,19 +114,40 @@ public sealed class LibraryViewModel
             Offset: offset,
             Limit: PageSize);
 
-        // A blank term uses the bounded p6-012 list path; a real term goes through the v10 matcher.
-        var page = string.IsNullOrWhiteSpace(SearchTerm)
-            ? await service.ListAsync(query, cancellationToken).ConfigureAwait(false)
-            : await service.SearchAsync(SearchTerm, query, cancellationToken).ConfigureAwait(false);
+        var page = await QueryPageAsync(service, query, cancellationToken).ConfigureAwait(false);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        // Compute the whole result before publishing it. A superseded request never writes its
+        // rows, selection or status over the current query's result.
+        var rows = page.Games
+            .Select(game => new LibraryRow(game.Value.Id, game.Value.Name ?? "(unnamed)", game.Value.GameId))
+            .ToArray();
+        var first = rows.Length > 0 ? rows[0] : null;
+        var selected = first is null ? null : await LoadDetailsAsync(first, cancellationToken).ConfigureAwait(false);
+        cancellationToken.ThrowIfCancellationRequested();
+        if (requestGeneration != Volatile.Read(ref generation))
+        {
+            return;
+        }
 
         pageOffset = offset;
         TotalCount = page.TotalCount;
-        Rows = page.Games
-            .Select(game => new LibraryRow(game.Value.Id, game.Value.Name ?? "(unnamed)", game.Value.GameId))
-            .ToArray();
-        var first = Rows.Count > 0 ? Rows[0] : null;
-        Selected = first is null ? null : await LoadDetailsAsync(first, cancellationToken).ConfigureAwait(false);
+        Rows = rows;
+        Selected = selected;
         Status = TotalCount == 0 ? "empty" : "loaded";
+    }
+
+    private async Task<LibraryPage> QueryPageAsync(LibraryService service, LibraryQuery query, CancellationToken cancellationToken)
+    {
+        if (QueryExecutor is not null)
+        {
+            return await QueryExecutor(query, cancellationToken).ConfigureAwait(false);
+        }
+
+        // A blank term uses the bounded p6-012 list path; a real term goes through the v10 matcher.
+        return string.IsNullOrWhiteSpace(SearchTerm)
+            ? await service.ListAsync(query, cancellationToken).ConfigureAwait(false)
+            : await service.SearchAsync(SearchTerm, query, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -125,7 +160,8 @@ public sealed class LibraryViewModel
         queryCts?.Dispose();
         var token = cancellationToken == default ? lifetimeToken : cancellationToken;
         queryCts = CancellationTokenSource.CreateLinkedTokenSource(token);
-        return LoadPageAsync(0, queryCts.Token);
+        currentQueryToken = queryCts.Token;
+        return LoadPageAsync(0, currentQueryToken);
     }
 
     /// <summary>Sets the v10 name-search term (trimmed) and reloads page 1.</summary>
@@ -224,6 +260,7 @@ public sealed class LibraryViewModel
         queryCts?.Cancel();
         queryCts?.Dispose();
         queryCts = null;
+        currentQueryToken = default;
         Rows = [];
         Selected = null;
         service = null;

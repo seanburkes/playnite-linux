@@ -40,6 +40,12 @@ out of scope. No protected fixture, golden, parity, baseline or aggregate is edi
   and ties come from p6-012 (`PagedLibraryComparer` / SQL total order: primary key with NOCASE
   text order, then name, then ordinal stored Id). Repeated identical queries return the same
   ordered identities; a query is always bounded by `PageSize = 50`.
+- **Supersession and stale results.** Every load advances a request generation. A load computes
+  rows and details before publishing them, re-checks the token after each awaited service/detail
+  call, and discards its result when the generation has advanced. The grid routes query changes
+  through a shared awaited helper: cancellation of the superseded query is a normal outcome, and
+  no query handler can leak an `OperationCanceledException` to the UI thread. Bounded paging and
+  selection semantics are unchanged.
 - p7-003 selection, details and paging are preserved: real selectable `ListBoxItem` rows with
   semantic names, `SelectedIndex` synchronization, non-first selection details through
   `LibraryService.GetAsync`, `PreviousButton`/`NextButton` no-ops at bounds and the `Page n / m`
@@ -49,13 +55,16 @@ out of scope. No protected fixture, golden, parity, baseline or aggregate is edi
 
 ## Evidence
 
-- `tests/Playnite.Architecture.Tests/Bootstrap/SearchFilterSortSeamsTests.cs` (8) — default query
+- `tests/Playnite.Architecture.Tests/Bootstrap/SearchFilterSortSeamsTests.cs` (10) — default query
   state, trimmed v10 term search, acronym/word matching, bounded quick filters, stable selected
-  sort with direction, bounded stable page reset on query change, instance-ownership guard, and
-  moved namespace/`x:Class`/p7-003 control-name invariants.
+  sort with direction, bounded stable page reset on query change, a held stale result that cannot
+  overwrite a newer result, a held superseded query whose cancellation leaves the newer result
+  intact, instance-ownership guard, and moved namespace/`x:Class`/p7-003 control-name invariants.
 - `tests/Playnite.Smoke.Tests/SearchFilterSortSmokeTests.cs` (2) — headless seeded six-game library
-  driving real search/filter/sort/reset controls and an empty-library control check, under isolated
-  XDG roots; writes stay inside the temporary profile.
+  driving real search/filter/sort/reset controls plus a deterministic hold/release supersession
+  through the same routed events, and an empty-library control check, under isolated XDG roots;
+  writes stay inside the temporary profile and no query failure is logged.
 - Mutation proofs: removing the search `TextChanged` wiring, removing the sort `SelectionChanged`
-  wiring, and removing the page reset each fail the smoke/architecture assertion; restored files
-  pass. Zero skips; executed-case counts non-decreasing (Architecture 246 → 254, Smoke 9 → 11).
+  wiring, removing the page reset, removing the generation guard, and rethrowing a superseded
+  cancellation each fail the relevant smoke/architecture assertion; restored files pass. Zero
+  skips; executed-case counts non-decreasing (Architecture 246 → 256, Smoke 9 → 11).

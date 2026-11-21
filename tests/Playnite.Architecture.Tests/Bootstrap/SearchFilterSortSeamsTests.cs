@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Reflection;
 using Playnite.Core.Database;
+using Playnite.Core.Library;
 using Playnite.Core.Models;
 using Playnite.Core.Queries;
 using Playnite.Desktop.Shell;
@@ -161,6 +162,79 @@ public sealed class SearchFilterSortSeamsTests
     }
 
     [Fact]
+    public async Task A_stale_query_result_cannot_overwrite_a_newer_result()
+    {
+        using var temp = await SeededLibraryAsync(new Seed("game-1", "Alpha Game"), new Seed("game-2", "Bravo Game"));
+        var model = new LibraryViewModel(temp.LibraryPath);
+        await model.LoadAsync();
+
+        var enteredFirst = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseFirst = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var calls = 0;
+        SetQueryExecutor(model, async (_, _) =>
+        {
+            if (Interlocked.Increment(ref calls) == 1)
+            {
+                enteredFirst.TrySetResult();
+                await releaseFirst.Task.ConfigureAwait(false);
+                return Page("Alpha Game", "game-1");
+            }
+
+            return Page("Bravo Game", "game-2");
+        });
+
+        // No cancellation here: a second load advances the generation while the first is held.
+        var first = model.LoadPageAsync(0);
+        await enteredFirst.Task;
+        var second = model.LoadPageAsync(0);
+        await second;
+        Assert.Equal(["Bravo Game"], model.Rows.Select(row => row.Name));
+
+        releaseFirst.TrySetResult();
+        await first;
+        Assert.Equal(["Bravo Game"], model.Rows.Select(row => row.Name));
+        Assert.Equal("Bravo Game", model.Selected?.Name);
+        Assert.Equal("loaded", model.Status);
+    }
+
+    [Fact]
+    public async Task A_superseded_query_cancellation_leaves_the_newer_result_intact()
+    {
+        using var temp = await SeededLibraryAsync(new Seed("game-1", "Alpha Game"), new Seed("game-2", "Bravo Game"));
+        var model = new LibraryViewModel(temp.LibraryPath);
+        await model.LoadAsync();
+
+        var enteredFirst = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseFirst = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var calls = 0;
+        SetQueryExecutor(model, async (_, token) =>
+        {
+            if (Interlocked.Increment(ref calls) == 1)
+            {
+                enteredFirst.TrySetResult();
+                await releaseFirst.Task.ConfigureAwait(false);
+                token.ThrowIfCancellationRequested();
+            }
+
+            return Page("Bravo Game", "game-2");
+        });
+
+        var first = model.SetSearchTermAsync("Alpha");
+        await enteredFirst.Task;
+        var second = model.SetSearchTermAsync("Bravo");
+        await second;
+        Assert.Equal(["Bravo Game"], model.Rows.Select(row => row.Name));
+
+        releaseFirst.TrySetResult();
+        await Assert.ThrowsAsync<OperationCanceledException>(() => first);
+        Assert.Equal(["Bravo Game"], model.Rows.Select(row => row.Name));
+        Assert.Equal("Bravo", model.SearchTerm);
+        Assert.Equal("Bravo Game", model.Selected?.Name);
+        Assert.Equal("Page 1 / 1", model.PageIndicator);
+        Assert.Equal("loaded", model.Status);
+    }
+
+    [Fact]
     public void The_moved_view_model_is_instance_owned_without_a_service_locator()
     {
         var constructor = Assert.Single(typeof(LibraryViewModel).GetConstructors());
@@ -190,6 +264,15 @@ public sealed class SearchFilterSortSeamsTests
             Assert.Contains("x:Name=\"" + name + "\"", xaml, StringComparison.Ordinal);
         }
     }
+
+    private static LibraryPage Page(string name, string gameId) => new(
+        [new StoredGame(new Game(Guid.NewGuid(), gameId, name))], 1, []);
+
+    private static void SetQueryExecutor(LibraryViewModel model,
+        Func<LibraryQuery, CancellationToken, Task<LibraryPage>> executor) =>
+        typeof(LibraryViewModel)
+            .GetProperty("QueryExecutor", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .SetValue(model, executor);
 
     private static async Task<TemporaryLibrary> SeededLibraryAsync(params Seed[] seeds)
     {

@@ -2,6 +2,9 @@ using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml;
+using Playnite.Core.Database;
+using Playnite.Core.Library;
+using Playnite.Core.Models;
 using Playnite.Core.Queries;
 using Playnite.Desktop.Bootstrap;
 
@@ -208,18 +211,17 @@ public sealed partial class LibraryGridView : UserControl
         Refresh();
     }
 
-    private async void OnSearchChanged(object? sender, TextChangedEventArgs eventArgs)
+    private void OnSearchChanged(object? sender, TextChangedEventArgs eventArgs)
     {
         if (model is null)
         {
             return;
         }
 
-        QueryTask = ApplyQueryAsync(model.SetSearchTermAsync(this.FindControl<TextBox>("SearchBox")!.Text ?? string.Empty));
-        await QueryTask;
+        StartQuery(model.SetSearchTermAsync(this.FindControl<TextBox>("SearchBox")!.Text ?? string.Empty), model.QueryToken);
     }
 
-    private async void OnFilterClicked(object? sender, RoutedEventArgs eventArgs)
+    private void OnFilterClicked(object? sender, RoutedEventArgs eventArgs)
     {
         if (model is null || sender is not Button button)
         {
@@ -234,11 +236,10 @@ public sealed partial class LibraryGridView : UserControl
             "FavoriteFilterButton" => LibraryFilterMode.Favorite,
             _ => LibraryFilterMode.All,
         };
-        QueryTask = ApplyQueryAsync(model.SetFilterAsync(mode));
-        await QueryTask;
+        StartQuery(model.SetFilterAsync(mode), model.QueryToken);
     }
 
-    private async void OnSortChanged(object? sender, SelectionChangedEventArgs eventArgs)
+    private void OnSortChanged(object? sender, SelectionChangedEventArgs eventArgs)
     {
         var combo = this.FindControl<ComboBox>("SortCombo")!;
         if (model is null || combo.SelectedIndex < 0 || combo.SelectedIndex >= SortOrders.Length)
@@ -246,26 +247,56 @@ public sealed partial class LibraryGridView : UserControl
             return;
         }
 
-        QueryTask = ApplyQueryAsync(model.SetSortAsync(SortOrders[combo.SelectedIndex], model.Descending));
-        await QueryTask;
+        StartQuery(model.SetSortAsync(SortOrders[combo.SelectedIndex], model.Descending), model.QueryToken);
     }
 
-    private async void OnSortDirectionClicked(object? sender, RoutedEventArgs eventArgs)
+    private void OnSortDirectionClicked(object? sender, RoutedEventArgs eventArgs)
     {
         if (model is null)
         {
             return;
         }
 
-        QueryTask = ApplyQueryAsync(model.SetDescendingAsync(!model.Descending));
-        await QueryTask;
+        StartQuery(model.SetDescendingAsync(!model.Descending), model.QueryToken);
     }
 
-    private async Task ApplyQueryAsync(Task query)
+    /// <summary>
+    /// Supersession is a normal query outcome. The shared helper awaits the query, treats a
+    /// cancellation of the active query as a no-op, and only refreshes the controls for a
+    /// still-current result. No async-void query handler can leak an OperationCanceledException.
+    /// </summary>
+    private void StartQuery(Task query, CancellationToken token)
     {
-        await query;
+        var uiTask = ApplyQueryAsync(query, token);
+        QueryTask = uiTask;
+        _ = ObserveQueryAsync(uiTask);
+    }
+
+    private async Task ApplyQueryAsync(Task query, CancellationToken token)
+    {
+        try
+        {
+            await query.ConfigureAwait(true);
+        }
+        catch (OperationCanceledException) when (token.IsCancellationRequested)
+        {
+            return;
+        }
+
         RebuildRows();
         Refresh();
+    }
+
+    private static async Task ObserveQueryAsync(Task task)
+    {
+        try
+        {
+            await task.ConfigureAwait(false);
+        }
+        catch (Exception exception)
+        {
+            Console.WriteLine("query: failed=" + exception.Message);
+        }
     }
 
     // Smoke-only drivers: they raise the same routed events a user raises, so removing any control
@@ -337,11 +368,48 @@ public sealed partial class LibraryGridView : UserControl
         allValid &= EmitQuery("reset", "Alpha Game,Bravo Game,Charlie Game,Delta Game,Echo Hidden,Foxtrot Game",
             "Page 1 / 1", "Search:  | Filter: All | Sort: Name | Direction: asc");
 
+        allValid &= await EmitSupersedeAsync();
+
         if (allValid)
         {
             Console.WriteLine("search-filter-sort: controls-loaded");
         }
     }
+
+    /// <summary>
+    /// Holds the first query in flight, completes a superseding query, then releases the first.
+    /// A stale result or an unhandled cancellation fails the marker and the host assertions.
+    /// </summary>
+    private async Task<bool> EmitSupersedeAsync()
+    {
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var calls = 0;
+        model!.QueryExecutor = async (_, _) =>
+        {
+            if (Interlocked.Increment(ref calls) == 1)
+            {
+                entered.TrySetResult();
+                await release.Task.ConfigureAwait(false);
+            }
+
+            return SmokePage(calls == 1 ? "Alpha Game" : "Charlie Game");
+        };
+
+        SetSearchForSmoke("Alpha");
+        await entered.Task;
+        var superseded = QueryTask;
+        ClickFilterForSmoke("AllFilterButton");
+        await QueryTask;
+        release.TrySetResult();
+        await superseded;
+        model.QueryExecutor = null;
+        return EmitQuery("supersede", "Charlie Game", "Page 1 / 1",
+            "Search: Alpha | Filter: All | Sort: Name | Direction: asc");
+    }
+
+    private static LibraryPage SmokePage(string name) => new(
+        [new StoredGame(new Game(Guid.NewGuid(), "smoke-" + name, name))], 1, []);
 
     private void SetSearchForSmoke(string text)
     {
@@ -384,6 +452,8 @@ public sealed partial class LibraryGridView : UserControl
             && !string.IsNullOrWhiteSpace(status)
             && string.Equals(current.QueryStatus, expectedState, StringComparison.Ordinal)
             && list.SelectedIndex == (current.Rows.Count > 0 ? 0 : -1)
+            && string.Equals(this.FindControl<TextBlock>("DetailsName")!.Text, current.Selected?.Name ?? "(none)", StringComparison.Ordinal)
+            && string.Equals(this.FindControl<TextBlock>("DetailsId")!.Text, current.Selected?.GameId ?? "(none)", StringComparison.Ordinal)
             && semantic;
 
         Console.WriteLine(

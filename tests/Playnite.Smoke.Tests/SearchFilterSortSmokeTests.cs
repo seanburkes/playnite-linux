@@ -24,6 +24,8 @@ public sealed class SearchFilterSortSmokeTests
         Assert.Contains("search-filter-sort: sort=rows:Delta Game,Bravo Game;total:2;page:Page 1 / 1;state:Search:  | Filter: Favorite | Sort: UserScore | Direction: asc;semantic:True;valid:true", lines);
         Assert.Contains("search-filter-sort: sort-desc=rows:Bravo Game,Delta Game;total:2;page:Page 1 / 1;state:Search:  | Filter: Favorite | Sort: UserScore | Direction: desc;semantic:True;valid:true", lines);
         Assert.Contains("search-filter-sort: reset=rows:Alpha Game,Bravo Game,Charlie Game,Delta Game,Echo Hidden,Foxtrot Game;total:6;page:Page 1 / 1;state:Search:  | Filter: All | Sort: Name | Direction: asc;semantic:True;valid:true", lines);
+        Assert.Contains("search-filter-sort: supersede=rows:Charlie Game;total:1;page:Page 1 / 1;state:Search: Alpha | Filter: All | Sort: Name | Direction: asc;semantic:True;valid:true", lines);
+        Assert.DoesNotContain("query: failed=", result.Output);
         Assert.Contains("search-filter-sort: controls-loaded", lines);
         profile.AssertWritesStayIsolated();
     }
