@@ -103,12 +103,20 @@ public sealed partial class ContentHostView : UserControl
         var pageText = grid.FindControl<TextBlock>("PageText")!;
         var previous = grid.FindControl<Button>("PreviousButton")!;
         var next = grid.FindControl<Button>("NextButton")!;
+        var detailsName = grid.FindControl<TextBlock>("DetailsName")!;
+        var detailsId = grid.FindControl<TextBlock>("DetailsId")!;
         var expectedFirst = model.Rows.Count > 0 ? model.Rows[0] : null;
+        var expectedSelected = model.Selected is null
+            ? -1
+            : Array.FindIndex(model.Rows.ToArray(), row => row.Id == model.Selected.Id);
         var valid =
             list.Items.Count == model.Rows.Count
             && string.Equals(pageText.Text, model.PageIndicator, StringComparison.Ordinal)
             && previous.IsEnabled == model.CanGoPrevious
             && next.IsEnabled == model.CanGoNext
+            && list.SelectedIndex == expectedSelected
+            && string.Equals(detailsName.Text, model.Selected?.Name ?? "(none)", StringComparison.Ordinal)
+            && string.Equals(detailsId.Text, model.Selected?.GameId ?? "(none)", StringComparison.Ordinal)
             && (expectedFirst is null
                 ? firstBlock is null
                 : firstBlock is not null
@@ -117,7 +125,9 @@ public sealed partial class ContentHostView : UserControl
 
         Console.WriteLine(
             $"library: {key}=count:{list.Items.Count};total:{model.TotalCount};page:{pageText.Text};"
-            + $"first:{firstBlock?.Text ?? "<missing>"};prev:{previous.IsEnabled.ToString().ToLowerInvariant()};"
+            + $"first:{firstBlock?.Text ?? "<missing>"};selected:{list.SelectedIndex};"
+            + $"details:{detailsName.Text}|{detailsId.Text};"
+            + $"prev:{previous.IsEnabled.ToString().ToLowerInvariant()};"
             + $"next:{next.IsEnabled.ToString().ToLowerInvariant()};"
             + $"semantic:{AutomationProperties.GetName(pageText)};"
             + $"valid:{valid.ToString().ToLowerInvariant()}");

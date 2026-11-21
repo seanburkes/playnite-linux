@@ -45,6 +45,7 @@ public sealed partial class LibraryGridView : UserControl
 
         var list = this.FindControl<ListBox>("GameList")!;
         list.Items.Clear();
+        var selectedIndex = -1;
         for (var index = 0; index < model.Rows.Count; index++)
         {
             var row = model.Rows[index];
@@ -56,7 +57,16 @@ public sealed partial class LibraryGridView : UserControl
             };
             AutomationProperties.SetName(item, row.Name);
             list.Items.Add(item);
+            if (model.Selected is not null && model.Selected.Id == row.Id)
+            {
+                selectedIndex = index;
+            }
         }
+
+        // Keep the real control's selection in step with the view-model: first row after a load or
+        // page reset, -1 for an empty library, and the same identity when a user-selected row
+        // survives a rebuild.
+        list.SelectedIndex = selectedIndex;
     }
 
     private void Refresh()

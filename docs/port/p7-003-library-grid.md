@@ -39,14 +39,17 @@ p7-009.
   p6-012 SQLite window; repeated first-page loads return the same ordered identities.
 - Selecting any row (not only the first) raises the ListBox `SelectionChanged` event, routes through
   `LibraryViewModel.SelectAsync`, reads that game's details with `LibraryService.GetAsync` and
-  applies the result to the real details TextBlocks and semantic names. An empty library renders
-  zero rows and `(none)` details.
+  applies the result to the real details TextBlocks and semantic names. After every rebuild the
+  real `ListBox.SelectedIndex` is synchronized to the model's selected identity: first row after a
+  load or page reset, `-1` for an empty library, and the same identity when a user-selected row
+  survives a rebuild. An empty library renders zero rows and `(none)` details.
 - Paging is bounded at `PageSize = 50`: `PreviousPage`/`NextPage` buttons are enabled from
   `CanGoPrevious`/`CanGoNext` and route through `LoadPageAsync`; requests beyond page 1 or the last
   page are no-ops. The page indicator reports `Page n / m` from the real total. No search, filter
   or sort control exists (p7-004).
 - The headless `--library-smoke` sequence drives the actual ListBox selection and button click
-  routed events, then emits markers only after the real applied controls match the view-model.
+  routed events, then emits markers only after the real applied controls match the view-model,
+  including `ListBox.SelectedIndex` and the details controls on initial load, Next and Previous.
 
 ## Evidence
 

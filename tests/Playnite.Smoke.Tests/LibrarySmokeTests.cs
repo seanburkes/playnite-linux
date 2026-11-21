@@ -20,7 +20,7 @@ public sealed class LibrarySmokeTests
 
         AssertHost(result);
         var lines = Lines(result.Output);
-        Assert.Contains("library: page1=count:0;total:0;page:Page 1 / 1;first:<missing>;prev:false;next:false;semantic:Page indicator;valid:true", lines);
+        Assert.Contains("library: page1=count:0;total:0;page:Page 1 / 1;first:<missing>;selected:-1;details:(none)|(none);prev:false;next:false;semantic:Page indicator;valid:true", lines);
         Assert.Contains("library: grid-loaded", lines);
         profile.AssertWritesStayIsolated();
     }
@@ -33,8 +33,13 @@ public sealed class LibrarySmokeTests
 
         AssertHost(result);
         var lines = Lines(result.Output);
-        Assert.Contains("library: page1=count:3;total:3;page:Page 1 / 1;first:" + FirstFixtureGame + ";prev:false;next:false;semantic:Page indicator;valid:true", lines);
+        Assert.Contains("library: page1=count:3;total:3;page:Page 1 / 1;first:" + FirstFixtureGame + ";selected:0;details:" + FirstFixtureGame + "|220;prev:false;next:false;semantic:Page indicator;valid:true", lines);
         Assert.Contains("library: selection=index:2;row:" + ThirdFixtureGame + ";details:" + ThirdFixtureGame + "|570;semantic:" + ThirdFixtureGame + "|Details name|Details id;valid:true", lines);
+        foreach (var key in new[] { "next-result", "next-at-last", "back", "prev-at-first" })
+        {
+            Assert.Contains($"library: {key}=count:3;total:3;page:Page 1 / 1;first:{FirstFixtureGame};selected:2;details:{ThirdFixtureGame}|570;prev:false;next:false;semantic:Page indicator;valid:true", lines);
+        }
+
         Assert.Contains("library: grid-loaded", lines);
         profile.AssertWritesStayIsolated();
     }
@@ -47,12 +52,12 @@ public sealed class LibrarySmokeTests
 
         AssertHost(result);
         var lines = Lines(result.Output);
-        Assert.Contains("library: page1=count:50;total:60;page:Page 1 / 2;first:Seeded Game 001;prev:false;next:true;semantic:Page indicator;valid:true", lines);
+        Assert.Contains("library: page1=count:50;total:60;page:Page 1 / 2;first:Seeded Game 001;selected:0;details:Seeded Game 001|game-001;prev:false;next:true;semantic:Page indicator;valid:true", lines);
         Assert.Contains("library: selection=index:2;row:Seeded Game 003;details:Seeded Game 003|game-003;semantic:Seeded Game 003|Details name|Details id;valid:true", lines);
-        Assert.Contains("library: next-result=count:10;total:60;page:Page 2 / 2;first:Seeded Game 051;prev:true;next:false;semantic:Page indicator;valid:true", lines);
-        Assert.Contains("library: next-at-last=count:10;total:60;page:Page 2 / 2;first:Seeded Game 051;prev:true;next:false;semantic:Page indicator;valid:true", lines);
-        Assert.Contains("library: back=count:50;total:60;page:Page 1 / 2;first:Seeded Game 001;prev:false;next:true;semantic:Page indicator;valid:true", lines);
-        Assert.Contains("library: prev-at-first=count:50;total:60;page:Page 1 / 2;first:Seeded Game 001;prev:false;next:true;semantic:Page indicator;valid:true", lines);
+        Assert.Contains("library: next-result=count:10;total:60;page:Page 2 / 2;first:Seeded Game 051;selected:0;details:Seeded Game 051|game-051;prev:true;next:false;semantic:Page indicator;valid:true", lines);
+        Assert.Contains("library: next-at-last=count:10;total:60;page:Page 2 / 2;first:Seeded Game 051;selected:0;details:Seeded Game 051|game-051;prev:true;next:false;semantic:Page indicator;valid:true", lines);
+        Assert.Contains("library: back=count:50;total:60;page:Page 1 / 2;first:Seeded Game 001;selected:0;details:Seeded Game 001|game-001;prev:false;next:true;semantic:Page indicator;valid:true", lines);
+        Assert.Contains("library: prev-at-first=count:50;total:60;page:Page 1 / 2;first:Seeded Game 001;selected:0;details:Seeded Game 001|game-001;prev:false;next:true;semantic:Page indicator;valid:true", lines);
         Assert.Contains("library: grid-loaded", lines);
         profile.AssertWritesStayIsolated();
     }
