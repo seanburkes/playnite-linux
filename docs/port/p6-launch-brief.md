@@ -202,8 +202,9 @@ that are foreign-owned or protected so the unit adds new files where it can.
 
 ## Phase 6 exit gate
 
-The gate is a phase-level result; no single unit may claim it. A `docs/port/gates/P6.md`
-artifact is required at exit (plan §5) and does not exist yet.
+The gate is a phase-level result; no single unit may claim it. The captain's accepted record is
+[`gates/P6.md`](gates/P6.md), supported by the command-level evidence assessment in
+[`gates/P6-pending.md`](gates/P6-pending.md). Acceptance is not owned by an individual unit.
 
 1. **`Playnite.Cli` can import, list, search and launch (dry-run) without the UI.**
    `p6-011` owns `list`, `search` and `launch --dry-run` (resolve a game and print the planned
@@ -227,20 +228,21 @@ artifact is required at exit (plan §5) and does not exist yet.
    `p6-009` uses the fake host to load the samples. This is also the anti-stub check: an
    interface with no fake-host test is not delivered.
 
-### Gate evidence state, 2026-11-20
+### Gate evidence and acceptance state, 2026-11-21
 
-This table records where the gate stands. It is not an acceptance and no unit below claims one.
+This table summarizes the accepted phase-level result. The detailed evidence and residuals remain
+in the gate artifacts; this board is not a replacement for them.
 
 | Gate item | Owner units | Evidence today | State |
 | --- | --- | --- | --- |
-| 1. CLI import/list/search/launch dry-run without the UI | `p6-002`, `p6-011`, `p6-012` | `import` (PR https://github.com/seanburkes/playnite-linux/pull/173) and `list`/`search`/`launch --dry-run` (PR https://github.com/seanburkes/playnite-linux/pull/167) are merged; paging is bounded through `p6-012` (PR https://github.com/seanburkes/playnite-linux/pull/168) and wired via `p6-001` (PR https://github.com/seanburkes/playnite-linux/pull/172) | Not accepted: no phase-level fixture run is recorded in a P6 gate artifact |
-| 2. Abstractions build, reviewed ApiCompat report, samples compile and load | `p6-008`, `p6-009` | Only the p2-006 scaffold exists (PublicAPI files, protected baseline, ApiCompat task); no v7 freeze, report or sample plugin exists yet | Not proven |
-| 3. No Core project references Avalonia, directly or transitively | every unit; `p6-008` cannot pass while red | Enforced by `tests/Playnite.Architecture.Tests` on every unit and green in unit CI | Enforced per unit; no P6 exit artifact records the phase-level run |
-| 4. Contract tests for every SDK interface with a fake host | `p6-006`, `p6-007`, `p6-008`, `p6-009` | `p6-006` fake-host tests merged (PR https://github.com/seanburkes/playnite-linux/pull/190); `p6-007` interfaces, `p6-008` coverage list and `p6-009` sample load are pending | Partial |
+| 1. CLI import/list/search/launch dry-run without the UI | `p6-002`, `p6-011`, `p6-012` | Fixture CLI commands and no-UI graph evidence; #220 adds a child-process positive `started:false` plan with a sentinel non-execution assertion | **Accepted: PROVEN** |
+| 2. Abstractions build, reviewed ApiCompat report, samples compile and load | `p6-008`, `p6-009` | v7 freeze and classified ApiCompat report; PublicAPI no-diff under RS0016/RS0017; sample compile/load tests | **Accepted: PROVEN** |
+| 3. No Core project references Avalonia, directly or transitively | every unit; `p6-008` cannot pass while red | Phase-level Architecture suite and evaluated project/package graph | **Accepted: PROVEN** |
+| 4. Contract tests for every SDK interface with a fake host | `p6-006`, `p6-007`, `p6-008`, `p6-009` | 13-interface coverage inventory, reflection completeness test, and executing fake-host contracts | **Accepted: PROVEN** |
 
-`docs/port/gates/P6.md` does not exist. Plan §5 requires it at exit, and only the phase exit can
-create it; this board records the gate and its evidence owners, it does not accept it.
-`p6-010` is Phase 6 scope but not an exit-gate item.
+The captain accepted Phase 6 on 2026-11-21 with **4 PROVEN / 0 PARTIAL / 0 DEFERRED**. See
+[`gates/P6.md`](gates/P6.md) for the decision and residuals, and [`gates/P6-pending.md`](gates/P6-pending.md)
+for the detailed evidence. `p6-010` is Phase 6 scope but not an exit-gate item.
 
 ## Board correction, 2026-11-20
 
