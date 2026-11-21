@@ -1,0 +1,49 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+              x:Class="Playnite.Desktop.Shell.LibraryGridView">
+  <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto,*,Auto">
+    <TextBlock x:Name="HeaderText" Grid.Row="0" Grid.ColumnSpan="2"
+               Text="Library" AutomationProperties.Name="Library header" />
+    <StackPanel x:Name="QueryBar" Grid.Row="1" Grid.ColumnSpan="2" Orientation="Horizontal"
+                AutomationProperties.Name="Library search filter and sort">
+      <TextBox x:Name="SearchBox" Width="220" Margin="0,4,8,4" PlaceholderText="Search"
+               AutomationProperties.Name="Search games" />
+      <Button x:Name="AllFilterButton" Content="All" Margin="0,4,4,4"
+              AutomationProperties.Name="All games filter" />
+      <Button x:Name="InstalledFilterButton" Content="Installed" Margin="0,4,4,4"
+              AutomationProperties.Name="Installed games filter" />
+      <Button x:Name="UninstalledFilterButton" Content="Uninstalled" Margin="0,4,4,4"
+              AutomationProperties.Name="Uninstalled games filter" />
+      <Button x:Name="HiddenFilterButton" Content="Hidden" Margin="0,4,4,4"
+              AutomationProperties.Name="Hidden games filter" />
+      <Button x:Name="FavoriteFilterButton" Content="Favorite" Margin="0,4,8,4"
+              AutomationProperties.Name="Favorite games filter" />
+      <ComboBox x:Name="SortCombo" Width="160" Margin="0,4,4,4"
+                AutomationProperties.Name="Sort by" />
+      <Button x:Name="SortDirectionButton" Content="Ascending" Margin="0,4,8,4"
+              AutomationProperties.Name="Sort direction" />
+      <TextBlock x:Name="QueryStatus" Text="" VerticalAlignment="Center"
+                 AutomationProperties.Name="Library query status" />
+    </StackPanel>
+    <ListBox x:Name="GameList" Grid.Row="2" Grid.Column="0"
+             SelectionMode="Single" AutomationProperties.Name="Game list" />
+    <Border x:Name="DetailsPane" Grid.Row="2" Grid.Column="1"
+            AutomationProperties.Name="Game details">
+      <StackPanel>
+        <TextBlock x:Name="DetailsName" Text="(none)"
+                   AutomationProperties.Name="Details name" />
+        <TextBlock x:Name="DetailsId" Text="(none)"
+                   AutomationProperties.Name="Details id" />
+      </StackPanel>
+    </Border>
+    <StackPanel Grid.Row="3" Grid.ColumnSpan="2" Orientation="Horizontal"
+                AutomationProperties.Name="Library pager">
+      <Button x:Name="PreviousButton" Content="Previous"
+              AutomationProperties.Name="Previous page" />
+      <TextBlock x:Name="PageText" Text="Page 1 / 1" Margin="8,0"
+                 AutomationProperties.Name="Page indicator" />
+      <Button x:Name="NextButton" Content="Next"
+              AutomationProperties.Name="Next page" />
+    </StackPanel>
+  </Grid>
+</UserControl>
