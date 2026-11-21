@@ -1,2 +1,2 @@
 id	wave	area	unit	depends	status	owner	oracle	test	notes
-p7-003	W7	ui	Library grid/list/details	p7-002	todo	ui	screens	test:ui	
+p7-003	W7	ui	Library grid/list/details	p7-002	in-progress	ui	screens	test:ui	Implementing approved option A: one-to-one Cross-Unit-Move of ContentHostView.axaml(.cs) p7-002->p7-003 with namespace/class preserved; grid/details over p6-001 LibraryService and p6-012 pages at XDG_DATA_HOME/playnite/library.sqlite; no add-on discovery, search/filter/sort, settings, tray/protocol, SDK UI freeze or protected/aggregate edits.

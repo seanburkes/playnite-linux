@@ -1,0 +1,20 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="Playnite.Desktop.Shell.LibraryGridView">
+  <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,*">
+    <TextBlock x:Name="HeaderText" Grid.Row="0" Grid.ColumnSpan="2"
+               Text="Library" AutomationProperties.Name="Library header" />
+    <ScrollViewer Grid.Row="1" Grid.Column="0" AutomationProperties.Name="Game list">
+      <StackPanel x:Name="Rows" />
+    </ScrollViewer>
+    <Border x:Name="DetailsPane" Grid.Row="1" Grid.Column="1"
+            AutomationProperties.Name="Game details">
+      <StackPanel>
+        <TextBlock x:Name="DetailsName" Text="(none)"
+                   AutomationProperties.Name="Details name" />
+        <TextBlock x:Name="DetailsId" Text="(none)"
+                   AutomationProperties.Name="Details id" />
+      </StackPanel>
+    </Border>
+  </Grid>
+</UserControl>
