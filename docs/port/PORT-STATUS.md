@@ -75,8 +75,8 @@ remains [`gates/P5-accepted.md`](gates/P5-accepted.md) with supporting evidence 
 
 | Metric | Value |
 | --- | ---: |
-| Ledger rows | 339 |
-| Ledger fragments | 112 |
+| Ledger rows | 340 |
+| Ledger fragments | 113 |
 
 ## Units
 
@@ -175,7 +175,7 @@ remains [`gates/P5-accepted.md`](gates/P5-accepted.md) with supporting evidence 
 | p6-012 | W6 | core | Repository-level ordered paging for list/search | done | `units/p6-012.*`; 3 ledger rows |
 | p6-guard-baseline | W6 | repo | Shared SDK baseline ownership allowance | in-progress | `units/p6-guard-baseline.*`; 1 ledger rows |
 | p6-guard-move2 | W6 | repo | Cross-Unit-Move ownership exception | in-progress | `units/p6-guard-move2.*`; 1 ledger rows |
-| p6-shards | W6 | repo | Phase 6 core services and SDK v7 board | done | `units/p6-shards.*`; 4 ledger rows |
+| p6-shards | W6 | repo | Phase 6 core services and SDK v7 board | done | `units/p6-shards.*`; 5 ledger rows |
 | p7-001 | W7 | ui | Bootstrap/DI/theme/localisation | todo | `units/p7-001.*`; 0 ledger rows |
 | p7-002 | W7 | ui | Shell/main window | todo | `units/p7-002.*`; 0 ledger rows |
 | p7-003 | W7 | ui | Library grid/list/details | todo | `units/p7-003.*`; 0 ledger rows |
