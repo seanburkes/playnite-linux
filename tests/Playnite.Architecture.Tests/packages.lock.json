@@ -413,15 +413,9 @@
           "Playnite.Core": "[1.0.0, )",
           "Playnite.LegacyImport.Contracts": "[1.0.0, )",
           "Playnite.Platform": "[1.0.0, )",
+          "Playnite.Platform.Linux": "[1.0.0, )",
           "Playnite.SDK": "[1.0.0, )",
           "Playnite.Steam": "[1.0.0, )"
-        }
-      },
-      "playnite.legacyimport": {
-        "type": "Project",
-        "dependencies": {
-          "LiteDB": "[4.1.4, )",
-          "Playnite.LegacyImport.Contracts": "[1.0.0, )"
         }
       },
       "playnite.legacyimport.contracts": {
@@ -507,12 +501,6 @@
         "requested": "[2.1.89, )",
         "resolved": "2.1.89",
         "contentHash": "1VjFE664wnxvuhlgP8kS4PeFFF4jqD3VkbIHW6Zlc52zuibgcz5ICnIHcQXlTp6pURpPNGLV0ZpNe5x9KePJnA=="
-      },
-      "LiteDB": {
-        "type": "CentralTransitive",
-        "requested": "[4.1.4, )",
-        "resolved": "4.1.4",
-        "contentHash": "g4g9JlHzRBZl+Gd2UbiRdszZ7t8wozU2wX7+5xY5uE79tmcgcDhha+ubAP84G1VLbwQmhBGCzRfIx+epLmJciQ=="
       },
       "Microsoft.Data.Sqlite": {
         "type": "CentralTransitive",

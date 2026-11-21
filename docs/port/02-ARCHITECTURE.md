@@ -46,12 +46,17 @@ LiteDB is never linked into the app or the CLI.
 | `Playnite.Steam` | `net11.0` | Core, Platform | Desktop |
 | `Playnite.LegacyImport.Contracts` | `net11.0` | nothing but BCL | LiteDB, Core, Desktop, SDK |
 | `Playnite.LegacyImport` | `net11.0` exec | Contracts, LiteDB 4.1.4 | Core, Desktop, SDK |
-| `Playnite.Desktop` | `net11.0` | Core, SDK, Platform, Steam, LegacyImport.Contracts, Avalonia | Microsoft.Win32, `DllImport` |
+| `Playnite.Desktop` | `net11.0` | Core, SDK, Platform, Platform.Linux, Steam, LegacyImport.Contracts, Avalonia | Microsoft.Win32, `DllImport` |
 | `Playnite.Cli` | `net11.0` | Core, Platform, Steam, LegacyImport.Contracts | Desktop, LiteDB |
 | Tests | `net11.0` | anything | — |
 
 Enforced by `BannedApiAnalyzers` + architecture tests. A project reference that violates the
 graph fails CI before a human sees it.
+
+The `Platform.Linux` allowance for `Playnite.Desktop` is narrow: the Linux-first Desktop
+composition root is the host that selects its platform-specific implementation, including the
+existing hardened `SingleInstanceService`. `Platform.Linux` must still not reference Desktop,
+and Core and Abstractions remain Avalonia-free.
 
 **Avalonia rule, precisely:** `Playnite.SDK.Abstractions` and `Playnite.Core` may not reference
 Avalonia at all. `Playnite.Platform`/`Playnite.Platform.Linux` may reference Avalonia base and

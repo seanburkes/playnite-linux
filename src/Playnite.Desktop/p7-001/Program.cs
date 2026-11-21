@@ -1,0 +1,123 @@
+using System.Globalization;
+using Avalonia;
+using Avalonia.Controls;
+using Avalonia.Controls.ApplicationLifetimes;
+using Avalonia.Headless;
+using Playnite.Core;
+using Playnite.Desktop.Bootstrap;
+using Playnite.Platform.Linux;
+using Playnite.Platform.Linux.Integration;
+
+namespace Playnite.Desktop;
+
+internal static class Program
+{
+    private const string InstanceId = "playnite.desktop";
+
+    [STAThread]
+    private static async Task<int> Main(string[] args)
+    {
+        var headless = args.Contains("--headless", StringComparer.Ordinal);
+        var smoke = args.Contains("--smoke", StringComparer.Ordinal)
+            || args.Contains("--bootstrap-smoke", StringComparer.Ordinal);
+        var bootstrapSmoke = args.Contains("--bootstrap-smoke", StringComparer.Ordinal);
+
+        var directories = XdgDirectories.Resolve(new LinuxEnvironment());
+        var services = new ServiceRegistry();
+        services.AddSingleton<IRegularFileProbe>(_ => new LinuxRegularFileProbe());
+        services.AddSingleton<IAppLogger>(registry =>
+            new FileAppLogger(
+                Path.Combine(directories.State, "playnite.log"),
+                registry.GetRequiredService<IRegularFileProbe>()));
+        services.AddSingleton(registry =>
+            BootstrapLocalization.Load(
+                Path.Combine(directories.Config, "Localization", "en.json"),
+                registry.GetRequiredService<IRegularFileProbe>()));
+        services.AddSingleton(registry => new DesktopBootstrapper(
+            registry.GetRequiredService<IAppLogger>(),
+            registry.GetRequiredService<BootstrapLocalization>(),
+            ResolveThemePath(directories, services.GetRequiredService<IRegularFileProbe>()),
+            registry.GetRequiredService<IRegularFileProbe>()));
+
+        using var logger = services.GetRequiredService<IAppLogger>();
+        var bootstrapper = services.GetRequiredService<DesktopBootstrapper>();
+        SingleInstanceBootstrap? singleInstance = null;
+        try
+        {
+            if (!headless)
+            {
+                singleInstance = new SingleInstanceBootstrap(
+                    SingleInstanceService.Start(InstanceId, directories), logger);
+                if (singleInstance.DecideStartup() == StartupDecision.ExitAlreadyRunning)
+                {
+                    return 2;
+                }
+            }
+            else
+            {
+                logger.Info("single-instance: skipped (headless test host)");
+            }
+
+            var builder = AppBuilder.Configure<App>();
+            builder = headless
+                ? builder.UseHeadless(new AvaloniaHeadlessPlatformOptions())
+                : builder.UsePlatformDetect();
+
+            // App.OnFrameworkInitializationCompleted installs its smoke close hook from Args.
+            // The bootstrap variant is a superset of --smoke, so the lifetime must see that flag.
+            var lifetimeArgs = bootstrapSmoke && !args.Contains("--smoke", StringComparer.Ordinal)
+                ? [.. args, "--smoke"]
+                : args;
+            var lifetime = new ClassicDesktopStyleApplicationLifetime { Args = lifetimeArgs };
+            builder.SetupWithLifetime(lifetime);
+            var application = Application.Current
+                ?? throw new InvalidOperationException("The Avalonia application was not initialised.");
+            bootstrapper.Apply(application);
+
+            double? observedFontSize = null;
+            if (bootstrapSmoke && lifetime.MainWindow is Window smokeWindow)
+            {
+                smokeWindow.Opened += (_, _) => observedFontSize = smokeWindow.FontSize;
+            }
+
+            if (bootstrapSmoke)
+            {
+                var theme = bootstrapper.AppliedTheme;
+                Console.WriteLine($"bootstrap: theme={theme?.Name ?? "unknown"}");
+                Console.WriteLine($"bootstrap: theme-applied={theme?.Applied.ToString().ToLowerInvariant() ?? "false"}");
+                Console.WriteLine($"bootstrap: theme-style-registered={theme?.StyleRegistered.ToString().ToLowerInvariant() ?? "false"}");
+                Console.WriteLine($"bootstrap: theme-source={theme?.Source ?? "none"}");
+                Console.WriteLine($"bootstrap: localisation={bootstrapper.LocalisedProbe}");
+                Console.WriteLine($"bootstrap: localisation-source={bootstrapper.LocalisationSource}");
+                Console.WriteLine($"bootstrap: config-root={directories.Config}");
+                Console.WriteLine($"bootstrap: state-root={directories.State}");
+                Console.WriteLine("bootstrap: single-instance=skipped (headless test host)");
+            }
+
+            var exitCode = lifetime.Start();
+            if (bootstrapSmoke)
+            {
+                Console.WriteLine("bootstrap: window-font-size="
+                    + (observedFontSize?.ToString(CultureInfo.InvariantCulture) ?? "none"));
+            }
+
+            return exitCode == 0 && smoke && !((App)application).SmokeSucceeded ? 1 : exitCode;
+        }
+        finally
+        {
+            if (singleInstance is not null)
+            {
+                await singleInstance.DisposeAsync().ConfigureAwait(false);
+            }
+        }
+    }
+
+    private static string? ResolveThemePath(XdgDirectories directories, IRegularFileProbe probe)
+    {
+        var themesRoot = Path.Combine(directories.Config, "Themes");
+        return ThemePaths.TryResolve(themesRoot, "Default", out var path, out _)
+            && BootstrapFiles.ExistingRegular(path, probe) is not null
+            ? path
+            : null;
+    }
+}
