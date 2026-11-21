@@ -5,15 +5,15 @@
 - Reviewed head: `4aaf227bd2f0683425d9aa2fa7b46ab6c5661b54`
 - Base: `8bb26178d75e4bf59dbf6ad7561730e4d39ed56f` (current `origin/main` and the PR
   merge base)
-- Candidate diff: `/home/sean/src/firstmate/data/p6-215/candidate.diff`
+- Candidate diff: `data/p6-215/candidate.diff`
 - Candidate diff SHA-256: `ba17809756e57c93b65e1e628b4dbb1119b4dc5d6dc0c86593832848a6daccef`
 - Size: 13 files, +1472/−0
 - Method: fetched `refs/pull/215/head`, recomputed `git diff 8bb2617 4aaf227` and confirmed it
   is byte-identical to the candidate diff (same SHA-256), built and tested the reviewed head in
   a scratch clone outside the worktree, read the frozen v10 sources for every cited oracle line,
   wrote adversarial probe tests, and ran a five-way mutation matrix against the new add-on
-  tests. Proof logs are under `/home/sean/src/firstmate/data/p1-review-cf/proof/`, outside the
-  worktree. No file in the worktree was edited except this review.
+  tests. Proof output is kept in a local directory outside the worktree. No file in the
+  worktree was edited except this review.
 - Verdict: **no P1 finding; one blocking P2** — the installer's failure/rollback surface has no
   test, and the rollback code can be deleted with the whole add-on suite green.
 
@@ -111,7 +111,7 @@ Id: x / Id: y …                                          -> invalid-manifest a
 Id: x … (no Module)                                      -> invalid-manifest at $.Module
 ```
 
-Exact messages recorded in `/home/sean/src/firstmate/data/p1-review-cf/proof/probe3.log`; the
+Exact messages are kept in the review's probe log outside the worktree; the
 null-`Type` case keeps the parser's quoted path form
 (`value at '$.Type': null cannot be stored in Playnite.Core.Manifests.ExtensionType.`), which
 `MemberPath` extracts as `$.Type`.
@@ -227,7 +227,7 @@ problem, graded P3-1, not a functional blocker.
 
 ### 7. Tests and CI evidence
 
-Local Release runs at the reviewed head (`/home/sean/src/firstmate/data/p1-review-cf/proof/`):
+Local Release runs at the reviewed head; the logs are kept outside the worktree:
 
 ```text
 dotnet build src/Playnite.Core/Playnite.Core.csproj -c Release -warnaserror
