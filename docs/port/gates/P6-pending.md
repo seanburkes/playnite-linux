@@ -1,39 +1,44 @@
 # Gate P6 — Phase 6 exit-gate evidence assessment (EVIDENCE ONLY)
 
 - Date: 2026-11-20
-- Base: merged `main` `481c96575b055b15807b433f4c30d1991c184e8a` (post-merge aggregates), whose
-  parent `8f8f89e` is the Phase 6 merge `#215` (`p6-010`). All command output below was produced on
-  this exact checkout (detached `main` at `481c965`, branch `fm/p6-shards5` cut from it).
+- Base: merged `main` `7167cbc9beb89d74f057e662967b3846259a111b` (post-merge port-index
+  regeneration). Its ancestor `6a2672a` is the merged PR `#220` carrying the process-level
+  `launch --dry-run` proof that closes criterion 1; the previous assessment (`#219`) was recorded
+  at `481c965`. All command output below was produced on this exact checkout (detached `main` at
+  `7167cbc`, branch `fm/p6-shards6` cut from it). Every criterion was **re-run** at this HEAD; no
+  count was copied from the earlier assessment.
 - Owner: `p6-shards` (resumed board unit; no new unit id).
-- Result: **3 PROVEN / 1 PARTIAL / 0 DEFERRED.**
+- Result: **4 PROVEN / 0 PARTIAL / 0 DEFERRED.**
 - **This is an evidence assessment, not an acceptance.** It deliberately does not claim the gate.
   Acceptance is the captain's decision after review; this file is named `P6-pending.md`
   deliberately and **`P6-accepted.md` is not written by this worker**.
-- Review basis: real commands run on merged `main`; exact stdout/stderr and exit codes are quoted.
+- Review basis: real commands re-run on merged `main`; exact stdout/stderr and exit codes are quoted.
   Raw logs are kept in worker scratch outside the worktree (not committed, not an oracle).
   No fixture, run, output or exit code is fabricated. Where a
-  positive result could not be produced from a committed artifact, the gap is named and the item is
-  marked `PARTIAL`.
+  positive result could not be produced from a committed artifact, the gap is named — and where a
+  later merged artifact closed it, the item is moved to the closed state and the closing change is
+  cited.
 - Environment: `dotnet --version` → `11.0.100`; `python3 --version` → `3.14.10`.
 
 ## Exit criteria summary
 
 | # | Criterion | Status | Concrete artifact or exact gap |
 | --- | --- | --- | --- |
-| 1 | `Playnite.Cli` import/list/search/launch --dry-run on a fixture library, no UI assembly loaded | **PARTIAL** | On the committed v10 fixture, `import`, `list` and `search` succeed (exit 0) and `launch --dry-run` runs and returns the documented `NoPlayAction` exit 5 with a reason — but that fixture has **only library-plugin-action games**, so a positive `started:false` launch plan cannot be produced from a committed fixture. Missing evidence: a committed fixture library containing a game with a stored play action. No-UI condition is proven: the CLI project graph and deps closures contain no Avalonia/Desktop assembly. |
-| 2 | Abstractions build with ApiCompat; reviewed v6→v7 report; samples compile and load; PublicAPI regeneration has no diff | **PROVEN** | `dotnet build src/Playnite.SDK.Abstractions/... -c Release --no-incremental -warnaserror`: exit 0, `APICompat ran successfully without finding any breaking changes`. Committed p6-008 artifacts carry exactly 306 differences (208 `CP0001` / 82 `CP0002` / 15 `CP0006` / 1 `CP0009`) classified 114 adapted / 178 deferred / 14 excluded / 0 breaking. `Playnite.Plugin.Tests`: 15 passed, 0 failed, 0 skipped, exit 0. PublicAPI regeneration in a scratch copy: `NO DIFF` on both declaration files and `--verify-no-changes` exit 0 under RS0016/RS0017-as-errors. |
-| 3 | No Core project references Avalonia directly or transitively | **PROVEN** | `Playnite.Architecture.Tests` 210 passed / 0 failed / 0 skipped (exit 0); the four direct graph/no-Avalonia tests pass (exit 0); evaluated graph shows `Playnite.Core` → only `Playnite.SDK.Abstractions`, with zero Avalonia packages in its transitive package closure. |
-| 4 | Contract tests for every SDK interface with a fake host | **PROVEN** | 13 interfaces (3 seed + 6 added by p6-006 + 4 added by p6-007) all appear in `p6-008-interface-coverage.tsv` with a fake class, a test method and a test file. Reflection test `Every_SDK_interface_has_a_fake_host_contract_test` passes (exit 0); the Core fake-host contract classes pass 26/0/0 (exit 0). No interface lacks a fake-host test. |
+| 1 | `Playnite.Cli` import/list/search/launch --dry-run on a fixture library, no UI assembly loaded | **PROVEN** | On the committed v10 fixture, `import`, `list` and `search` succeed (exit 0) and `launch --dry-run` returns the documented `NoPlayAction` exit 5. The positive `started:false` plan is now shown by a **real child CLI process** in `LaunchProcessDryRunTests` (merged by `#220` at `6a2672a`): `dotnet test tests/Playnite.Core.Tests --filter FullyQualifiedName~LaunchProcessDryRunTests` → 1 passed / 0 failed / 0 skipped, exit 0; the child process prints `kind=launch`, `dryRun=true`, `started=false`, `actionType=File` and does not execute the game (no sentinel). No-UI condition proven by CLI project graph, `deps.json` and output directory. |
+| 2 | Abstractions build with ApiCompat; reviewed v6→v7 report; samples compile and load; PublicAPI regeneration has no diff | **PROVEN** | Re-run at `7167cbc`: Abstractions Release build with `-warnaserror` exit 0, `APICompat ran successfully without finding any breaking changes`. Committed p6-008 artifacts carry exactly 306 differences (208 `CP0001` / 82 `CP0002` / 15 `CP0006` / 1 `CP0009`) classified 114 adapted / 178 deferred / 14 excluded / 0 breaking. `Playnite.Plugin.Tests`: 15 passed, 0 failed, 0 skipped, exit 0. PublicAPI regeneration in a scratch copy: `NO DIFF` on both declaration files and `--verify-no-changes` exit 0 under RS0016/RS0017-as-errors. |
+| 3 | No Core project references Avalonia directly or transitively | **PROVEN** | Re-run at `7167cbc`: `Playnite.Architecture.Tests` 210 passed / 0 failed / 0 skipped (exit 0); the four direct graph/no-Avalonia tests pass 4/0/0 (exit 0); evaluated graph shows `Playnite.Core` → only `Playnite.SDK.Abstractions`, with zero Avalonia packages in its transitive package closure. |
+| 4 | Contract tests for every SDK interface with a fake host | **PROVEN** | Re-run at `7167cbc`: 13 interfaces (3 seed + 6 added by p6-006 + 4 added by p6-007) all appear in `p6-008-interface-coverage.tsv` with a fake class, a test method and a test file. Reflection test `Every_SDK_interface_has_a_fake_host_contract_test` passes 1/0/0 (exit 0); the Core fake-host contract classes pass 26/0/0 (exit 0). No interface lacks a fake-host test. |
 
-Summary: **3 PROVEN / 1 PARTIAL / 0 DEFERRED.** Criterion 1 is `PARTIAL` solely because the committed
-fixture cannot drive the positive `launch --dry-run` plan; the command itself runs and returns a
-documented exit code. Nothing is silently dropped. This file does not accept the gate.
+Summary: **4 PROVEN / 0 PARTIAL / 0 DEFERRED.** All four criteria were re-run at `7167cbc` and every
+command succeeded. Criterion 1's earlier `PARTIAL` (recorded in `#219` at `481c965`) is closed by
+the merged process-level launch proof (`#220`, `6a2672a`) documented in §1e–§1e2. Nothing is
+silently dropped. This file does not accept the gate.
 
 ---
 
 ## Criterion 1 — CLI without the UI
 
-All commands were run as real processes against merged `main` at `481c965`. Fixture used: the
+All commands were re-run as real processes against merged `main` at `7167cbc`. Fixture used: the
 committed v10 library `tests/fixtures/v10/library`; reader: the Release-built
 `src/Playnite.LegacyImport/bin/Release/net11.0/Playnite.LegacyImport.dll`. Destination SQLite was
 written under worker scratch, never into the worktree. `REPO` below denotes the repository
@@ -92,7 +97,7 @@ Command: `dotnet ...Playnite.Cli.dll search Steam --library <dest.sqlite> --limi
 (An initial `search --library ... -- Steam` mis-ordered the term and correctly returned the usage
 line with exit 2; the term-first form above is the documented invocation and is the one cited.)
 
-### 1e. Launch --dry-run on that library — PARTIAL
+### 1e. Launch --dry-run on the committed fixture — PROVEN (refusal path)
 
 Command: `dotnet ...Playnite.Cli.dll launch --dry-run --library <dest.sqlite> --id 10000000-0000-0000-0000-000000000001`
 — exit **5**:
@@ -104,20 +109,49 @@ Command: `dotnet ...Playnite.Cli.dll launch --dry-run --library <dest.sqlite> --
 The same exit 5 is returned for all three fixture games (`--id ...0001`, `...0002`, `...0003`) and
 for `--name "Synthetic Steam Installed"`. Exit 5 is the documented `QueryExitCodes.NoPlayAction`
 (`src/Playnite.Cli/Commands/QueryCommandSupport.cs:14`); the command resolves the game and refuses
-to start a process, but it cannot print a `started:false` launch plan because the committed fixture
-games carry `IncludeLibraryPluginAction` rather than a stored `GameAction`.
+to start a process, because the committed fixture games carry `IncludeLibraryPluginAction` rather
+than a stored `GameAction`. This part of the evidence is unchanged from the `#219` assessment.
 
-Positive launch-plan output is proven only by the merged in-process unit test
-`LaunchDryRunCommandTests` (`tests/Playnite.Core.Tests/Cli/LaunchDryRunCommandTests.cs`), which
-asserts `kind=launch`, `dryRun=true`, `started=false` for a game with a File action. That is not a
-real-process run on a committed fixture, so it does not close the gap. **Missing evidence: a
-committed fixture library containing at least one game with a stored (File/URL/Script) play action,
-run through the CLI process to a `started:false` plan.** Per the brief, a fixture was not invented;
-this item stays `PARTIAL`.
+In `#219` this was the sole reason criterion 1 was `PARTIAL`: the committed fixture could not drive
+a positive `started:false` plan through a real process. That gap was **closed by `#220` at
+`6a2672a`**, which added a process-level launch proof (§1e2) that exercises the same CLI through a
+real child process against a library with a stored play action. The earlier `PARTIAL` text is not
+softened or deleted: the committed fixture still refuses, but the missing real-process positive
+plan now exists, so criterion 1 is closed.
+
+### 1e2. Positive launch plan from a real child CLI process — PROVEN (closes the gap)
+
+Proof added by `#220` (`6a2672a`, commits `4aeefd8`/`60cc6af`) in
+`tests/Playnite.Core.Tests/Cli/LaunchProcessDryRunTests.cs`. Command and **actual result** re-run at
+`7167cbc`:
+
+```
+$ dotnet test tests/Playnite.Core.Tests --filter FullyQualifiedName~LaunchProcessDryRunTests
+Running tests from $REPO/tests/Playnite.Core.Tests/bin/Debug/net11.0/Playnite.Core.Tests.dll (net11.0|x64)
+$REPO/tests/Playnite.Core.Tests/bin/Debug/net11.0/Playnite.Core.Tests.dll (net11.0|x64) passed [+1/x0/?0] (1s 266ms)
+
+Test run summary: Passed!
+  total: 1
+  failed: 0
+  succeeded: 1
+  skipped: 0
+  duration: 1s 439ms
+exit 0
+```
+
+The test starts a **real child process** — `dotnet <Playnite.Cli.dll> launch --dry-run --library
+<sqlite> --id <guid>` — with `UseShellExecute=false` and argument lists (no shell string), against
+a runtime-created library whose game has a stored `File` play action pointing at a sentinel script.
+It asserts, on the child's stdout, exit code 0, empty stderr, and a single JSON record with
+`kind=launch`, `dryRun=true`, `started=false`, `actionType=File`, the action path and its arguments.
+It also asserts the sentinel file does **not** exist after the run, so the dry run resolved the game
+but did not execute its play action. Finally it asserts no `Avalonia*`/`*Desktop*` DLL exists in the
+CLI output directory. This is the positive `started:false` launch plan produced by a real CLI child
+process that the `#219` assessment could not produce; it closes criterion 1.
 
 ### 1f. No UI assembly loaded — PROVEN
 
-Exact checks run:
+Exact checks re-run at `7167cbc`:
 
 ```
 dotnet list src/Playnite.Cli/Playnite.Cli.csproj reference --include-transitive
@@ -133,16 +167,18 @@ grep -i avalonia src/Playnite.Cli/bin/Release/net11.0/Playnite.Cli.deps.json
   -> (no lines) ; grep exit 1  (no Avalonia assembly in the deps closure)
 
 ls src/Playnite.Cli/bin/Release/net11.0/*.dll | grep -iE 'avalonia|desktop'
-  -> (none) ; pipeline exit 0 with empty match
+  -> (none) ; pipeline exit 1 with empty match
 ```
 
 The CLI project graph contains no UI assembly, its resolved `deps.json` names no Avalonia assembly,
-and its output directory ships no Avalonia/Desktop DLL. The four CLI processes above therefore ran
-with no UI assembly in their load path.
+and its output directory ships no Avalonia/Desktop DLL. The four CLI processes above and the child
+process in §1e2 therefore ran with no UI assembly in their load path.
 
 ---
 
 ## Criterion 2 — Abstractions build, ApiCompat report, samples, PublicAPI regeneration
+
+All commands below were **re-run at `7167cbc`**; counts were not copied from `#219`.
 
 ### 2a. Abstractions builds with ApiCompat enabled — PROVEN
 
@@ -169,7 +205,7 @@ if `RS0016`/`RS0017` appear in `NoWarn`/`WarningsNotAsErrors`. The build above r
 The reviewed report is `docs/port/p6-008-apicompat-v6-v7.txt`, the frozen surface is
 `docs/port/p6-008-frozen-api.txt`, and the classification is
 `docs/port/p6-008-apicompat-classification.tsv`, all merged by p6-008 (`98f7391`, PR #208). Verified
-directly from the committed files:
+directly from the committed files at `7167cbc`:
 
 ```
 for code in CP0001 CP0002 CP0006 CP0009; do grep -c "^$code:" docs/port/p6-008-apicompat-v6-v7.txt; done
@@ -195,7 +231,7 @@ produced it was performed by p6-008 and is recorded in that unit's fragment, not
 
 ```
 dotnet test tests/Playnite.Plugin.Tests -c Release --nologo
-  Passed! total: 15, failed: 0, succeeded: 15, skipped: 0, duration 3s 581ms. exit 0
+  Passed! total: 15, failed: 0, succeeded: 15, skipped: 0, duration 904ms. exit 0
 ```
 
 `Playnite.Plugin.Tests` contains `SamplePluginBuildTests` (Release compile of the three samples)
@@ -226,11 +262,13 @@ produces no diff while both diagnostics are treated as errors.
 
 ## Criterion 3 — No Core project references Avalonia
 
+All commands below were **re-run at `7167cbc`**.
+
 ### 3a. Architecture suite at phase level — PROVEN
 
 ```
 dotnet test tests/Playnite.Architecture.Tests -c Release --nologo
-  Passed! total: 210, failed: 0, succeeded: 210, skipped: 0, duration 11s 930ms. exit 0
+  Passed! total: 210, failed: 0, succeeded: 210, skipped: 0, duration 10s 230ms. exit 0
 ```
 
 ### 3b. Direct graph/no-Avalonia tests (not merely "CI green") — PROVEN
@@ -264,6 +302,8 @@ is exactly SDK.Abstractions and its package closure contains no Avalonia.
 
 ## Criterion 4 — Fake-host contract test for every SDK interface
 
+All commands below were **re-run at `7167cbc`**.
+
 ### 4a. Interface inventory
 
 Interfaces added by p6-006 (`d1d57be`, PR #202, `docs/port/p6-006-notifications-dialogs-mainview.md`):
@@ -274,7 +314,8 @@ Interfaces added by p6-007 (`b80847b`, PR #201, `docs/port/p6-007-uri-html-descr
 `IUriHandlerAPI`, `IUriCommandHost`, `IHtmlDescriptionProvider`, `IHtmlSanitizer`.
 
 Seed interfaces already frozen: `IDataSerializer`, `IIdentifiable` (and `IGameView` counted above).
-The `p6-008` coverage list `docs/port/p6-008-interface-coverage.tsv` froze 13 rows:
+The `p6-008` coverage list `docs/port/p6-008-interface-coverage.tsv` froze 13 rows (re-counted at
+`7167cbc`: 13):
 
 ```
 Playnite.SDK.Data.IDataSerializer                    ContractDataSerializer        IDataSerializer_every_member_is_exercised
@@ -323,19 +364,19 @@ missing: **0 PARTIAL** within this criterion.
 ## Validation of this assessment's own change set
 
 The change set is docs-only and confined to `p6-shards` evidence: this gate doc, the `p6-shards`
-queue shard notes (status stays `done`), one new `p6-shards.ledger.d/219-p6-gate-evidence.tsv`
+queue shard notes (status stays `done`), one new `p6-shards.ledger.d/221-p6-gate-reassessment.tsv`
 fragment, and the hand-written narrative window of `docs/port/PORT-STATUS.md`.
 
-- PR: https://github.com/seanburkes/playnite-linux/pull/219 (base `main`, head `fm/p6-shards5`).
-- Validated pushed head: `cff31a169e15d4980dbb0c88cd4753663a7afaf0`.
-- linux-ci run: https://github.com/seanburkes/playnite-linux/actions/runs/44851252321
-  (`ci_run=44851252321`), workflow `linux-ci`, event `pull_request`, on that exact head;
-  `gh-axi run view 44851252321` reported `status: completed`, `conclusion: success`,
-  job `linux-build-and-test` (ID 136682871551) `completed/success`.
+- PR: https://github.com/seanburkes/playnite-linux/pull/221 (base `main`, head `fm/p6-shards6`).
+- Validated pushed head: `687a1278b4f6f76e1caccff91070298d75d5b040`.
+- linux-ci run: https://github.com/seanburkes/playnite-linux/actions/runs/44854628319
+  (`ci_run=44854628319`), workflow `linux-ci`, event `pull_request`, on that exact head;
+  `gh-axi run view 44854628319` reported `status: completed`, `conclusion: success`,
+  job `linux-build-and-test` (ID 136693814581) `completed/success`.
 - Local guard checks on the validated head: `python3 scripts/port/build_port_index.py check
   --shards-only --against origin/main --forbid-aggregate-changes` → exit 0;
   `python3 scripts/port/check_unit_ownership.py --base origin/main --head HEAD --unit p6-shards
-  --branch fm/p6-shards5` → exit 0 with `offending paths: (none)`.
+  --branch fm/p6-shards6` → exit 0 with `offending paths: (none)`.
 - The ledger fragment is a docs-only delta added after that run, following the established
   `p6-shards` fragment pattern; the head-commit `Port-Unit: p6-shards` trailer is present.
 
