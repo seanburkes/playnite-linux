@@ -322,6 +322,7 @@ tests/Playnite.Core.Tests/Cli/CliQueryCommandsTests.cs	p6-011	e2eed7b7d1f1102209
 tests/Playnite.Core.Tests/Cli/CliQueryFixture.cs	p6-011	e2eed7b7d1f11022090aeb1ceb6de2a21cbb2a33	pull/167
 tests/Playnite.Core.Tests/Cli/ImportLibraryCommandTests.cs	p6-002	c051da647f058b815254cc11e4e4b971860651d0	pull/173
 tests/Playnite.Core.Tests/Cli/LaunchDryRunCommandTests.cs	p6-011	e2eed7b7d1f11022090aeb1ceb6de2a21cbb2a33	pull/167
+tests/Playnite.Core.Tests/Cli/LaunchProcessDryRunTests.cs	p6-011	6a2672a6790435c20cc322d029168d14206e1ff9	pull/220
 tests/Playnite.Core.Tests/Cli/ListCommandTests.cs	p6-011	e2eed7b7d1f11022090aeb1ceb6de2a21cbb2a33	pull/167
 tests/Playnite.Core.Tests/Cli/SearchCommandTests.cs	p6-011	e2eed7b7d1f11022090aeb1ceb6de2a21cbb2a33	pull/167
 tests/Playnite.Core.Tests/Cli/SyntheticCommand.cs	p4-002	3e157257c383425ddfcbc1fe6c5469c30c875da6	pull/165
