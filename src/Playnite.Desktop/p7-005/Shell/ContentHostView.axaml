@@ -2,5 +2,8 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:shell="using:Playnite.Desktop.Shell"
              x:Class="Playnite.Desktop.Shell.ContentHostView">
-  <shell:LibraryGridView x:Name="LibraryGrid" />
+  <Grid ColumnDefinitions="*,Auto">
+    <shell:LibraryGridView x:Name="LibraryGrid" Grid.Column="0" />
+    <shell:GameEditView x:Name="GameEdit" Grid.Column="1" />
+  </Grid>
 </UserControl>
