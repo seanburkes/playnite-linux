@@ -107,6 +107,25 @@ Evidence: `tests/Playnite.Core.Tests/Playnite.Core.Tests.csproj` copies
 `tests/fixtures/manifests-v10/*` copy is unchanged. No oracle, p3-005 fixture or manifest test
 is edited.
 
+Local and real CI evidence:
+
+```text
+dotnet build src/Playnite.Core/Playnite.Core.csproj -c Release -warnaserror
+  0 Warning(s), 0 Error(s)
+
+dotnet test tests/Playnite.Core.Tests -c Release
+  total 3113, failed 0, succeeded 3113, skipped 0
+
+dotnet test tests/Playnite.Architecture.Tests -c Release
+  total 210, failed 0, succeeded 210, skipped 0
+```
+
+Real linux-ci: [run 44840650650](https://github.com/seanburkes/playnite-linux/actions/runs/44840650650)
+on head `b67d995653fe7f376e629a96615ab75832603544`, based on main `8bb2617`, completed
+successfully. The downloaded `linux-test-results` artifact reports Core 3113/3113,
+Architecture 210/210, Smoke 4/4 and Plugin 15/15 total/executed/passed, every suite 0 failed
+and 0 skipped with exit 0.
+
 ## 6. Out of scope
 
 No add-on store, catalogue download, package download, update/rollback path, licence UI, zip
