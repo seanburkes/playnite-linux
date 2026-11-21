@@ -44,6 +44,18 @@ public sealed class ShellSmokeTests
             Assert.Contains("Window opened: Playnite", lines);
             Assert.Contains("Window closed", lines);
             Assert.Contains("shell: about-title=" + ControlledTitle, lines);
+
+            // The pilot markers are emitted only after the host reads the real TextBlocks of
+            // both constructed views and matches their text and semantic names to the
+            // controlled catalog values. A view that stops applying its text fails here.
+            Assert.Contains(
+                $"shell: pilot.about=title={ControlledTitle};message={ControlledAuthor};"
+                    + "semantic=About title|About author;valid=true",
+                lines);
+            Assert.Contains(
+                $"shell: pilot.messagebox=title={ControlledTitle};message={ControlledAuthor};"
+                    + "semantic=Message title|Message text;valid=true",
+                lines);
             Assert.Contains("shell: pilot=about,messagebox", lines);
 
             var regions = Assert.Single(lines.Where(line => line.StartsWith("shell: regions=", StringComparison.Ordinal)));

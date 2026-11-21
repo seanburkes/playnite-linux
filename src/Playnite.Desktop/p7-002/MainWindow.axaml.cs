@@ -46,11 +46,60 @@ public sealed partial class MainWindow : Window
             Console.WriteLine("shell: regions=" + string.Join(",", RegionNames));
             Console.WriteLine("shell: about-title=" + Shell.AboutTitle);
             Console.WriteLine("shell: semantic=" + DescribeSemanticTree(this));
-            _ = new AboutView(Shell.AboutTitle, Shell.AboutMessage);
-            _ = new MessageBoxView("Playnite", "Shell ready");
-            Console.WriteLine("shell: pilot=about,messagebox");
+
+            // Keep both pilot views alive through the assertions. Nothing is shown as a second
+            // window; the assertions read the real TextBlocks the views applied.
+            var about = new AboutView(Shell.AboutTitle, Shell.AboutMessage);
+            var messageBox = new MessageBoxView(Shell.AboutTitle, Shell.AboutMessage);
+            var aboutPilot = DescribePilotView(
+                about, "AboutTitleText", "AboutMessageText",
+                Shell.AboutTitle, Shell.AboutMessage, "About title", "About author");
+            var messagePilot = DescribePilotView(
+                messageBox, "MessageBoxTitleText", "MessageBoxMessageText",
+                Shell.AboutTitle, Shell.AboutMessage, "Message title", "Message text");
+
+            Console.WriteLine("shell: pilot.about=" + aboutPilot.Description);
+            Console.WriteLine("shell: pilot.messagebox=" + messagePilot.Description);
+            if (aboutPilot.Valid && messagePilot.Valid)
+            {
+                Console.WriteLine("shell: pilot=about,messagebox");
+            }
+
+            GC.KeepAlive(about);
+            GC.KeepAlive(messageBox);
             Dispatcher.UIThread.Post(Close, DispatcherPriority.ApplicationIdle);
         };
+    }
+
+    /// <summary>Reads a pilot view's real text and semantic names; the success marker is emitted
+    /// only when every observed value matches the controlled-catalog expectation.</summary>
+    private static (string Description, bool Valid) DescribePilotView(
+        Control view,
+        string titleName,
+        string messageName,
+        string expectedTitle,
+        string expectedMessage,
+        string expectedTitleSemantic,
+        string expectedMessageSemantic)
+    {
+        var title = view.FindControl<TextBlock>(titleName);
+        var message = view.FindControl<TextBlock>(messageName);
+        var titleText = title?.Text;
+        var messageText = message?.Text;
+        var titleSemantic = title is null ? null : AutomationProperties.GetName(title);
+        var messageSemantic = message is null ? null : AutomationProperties.GetName(message);
+
+        var valid =
+            string.Equals(titleText, expectedTitle, StringComparison.Ordinal)
+            && string.Equals(messageText, expectedMessage, StringComparison.Ordinal)
+            && string.Equals(titleSemantic, expectedTitleSemantic, StringComparison.Ordinal)
+            && string.Equals(messageSemantic, expectedMessageSemantic, StringComparison.Ordinal);
+
+        return (
+            $"title={titleText ?? "<missing>"};message={messageText ?? "<missing>"};"
+                + $"semantic={titleSemantic ?? "<missing>"}|{messageSemantic ?? "<missing>"};"
+                + $"valid={valid.ToString().ToLowerInvariant()}",
+            valid);
     }
 
     private static readonly string[] RegionNames =
