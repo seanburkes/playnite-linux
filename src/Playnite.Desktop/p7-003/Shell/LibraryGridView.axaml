@@ -1,0 +1,28 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="Playnite.Desktop.Shell.LibraryGridView">
+  <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,*,Auto">
+    <TextBlock x:Name="HeaderText" Grid.Row="0" Grid.ColumnSpan="2"
+               Text="Library" AutomationProperties.Name="Library header" />
+    <ListBox x:Name="GameList" Grid.Row="1" Grid.Column="0"
+             SelectionMode="Single" AutomationProperties.Name="Game list" />
+    <Border x:Name="DetailsPane" Grid.Row="1" Grid.Column="1"
+            AutomationProperties.Name="Game details">
+      <StackPanel>
+        <TextBlock x:Name="DetailsName" Text="(none)"
+                   AutomationProperties.Name="Details name" />
+        <TextBlock x:Name="DetailsId" Text="(none)"
+                   AutomationProperties.Name="Details id" />
+      </StackPanel>
+    </Border>
+    <StackPanel Grid.Row="2" Grid.ColumnSpan="2" Orientation="Horizontal"
+                AutomationProperties.Name="Library pager">
+      <Button x:Name="PreviousButton" Content="Previous"
+              AutomationProperties.Name="Previous page" />
+      <TextBlock x:Name="PageText" Text="Page 1 / 1" Margin="8,0"
+                 AutomationProperties.Name="Page indicator" />
+      <Button x:Name="NextButton" Content="Next"
+              AutomationProperties.Name="Next page" />
+    </StackPanel>
+  </Grid>
+</UserControl>
