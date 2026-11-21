@@ -14,6 +14,14 @@ public static class BootstrapFiles
     {
         ArgumentNullException.ThrowIfNull(probe);
         var fullPath = Path.GetFullPath(path);
+        // A dangling symlink is not reported by File.Exists, so it would pass a naive existence
+        // check and FileMode.Append would then follow it and create the link target. Reject the
+        // final symlink first, whether or not its target currently exists.
+        if (new FileInfo(fullPath).LinkTarget is not null)
+        {
+            throw new InvalidDataException($"{fullPath} is a symbolic link.");
+        }
+
         if (File.Exists(fullPath) && !probe.IsRegularFile(fullPath))
         {
             throw new InvalidDataException($"{fullPath} is not a regular file.");

@@ -264,6 +264,41 @@ public sealed class BootstrapSeamsTests
         }
     }
 
+    [Fact]
+    public async Task Dangling_symlink_log_path_fails_fast_without_creating_the_target()
+    {
+        if (!OperatingSystem.IsLinux())
+        {
+            return;
+        }
+
+        var root = Path.Combine(Path.GetTempPath(), "playnite-p7-001-link-" + Path.GetRandomFileName());
+        Directory.CreateDirectory(root);
+        var link = Path.Combine(root, "playnite.log");
+        var target = Path.Combine(root, "outside-target.log");
+        try
+        {
+            File.CreateSymbolicLink(link, target);
+            Assert.NotNull(new FileInfo(link).LinkTarget);
+
+            var exception = await Assert.ThrowsAsync<InvalidDataException>(
+                () => Task.Run(() => new FileAppLogger(link, Probe)))
+                .WaitAsync(TimeSpan.FromSeconds(5));
+            Assert.Contains("symbolic link", exception.Message, StringComparison.Ordinal);
+
+            Assert.False(File.Exists(target));
+        }
+        finally
+        {
+            if (File.Exists(link))
+            {
+                File.Delete(link);
+            }
+
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
     private static string CreateFifo(string name)
     {
         var path = Path.Combine(Path.GetTempPath(), "playnite-p7-001-" + name + "-" + Path.GetRandomFileName());
