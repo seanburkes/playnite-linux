@@ -1,0 +1,36 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:shell="using:Playnite.Desktop.Shell"
+             x:Class="Playnite.Desktop.Shell.ShellView">
+  <Grid>
+    <DockPanel x:Name="Workspace" LastChildFill="True">
+      <Border x:Name="TopPanel" DockPanel.Dock="Top" AutomationProperties.Name="Top panel">
+        <DockPanel>
+          <Button x:Name="SettingsButton" DockPanel.Dock="Right" Click="OnSettings" IsEnabled="False" />
+          <shell:TopPanelView />
+        </DockPanel>
+      </Border>
+      <TextBlock x:Name="StartupError" DockPanel.Dock="Top" IsVisible="False" TextWrapping="Wrap"
+                 AutomationProperties.LiveSetting="Assertive" />
+      <Border x:Name="Notifications" DockPanel.Dock="Right" AutomationProperties.Name="Notifications">
+        <shell:NotificationsView />
+      </Border>
+      <Border x:Name="Sidebar" DockPanel.Dock="Left" AutomationProperties.Name="Sidebar">
+        <shell:SidebarView />
+      </Border>
+      <Border x:Name="ContentHost" AutomationProperties.Name="Content host">
+        <shell:ContentHostView />
+      </Border>
+    </DockPanel>
+    <Border x:Name="Welcome" IsVisible="False">
+      <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Margin="24" Spacing="12">
+        <TextBlock x:Name="WelcomeTitle" FontWeight="SemiBold" />
+        <TextBlock Text="Playnite brings your games together in one library. You can change your preferences in Settings."
+                   TextWrapping="Wrap" />
+        <TextBlock x:Name="WelcomeError" IsVisible="False" TextWrapping="Wrap"
+                   AutomationProperties.LiveSetting="Assertive" />
+        <Button x:Name="AcknowledgeButton" Click="OnAcknowledge" HorizontalAlignment="Left" />
+      </StackPanel>
+    </Border>
+  </Grid>
+</UserControl>

@@ -1,0 +1,26 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="Playnite.Desktop.Shell.SettingsWindow"
+        SizeToContent="WidthAndHeight" WindowStartupLocation="CenterOwner" CanResize="False">
+  <StackPanel Margin="16" Spacing="12">
+    <TabControl x:Name="Sections">
+      <TabItem x:Name="General">
+        <StackPanel Margin="0,12" Spacing="6">
+          <TextBlock x:Name="LanguageLabel" />
+          <ComboBox x:Name="Language" HorizontalAlignment="Stretch"
+                    AutomationProperties.LabeledBy="{Binding #LanguageLabel}" />
+          <TextBlock x:Name="RestartHint" />
+        </StackPanel>
+      </TabItem>
+      <TabItem x:Name="Appearance">
+        <CheckBox x:Name="ShowSidebar" Margin="0,12" />
+      </TabItem>
+    </TabControl>
+    <TextBlock x:Name="SaveError" IsVisible="False" TextWrapping="Wrap"
+               AutomationProperties.LiveSetting="Assertive" />
+    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+      <Button x:Name="SaveButton" IsDefault="True" Click="OnSave" />
+      <Button x:Name="CancelButton" IsCancel="True" Click="OnCancel" />
+    </StackPanel>
+  </StackPanel>
+</Window>
