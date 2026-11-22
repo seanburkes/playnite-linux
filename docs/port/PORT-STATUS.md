@@ -67,16 +67,16 @@ in [`gates/P5-pending.md`](gates/P5-pending.md).
 | Status | Units |
 | --- | ---: |
 | deferred | 1 |
-| done | 90 |
+| done | 91 |
 | in-progress | 5 |
-| todo | 17 |
+| todo | 16 |
 
 ## Ledger
 
 | Metric | Value |
 | --- | ---: |
-| Ledger rows | 359 |
-| Ledger fragments | 132 |
+| Ledger rows | 361 |
+| Ledger fragments | 134 |
 
 ## Units
 
@@ -181,7 +181,7 @@ in [`gates/P5-pending.md`](gates/P5-pending.md).
 | p7-003 | W7 | ui | Library grid/list/details | done | `units/p7-003.*`; 4 ledger rows |
 | p7-004 | W7 | ui | Search/filter/sort | done | `units/p7-004.*`; 3 ledger rows |
 | p7-005 | W7 | ui | Game edit/metadata | done | `units/p7-005.*`; 4 ledger rows |
-| p7-006 | W7 | ui | Settings/first-run/import | todo | `units/p7-006.*`; 0 ledger rows |
+| p7-006 | W7 | ui | Settings/first-run/import | done | `units/p7-006.*`; 2 ledger rows |
 | p7-007 | W7 | ui | Tray/protocol/keyboard | todo | `units/p7-007.*`; 0 ledger rows |
 | p7-008 | W7 | ui | Accessibility baseline | todo | `units/p7-008.*`; 0 ledger rows |
 | p7-009 | W7 | ui | Import transport/fresh-install wizard | todo | `units/p7-009.*`; 0 ledger rows |

@@ -126,6 +126,7 @@ src/Playnite.Core/Serialization/TomlSerialization.cs	p3-003c	0f1c774400a829cd45e
 src/Playnite.Core/Serialization/YamlDepthGuard.cs	p3-003c	0f1c774400a829cd45e1647245bf0a802e237ebb	pull/69
 src/Playnite.Core/Serialization/YamlNullGuard.cs	p3-003c	0f1c774400a829cd45e1647245bf0a802e237ebb	pull/69
 src/Playnite.Core/Serialization/YamlSerialization.cs	p3-003c	0f1c774400a829cd45e1647245bf0a802e237ebb	pull/69
+src/Playnite.Core/Settings/DesktopPreferences.cs	p7-006	503d6689f887a026f0753573c30f1b92fcb4ffc1	pull/228
 src/Playnite.Core/Settings/SettingsKey.cs	p6-004	c5ac0c7707f33702aa490b442a9aba983c9280bd	pull/181
 src/Playnite.Core/Settings/SettingsMigration.cs	p4-004	a6f8bfc7e3cf94a37c5c043da6f2e90609b2ba6b	pull/91
 src/Playnite.Core/Settings/SettingsService.cs	p6-004	c5ac0c7707f33702aa490b442a9aba983c9280bd	pull/181
@@ -168,7 +169,9 @@ src/Playnite.Desktop/p7-002/Shell/NotificationsView.axaml	p7-002	e0ad0f948d3ca44
 src/Playnite.Desktop/p7-002/Shell/NotificationsView.axaml.cs	p7-002	e0ad0f948d3ca4441f967536c50050142431a7ee	pull/224
 src/Playnite.Desktop/p7-002/Shell/RelayCommand.cs	p7-002	e0ad0f948d3ca4441f967536c50050142431a7ee	pull/224
 src/Playnite.Desktop/p7-002/Shell/ShellView.axaml	p7-002	e0ad0f948d3ca4441f967536c50050142431a7ee	pull/224
+src/Playnite.Desktop/p7-002/Shell/ShellView.axaml	p7-006	503d6689f887a026f0753573c30f1b92fcb4ffc1	pull/228
 src/Playnite.Desktop/p7-002/Shell/ShellView.axaml.cs	p7-002	e0ad0f948d3ca4441f967536c50050142431a7ee	pull/224
+src/Playnite.Desktop/p7-002/Shell/ShellView.axaml.cs	p7-006	503d6689f887a026f0753573c30f1b92fcb4ffc1	pull/228
 src/Playnite.Desktop/p7-002/Shell/ShellViewModel.cs	p7-002	e0ad0f948d3ca4441f967536c50050142431a7ee	pull/224
 src/Playnite.Desktop/p7-002/Shell/SidebarView.axaml	p7-002	e0ad0f948d3ca4441f967536c50050142431a7ee	pull/224
 src/Playnite.Desktop/p7-002/Shell/SidebarView.axaml.cs	p7-002	e0ad0f948d3ca4441f967536c50050142431a7ee	pull/224
@@ -193,6 +196,12 @@ src/Playnite.Desktop/p7-005/Shell/GameEditStore.cs	p7-005	0c9f5d22929818d59b9d09
 src/Playnite.Desktop/p7-005/Shell/GameEditView.axaml	p7-005	0c9f5d22929818d59b9d0902fa50aa63219e3fc1	pull/227
 src/Playnite.Desktop/p7-005/Shell/GameEditView.axaml.cs	p7-005	0c9f5d22929818d59b9d0902fa50aa63219e3fc1	pull/227
 src/Playnite.Desktop/p7-005/Shell/GameEditViewModel.cs	p7-005	0c9f5d22929818d59b9d0902fa50aa63219e3fc1	pull/227
+src/Playnite.Desktop/p7-006/Shell/SettingsCatalogs.cs	p7-006	503d6689f887a026f0753573c30f1b92fcb4ffc1	pull/228
+src/Playnite.Desktop/p7-006/Shell/SettingsSmoke.cs	p7-006	503d6689f887a026f0753573c30f1b92fcb4ffc1	pull/228
+src/Playnite.Desktop/p7-006/Shell/SettingsWindow.axaml	p7-006	503d6689f887a026f0753573c30f1b92fcb4ffc1	pull/228
+src/Playnite.Desktop/p7-006/Shell/SettingsWindow.axaml.cs	p7-006	503d6689f887a026f0753573c30f1b92fcb4ffc1	pull/228
+src/Playnite.Desktop/p7-006/Shell/ShellView.axaml	p7-006	503d6689f887a026f0753573c30f1b92fcb4ffc1	pull/228
+src/Playnite.Desktop/p7-006/Shell/ShellView.axaml.cs	p7-006	503d6689f887a026f0753573c30f1b92fcb4ffc1	pull/228
 src/Playnite.LegacyImport.Contracts/AssemblyMarker.cs	p2-001	9afd818ae8a695e921bb98f386bfceb83d0059db	pull/29
 src/Playnite.LegacyImport.Contracts/AssemblyMarker.cs	p2-002	abdb82bedd0bcadfe93c1fc6f11937c55b116b7c	pull/37
 src/Playnite.LegacyImport/LibraryReader.cs	p4-002	9f81d30b3cc4a6beb0e15f39610ecd219ebc19f7	pull/94
@@ -459,6 +468,7 @@ tests/Playnite.Core.Tests/Sessions/LinuxProcessLauncherTests.cs	p5-004	5c4d11a68
 tests/Playnite.Core.Tests/Sessions/ProcessTestDoubles.cs	p5-004	064e261b5bffa6c434515b9851160a21fd0e317d	pull/120
 tests/Playnite.Core.Tests/Sessions/SessionEventRecorder.cs	p5-004	064e261b5bffa6c434515b9851160a21fd0e317d	pull/120
 tests/Playnite.Core.Tests/Sessions/SessionTestDoubles.cs	p5-004	35b61264636fe22d012ee06c439b9d2f178bebb5	pull/164
+tests/Playnite.Core.Tests/Settings/DesktopPreferencesTests.cs	p7-006	503d6689f887a026f0753573c30f1b92fcb4ffc1	pull/228
 tests/Playnite.Core.Tests/Settings/SettingsServiceTests.cs	p6-004	c5ac0c7707f33702aa490b442a9aba983c9280bd	pull/181
 tests/Playnite.Core.Tests/SettingsMigrationTests.cs	p4-004	a6f8bfc7e3cf94a37c5c043da6f2e90609b2ba6b	pull/91
 tests/Playnite.Core.Tests/Steam/SteamDiscoveryTests.cs	p5-002	f8aed2fe6b29918fbe6bc29dd5f3b54a7af6fcee	pull/112
@@ -493,6 +503,7 @@ tests/Playnite.Smoke.Tests/HostSmokeTests.cs	p2-004	34af4f0fb6430fbc585d3b76ce85
 tests/Playnite.Smoke.Tests/LibrarySmokeTests.cs	p7-003	9ce99d4a901b0dbe7594197ac164d2e5b34a8091	pull/225
 tests/Playnite.Smoke.Tests/README.md	p2-004	34af4f0fb6430fbc585d3b76ce85094390a26467	pull/34
 tests/Playnite.Smoke.Tests/SearchFilterSortSmokeTests.cs	p7-004	8af3cc00a2ac796b4043d1f9b22242afe54186b4	pull/226
+tests/Playnite.Smoke.Tests/SettingsWelcomeSmokeTests.cs	p7-006	503d6689f887a026f0753573c30f1b92fcb4ffc1	pull/228
 tests/Playnite.Smoke.Tests/ShellSmokeTests.cs	p7-002	e0ad0f948d3ca4441f967536c50050142431a7ee	pull/224
 tests/README.md	p2-review-model	3497640ecdc76144381f168913785fe17b24fe73	pull/49
 tests/fixtures/.gitkeep	*	a9b884f696be6ce48e42a0f2d93b8275891fac8b	-
