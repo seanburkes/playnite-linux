@@ -1,0 +1,39 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="Playnite.Desktop.Setup.FirstTimeStartupWindow"
+        Title="Set up Playnite" Width="650" Height="520" MinWidth="360" MinHeight="300"
+        WindowStartupLocation="CenterScreen">
+  <ScrollViewer HorizontalScrollBarVisibility="Disabled">
+    <StackPanel Margin="20" Spacing="12">
+      <TextBlock Text="Choose a library source" FontSize="20" />
+      <StackPanel x:Name="Choices" Spacing="12">
+        <StackPanel x:Name="ImportSource" Spacing="8">
+          <TextBlock TextWrapping="Wrap"
+                     Text="Choose your Playnite 10 folder (or its library subfolder) on a mounted Windows partition, USB drive, or network share. Close Playnite 10 before copying. Import is one-way and does not change the source. Steam games are brought over; unsupported records are kept in the migration backup." />
+          <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+            <TextBox x:Name="SourcePath" PlaceholderText="Mounted Playnite folder"
+                     AutomationProperties.Name="Mounted Playnite folder" />
+            <Button x:Name="BrowseButton" Grid.Column="1" Content="Browse…" Click="OnBrowse" />
+          </Grid>
+          <TextBox x:Name="WindowsPath" PlaceholderText="Original Windows path of this folder (optional)"
+                   AutomationProperties.Name="Original Windows path of this folder (optional)" />
+          <TextBlock TextWrapping="Wrap"
+                     Text="Select the parent Playnite folder to include config.json. Provide its original Windows path only if you know it; otherwise Windows settings paths are retained and reported as unmapped." />
+          <Button x:Name="ImportButton" Content="Import Playnite 10 library" Click="OnImport" />
+        </StackPanel>
+        <TextBlock TextWrapping="Wrap"
+                   Text="Starting without a Windows library? Set up with games Steam already knows about on this machine." />
+        <Button x:Name="SteamButton" Content="Set up with Steam" Click="OnSteam" />
+        <Button x:Name="KeepButton" Content="Keep my existing Linux library" Click="OnKeep" IsVisible="False" />
+      </StackPanel>
+      <ProgressBar x:Name="ProgressBar" IsIndeterminate="True" IsVisible="False"
+                   AutomationProperties.Name="Setup progress" />
+      <TextBlock x:Name="StatusText" TextWrapping="Wrap" AutomationProperties.LiveSetting="Polite" />
+      <SelectableTextBlock x:Name="DetailsText" TextWrapping="Wrap" />
+      <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+        <Button x:Name="CancelButton" Content="Cancel" IsVisible="False" Click="OnCancel" />
+        <Button x:Name="FinishButton" Content="Finish" IsVisible="False" Click="OnFinish" />
+      </StackPanel>
+    </StackPanel>
+  </ScrollViewer>
+</Window>

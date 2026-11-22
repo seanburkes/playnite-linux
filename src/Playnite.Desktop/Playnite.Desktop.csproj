@@ -16,4 +16,43 @@
     <ProjectReference Include="../Playnite.Steam/Playnite.Steam.csproj" />
     <ProjectReference Include="../Playnite.LegacyImport.Contracts/Playnite.LegacyImport.Contracts.csproj" />
   </ItemGroup>
+  <!-- Stage a separate executable, not a ProjectReference, so reader dependencies
+       never enter Desktop's compiler, restore, or runtime graph. -->
+  <Target Name="BuildLegacyImportSidecar" BeforeTargets="CopyFilesToOutputDirectory;ComputeFilesToPublish"
+          Condition="'$(DesignTimeBuild)' != 'true'">
+    <PropertyGroup>
+      <_LegacyImportProject>$(MSBuildProjectDirectory)/../Playnite.LegacyImport/Playnite.LegacyImport.csproj</_LegacyImportProject>
+      <_LegacyImportMode Condition="'$(SelfContained)' == 'true'">self-contained</_LegacyImportMode>
+      <_LegacyImportMode Condition="'$(_LegacyImportMode)' == ''">framework-dependent</_LegacyImportMode>
+      <_LegacyImportProperties>Configuration=Sidecar-$(Configuration)-$(_LegacyImportMode);Optimize=$(Optimize);ArtifactsPath=$(MSBuildProjectDirectory)/obj/legacy-import/$(_LegacyImportMode)/$(RuntimeIdentifier);UseArtifactsOutput=true;RuntimeIdentifier=$(RuntimeIdentifier);SelfContained=$(SelfContained);UseAppHost=true</_LegacyImportProperties>
+      <_LegacyImportRemoveProperties>OutputPath;OutDir;PublishDir;PublishSingleFile;PublishTrimmed;PublishReadyToRun</_LegacyImportRemoveProperties>
+    </PropertyGroup>
+    <MSBuild Projects="$(_LegacyImportProject)" Targets="Restore" Properties="$(_LegacyImportProperties)"
+             RemoveProperties="$(_LegacyImportRemoveProperties)" />
+    <MSBuild Projects="$(_LegacyImportProject)" Targets="Build" Properties="$(_LegacyImportProperties)"
+             RemoveProperties="$(_LegacyImportRemoveProperties)">
+      <Output TaskParameter="TargetOutputs" ItemName="_LegacyImportOutput" />
+    </MSBuild>
+    <PropertyGroup>
+      <_LegacyImportDir>@(_LegacyImportOutput->'%(RootDir)%(Directory)')</_LegacyImportDir>
+    </PropertyGroup>
+    <ItemGroup>
+      <_LegacyImportFile Include="$(_LegacyImportDir)**/*" Exclude="$(_LegacyImportDir)**/*.pdb" />
+    </ItemGroup>
+    <Copy SourceFiles="@(_LegacyImportFile)"
+          DestinationFiles="@(_LegacyImportFile->'$(OutDir)legacy-import/%(RecursiveDir)%(Filename)%(Extension)')"
+          SkipUnchangedFiles="true" />
+    <ItemGroup>
+      <FileWrites Include="@(_LegacyImportFile->'$(OutDir)legacy-import/%(RecursiveDir)%(Filename)%(Extension)')" />
+    </ItemGroup>
+  </Target>
+  <Target Name="PublishLegacyImportSidecar" AfterTargets="ComputeFilesToPublish" DependsOnTargets="BuildLegacyImportSidecar">
+    <ItemGroup>
+      <ResolvedFileToPublish Include="@(_LegacyImportFile)">
+        <RelativePath>legacy-import/%(RecursiveDir)%(Filename)%(Extension)</RelativePath>
+        <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+        <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
+      </ResolvedFileToPublish>
+    </ItemGroup>
+  </Target>
 </Project>
