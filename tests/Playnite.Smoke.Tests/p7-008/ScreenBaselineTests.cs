@@ -33,6 +33,7 @@ public sealed class HeadlessScreenApplication : Application
     }
 
     public static AppBuilder BuildAvaloniaApp() => AppBuilder.Configure<HeadlessScreenApplication>()
+        .WithInterFont()
         .UseSkia()
         .UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false });
 }
