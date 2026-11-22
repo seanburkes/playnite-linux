@@ -12,7 +12,8 @@
     <PackageReference Include="xunit.runner.visualstudio" PrivateAssets="all" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="../../src/Playnite.Desktop/Playnite.Desktop.csproj" ReferenceOutputAssembly="false" />
+    <PackageReference Include="Avalonia.Headless" />
+    <ProjectReference Include="../../src/Playnite.Desktop/Playnite.Desktop.csproj" />
     <ProjectReference Include="../../src/Playnite.Cli/Playnite.Cli.csproj" ReferenceOutputAssembly="false" />
     <ProjectReference Include="../../src/Playnite.Core/Playnite.Core.csproj" />
   </ItemGroup>

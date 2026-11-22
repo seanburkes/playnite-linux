@@ -1,0 +1,124 @@
+{
+  "id": null,
+  "name": "About Playnite",
+  "role": "Window",
+  "enabled": true,
+  "focusable": false,
+  "offscreen": false,
+  "children": [
+    {
+      "id": "AvaloniaWindowChrome",
+      "name": "WindowChrome",
+      "role": "Group",
+      "enabled": true,
+      "focusable": false,
+      "offscreen": false,
+      "children": []
+    },
+    {
+      "id": null,
+      "name": "",
+      "role": "None",
+      "enabled": true,
+      "focusable": false,
+      "offscreen": false,
+      "children": [
+        {
+          "id": "PART_TransparencyFallback",
+          "name": "",
+          "role": "None",
+          "enabled": true,
+          "focusable": false,
+          "offscreen": false,
+          "children": []
+        },
+        {
+          "id": null,
+          "name": "",
+          "role": "None",
+          "enabled": true,
+          "focusable": false,
+          "offscreen": false,
+          "children": []
+        },
+        {
+          "id": null,
+          "name": "",
+          "role": "None",
+          "enabled": true,
+          "focusable": false,
+          "offscreen": false,
+          "children": []
+        },
+        {
+          "id": "PART_VisualLayerManager",
+          "name": "",
+          "role": "None",
+          "enabled": true,
+          "focusable": false,
+          "offscreen": false,
+          "children": [
+            {
+              "id": "PART_ContentPresenter",
+              "name": "",
+              "role": "None",
+              "enabled": true,
+              "focusable": false,
+              "offscreen": false,
+              "children": [
+                {
+                  "id": null,
+                  "name": "",
+                  "role": "Custom",
+                  "enabled": true,
+                  "focusable": false,
+                  "offscreen": false,
+                  "children": [
+                    {
+                      "id": "PART_ContentPresenter",
+                      "name": "",
+                      "role": "None",
+                      "enabled": true,
+                      "focusable": false,
+                      "offscreen": false,
+                      "children": [
+                        {
+                          "id": null,
+                          "name": "",
+                          "role": "None",
+                          "enabled": true,
+                          "focusable": false,
+                          "offscreen": false,
+                          "children": [
+                            {
+                              "id": "AboutTitleText",
+                              "name": "About Playnite",
+                              "role": "Text",
+                              "enabled": true,
+                              "focusable": false,
+                              "offscreen": false,
+                              "children": []
+                            },
+                            {
+                              "id": "AboutMessageText",
+                              "name": "Playnite Linux",
+                              "role": "Text",
+                              "enabled": true,
+                              "focusable": false,
+                              "offscreen": false,
+                              "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
