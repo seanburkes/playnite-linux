@@ -1,2 +1,2 @@
 id	wave	area	unit	depends	status	owner	oracle	test	notes
-p5-005	W5	platform	XDG/single-instance/protocol	p3-001	todo	platform	smoke	test:platform	
+p5-005	W5	platform	XDG/single-instance/protocol	p3-001	done	fm/p5-005	smoke	test:platform	Reconciled to done against merged PR https://github.com/seanburkes/playnite-linux/pull/119 at 785b892 (unit p5-005a, merged-head linux-ci 44344964418), which delivered the p5-005 base scope without duplicating implementation. p5-005a remains the implementation and evidence owner for its continuation; this canonical row is closed out so downstream dependents such as p7-007 are unblocked.
