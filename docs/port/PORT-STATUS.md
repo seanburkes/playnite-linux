@@ -67,16 +67,16 @@ in [`gates/P5-pending.md`](gates/P5-pending.md).
 | Status | Units |
 | --- | ---: |
 | deferred | 1 |
-| done | 92 |
+| done | 93 |
 | in-progress | 5 |
-| todo | 15 |
+| todo | 14 |
 
 ## Ledger
 
 | Metric | Value |
 | --- | ---: |
-| Ledger rows | 362 |
-| Ledger fragments | 135 |
+| Ledger rows | 363 |
+| Ledger fragments | 136 |
 
 ## Units
 
@@ -183,7 +183,7 @@ in [`gates/P5-pending.md`](gates/P5-pending.md).
 | p7-005 | W7 | ui | Game edit/metadata | done | `units/p7-005.*`; 4 ledger rows |
 | p7-006 | W7 | ui | Settings/first-run/import | done | `units/p7-006.*`; 2 ledger rows |
 | p7-007 | W7 | ui | Tray/protocol/keyboard | todo | `units/p7-007.*`; 0 ledger rows |
-| p7-008 | W7 | ui | Accessibility baseline | todo | `units/p7-008.*`; 0 ledger rows |
+| p7-008 | W7 | ui | Headless screenshot and semantic-tree baselines (accessibility deferred per D1) | done | `units/p7-008.*`; 1 ledger rows |
 | p7-009 | W7 | ui | Import transport/fresh-install wizard | done | `units/p7-009.*`; 1 ledger rows |
 | p8-001 | W8 | pack | AppImage x64/ARM64 | todo | `units/p8-001.*`; 0 ledger rows |
 | p8-002 | W8 | pack | Flatpak x64/ARM64 | todo | `units/p8-002.*`; 0 ledger rows |

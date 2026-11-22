@@ -512,6 +512,7 @@ tests/Playnite.Smoke.Tests/README.md	p2-004	34af4f0fb6430fbc585d3b76ce85094390a2
 tests/Playnite.Smoke.Tests/SearchFilterSortSmokeTests.cs	p7-004	8af3cc00a2ac796b4043d1f9b22242afe54186b4	pull/226
 tests/Playnite.Smoke.Tests/SettingsWelcomeSmokeTests.cs	p7-006	503d6689f887a026f0753573c30f1b92fcb4ffc1	pull/228
 tests/Playnite.Smoke.Tests/ShellSmokeTests.cs	p7-002	e0ad0f948d3ca4441f967536c50050142431a7ee	pull/224
+tests/Playnite.Smoke.Tests/p7-008/ScreenBaselineTests.cs	p7-008	7bba7d5c9017841d252e7df6b4fddd4b7ae22f1d	pull/230
 tests/Playnite.Smoke.Tests/p7-009/FirstTimeSetupSmokeTests.cs	p7-009	5885aaa432ef880c5d900b1b5a7bf19a01f2f1f6	pull/229
 tests/README.md	p2-review-model	3497640ecdc76144381f168913785fe17b24fe73	pull/49
 tests/fixtures/.gitkeep	*	a9b884f696be6ce48e42a0f2d93b8275891fac8b	-
@@ -708,6 +709,15 @@ tests/golden/settings/fullscreenConfig.json	p1-002	f958bcceb23e6090b636ec8eef4c3
 tests/golden/settings/windowPositions.json	p1-002	f958bcceb23e6090b636ec8eef4c3214ae7668f0	pull/19
 tests/golden/utils-v10.json	*	29f665a47aa385cafbf87538c4465a8ee70badef	pull/67
 tests/legacy-exclusions.md	*	4d96b432dcab9349209d370d6fae9d7df2eda6b5	pull/27
+tests/screens/README.md	p7-008	7bba7d5c9017841d252e7df6b4fddd4b7ae22f1d	pull/230
+tests/screens/about.png	p7-008	7bba7d5c9017841d252e7df6b4fddd4b7ae22f1d	pull/230
+tests/screens/about.tree.json	p7-008	7bba7d5c9017841d252e7df6b4fddd4b7ae22f1d	pull/230
+tests/screens/main-shell.png	p7-008	7bba7d5c9017841d252e7df6b4fddd4b7ae22f1d	pull/230
+tests/screens/main-shell.tree.json	p7-008	7bba7d5c9017841d252e7df6b4fddd4b7ae22f1d	pull/230
+tests/screens/messagebox.png	p7-008	7bba7d5c9017841d252e7df6b4fddd4b7ae22f1d	pull/230
+tests/screens/messagebox.tree.json	p7-008	7bba7d5c9017841d252e7df6b4fddd4b7ae22f1d	pull/230
+tests/screens/welcome.png	p7-008	7bba7d5c9017841d252e7df6b4fddd4b7ae22f1d	pull/230
+tests/screens/welcome.tree.json	p7-008	7bba7d5c9017841d252e7df6b4fddd4b7ae22f1d	pull/230
 tools/AssetCopy.CrashHost/Program.cs	p4-005	f12a4325c58cf66d47b93c5768e46861696d3052	pull/96
 tools/LegacyOracle/Program.cs	p1-002	082d25b094632710fea2b2bd484f95772250609c	pull/5
 tools/LegacyOracle/README.md	p1-002	9cbdc8d472ab526b08a9c2bcf1002f093d02e26a	pull/22
