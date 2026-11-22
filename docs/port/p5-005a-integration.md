@@ -1,7 +1,8 @@
 # p5-005a — Linux integration plumbing
 
-Continuation of queue unit `p5-005` (XDG/single-instance/protocol). The base row stays
-`todo`; this shard records the delivered slice without claiming the later Desktop wiring.
+Continuation of queue unit `p5-005` (XDG/single-instance/protocol). This shard records the
+`p5-005a` slice delivered by https://github.com/seanburkes/playnite-linux/pull/119; the
+`p5-005` base row is now `done` after https://github.com/seanburkes/playnite-linux/pull/231.
 
 ## Behaviour contract
 

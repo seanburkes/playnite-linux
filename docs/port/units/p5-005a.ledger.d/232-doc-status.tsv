@@ -1,0 +1,2 @@
+timestamp	unit	from	to	actor	evidence
+2026-11-22T21:52:00Z	p5-005a	done	done	fm/p5-005a-doc	Updated opening status wording in docs/port/p5-005a-integration.md for p5-005 done state (PR https://github.com/seanburkes/playnite-linux/pull/232); validated head cffe8c4336504d00aabb468f9ea194eda2a14f55; linux-ci run https://github.com/seanburkes/playnite-linux/actions/runs/45071435964 completed success. build_port_index check --shards-only --against origin/main passes; no product, test, oracle, baseline or aggregate change.
