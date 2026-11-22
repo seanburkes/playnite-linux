@@ -1,2 +1,2 @@
 id	wave	area	unit	depends	status	owner	oracle	test	notes
-p3-008	W3	leaves	Archive/backup	p3-002	todo	core	golden:archive	test:archive	SharpCompress
+p3-008	W3	leaves	Archive/backup	p3-002	in-progress	core	golden:archive-listing	test:ArchiveBackupTests	SharpCompress 1.0.0; versioned Linux format and permissive v10 import per captain ruling; explicit overwrite; docs/port/p3-008-archive-backup.md; independent reviews firstmate-owned

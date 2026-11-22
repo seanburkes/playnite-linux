@@ -1,0 +1,22 @@
+{
+  "generator": "python3 scripts/port/generate_archive_fixture.py",
+  "kind": "source-derived, not executed Windows oracle",
+  "layout": "Backup.cs lines 94-185; Archive.cs lines 37-67",
+  "payload": "Synthetic config/media/addon/theme shapes; unmodified frozen SQLite emulator database as opaque library payload, not a Playnite LiteDB export",
+  "sources": {
+    "legacy/source/Playnite/Archive.cs": "1b2ff3898708e9dc27b50824361783768b0f6e404ebe1aca309609daeea3c1ed",
+    "legacy/source/Playnite/Backup.cs": "d022f5b3493542edb12e267c6b2bef02251812738c96654e76333633f0beb11e",
+    "legacy/source/Tests/Playnite.Tests/Resources/Sony - PlayStation Vita.db": "3f07f8532c8ebeefbcf56524442c5a47c32f3fe0e1cedb0c66ed9a6731eaac22"
+  },
+  "members": {
+    "config.json": "a8ad275f039aa24408a6df347c1107fb48eb4b729fa11a9700394f0e780b68b9",
+    "fullscreenConfig.json": "17317d6cbab5aef3b4cca96d828521b6b50368010c0efd07d42e78a8e68eab46",
+    "library/games.db": "3f07f8532c8ebeefbcf56524442c5a47c32f3fe0e1cedb0c66ed9a6731eaac22",
+    "libraryfiles/game-id/cover.txt": "414e18e3682c5f16d45de5b675febb93abfcbd11f1842f64a92b46efab2cfecc",
+    "extension/sample/extension.yaml": "442aea9dd308da13c7655d368719f245a58e40a9d233a18f689e8d611a90e22d",
+    "extensiondata/sample/settings.json": "26b3426b2593763c96d0890b4a77a0bbf66d13fc512b0c6b138a23c290f30a2a",
+    "themes/Desktop/Custom/theme.yaml": "58862fcadb42ef6bf5cb5b545f3488043bf6c129a1da4a56f8dd5d4e2abd5ad5",
+    "themes/Fullscreen/Custom/theme.yaml": "9b8b2c04641d4b30f29f83781d2d6b192aa8eb03711ee7693aefefa77e52b3f6"
+  },
+  "archiveSha256": "c93d85984bae5c3d4f6bb0555aeb6fdcaf96bd64d8b66c738d25b4f9f6328787"
+}

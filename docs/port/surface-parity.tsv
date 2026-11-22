@@ -29,7 +29,7 @@ core-012	Core	Serialization helpers (JSON/YAML/TOML/INI)	Playnite/Common/Seriali
 core-013	Core	Search/filter/sort/group	Playnite/Database/GameFieldComparer.cs	planned			core	property tests
 core-014	Core	Date/time and playtime formatting	Playnite/Common/Extensions	planned			core	culture matrix
 core-015	Core	Localisation keys/lookup	Playnite/Localization	planned			core	38 languages
-core-016	Core	Archive/backup	Playnite/Archive.cs	planned			core	SharpCompress
+core-016	Core	Archive/backup	Playnite/Archive.cs	adapted	ArchiveBackupTests	docs/port/p3-008-archive-backup.md	core	SharpCompress 1.0.0; v10 import plus authorized versioned Linux ZIP; bounded staging; explicit overwrite; lifecycle/settings path rewrite deferred
 core-017	Core	Add-on manifest/install model	Playnite/Plugins/ExtensionInstaller.cs	planned			core	store deferred
 core-018	Core	Diagnostics bundle	Playnite/Diagnostic.cs	planned			core	redaction
 core-019	Core	Logging (NLog)	Playnite/Settings/PlayniteSettings.cs	planned			core	line compatibility

@@ -1,0 +1,9 @@
+config.json
+extension/sample/extension.yaml
+extensiondata/sample/settings.json
+fullscreenConfig.json
+library/games.db
+libraryfiles/game-id/cover.txt
+themes/Desktop/Custom/theme.yaml
+themes/Fullscreen/Custom/theme.yaml
+backup-manifest.json
