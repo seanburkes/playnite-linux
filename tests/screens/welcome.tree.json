@@ -1,0 +1,173 @@
+{
+  "id": null,
+  "name": "Playnite",
+  "role": "Window",
+  "enabled": true,
+  "focusable": false,
+  "offscreen": false,
+  "children": [
+    {
+      "id": "AvaloniaWindowChrome",
+      "name": "WindowChrome",
+      "role": "Group",
+      "enabled": true,
+      "focusable": false,
+      "offscreen": false,
+      "children": []
+    },
+    {
+      "id": null,
+      "name": "",
+      "role": "None",
+      "enabled": true,
+      "focusable": false,
+      "offscreen": false,
+      "children": [
+        {
+          "id": "PART_TransparencyFallback",
+          "name": "",
+          "role": "None",
+          "enabled": true,
+          "focusable": false,
+          "offscreen": false,
+          "children": []
+        },
+        {
+          "id": null,
+          "name": "",
+          "role": "None",
+          "enabled": true,
+          "focusable": false,
+          "offscreen": false,
+          "children": []
+        },
+        {
+          "id": null,
+          "name": "",
+          "role": "None",
+          "enabled": true,
+          "focusable": false,
+          "offscreen": false,
+          "children": []
+        },
+        {
+          "id": "PART_VisualLayerManager",
+          "name": "",
+          "role": "None",
+          "enabled": true,
+          "focusable": false,
+          "offscreen": false,
+          "children": [
+            {
+              "id": "PART_ContentPresenter",
+              "name": "",
+              "role": "None",
+              "enabled": true,
+              "focusable": false,
+              "offscreen": false,
+              "children": [
+                {
+                  "id": "ShellRoot",
+                  "name": "",
+                  "role": "Custom",
+                  "enabled": true,
+                  "focusable": false,
+                  "offscreen": false,
+                  "children": [
+                    {
+                      "id": "PART_ContentPresenter",
+                      "name": "",
+                      "role": "None",
+                      "enabled": true,
+                      "focusable": false,
+                      "offscreen": false,
+                      "children": [
+                        {
+                          "id": null,
+                          "name": "",
+                          "role": "None",
+                          "enabled": true,
+                          "focusable": false,
+                          "offscreen": false,
+                          "children": [
+                            {
+                              "id": "Welcome",
+                              "name": "",
+                              "role": "None",
+                              "enabled": true,
+                              "focusable": false,
+                              "offscreen": false,
+                              "children": [
+                                {
+                                  "id": null,
+                                  "name": "",
+                                  "role": "None",
+                                  "enabled": true,
+                                  "focusable": false,
+                                  "offscreen": false,
+                                  "children": [
+                                    {
+                                      "id": "WelcomeTitle",
+                                      "name": "Welcome",
+                                      "role": "Text",
+                                      "enabled": true,
+                                      "focusable": false,
+                                      "offscreen": false,
+                                      "children": []
+                                    },
+                                    {
+                                      "id": null,
+                                      "name": "Playnite brings your games together in one library. You can change your preferences in Settings.",
+                                      "role": "Text",
+                                      "enabled": true,
+                                      "focusable": false,
+                                      "offscreen": false,
+                                      "children": []
+                                    },
+                                    {
+                                      "id": "AcknowledgeButton",
+                                      "name": "OK",
+                                      "role": "Button",
+                                      "enabled": true,
+                                      "focusable": true,
+                                      "offscreen": false,
+                                      "children": [
+                                        {
+                                          "id": "PART_ContentPresenter",
+                                          "name": "",
+                                          "role": "None",
+                                          "enabled": true,
+                                          "focusable": false,
+                                          "offscreen": false,
+                                          "children": [
+                                            {
+                                              "id": null,
+                                              "name": "",
+                                              "role": "None",
+                                              "enabled": true,
+                                              "focusable": false,
+                                              "offscreen": false,
+                                              "children": []
+                                            }
+                                          ]
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
