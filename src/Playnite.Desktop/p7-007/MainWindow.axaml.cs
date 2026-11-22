@@ -1,10 +1,12 @@
 using Avalonia;
 using Avalonia.Automation;
 using Avalonia.Controls;
+using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using Playnite.Desktop.Bootstrap;
+using Playnite.Desktop.Integration;
 using Playnite.Desktop.Shell;
 using Playnite.Platform.Linux;
 using Playnite.Platform.Linux.Integration;
@@ -14,10 +16,14 @@ namespace Playnite.Desktop;
 /// <summary>
 /// The shell window. It owns its own dependencies as instance objects: the p7-001 composition
 /// root keeps its ServiceRegistry private to Program and no static locator is introduced here.
+/// p7-007 adds in-app keyboard shortcuts and tray lifecycle hooks without altering the visual tree.
 /// </summary>
 public sealed partial class MainWindow : Window
 {
     private const string ShellSmokeFlag = "--shell-smoke";
+
+    private readonly IDisposable shortcutSubscription;
+    private TrayController? trayController;
 
     internal ShellViewModel Shell { get; }
 
@@ -33,10 +39,68 @@ public sealed partial class MainWindow : Window
         Shell = new ShellViewModel(catalog, dialogs);
         DataContext = Shell;
 
+        shortcutSubscription = DesktopShortcutHandler.Attach(
+            this,
+            new DesktopShortcutCallbacks
+            {
+                OpenSettings = () => OpenSettingsFromAction(),
+                OpenAbout = () => Shell.AboutCommand.Execute(null),
+                FocusSearch = FocusSearchFromShortcut,
+                Shutdown = RequestShutdownFromShortcut,
+            });
+        Closed += (_, _) => shortcutSubscription.Dispose();
+
         if (Environment.GetCommandLineArgs().Contains(ShellSmokeFlag, StringComparer.Ordinal))
         {
             InstallShellSmokeHook();
         }
+    }
+
+    public void AttachTray(TrayController controller, bool alreadyOpened = false)
+    {
+        ArgumentNullException.ThrowIfNull(controller);
+        trayController = controller;
+        controller.AttachWindow(this, alreadyOpened);
+    }
+
+    internal bool OpenSettingsFromAction()
+    {
+        var button = this.FindControl<ShellView>("ShellRoot")?.FindControl<Button>("SettingsButton");
+        if (button is null || !button.IsEnabled)
+        {
+            return false;
+        }
+
+        button.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        return true;
+    }
+
+    internal void FocusSearchFromShortcut()
+    {
+        foreach (var visual in this.GetVisualDescendants())
+        {
+            if (visual is LibraryGridView grid)
+            {
+                var searchBox = grid.FindControl<TextBox>("SearchBox");
+                if (searchBox is { IsVisible: true, IsEnabled: true })
+                {
+                    searchBox.Focus();
+                }
+
+                return;
+            }
+        }
+    }
+
+    internal void RequestShutdownFromShortcut()
+    {
+        if (trayController is not null)
+        {
+            trayController.RequestExit();
+            return;
+        }
+
+        Close();
     }
 
     private void InstallShellSmokeHook()
