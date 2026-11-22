@@ -75,8 +75,8 @@ in [`gates/P5-pending.md`](gates/P5-pending.md).
 
 | Metric | Value |
 | --- | ---: |
-| Ledger rows | 365 |
-| Ledger fragments | 138 |
+| Ledger rows | 366 |
+| Ledger fragments | 139 |
 
 ## Units
 
@@ -154,7 +154,7 @@ in [`gates/P5-pending.md`](gates/P5-pending.md).
 | p5-003 | W5 | steam | Artwork/metadata cache | done | `units/p5-003.*`; 9 ledger rows |
 | p5-004 | W5 | platform | Process launcher/session tracker | done | `units/p5-004.*`; 11 ledger rows |
 | p5-005 | W5 | platform | XDG/single-instance/protocol | done | `units/p5-005.*`; 2 ledger rows |
-| p5-005a | W5 | platform | XDG/single-instance/protocol continuation | done | `units/p5-005a.*`; 5 ledger rows |
+| p5-005a | W5 | platform | XDG/single-instance/protocol continuation | done | `units/p5-005a.*`; 6 ledger rows |
 | p5-006 | W5 | platform | WebView service | todo | `units/p5-006.*`; 0 ledger rows |
 | p5-007 | W5 | platform | Tray/notifications/sleep | todo | `units/p5-007.*`; 0 ledger rows |
 | p5-007a | W5 | platform | Tray/notifications/sleep inhibition | done | `units/p5-007a.*`; 3 ledger rows |
