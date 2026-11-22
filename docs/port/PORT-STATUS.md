@@ -67,16 +67,16 @@ in [`gates/P5-pending.md`](gates/P5-pending.md).
 | Status | Units |
 | --- | ---: |
 | deferred | 1 |
-| done | 93 |
+| done | 94 |
 | in-progress | 5 |
-| todo | 14 |
+| todo | 13 |
 
 ## Ledger
 
 | Metric | Value |
 | --- | ---: |
-| Ledger rows | 363 |
-| Ledger fragments | 136 |
+| Ledger rows | 365 |
+| Ledger fragments | 138 |
 
 ## Units
 
@@ -153,7 +153,7 @@ in [`gates/P5-pending.md`](gates/P5-pending.md).
 | p5-002 | W5 | steam | Steam root/library discovery | done | `units/p5-002.*`; 7 ledger rows |
 | p5-003 | W5 | steam | Artwork/metadata cache | done | `units/p5-003.*`; 9 ledger rows |
 | p5-004 | W5 | platform | Process launcher/session tracker | done | `units/p5-004.*`; 11 ledger rows |
-| p5-005 | W5 | platform | XDG/single-instance/protocol | todo | `units/p5-005.*`; 0 ledger rows |
+| p5-005 | W5 | platform | XDG/single-instance/protocol | done | `units/p5-005.*`; 2 ledger rows |
 | p5-005a | W5 | platform | XDG/single-instance/protocol continuation | done | `units/p5-005a.*`; 5 ledger rows |
 | p5-006 | W5 | platform | WebView service | todo | `units/p5-006.*`; 0 ledger rows |
 | p5-007 | W5 | platform | Tray/notifications/sleep | todo | `units/p5-007.*`; 0 ledger rows |
