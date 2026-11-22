@@ -93,15 +93,8 @@ internal static class Program
 
             if (!headless)
             {
-                await RegisterProtocolAsync(directories, env, logger).ConfigureAwait(false);
-                tray = await InitializeTrayAsync(
-                    application,
-                    lifetime,
-                    directories,
-                    env,
-                    services.GetRequiredService<BootstrapLocalization>(),
-                    logger).ConfigureAwait(false);
-
+                // Keep SetupWithLifetime and lifetime.Start() on the initial STAThread;
+                // async startup work runs inside lifetime.Startup on Dispatcher.UIThread.
                 var commandHost = new DesktopUriCommandHost(
                     () => lifetime.MainWindow as MainWindow,
                     () => tray?.RestoreWindow());
@@ -125,6 +118,29 @@ internal static class Program
                         }
                     }
                 });
+
+                lifetime.Startup += async (_, _) =>
+                {
+                    try
+                    {
+                        await RegisterProtocolAsync(directories, env, logger);
+                        tray = await InitializeTrayAsync(
+                            application,
+                            lifetime,
+                            directories,
+                            env,
+                            services.GetRequiredService<BootstrapLocalization>(),
+                            logger);
+                        if (lifetime.MainWindow is MainWindow openWindow)
+                        {
+                            openWindow.AttachTray(tray, alreadyOpened: openWindow.IsVisible);
+                        }
+                    }
+                    catch (Exception exception)
+                    {
+                        logger.Error($"desktop-integration: startup failed ({exception.Message})");
+                    }
+                };
             }
 
             double? observedFontSize = null;
