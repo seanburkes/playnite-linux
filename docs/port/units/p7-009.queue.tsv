@@ -1,2 +1,2 @@
 id	wave	area	unit	depends	status	owner	oracle	test	notes
-p7-009	W7	ui	Import transport/fresh-install wizard	p4-002,p7-002	todo	ui	screens	test:ui	ADR-021
+p7-009	W7	ui	Import transport/fresh-install wizard	p4-002,p7-002	done	ui	ui-011; legacy/source/Playnite.DesktopApp/Windows/FirstTimeStartupWindow.xaml; docs/port/p7-009-first-run-import.md	test:ui; FirstTimeSetupSmokeTests	ADR-021: pre-shell mounted-library import or Steam-only setup; separate staged apphost and existing verified service; backup, reports, progress and failure handoff; explicit mapping only; native completion independent of the unchanged p7-006 welcome/settings.
