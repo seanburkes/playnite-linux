@@ -1,2 +1,2 @@
 id	wave	area	unit	depends	status	owner	oracle	test	notes
-p8-001	W8	pack	AppImage x64/ARM64	p7-002	todo	release	pack	test:pack	
+p8-001	W8	pack	AppImage x64/ARM64	p7-002	in-progress	fm/p8-001	pack	test:pack	AppImage packaging for linux-x64 and linux-arm64 (in progress)
