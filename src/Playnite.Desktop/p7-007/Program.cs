@@ -3,9 +3,14 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Headless;
+using Avalonia.Threading;
 using Playnite.Core;
+using Playnite.Core.UriHandling;
 using Playnite.Desktop.Bootstrap;
+using Playnite.Desktop.Integration;
+using Playnite.Platform.Integration;
 using Playnite.Platform.Linux;
+using Playnite.Platform.Linux.DesktopIntegration;
 using Playnite.Platform.Linux.Integration;
 
 namespace Playnite.Desktop;
@@ -21,8 +26,10 @@ internal static class Program
         var smoke = args.Contains("--smoke", StringComparer.Ordinal)
             || args.Contains("--bootstrap-smoke", StringComparer.Ordinal);
         var bootstrapSmoke = args.Contains("--bootstrap-smoke", StringComparer.Ordinal);
+        DesktopActivationBridge.TryExtractUriArgument(args, out var activationUri);
 
-        var directories = XdgDirectories.Resolve(new LinuxEnvironment());
+        var env = new LinuxEnvironment();
+        var directories = XdgDirectories.Resolve(env);
         var services = new ServiceRegistry();
         services.AddSingleton<IRegularFileProbe>(_ => new LinuxRegularFileProbe());
         services.AddSingleton<IAppLogger>(registry =>
@@ -42,14 +49,24 @@ internal static class Program
         using var logger = services.GetRequiredService<IAppLogger>();
         var bootstrapper = services.GetRequiredService<DesktopBootstrapper>();
         SingleInstanceBootstrap? singleInstance = null;
+        TrayController? tray = null;
+        DesktopActivationBridge? activationBridge = null;
         try
         {
+            SingleInstanceService? singleInstanceService = null;
             if (!headless)
             {
-                singleInstance = new SingleInstanceBootstrap(
-                    SingleInstanceService.Start(InstanceId, directories), logger);
+                singleInstanceService = SingleInstanceService.Start(InstanceId, directories);
+                singleInstance = new SingleInstanceBootstrap(singleInstanceService, logger);
                 if (singleInstance.DecideStartup() == StartupDecision.ExitAlreadyRunning)
                 {
+                    if (activationUri is not null)
+                    {
+                        var forwarded = await singleInstanceService.ActivateAsync(activationUri).ConfigureAwait(false);
+                        logger.Info($"single-instance: activate status={forwarded.Status} ({forwarded.Diagnostic ?? "no diagnostic"})");
+                        return forwarded.Status == SingleInstanceStatus.Forwarded ? 0 : 2;
+                    }
+
                     return 2;
                 }
             }
@@ -73,6 +90,42 @@ internal static class Program
             var application = Application.Current
                 ?? throw new InvalidOperationException("The Avalonia application was not initialised.");
             bootstrapper.Apply(application);
+
+            if (!headless)
+            {
+                await RegisterProtocolAsync(directories, env, logger).ConfigureAwait(false);
+                tray = await InitializeTrayAsync(
+                    application,
+                    lifetime,
+                    directories,
+                    env,
+                    services.GetRequiredService<BootstrapLocalization>(),
+                    logger).ConfigureAwait(false);
+
+                var commandHost = new DesktopUriCommandHost(
+                    () => lifetime.MainWindow as MainWindow,
+                    () => tray?.RestoreWindow());
+                var uriHandler = new UriHandlerApi(commandHost);
+                activationBridge = new DesktopActivationBridge(singleInstanceService, uriHandler, logger);
+                activationBridge.Start();
+
+                var pendingInitialUri = activationUri;
+                Window.WindowOpenedEvent.AddClassHandler<MainWindow>((window, routedArgs) =>
+                {
+                    if (tray is not null)
+                    {
+                        window.AttachTray(tray, alreadyOpened: true);
+                    }
+                    if (pendingInitialUri is not null)
+                    {
+                        var uriToDispatch = Interlocked.Exchange(ref pendingInitialUri, null);
+                        if (uriToDispatch is not null)
+                        {
+                            Dispatcher.UIThread.Post(() => { _ = activationBridge.DispatchUriAsync(uriToDispatch); });
+                        }
+                    }
+                });
+            }
 
             double? observedFontSize = null;
             if (bootstrapSmoke && lifetime.MainWindow is Window smokeWindow)
@@ -105,11 +158,69 @@ internal static class Program
         }
         finally
         {
+            activationBridge?.Dispose();
+            if (tray is not null)
+            {
+                await tray.DisposeAsync().ConfigureAwait(false);
+            }
+
             if (singleInstance is not null)
             {
                 await singleInstance.DisposeAsync().ConfigureAwait(false);
             }
         }
+    }
+
+    private static async Task RegisterProtocolAsync(
+        XdgDirectories directories,
+        IEnvironment environment,
+        IAppLogger logger)
+    {
+        var executablePath = Environment.ProcessPath;
+        if (string.IsNullOrWhiteSpace(executablePath))
+        {
+            logger.Info("protocol: skipped (process executable path unavailable)");
+            return;
+        }
+
+        var handler = new PlayniteProtocolHandler(
+            directories,
+            executablePath,
+            environment,
+            new SystemProtocolFileSystem());
+        var result = await handler.RegisterAsync().ConfigureAwait(false);
+        logger.Info($"protocol: status={result.Status} ({result.Diagnostic ?? "no diagnostic"})");
+    }
+
+    private static async Task<TrayController> InitializeTrayAsync(
+        Application application,
+        ClassicDesktopStyleApplicationLifetime lifetime,
+        XdgDirectories directories,
+        IEnvironment environment,
+        BootstrapLocalization localization,
+        IAppLogger logger)
+    {
+        var preferences = await TrayPreferences
+            .LoadAsync(Path.Combine(directories.Config, "settings.json"), logger)
+            .ConfigureAwait(false);
+        TrayController? controller = null;
+        var presenter = new AvaloniaTrayIconPresenter(
+            application,
+            id => Dispatcher.UIThread.Post(() => controller?.HandleMenuItem(id)),
+            () => Dispatcher.UIThread.Post(() => controller?.HandleTrayClick()));
+        var hostProbe = new LinuxTrayHostProbe(
+            new LinuxDesktopSessionProbe(environment),
+            new LinuxExternalCommandRunner(),
+            new LinuxExecutableLocator());
+        var trayService = new LinuxTrayService(hostProbe, presenter);
+        controller = new TrayController(
+            trayService,
+            preferences,
+            logger,
+            () => lifetime.MainWindow,
+            () => Dispatcher.UIThread.Post(() => lifetime.Shutdown()));
+        await controller.InitializeAsync(localization: localization).ConfigureAwait(false);
+        return controller;
     }
 
     private static string? ResolveThemePath(XdgDirectories directories, IRegularFileProbe probe)

@@ -1,2 +1,2 @@
 id	wave	area	unit	depends	status	owner	oracle	test	notes
-p7-007	W7	ui	Tray/protocol/keyboard	p5-005,p7-002	todo	ui	smoke	test:ui	
+p7-007	W7	ui	Tray/protocol/keyboard	p5-005,p7-002	done	ui	ui-017; docs/port/p7-007-tray-protocol-keyboard.md	test:ui; TrayProtocolKeyboardTests	Avalonia TrayIcon presenter and lifecycle (EnableTray, MinimizeToTray, CloseToTray, StartMinimized) over p5-007a ITrayService; --uridata forwarding, PlayniteProtocolHandler registration, and DesktopUriCommandHost over p5-005a/p6-007; in-app keyboard shortcuts (F4, F1, Ctrl+F, Alt+Q). Global hotkeys out of v1 scope on Wayland; gamepad navigation deferred.
