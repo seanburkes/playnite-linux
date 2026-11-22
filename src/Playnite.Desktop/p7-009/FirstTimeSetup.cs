@@ -155,6 +155,8 @@ internal sealed class FirstTimeSetup
             catch (IOException) when (File.Exists(SettingsFile))
             {
                 // A newly created native profile wins; preserve its preferences.
+                await SaveCompletionAsync(complete, token).ConfigureAwait(false);
+                return;
             }
             finally
             {
@@ -164,6 +166,11 @@ internal sealed class FirstTimeSetup
                 }
             }
         }
+        await SaveCompletionAsync(complete, token).ConfigureAwait(false);
+    }
+
+    private async Task SaveCompletionAsync(SettingsUpdate complete, CancellationToken token)
+    {
         using var settings = new PlayniteSettingsService(SettingsFile);
         await settings.UpdateAsync([complete], token).ConfigureAwait(false);
     }

@@ -1,4 +1,3 @@
-using System.ComponentModel;
 using System.Diagnostics;
 using Playnite.Core.Import;
 
@@ -22,18 +21,20 @@ internal sealed class LegacyLibraryReaderExecutable : ILibraryImportReader
                 ArgumentList = { sourceDirectory },
             },
         };
+        bool started;
         try
         {
-            if (!process.Start())
-            {
-                throw new LibraryImportException(LibraryImportFailure.SourceReadFailed, "The legacy reader could not start.");
-            }
+            started = process.Start();
         }
-        catch (Win32Exception exception)
+        catch (Exception exception)
         {
             throw new LibraryImportException(LibraryImportFailure.SourceReadFailed,
                 $"The legacy reader could not start. Verify that the Playnite installation includes its legacy importer. {exception.Message}",
                 exception);
+        }
+        if (!started)
+        {
+            throw new LibraryImportException(LibraryImportFailure.SourceReadFailed, "The legacy reader could not start.");
         }
 
         var output = process.StandardOutput.ReadToEndAsync();
@@ -44,20 +45,24 @@ internal sealed class LegacyLibraryReaderExecutable : ILibraryImportReader
         }
         catch (OperationCanceledException)
         {
+            Exception? exitRace = null;
             try
             {
-                process.Kill(entireProcessTree: true);
+                if (!process.HasExited)
+                {
+                    process.Kill(entireProcessTree: true);
+                }
             }
-            catch (InvalidOperationException) when (process.HasExited)
+            catch (Exception exception) when (process.HasExited)
             {
-                // Exit can win the race with cancellation.
-            }
-            catch (Win32Exception) when (process.HasExited)
-            {
-                // The OS may have already reaped the child.
+                exitRace = exception;
             }
             await process.WaitForExitAsync().ConfigureAwait(false);
             await Task.WhenAll(output, error).ConfigureAwait(false);
+            if (exitRace is not null)
+            {
+                throw new OperationCanceledException("The legacy reader exited during cancellation.", exitRace, cancellationToken);
+            }
             throw;
         }
 

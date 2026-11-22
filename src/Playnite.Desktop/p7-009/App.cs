@@ -35,15 +35,22 @@ public sealed class App : Application
             {
                 // The shell's Loaded handlers can create the live database. Do not
                 // even construct the shell until the first-run decision is durable.
-                desktop.Startup += (_, _) => Dispatcher.UIThread.Post(() => StartDesktop(desktop, args));
+                desktop.Startup += StartDesktop;
             }
         }
 
         base.OnFrameworkInitializationCompleted();
     }
 
-    private static async void StartDesktop(IClassicDesktopStyleApplicationLifetime desktop, string[] args)
+    private static async void StartDesktop(object? sender, ControlledApplicationLifetimeStartupEventArgs startup)
     {
+        if (sender is not IClassicDesktopStyleApplicationLifetime desktop)
+        {
+            return;
+        }
+        // Let the lifetime finish its synchronous startup before showing a window.
+        await Dispatcher.Yield(DispatcherPriority.Background);
+        var args = desktop.Args ?? [];
         var setup = new FirstTimeSetup();
         try
         {
