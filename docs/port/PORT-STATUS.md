@@ -67,16 +67,16 @@ in [`gates/P5-pending.md`](gates/P5-pending.md).
 | Status | Units |
 | --- | ---: |
 | deferred | 1 |
-| done | 95 |
+| done | 96 |
 | in-progress | 5 |
-| todo | 12 |
+| todo | 11 |
 
 ## Ledger
 
 | Metric | Value |
 | --- | ---: |
-| Ledger rows | 367 |
-| Ledger fragments | 140 |
+| Ledger rows | 368 |
+| Ledger fragments | 141 |
 
 ## Units
 
@@ -185,7 +185,7 @@ in [`gates/P5-pending.md`](gates/P5-pending.md).
 | p7-007 | W7 | ui | Tray/protocol/keyboard | done | `units/p7-007.*`; 1 ledger rows |
 | p7-008 | W7 | ui | Headless screenshot and semantic-tree baselines (accessibility deferred per D1) | done | `units/p7-008.*`; 1 ledger rows |
 | p7-009 | W7 | ui | Import transport/fresh-install wizard | done | `units/p7-009.*`; 1 ledger rows |
-| p8-001 | W8 | pack | AppImage x64/ARM64 | todo | `units/p8-001.*`; 0 ledger rows |
+| p8-001 | W8 | pack | AppImage x64/ARM64 | done | `units/p8-001.*`; 1 ledger rows |
 | p8-002 | W8 | pack | Flatpak x64/ARM64 | todo | `units/p8-002.*`; 0 ledger rows |
 | p8-003 | W8 | hard | Benchmarks/soak | todo | `units/p8-003.*`; 0 ledger rows |
 | p8-004 | W8 | hard | Fuzz/security review | todo | `units/p8-004.*`; 0 ledger rows |
