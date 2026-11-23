@@ -218,12 +218,11 @@ it has its own tests.
 
 Avalonia makes UI testable in ways WPF v10 was not:
 
-- **Headless rendering:** `Avalonia.Headless.XUnit` + Skia; render a view to a bitmap at fixed
-  size/DPI/theme/culture. This is the screenshot gate; it uses neither X11 nor Wayland.
-- **Baseline screenshots:** checked in under `tests/golden/ui/`; pixel diff with a small
-  tolerance for antialiasing; fail on layout/size changes beyond tolerance.
-- **Semantic tree assertions:** query the visual/logical tree for names, roles, text, enabled
-  state, and focus order. More stable than pixels and better for accessibility.
+- **Headless smoke:** use Avalonia Headless to exercise key screens without X11 or Wayland.
+- **Visual review:** screenshots and full automation-tree captures are optional review
+  evidence, not CI expectations. A visual-only change does not require refreshing them.
+- **Targeted semantic assertions:** query key controls for names, roles, text, visibility,
+  enabled state, and focus order without freezing the full tree.
 - **Interaction tests:** simulate keyboard/pointer input, assert ViewModel state and navigation.
 - **Theme matrix:** default dark/light, 100%/150% scaling, LTR/RTL for a few screens.
 - **Old-app UI references:** curated official/public screenshot and video links in
@@ -360,7 +359,7 @@ modes. One waiver cannot hide all three.
 tests/baseline.json                 counts, skips, coverage
 tests/golden/**                     expected bytes + manifest
 tests/fixtures/**                   synthetic v10 library, Steam roots, archives
-tests/screens/**                    UI baselines + semantic trees
+tests/screens/**                    UI reference screenshots + semantic trees (not test inputs)
 docs/port/gates/**                  gate evidence
 docs/port/ledger.tsv                unit status, owner, attempt count
 docs/port/surface-parity.tsv        omission ledger

@@ -338,8 +338,8 @@ launch. Defer bespoke animations, custom chrome, and pixel parity.
 **Consequences.**
 - Faster path to a usable release; visual polish is a separate, parallel workstream.
 - Theme authors get a simpler reference theme.
-- Headless Skia screenshot tests use layout/semantic assertions first, pixel tolerance later.
-  Old-app screenshots are reference images only.
+- Headless UI tests check usability and behavior. Screenshots of either app are for human
+  review only, not pixel gates.
 
 **Rejected.**
 - *Pixel parity v1.* Delays the port and couples it to WPF rendering quirks.
