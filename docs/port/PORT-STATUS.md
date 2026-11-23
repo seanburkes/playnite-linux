@@ -75,8 +75,8 @@ in [`gates/P5-pending.md`](gates/P5-pending.md).
 
 | Metric | Value |
 | --- | ---: |
-| Ledger rows | 370 |
-| Ledger fragments | 143 |
+| Ledger rows | 371 |
+| Ledger fragments | 144 |
 
 ## Units
 
@@ -183,7 +183,7 @@ in [`gates/P5-pending.md`](gates/P5-pending.md).
 | p7-005 | W7 | ui | Game edit/metadata | done | `units/p7-005.*`; 4 ledger rows |
 | p7-006 | W7 | ui | Settings/first-run/import | done | `units/p7-006.*`; 2 ledger rows |
 | p7-007 | W7 | ui | Tray/protocol/keyboard | done | `units/p7-007.*`; 2 ledger rows |
-| p7-008 | W7 | ui | Headless screenshot and semantic-tree baselines (accessibility deferred per D1) | done | `units/p7-008.*`; 1 ledger rows |
+| p7-008 | W7 | ui | Headless UI usability checks (accessibility deferred per D1) | done | `units/p7-008.*`; 2 ledger rows |
 | p7-009 | W7 | ui | Import transport/fresh-install wizard | done | `units/p7-009.*`; 1 ledger rows |
 | p8-001 | W8 | pack | AppImage x64/ARM64 | done | `units/p8-001.*`; 1 ledger rows |
 | p8-002 | W8 | pack | Flatpak x64/ARM64 | done | `units/p8-002.*`; 1 ledger rows |
