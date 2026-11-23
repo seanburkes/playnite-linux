@@ -45,8 +45,8 @@
 | Steam real-artifact corpus + written spec (p1-009) | done | PR #14 (`ea4d558`), PR #18 (`663e02c`) and PR #26 (`2045697`) | The written spec is merged in `docs/port/08-STEAM-SPEC.md`; the corrected proposal lists 11 exact protected paths with hashes, redactions and a narrow validator record. All 11 paths are committed under `tests/fixtures/steam/real/` (10 payloads plus `SHA256SUMS`); `sha256sum -c SHA256SUMS` verifies 10/10 payloads, and the `SHA256SUMS` digest `a959d618d04597deda9ca126fb15821c04113dd967ab24b4e4f794d9a338cf8e` matches the proposal. The captain approved the real variant, keeping public app ids and game names with personal data redacted; 105-check corpus validation and a clean residual scan pass on the committed bytes | Nothing; the corpus is committed and verified |
 | LiteDB 4.1.4 read/write spike (p1-005) | done | `main` | `spikes/litedb-net11`; read/write passed on `net11.0` | Nothing for this spike; v10 mapper/collection verification remains part of p1-003 |
 | WebView feasibility (p1-006) | deferred to v1.1, not a v1 gate | — | ADR-003 and ADR-019 defer WebView and the WebKitGTK/WPE engine to v1.1 and make this a bounded feasibility study; v1 has no browser-engine dependency and no v1 code path consumes `IWebView` | Nothing for v1. The study remains a v1.1 exercise; the p1-006 shard records `deferred` so no Phase 1 row is silently open |
-| Protected oracle paths guarded | done for the oracle roots and the harness paths | PR #22 (`9cbdc8d`); `main` | `.github/CODEOWNERS` plus the oracle, fixture, parity and formal workflows; protected-path changes require an `oracle-change` PR. `PROTECTED_PATHS` covers `tests/golden`, `tests/fixtures`, `tests/baseline.json`, `docs/formal`, `docs/port/surface-parity.tsv`, and now `tools/LegacyOracle` and `tools/V10LibraryFixture`; `legacy/` and `oracle-lock/` are unconditionally immutable | CODEOWNERS only enforces when branch protection requires code-owner review. The guard workflow, `.github/CODEOWNERS` itself and `scripts/port/build_port_index.py` are still outside `PROTECTED_PATHS`; that is the separate `p1-guard-protect` hardening follow-up, not an oracle gate item |
-| Port index shards + generator (p1-011) | done, hardened | PR #9 (`f886749`), PR #20 (`6259c1a`) and PR #21 (`e9e0429`) | `docs/port/units/` plus `scripts/port/build_port_index.py`; shard-only PR validation with `--forbid-aggregate-changes`, parent-owned aggregate regeneration, and `queue.tsv`/`ledger.tsv` generated only by that step. #21 makes the writer push-only on `refs/heads/main` (no manual dispatch), validates shard tree and history against the previous `main` commit before `build`, and retries once without force on a non-fast-forward rejection; the `[skip port-index]` escape is gone and covered by a generator test | Nothing for the unit. The generator script itself is still outside `PROTECTED_PATHS`, tracked by `p1-guard-protect` |
+| Protected oracle paths guarded | done for the oracle roots and the harness paths | PR #22 (`9cbdc8d`); `main` | `.github/CODEOWNERS` plus the oracle, fixture, parity and formal workflows; protected-path changes require an `oracle-change` PR. `PROTECTED_PATHS` covers `tests/golden`, `tests/fixtures`, `tests/baseline.json`, `docs/formal`, `docs/port/surface-parity.tsv`, and `tools/LegacyOracle` and `tools/V10LibraryFixture`; `legacy/` and `oracle-lock/` are unconditionally immutable. CODEOWNERS now covers all workflows, itself, the port-index generator, and both harness tools | GitHub enforces code-owner review only when repository branch protection requires it. Protecting `main` against direct pushes and requiring review remain repository settings and are not changed here |
+| Port index shards + generator (p1-011) | done, hardened | PR #9 (`f886749`), PR #20 (`6259c1a`) and PR #21 (`e9e0429`) | `docs/port/units/` plus `scripts/port/build_port_index.py`; shard-only PR validation with `--forbid-aggregate-changes`, parent-owned aggregate regeneration, and `queue.tsv`/`ledger.tsv` generated only by that step. #21 makes the writer push-only on `refs/heads/main` (no manual dispatch), validates shard tree and history against the previous `main` commit before `build`, and retries once without force on a non-fast-forward rejection; the `[skip port-index]` escape is gone and covered by a generator test | Nothing for the unit. The generator is CODEOWNED; the protected-path gate and repository branch-protection settings are separate mechanisms |
 
 Supporting checks on the committed tree:
 
@@ -88,10 +88,11 @@ Supporting checks on the committed tree:
   and 43656817607 (plan-guards) are green.
 - PR #22 (`9cbdc8d`) is merged. `.github/CODEOWNERS` names `tools/LegacyOracle/` and
   `tools/V10LibraryFixture/`, and `plan-guards.yml` includes both in `PROTECTED_PATHS`; main
-  runs 43660863563 (port-index) and 43660863485 (plan-guards) are green. Caveat: CODEOWNERS
-  enforcement depends on branch protection requiring code-owner review, and
-  `p1-guard-protect` will extend the guard to the workflow, CODEOWNERS and generator files that
-  protect other paths.
+  runs 43660863563 (port-index) and 43660863485 (plan-guards) are green. The follow-up extends
+  CODEOWNERS coverage to the entire workflow directory, `.github/CODEOWNERS`, and
+  `scripts/port/build_port_index.py`. GitHub enforces code-owner review only when repository
+  branch protection requires it; protecting `main` against direct pushes and requiring review
+  remain repository settings, not changes made by this follow-up.
 - PR #24 (`ff1da20`) is merged. Main runs 43660917613 (port-index) and 43660917606
   (plan-guards) are green.
 
@@ -133,9 +134,11 @@ close the listed items while leaving a checklist item unchecked.
       `tests/baseline.json`, `docs/formal/`, `oracle-lock/`, `docs/port/surface-parity.tsv`)
       are guarded by CODEOWNERS and CI.
 - [x] Oracle harness path protection extension merged in #22: `tools/LegacyOracle` and
-      `tools/V10LibraryFixture` are covered by CODEOWNERS and the protected-path check. (The
-      guard workflow, CODEOWNERS itself and the port-index generator remain for
-      `p1-guard-protect`; that is follow-up hardening, not an oracle gate item.)
+      `tools/V10LibraryFixture` are covered by CODEOWNERS and the protected-path check.
+- [x] Guard-surface CODEOWNERS coverage includes all workflows, `.github/CODEOWNERS`,
+      `scripts/port/build_port_index.py`, and both oracle harness tools. GitHub enforces
+      code-owner review only when repository branch protection requires it; protecting `main`
+      against direct pushes and requiring review remain repository settings.
 - [x] Port queue/ledger generated from unit shards; shard edit is the only edit path.
 - [x] Port-index workflow hardening merged in #21: writes to `main` only from a push event on
       `refs/heads/main`, validates shard tree and history before `build`, handles a
@@ -172,8 +175,6 @@ Deferred or bounded evidence, not gate blockers:
   test (for example Orca) was performed. Accessibility is not a v1 requirement.
 - **WebView (p1-006)** is deferred to v1.1 by ADR-019; v1 ships with no browser-engine
   dependency.
-- **`p1-guard-protect`** is hardening: extend the protected-path check to the guard workflow,
-  `.github/CODEOWNERS` itself and the port-index generator. It is not an oracle gate item.
 - **Bounded evidence**: the Steam acceptance is single-title/single-host; the Flatpak probe used
   an EOL runtime; the X11 accessibility evidence is XWayland, not bare Xorg; keyboard injection
   on Wayland used a compositor-specific path. These are stated limits, not hidden claims.

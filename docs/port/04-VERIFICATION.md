@@ -171,8 +171,12 @@ Independence is structural, not cultural. The mechanisms that carry it are:
   script run by a human, and the resulting diff goes through the protected-path route.
 - Escape hatches (`Skip`, `Explicit`, `[Ignore]`, category filters) are counted; a non-zero
   skip count fails.
-- `.github/CODEOWNERS` records which paths belong to the owner for visibility and routing. It
-  is audit metadata, not an approval gate.
+- `.github/CODEOWNERS` records which paths belong to the owner for visibility and routing,
+  including the complete `.github/workflows/` directory, the CODEOWNERS file itself,
+  `scripts/port/build_port_index.py`, and the oracle harness tools. GitHub enforces code-owner
+  review only when repository branch protection requires it. CODEOWNERS alone is not an
+  approval gate: protecting `main` against direct pushes and requiring review remain repository
+  settings; this repository change does not configure them.
 
 An oracle change is declared, not approved by a second person: the task says `oracle-change`,
 the PR carries the label, and the protected-path gate checks the diff. This repository has one
