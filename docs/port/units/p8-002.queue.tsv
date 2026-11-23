@@ -1,2 +1,2 @@
 id	wave	area	unit	depends	status	owner	oracle	test	notes
-p8-002	W8	pack	Flatpak x64/ARM64	p8-001	todo	release	pack	test:pack	permissions
+p8-002	W8	pack	Flatpak x64/ARM64	p8-001	done	fm/p8-002	pack	test:pack; packaging/test_packaging.py (18 cases); packaging.yml (Flatpak x64 & ARM64 smoke)	Flatpak packaging for linux-x64 (x86_64) and linux-arm64 (aarch64): architecture-keyed flatpak-runtime-lock.json (25.08 OSTree commits), verify-flatpak-runtime.py --arch, packaging.yml ubuntu-24.04 and ubuntu-24.04-arm Flatpak smoke jobs with narrow permissions (verify-flatpak.py) and ELF arch checks (verify-entry.py --arch), and README.md scope update; aggregates parent-owned.
