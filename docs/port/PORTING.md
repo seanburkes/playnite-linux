@@ -149,7 +149,7 @@ language/framework change makes implicit behaviour explicit; an unanswered row i
 - Use fixtures/goldens from `tests/`; never inline a copy of a golden.
 - For parsers: table tests + at least one property test + a fuzz target.
 - For lifecycle: cancel at every await; assert no live handles.
-- For UI: headless interaction and targeted semantic assertions; screenshots are for human review only.
+- For UI: headless render + semantic assertions; screenshot only for layout.
 - A test that would pass with the implementation deleted is not a test.
 - No `[Skip]`, `[Ignore]`, `--filter` exclusions, or conditional test runs in CI.
 

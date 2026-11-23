@@ -1,0 +1,2 @@
+timestamp	unit	from	to	actor	evidence
+2026-11-23T23:21:45Z	p7-008	done	done	seanburkes	PR https://github.com/seanburkes/playnite-linux/pull/238 validates head 58f4223766f347b5b37b654e84ca50a67c4b9c6a with successful linux-ci https://github.com/seanburkes/playnite-linux/actions/runs/45287518371. Replaces screenshot and full-tree comparisons with targeted headless usability checks. Historical captures are unchanged. Local Release smoke: 34 passed, zero failures or skips.
