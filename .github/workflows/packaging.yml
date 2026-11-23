@@ -12,13 +12,28 @@ permissions:
 
 jobs:
   package:
-    name: ${{ matrix.format }} packaging smoke
-    runs-on: ubuntu-24.04
+    name: ${{ matrix.job_name }}
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
-        format: [AppImage, Flatpak]
+        include:
+          - format: AppImage
+            job_name: AppImage packaging smoke
+            runner: ubuntu-24.04
+            rid: linux-x64
+            arch: x86_64
+          - format: AppImage
+            job_name: AppImage ARM64 packaging smoke
+            runner: ubuntu-24.04-arm
+            rid: linux-arm64
+            arch: aarch64
+          - format: Flatpak
+            job_name: Flatpak packaging smoke
+            runner: ubuntu-24.04
+            rid: linux-x64
+            arch: x86_64
     env:
       DOTNET_CLI_TELEMETRY_OPTOUT: "1"
       DOTNET_NOLOGO: "1"
@@ -31,35 +46,52 @@ jobs:
         with:
           global-json-file: global.json
       - name: Publish the existing shell and CLI; assemble package inputs
-        run: bash packaging/assemble.sh "$RUNNER_TEMP/package"
+        run: bash packaging/assemble.sh "$RUNNER_TEMP/package" "${{ matrix.rid }}"
       - name: Test packaging validation and launcher routing
         run: python3 -m unittest discover -s packaging -p 'test_*.py' -v
       - name: Build and smoke the AppImage
         if: matrix.format == 'AppImage'
         working-directory: ${{ runner.temp }}/package
+        env:
+          TARGET_ARCH: ${{ matrix.arch }}
+          TARGET_RID: ${{ matrix.rid }}
         run: |
           set -euo pipefail
-          curl --fail --location --retry 3 -o appimagetool.AppImage https://github.com/AppImage/appimagetool/releases/download/1.9.1/appimagetool-x86_64.AppImage
-          curl --fail --location --retry 3 -o runtime-x86_64 https://github.com/AppImage/type2-runtime/releases/download/20251108/runtime-x86_64
-          echo 'ed4ce84f0d9caff66f50bcca6ff6f35aae54ce8135408b3fa33abfc3cb384eb0  appimagetool.AppImage' | sha256sum --check --strict
-          echo '2fca8b443c92510f1483a883f60061ad09b46b978b2631c807cd873a47ec260d  runtime-x86_64' | sha256sum --check --strict
+          case "$TARGET_ARCH" in
+            x86_64)
+              tool_sha='ed4ce84f0d9caff66f50bcca6ff6f35aae54ce8135408b3fa33abfc3cb384eb0'
+              runtime_sha='2fca8b443c92510f1483a883f60061ad09b46b978b2631c807cd873a47ec260d'
+              ;;
+            aarch64)
+              tool_sha='f0837e7448a0c1e4e650a93bb3e85802546e60654ef287576f46c71c126a9158'
+              runtime_sha='00cbdfcf917cc6c0ff6d3347d59e0ca1f7f45a6df1a428a0d6d8a78664d87444'
+              ;;
+            *)
+              echo "Unsupported AppImage architecture: $TARGET_ARCH" >&2
+              exit 1
+              ;;
+          esac
+          curl --fail --location --retry 3 -o appimagetool.AppImage "https://github.com/AppImage/appimagetool/releases/download/1.9.1/appimagetool-${TARGET_ARCH}.AppImage"
+          curl --fail --location --retry 3 -o "runtime-${TARGET_ARCH}" "https://github.com/AppImage/type2-runtime/releases/download/20251108/runtime-${TARGET_ARCH}"
+          printf '%s  appimagetool.AppImage\n' "$tool_sha" | sha256sum --check --strict
+          printf '%s  runtime-%s\n' "$runtime_sha" "$TARGET_ARCH" | sha256sum --check --strict
           chmod +x appimagetool.AppImage
           mkdir artifacts
-          ARCH=x86_64 ./appimagetool.AppImage --appimage-extract-and-run --no-appstream --runtime-file runtime-x86_64 AppDir artifacts/Playnite-Linux-x86_64.AppImage
-          image="$RUNNER_TEMP/package/artifacts/Playnite-Linux-x86_64.AppImage"
+          ARCH="$TARGET_ARCH" ./appimagetool.AppImage --appimage-extract-and-run --no-appstream --runtime-file "runtime-${TARGET_ARCH}" AppDir "artifacts/Playnite-Linux-${TARGET_ARCH}.AppImage"
+          image="$RUNNER_TEMP/package/artifacts/Playnite-Linux-${TARGET_ARCH}.AppImage"
           test -s "$image"
           version=$(timeout 30s "$image" --appimage-extract-and-run --version)
           printf 'Packaged CLI version: %s\n' "$version"
           test "$version" = '1.0.0.0'
           timeout 30s "$image" --appimage-extract-and-run --headless --smoke
           "$image" --appimage-extract
-          python3 "$GITHUB_WORKSPACE/packaging/verify-entry.py" squashfs-root
+          python3 "$GITHUB_WORKSPACE/packaging/verify-entry.py" --arch "$TARGET_ARCH" squashfs-root
           {
-            echo '## AppImage: PASS'
+            echo "## AppImage ($TARGET_ARCH): PASS"
             echo "Source commit: $(cat source-commit.txt)"
-            echo 'appimagetool 1.9.1; type2-runtime 20251108; SDK 11.0.100; .NET runtime 11.0.0; linux-x64'
+            echo "appimagetool 1.9.1; type2-runtime 20251108; SDK 11.0.100; .NET runtime 11.0.0; $TARGET_RID"
             ./appimagetool.AppImage --appimage-extract-and-run --version
-            sha256sum appimagetool.AppImage runtime-x86_64
+            sha256sum appimagetool.AppImage "runtime-${TARGET_ARCH}"
             stat --printf='Artifact: %n — %s bytes\n' "$image"
             cat squashfs-root/usr/lib/playnite/{cli,desktop}/*.runtimeconfig.json
           } | tee -a "$GITHUB_STEP_SUMMARY"
@@ -130,6 +162,6 @@ jobs:
           } | tee -a "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v4
         with:
-          name: Playnite-Linux-x86_64-${{ matrix.format }}
+          name: Playnite-Linux-${{ matrix.arch }}-${{ matrix.format }}
           path: ${{ runner.temp }}/package/artifacts/*
           if-no-files-found: error

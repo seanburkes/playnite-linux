@@ -1,7 +1,7 @@
 [Desktop Entry]
 Type=Application
-Name=Playnite Linux (Shell)
-Comment=Phase 2 desktop shell; not a complete game library manager
+Name=Playnite Linux
+Comment=Linux-first game library manager (Playnite port)
 Exec=playnite
 Icon=io.github.playnite_linux.Playnite
 Terminal=false

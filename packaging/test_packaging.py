@@ -2,6 +2,7 @@ import os
 import json
 from pathlib import Path
 import shutil
+import struct
 import subprocess
 import tempfile
 import unittest
@@ -215,3 +216,80 @@ class PackagingTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("requires a clean committed checkout", result.stderr)
         self.assertFalse((self.root / "output").exists())
+
+    def test_assembly_rejects_unsupported_rid(self):
+        repo = self.root / "repo"
+        repo.mkdir()
+        subprocess.run(["git", "init", "-q", str(repo)], check=True)
+        subprocess.run(["git", "-C", str(repo), "config", "user.email", "test@example.com"], check=True)
+        subprocess.run(["git", "-C", str(repo), "config", "user.name", "Test"], check=True)
+        script = repo / "assemble.sh"
+        shutil.copyfile(PACKAGING / "assemble.sh", script)
+        subprocess.run(["git", "-C", str(repo), "add", "assemble.sh"], check=True)
+        subprocess.run(["git", "-C", str(repo), "commit", "-q", "-m", "init"], check=True)
+        result = subprocess.run(["bash", str(script), str(self.root / "output"), "win-x64"],
+                                capture_output=True, text=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Unsupported runtime identifier: win-x64", result.stderr)
+        self.assertFalse((self.root / "output").exists())
+
+    @staticmethod
+    def _elf64_header(machine: int) -> bytes:
+        header = bytearray(64)
+        header[0:4] = b"\x7fELF"
+        header[4] = 2  # ELFCLASS64
+        header[5] = 1  # ELFDATA2LSB
+        header[6] = 1  # EV_CURRENT
+        struct.pack_into("<HHI", header, 16, 3, machine, 1)  # ET_DYN, e_machine, EV_CURRENT
+        return bytes(header)
+
+    def test_verify_entry_checks_elf_architecture_for_x64_and_arm64(self):
+        apphosts = (
+            "lib/playnite/cli/Playnite.Cli",
+            "lib/playnite/desktop/Playnite.Desktop",
+            "lib/playnite/steam-import/Playnite.Steam.Import",
+            "lib/playnite/launch/Playnite.Launch",
+            "lib/playnite/desktop/legacy-import/Playnite.LegacyImport",
+        )
+        for arch, machine, other_machine in (("x86_64", 62, 183), ("aarch64", 183, 62)):
+            with self.subTest(arch=arch):
+                for relative in apphosts:
+                    path = self.prefix / relative
+                    path.parent.mkdir(parents=True, exist_ok=True)
+                    path.write_bytes(self._elf64_header(machine))
+                    path.chmod(0o755)
+                ok = subprocess.run(
+                    ["python3", "-O", str(PACKAGING / "verify-entry.py"),
+                     "--arch", arch, str(self.prefix), "."],
+                    capture_output=True, text=True)
+                self.assertEqual(ok.returncode, 0, ok.stdout + ok.stderr)
+                self.assertIn(f"Verified ELF ({arch}):", ok.stdout)
+
+                # Mismatched ELF architecture must fail.
+                (self.prefix / apphosts[0]).write_bytes(self._elf64_header(other_machine))
+                bad = subprocess.run(
+                    ["python3", "-O", str(PACKAGING / "verify-entry.py"),
+                     "--arch", arch, str(self.prefix), "."],
+                    capture_output=True, text=True)
+                self.assertNotEqual(bad.returncode, 0)
+                self.assertIn("Unexpected ELF machine", bad.stderr)
+
+    def test_appimage_workflow_covers_x64_and_arm64_with_pinned_checksums(self):
+        workflow = (PACKAGING.parent / ".github/workflows/packaging.yml").read_text()
+        for snippet in (
+            "job_name: AppImage packaging smoke",
+            "runner: ubuntu-24.04",
+            "rid: linux-x64",
+            "arch: x86_64",
+            "job_name: AppImage ARM64 packaging smoke",
+            "runner: ubuntu-24.04-arm",
+            "rid: linux-arm64",
+            "arch: aarch64",
+            "ed4ce84f0d9caff66f50bcca6ff6f35aae54ce8135408b3fa33abfc3cb384eb0",
+            "2fca8b443c92510f1483a883f60061ad09b46b978b2631c807cd873a47ec260d",
+            "f0837e7448a0c1e4e650a93bb3e85802546e60654ef287576f46c71c126a9158",
+            "00cbdfcf917cc6c0ff6d3347d59e0ca1f7f45a6df1a428a0d6d8a78664d87444",
+            'python3 "$GITHUB_WORKSPACE/packaging/verify-entry.py" --arch "$TARGET_ARCH" squashfs-root',
+        ):
+            with self.subTest(snippet=snippet):
+                self.assertIn(snippet, workflow)
