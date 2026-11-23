@@ -128,7 +128,7 @@ jobs:
             if ! (
               flatpak install --user --noninteractive --no-related --no-deps flathub "$ref"
             ); then
-              flatpak install --user --noninteractive --no-related --no-deps --ostree-verbose flathub "$ref" || true
+              flatpak -vv --ostree-verbose install --user --noninteractive --no-related --no-deps flathub "$ref" || true
               exit 1
             fi
             actual=$(flatpak info --user --show-commit "$ref" 2>/dev/null || true)
