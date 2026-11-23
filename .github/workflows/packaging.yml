@@ -125,20 +125,10 @@ jobs:
           python3 packaging/verify-flatpak.py packaging/io.github.playnite_linux.Playnite.json
           python3 -c 'import json, sys; locks=json.load(open("packaging/flatpak-runtime-lock.json"))[sys.argv[1]]; print("\n".join(f"{ref}\t{commit}" for ref, commit in locks.items()))' "$TARGET_ARCH" > "$RUNNER_TEMP/runtime-lock.tsv"
           while IFS=$'\t' read -r ref commit; do
-            if ! (
-              flatpak install --user --noninteractive --no-related --no-deps flathub "$ref"
-            ); then
-              flatpak -vv --ostree-verbose install --user --noninteractive --no-related --no-deps flathub "$ref" || true
-              exit 1
-            fi
+            flatpak install --user --noninteractive --no-related --no-deps flathub "$ref"
             actual=$(flatpak info --user --show-commit "$ref" 2>/dev/null || true)
             if [ "$actual" != "$commit" ]; then
-              if ! (
-                flatpak update --user --noninteractive --no-related --no-deps --commit="$commit" "$ref"
-              ); then
-                flatpak update --user --noninteractive --no-related --no-deps --ostree-verbose --commit="$commit" "$ref" || true
-                exit 1
-              fi
+              flatpak update --user --noninteractive --no-related --no-deps --commit="$commit" "$ref"
             fi
           done < "$RUNNER_TEMP/runtime-lock.tsv"
           python3 packaging/verify-flatpak-runtime.py --arch "$TARGET_ARCH" packaging/flatpak-runtime-lock.json 'After setup'
