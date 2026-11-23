@@ -201,7 +201,7 @@ not a port (ADR-017); the oracle is the recorded Steam corpus plus real-install 
 4. Game edit and metadata display; image picker.
 5. Settings (essential sections first), first-run/import wizard, progress/crash dialogs.
 6. Tray, protocol activation, keyboard shortcuts. Gamepad navigation is deferred.
-7. Headless screenshot and semantic-tree baselines for each key screen; screen-reader
+7. Headless usability checks for key screens; screen-reader
    accessibility is deferred for v1 (Deferred limitations D1 in
    [`00-DECISIONS.md`](00-DECISIONS.md)).
 8. Freeze the SDK UI extension points after the shell pilot (ADR-023).
@@ -209,7 +209,7 @@ not a port (ADR-017); the oracle is the recorded Steam corpus plus real-install 
 **Exit gate:**
 - All v1 flows work on Linux x64 and ARM64.
 - UI executed-case count non-decreasing; no skipped UI tests.
-- Headless Skia screenshot baselines pass; X11/Wayland is an app-launch smoke, not a pixel gate.
+- Headless UI behavior checks pass; X11/Wayland is an app-launch and input smoke.
 - Semantic-tree smoke: key interactive controls have a name/role. This is not a v1
   screen-reader gate; accessibility is deferred (Deferred limitations D1 in
   [`00-DECISIONS.md`](00-DECISIONS.md)).

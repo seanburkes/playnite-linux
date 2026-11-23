@@ -1,8 +1,8 @@
-# UI Screen Baselines (`p7-008`)
+# Historical UI Screen Captures (`p7-008`)
 
-Checked-in headless Avalonia + Skia screenshot baselines (`*.png`) and semantic/automation-peer tree baselines (`*.tree.json`) for key desktop screens.
+These screenshots (`*.png`) and automation-peer trees (`*.tree.json`) document an earlier desktop design. They are reference material for human review, not release targets or test inputs. UI changes do not need to update or match them.
 
-## Render contract
+## Capture settings
 
 - Renderer: `Avalonia.Headless` + `Avalonia.Skia` (`UseHeadlessDrawing = false`)
 - Theme: `FluentTheme` (`ThemeVariant.Light`)
@@ -16,12 +16,4 @@ Checked-in headless Avalonia + Skia screenshot baselines (`*.png`) and semantic/
 
 ## Accessibility scope (D1)
 
-Per `docs/port/00-DECISIONS.md` (D1), screen-reader / AT-SPI accessibility is deferred for v1. Semantic-tree baselines verify control names, roles, enabled state, visibility, and keyboard `Tab` focus order as quality practices, not a screen-reader claim.
-
-## Regeneration
-
-Baselines are only regenerated intentionally when a UI layout change is reviewed:
-
-```sh
-PLAYNITE_UPDATE_SCREENS=1 dotnet test --project tests/Playnite.Smoke.Tests -c Release --filter ScreenBaselineTests
-```
+Per `docs/port/00-DECISIONS.md` (D1), screen-reader / AT-SPI accessibility is deferred for v1. Headless smoke tests check key controls and keyboard focus directly instead of comparing the captured tree.
