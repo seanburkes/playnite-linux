@@ -677,9 +677,10 @@ reviewer who does not exist teaches readers to accept a false claim.
   reviewer, or an approval gate.
 - The owner makes the merge decision. No document may present an agent review or a CODEOWNERS
   entry as human approval.
-- CODEOWNERS is audit metadata only: it records which surface each path belongs to for
-  visibility and routing. It is not an approval requirement, and branch protection does not
-  require code-owner review.
+- CODEOWNERS records which surface each path belongs to for visibility and routing. GitHub
+  enforces code-owner review only when repository branch protection requires it; CODEOWNERS
+  alone is not an approval requirement. Protecting `main` against direct pushes and requiring
+  review remain repository settings, outside this repository's files.
 - Oracle independence is structural, not social: frozen `legacy/` data, committed hashes in
   `tests/fixtures/*/SHA256SUMS`, golden manifests and `oracle-lock/` pins, protected paths
   enforced by the `plan-guards` CI diff against the merge base, the five required status checks

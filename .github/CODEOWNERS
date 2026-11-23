@@ -15,6 +15,7 @@ oracle-lock/               @seanburkes
 docs/port/surface-parity.tsv @seanburkes
 tools/LegacyOracle/        @seanburkes
 tools/V10LibraryFixture/   @seanburkes
+.github/workflows/              @seanburkes
 .github/workflows/linux-ci.yml @seanburkes
 .github/workflows/plan-guards.yml @seanburkes
 .github/workflows/legacy-oracle.yml @seanburkes
@@ -26,5 +27,6 @@ packaging/                 @seanburkes
 .github/CODEOWNERS         @seanburkes
 scripts/ci/                @seanburkes
 scripts/port/              @seanburkes
+scripts/port/build_port_index.py @seanburkes
 docs/port/LOCAL-PATH-EXCEPTIONS.md @seanburkes
 scripts/formal/            @seanburkes
