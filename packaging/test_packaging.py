@@ -196,7 +196,7 @@ class PackagingTests(unittest.TestCase):
         workflow = (PACKAGING.parent / ".github/workflows/packaging.yml").read_text()
         setup = workflow.split("- name: Install pinned Flatpak tooling and runtime branch", 1)[1]
         setup_lines = [line.strip() for line in setup.splitlines()]
-        self.assertIn('flatpak install --user --noninteractive --no-related --no-deps flathub "$ref"',
+        self.assertIn('flatpak install --user --noninteractive --no-related --no-deps --no-static-deltas flathub "$ref"',
                       setup_lines)
         self.assertIn('flatpak update --user --noninteractive --no-related --no-deps '
                       '--commit="$commit" "$ref"', setup_lines)
