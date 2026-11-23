@@ -1,12 +1,31 @@
 #!/usr/bin/env python3
 """Report every installed runtime commit before failing on lock mismatches."""
+import argparse
 import json
 from pathlib import Path
+import platform
 import subprocess
 import sys
 
-locks = json.loads(Path(sys.argv[1]).read_text())
-stage = sys.argv[2]
+
+def parse_args(argv: list[str]) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("lock_file", help="Path to flatpak-runtime-lock.json")
+    parser.add_argument("stage", help="Stage label for log output")
+    parser.add_argument(
+        "--arch",
+        default=platform.machine(),
+        help="Target Flatpak architecture (default: host machine)",
+    )
+    return parser.parse_args(argv)
+
+
+args = parse_args(sys.argv[1:])
+lock_data = json.loads(Path(args.lock_file).read_text())
+if args.arch not in lock_data:
+    raise SystemExit(f"Unsupported Flatpak runtime lock architecture: {args.arch}")
+locks = lock_data[args.arch]
+stage = args.stage
 failed = False
 inventory = subprocess.run(["flatpak", "list", "--user", "--runtime", "--all", "--columns=ref"],
                            capture_output=True, text=True)

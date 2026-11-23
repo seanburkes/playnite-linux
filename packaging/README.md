@@ -1,8 +1,8 @@
-# Linux packaging (AppImage x64/ARM64; Flatpak x64)
+# Linux packaging (AppImage & Flatpak x64/ARM64)
 
-AppImage packaging supports both **`linux-x64` (`x86_64`)** and **`linux-arm64` (`aarch64`)**;
-Flatpak remains **`linux-x64`** only (tracked separately by `p8-002`). No signing or update
-channel is provided. The icon is a packaging-only shell mark, not a final product asset.
+Both AppImage and Flatpak packaging support **`linux-x64` (`x86_64`)** and
+**`linux-arm64` (`aarch64`)**. No signing or update channel is provided.
+The icon is a packaging-only shell mark, not a final product asset.
 
 `playnite --version` dispatches to the packaged CLI (expected `1.0.0.0`);
 `playnite steam-library-import` dispatches to the packaged Steam portal importer;
@@ -32,9 +32,9 @@ Flatpak uses **flatpak-builder 1.4.2** (Ubuntu `1.4.2-1build2`) and
 (Ubuntu `0.190-1.1ubuntu0.1`) for native library stripping. The manifest pins both
 Freedesktop runtime and SDK to **25.08**. Their exact OSTree commits, the
 bundled .NET runtime versions, tool versions and artifact byte sizes are recorded
-in each successful workflow summary. `flatpak-runtime-lock.json` pins both runtime
-refs to exact OSTree commits; CI deploys those commits before building and verifies
-them again after the installed artifact smoke.
+in each successful workflow summary. `flatpak-runtime-lock.json` pins both `x86_64` and `aarch64` runtime refs to exact
+OSTree commits; CI deploys those commits for the target architecture before building
+and verifies them again after the installed artifact smoke.
 
 The host SVG export validator needs `librsvg2-common=2.58.0+dfsg-1ubuntu0.1`;
 the workflow also installs `libgdk-pixbuf2.0-bin=2.42.10+dfsg-3ubuntu3.3` and
@@ -44,11 +44,13 @@ The Flatpak has display/IPC/GPU access only: no network, home, host filesystem,
 or unrestricted D-Bus permissions. Per-app Flatpak storage remains available.
 CI validates the exact manifest finish-args and the installed effective permissions,
 including rejecting additional filesystem access or D-Bus policy sections.
-CI builds a bundle, installs that bundle into the user installation, verifies its
-installed desktop paths, runs the sandboxed version CLI and headless desktop smoke,
-then uploads the bundle. AppImage CI similarly tests the actual assembled image on
-`ubuntu-24.04` (`linux-x64`) and `ubuntu-24.04-arm` (`linux-arm64`),
-not just the pre-packaging payload. Missing artifacts or failed smoke tests fail the job.
+CI builds a bundle (`Playnite-Linux-x86_64.flatpak` or `Playnite-Linux-aarch64.flatpak`),
+installs that bundle into the user installation, verifies its installed desktop paths and
+ELF machine headers, runs the sandboxed version CLI and headless desktop smoke on
+`ubuntu-24.04` (`linux-x64`) and `ubuntu-24.04-arm` (`linux-arm64`), then uploads the
+bundle. AppImage CI similarly tests the actual assembled image on `ubuntu-24.04`
+(`linux-x64`) and `ubuntu-24.04-arm` (`linux-arm64`), not just the pre-packaging payload.
+Missing artifacts or failed smoke tests fail the job.
 
 Local Flatpak execution may be prohibited by container user-namespace restrictions;
 the Ubuntu CI sandbox smoke is authoritative. No broad sandbox permissions are added

@@ -34,6 +34,11 @@ jobs:
             runner: ubuntu-24.04
             rid: linux-x64
             arch: x86_64
+          - format: Flatpak
+            job_name: Flatpak ARM64 packaging smoke
+            runner: ubuntu-24.04-arm
+            rid: linux-arm64
+            arch: aarch64
     env:
       DOTNET_CLI_TELEMETRY_OPTOUT: "1"
       DOTNET_NOLOGO: "1"
@@ -97,6 +102,8 @@ jobs:
           } | tee -a "$GITHUB_STEP_SUMMARY"
       - name: Install pinned Flatpak tooling and runtime branch
         if: matrix.format == 'Flatpak'
+        env:
+          TARGET_ARCH: ${{ matrix.arch }}
         run: |
           set -euo pipefail
           sudo apt-get update
@@ -116,45 +123,49 @@ jobs:
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
           flatpak remote-add --user --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
           python3 packaging/verify-flatpak.py packaging/io.github.playnite_linux.Playnite.json
-          python3 -c 'import json; locks=json.load(open("packaging/flatpak-runtime-lock.json")); print("\n".join(f"{ref}\t{commit}" for ref, commit in locks.items()))' > "$RUNNER_TEMP/runtime-lock.tsv"
+          python3 -c 'import json, sys; locks=json.load(open("packaging/flatpak-runtime-lock.json"))[sys.argv[1]]; print("\n".join(f"{ref}\t{commit}" for ref, commit in locks.items()))' "$TARGET_ARCH" > "$RUNNER_TEMP/runtime-lock.tsv"
           while IFS=$'\t' read -r ref commit; do
             flatpak install --user --noninteractive --no-related --no-deps flathub "$ref"
             flatpak update --user --noninteractive --no-related --no-deps --commit="$commit" "$ref"
           done < "$RUNNER_TEMP/runtime-lock.tsv"
-          python3 packaging/verify-flatpak-runtime.py packaging/flatpak-runtime-lock.json 'After setup'
+          python3 packaging/verify-flatpak-runtime.py --arch "$TARGET_ARCH" packaging/flatpak-runtime-lock.json 'After setup'
       - name: Build, install bundle and smoke the sandboxed Flatpak
         if: matrix.format == 'Flatpak'
         working-directory: ${{ runner.temp }}/package
+        env:
+          TARGET_ARCH: ${{ matrix.arch }}
+          TARGET_RID: ${{ matrix.rid }}
         run: |
           set -euo pipefail
           id=io.github.playnite_linux.Playnite
           verify_runtime() {
             python3 "$GITHUB_WORKSPACE/packaging/verify-flatpak-runtime.py" \
+              --arch "$TARGET_ARCH" \
               "$GITHUB_WORKSPACE/packaging/flatpak-runtime-lock.json" "$1"
           }
           verify_runtime 'Before builder'
           flatpak-builder --user --disable-rofiles-fuse --repo=repo build "$id.json"
           verify_runtime 'After builder'
           mkdir artifacts
-          flatpak build-bundle repo "artifacts/Playnite-Linux-x86_64.flatpak" "$id"
+          flatpak build-bundle repo "artifacts/Playnite-Linux-${TARGET_ARCH}.flatpak" "$id"
           verify_runtime 'After build-bundle'
-          test -s artifacts/Playnite-Linux-x86_64.flatpak
+          test -s "artifacts/Playnite-Linux-${TARGET_ARCH}.flatpak"
           # Dependencies are already deployed from the lock; do not update them to branch tips.
-          flatpak install --user --noninteractive --no-deps artifacts/Playnite-Linux-x86_64.flatpak
+          flatpak install --user --noninteractive --no-deps "artifacts/Playnite-Linux-${TARGET_ARCH}.flatpak"
           verify_runtime 'After bundle install'
           version=$(timeout 30s flatpak run --user "$id" --version)
           printf 'Packaged CLI version: %s\n' "$version"
           test "$version" = '1.0.0.0'
           timeout 30s flatpak run --user "$id" --headless --smoke
           installed=$(flatpak info --user --show-location "$id")
-          python3 "$GITHUB_WORKSPACE/packaging/verify-entry.py" "$installed/files" .
+          python3 "$GITHUB_WORKSPACE/packaging/verify-entry.py" --arch "$TARGET_ARCH" "$installed/files" .
           flatpak info --user --show-permissions "$id" > "$RUNNER_TEMP/flatpak-permissions.ini"
           python3 "$GITHUB_WORKSPACE/packaging/verify-flatpak.py" "$id.json" "$RUNNER_TEMP/flatpak-permissions.ini"
           {
             verify_runtime 'After sandbox smoke'
-            echo '## Flatpak: PASS'
+            echo "## Flatpak ($TARGET_ARCH): PASS"
             echo "Source commit: $(cat source-commit.txt)"
-            echo 'flatpak-builder 1.4.2-1build2; Flatpak 1.14.6-1ubuntu0.1; elfutils 0.190-1.1ubuntu0.1; SDK 11.0.100; .NET runtime 11.0.0; linux-x64'
+            echo "flatpak-builder 1.4.2-1build2; Flatpak 1.14.6-1ubuntu0.1; elfutils 0.190-1.1ubuntu0.1; SDK 11.0.100; .NET runtime 11.0.0; $TARGET_RID"
             echo 'SVG loader librsvg2-common 2.58.0+dfsg-1ubuntu0.1; GDK thumbnailer 2.42.10+dfsg-3ubuntu3.3'
             stat --printf='Artifact: %n — %s bytes\n' artifacts/*.flatpak
             cat "$RUNNER_TEMP/flatpak-permissions.ini"

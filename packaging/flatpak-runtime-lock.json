@@ -1,9 +1,20 @@
 {
-  "org.freedesktop.Platform/x86_64/25.08": "08713ee4ce58fee0b8ff2f5bb58e511ff2009c4d72209270d2ddd01fb0336a04",
-  "org.freedesktop.Sdk/x86_64/25.08": "3912bfb67e8fbda84403f805028df718c7f12216fe5cafb8b54b8bb0d57ad955",
-  "org.freedesktop.Platform.GL.default/x86_64/25.08": "faea141e54b9c74e75d571e3b001d6a80f2b6757221fd8f29b937ff2486ee2b9",
-  "org.freedesktop.Platform.GL.default/x86_64/25.08-extra": "ea550d0bdbaa416e3b9dbd51a55f5f73612e7c3fe9b1d3733791ed4004f3020b",
-  "org.freedesktop.Platform.Locale/x86_64/25.08": "2c242953ed891c402f6443e122bb210d2fcc0202083ab53e3db36c19f29f8cc4",
-  "org.freedesktop.Platform.codecs-extra/x86_64/25.08-extra": "3bf3b955b0227dc63cc89d9b450a03559cf0700b6e04eeb08964d39642dc58ad",
-  "org.freedesktop.Sdk.Locale/x86_64/25.08": "70a73b04498c0abbb520f73d389e4d1cb9d1c9988a888a25a820115c880c068d"
+  "x86_64": {
+    "org.freedesktop.Platform/x86_64/25.08": "08713ee4ce58fee0b8ff2f5bb58e511ff2009c4d72209270d2ddd01fb0336a04",
+    "org.freedesktop.Sdk/x86_64/25.08": "3912bfb67e8fbda84403f805028df718c7f12216fe5cafb8b54b8bb0d57ad955",
+    "org.freedesktop.Platform.GL.default/x86_64/25.08": "faea141e54b9c74e75d571e3b001d6a80f2b6757221fd8f29b937ff2486ee2b9",
+    "org.freedesktop.Platform.GL.default/x86_64/25.08-extra": "ea550d0bdbaa416e3b9dbd51a55f5f73612e7c3fe9b1d3733791ed4004f3020b",
+    "org.freedesktop.Platform.Locale/x86_64/25.08": "2c242953ed891c402f6443e122bb210d2fcc0202083ab3e3db36c19f29f8cc4",
+    "org.freedesktop.Platform.codecs-extra/x86_64/25.08-extra": "3bf3b955b0227dc63cc89d9b450a03559cf0700b6e04eeb08964d39642dc58ad",
+    "org.freedesktop.Sdk.Locale/x86_64/25.08": "70a73b04498c0abbb520f73d389e4d1cb9d1c9988a888a25a820115c880c068d"
+  },
+  "aarch64": {
+    "org.freedesktop.Platform/aarch64/25.08": "450c8dc4965eaeae9ee482eac9096e92ca3f3156e3db9d98b88ca86353ffb23a",
+    "org.freedesktop.Sdk/aarch64/25.08": "9ecc504aee96d78baddff9c2615d1a14b259fbe8e8cf6f1dac2ffa39168f1949",
+    "org.freedesktop.Platform.GL.default/aarch64/25.08": "aeba315b3c454bb07a8d7ba474814b53f5f3267870e6b8b17b5a787aca77bcde",
+    "org.freedesktop.Platform.GL.default/aarch64/25.08-extra": "2f2fbcba2cd3630ba620aa8f96b1c86dbb13736ab34c717055b760b2ccb5da66",
+    "org.freedesktop.Platform.Locale/aarch64/25.08": "f14db49a823105839c1a98733be313d1555b38bcfe6df6ccc87787cfbeaf1e60b",
+    "org.freedesktop.Platform.codecs-extra/aarch64/25.08-extra": "cf51b16d9e10beb06046c815e36329b49f6fa999673e5712e58ceacdc0d65e9c",
+    "org.freedesktop.Sdk.Locale/aarch64/25.08": "6a4094720e27361acc4b559002413ae90535fdf07bdd1bc8bcb5bca03d5896b7"
+  }
 }
