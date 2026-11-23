@@ -20,23 +20,9 @@ using Xunit;
 namespace Playnite.Smoke.Tests;
 
 [Collection("HeadlessScreens")]
-public sealed class TrayProtocolKeyboardTests : IClassFixture<TrayProtocolKeyboardTests.HeadlessSessionFixture>
+public sealed class TrayProtocolKeyboardTests
 {
     private static readonly Guid SampleGameId = Guid.Parse("22222222-3333-4444-8555-666666666661");
-    private readonly HeadlessSessionFixture headless;
-
-    public TrayProtocolKeyboardTests(HeadlessSessionFixture headless)
-    {
-        this.headless = headless;
-    }
-
-    public sealed class HeadlessSessionFixture : IDisposable
-    {
-        public HeadlessUnitTestSession Session { get; } =
-            HeadlessUnitTestSession.StartNew(typeof(HeadlessScreenApplication));
-
-        public void Dispose() => Session.Dispose();
-    }
 
     [Fact]
     public void DesktopShortcutHandler_maps_v10_in_app_gestures_and_ignores_unmapped_keys()
@@ -272,13 +258,10 @@ public sealed class TrayProtocolKeyboardTests : IClassFixture<TrayProtocolKeyboa
         Assert.Contains("x-scheme-handler/playnite", desktopContent);
     }
 
-    private Task RunHeadlessAsync(Action work)
+    private static async Task RunHeadlessAsync(Action work)
     {
-        return headless.Session.Dispatch(() =>
-        {
-            work();
-            return Task.CompletedTask;
-        }, CancellationToken.None);
+        await using var session = HeadlessUnitTestSession.StartNew(typeof(HeadlessScreenApplication));
+        await session.Dispatch(work, CancellationToken.None);
     }
 
     private static void PumpFrames(int count = 4)

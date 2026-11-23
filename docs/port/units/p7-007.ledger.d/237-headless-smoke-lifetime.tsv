@@ -1,0 +1,2 @@
+timestamp	unit	from	to	actor	evidence
+2026-11-23T18:19:25Z	p7-007	done	done	seanburkes	PR https://github.com/seanburkes/playnite-linux/pull/237 validates head 45faec3b62de77331857910f605807102ab311fe with successful linux-ci https://github.com/seanburkes/playnite-linux/actions/runs/45235816024. Tray and keyboard smoke UI cases own and asynchronously dispose their headless sessions. Local Release smoke: 34 passed, zero failures or skips, with screenshot updates disabled. No product or screenshot baseline files changed.
