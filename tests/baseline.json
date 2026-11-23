@@ -16,23 +16,30 @@
   },
   "new": {
     "Playnite.Architecture.Tests": {
-      "total": 173,
-      "executed": 173,
-      "passed": 173,
+      "total": 270,
+      "executed": 270,
+      "passed": 270,
       "failed": 0,
       "skipped": 0
     },
     "Playnite.Core.Tests": {
-      "total": 1989,
-      "executed": 1989,
-      "passed": 1989,
+      "total": 3129,
+      "executed": 3129,
+      "passed": 3129,
+      "failed": 0,
+      "skipped": 0
+    },
+    "Playnite.Plugin.Tests": {
+      "total": 15,
+      "executed": 15,
+      "passed": 15,
       "failed": 0,
       "skipped": 0
     },
     "Playnite.Smoke.Tests": {
-      "total": 4,
-      "executed": 4,
-      "passed": 4,
+      "total": 34,
+      "executed": 34,
+      "passed": 34,
       "failed": 0,
       "skipped": 0
     }
@@ -289,36 +296,6 @@
     "notes": "Post-merge Phase 4 floor capture for the gate document. This is the main-branch push linux-ci run 43998974769 on merged main 0ecee2607cb6539e6fbbd479d349f04ce795fb68 (event push, head_branch main, conclusion success; the run's own test tree is the merged tree). Counts were parsed from the downloaded linux-test-results artifact (test-counts.json plus the three JUnit XML files and MTP exit-code files), not from a local run, memory or another commit: Core 1779 total/executed/passed with 0 failed/0 skipped and MTP exit 0, Architecture 173/173/173 with 0 failed/0 skipped and exit 0, Smoke 4/4/4 with 0 failed/0 skipped and exit 0. These equal the recorded new-suite floors in this file, so no floor is raised or lowered and no capture object is edited. This record is added by the p4-exit documentation PR, which deliberately does not cite that PR head's own run; it cites the merged-main run that measured the tree the gate describes. The same main head's plan-guards run 43998974777 (inventory-and-parity and formal both success, including the pinned TLC 1.7.4 LibraryImport/SettingsMigration/GameSession models and the 11-invariant mutation artifact) and packaging run 43998974804 also passed; port-index 43998974860 is the parent-owned aggregate regeneration."
   },
   "main_captures": [
-    {
-      "run_id": 44135586461,
-      "run_url": "https://github.com/seanburkes/playnite-linux/actions/runs/44135586461",
-      "commit": "a462ff6440ad589d5b5ea5c26a9d8dce2dec3389",
-      "captured_at": "2026-11-17T17:23:05Z",
-      "counts": {
-        "Playnite.Architecture.Tests": {
-          "total": 173,
-          "executed": 173,
-          "passed": 173,
-          "failed": 0,
-          "skipped": 0
-        },
-        "Playnite.Core.Tests": {
-          "total": 1781,
-          "executed": 1781,
-          "passed": 1781,
-          "failed": 0,
-          "skipped": 0
-        },
-        "Playnite.Smoke.Tests": {
-          "total": 4,
-          "executed": 4,
-          "passed": 4,
-          "failed": 0,
-          "skipped": 0
-        }
-      },
-      "notes": "Counts parsed from this merged-main linux-ci run's downloaded JUnit and MTP exit artifacts; they equal the current floor. The run is recorded as provenance without changing the number."
-    },
     {
       "run_id": 44137257280,
       "run_url": "https://github.com/seanburkes/playnite-linux/actions/runs/44137257280",
@@ -583,6 +560,43 @@
           "total": 4,
           "executed": 4,
           "passed": 4,
+          "failed": 0,
+          "skipped": 0
+        }
+      },
+      "notes": "Counts parsed from this merged-main linux-ci run's downloaded JUnit and MTP exit artifacts; all previous capture records are retained."
+    },
+    {
+      "run_id": 45113037570,
+      "run_url": "https://github.com/seanburkes/playnite-linux/actions/runs/45113037570",
+      "commit": "5919f18a86b969842dc9b1302d647bc98bab43ee",
+      "captured_at": "2026-11-23T04:42:42Z",
+      "counts": {
+        "Playnite.Architecture.Tests": {
+          "total": 270,
+          "executed": 270,
+          "passed": 270,
+          "failed": 0,
+          "skipped": 0
+        },
+        "Playnite.Core.Tests": {
+          "total": 3129,
+          "executed": 3129,
+          "passed": 3129,
+          "failed": 0,
+          "skipped": 0
+        },
+        "Playnite.Plugin.Tests": {
+          "total": 15,
+          "executed": 15,
+          "passed": 15,
+          "failed": 0,
+          "skipped": 0
+        },
+        "Playnite.Smoke.Tests": {
+          "total": 34,
+          "executed": 34,
+          "passed": 34,
           "failed": 0,
           "skipped": 0
         }
