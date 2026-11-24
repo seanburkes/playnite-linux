@@ -1,0 +1,50 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:shell="using:Playnite.Desktop.Shell"
+        x:Class="Playnite.Desktop.Fullscreen.FullscreenLibraryWindow"
+        Title="Playnite Fullscreen" WindowState="FullScreen" ShowInTaskbar="False">
+  <Window.Resources>
+    <x:Int32 x:Key="FullscreenColumns">4</x:Int32>
+  </Window.Resources>
+  <Grid Margin="32" RowDefinitions="Auto,*,Auto,Auto" RowSpacing="16">
+    <DockPanel>
+      <Button x:Name="ExitButton" DockPanel.Dock="Right" Classes="secondary-cta"
+              Content="Back to desktop" Click="OnExit" />
+      <StackPanel VerticalAlignment="Center" Spacing="4">
+        <TextBlock Text="PLAYNITE" Classes="section-label" />
+        <TextBlock Text="Fullscreen library" Classes="h1" />
+      </StackPanel>
+    </DockPanel>
+    <ListBox x:Name="GameList" Grid.Row="1" SelectionMode="Single"
+             Focusable="True" ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+             AutomationProperties.Name="Fullscreen game grid">
+      <ListBox.ItemsPanel>
+        <ItemsPanelTemplate>
+          <UniformGrid Columns="{StaticResource FullscreenColumns}" VerticalAlignment="Top" />
+        </ItemsPanelTemplate>
+      </ListBox.ItemsPanel>
+      <ListBox.ItemTemplate>
+        <DataTemplate x:DataType="shell:LibraryRow">
+          <Border Background="{DynamicResource PlayniteSurfaceBrush}"
+                  BorderBrush="{DynamicResource PlayniteBorderBrush}" BorderThickness="1"
+                  CornerRadius="6" Padding="8" MinHeight="96">
+            <TextBlock Text="{Binding Name}" TextWrapping="Wrap" VerticalAlignment="Center" />
+          </Border>
+        </DataTemplate>
+      </ListBox.ItemTemplate>
+    </ListBox>
+    <TextBlock x:Name="StatusText" Grid.Row="2" TextWrapping="Wrap"
+               AutomationProperties.LiveSetting="Polite" />
+    <DockPanel Grid.Row="3">
+      <Button x:Name="PlayButton" DockPanel.Dock="Right" Classes="primary-cta"
+              Content="Play" Click="OnPlay" IsEnabled="False" />
+      <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+        <Button x:Name="PreviousButton" Classes="secondary-cta" Content="Previous"
+                Click="OnPrevious" IsEnabled="False" />
+        <TextBlock x:Name="PageText" VerticalAlignment="Center" />
+        <Button x:Name="NextButton" Classes="secondary-cta" Content="Next"
+                Click="OnNext" IsEnabled="False" />
+      </StackPanel>
+    </DockPanel>
+  </Grid>
+</Window>

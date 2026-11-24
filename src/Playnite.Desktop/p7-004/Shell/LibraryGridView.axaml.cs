@@ -7,6 +7,7 @@ using Playnite.Core.Library;
 using Playnite.Core.Models;
 using Playnite.Core.Queries;
 using Playnite.Desktop.Bootstrap;
+using Playnite.Desktop.Fullscreen;
 using Playnite.Desktop.Integration;
 
 namespace Playnite.Desktop.Shell;
@@ -20,6 +21,7 @@ namespace Playnite.Desktop.Shell;
 public sealed partial class LibraryGridView : UserControl
 {
     private const string SearchSmokeFlag = "--search-filter-sort-smoke";
+    private const string FullscreenPreviewFlag = "--fullscreen-preview";
 
     private static readonly SortOrder[] SortOrders =
     [
@@ -36,20 +38,25 @@ public sealed partial class LibraryGridView : UserControl
     private readonly SteamPlayRequest steamPlay;
     private readonly Button playButton;
     private readonly TextBlock playStatus;
+    private readonly Button fullscreenButton;
     private bool playPending;
+    private bool fullscreenOpen;
 
     private LibraryViewModel? model;
 
-    public LibraryGridView() : this(new SteamPlayRequest(new SteamPlayRequest.DesktopOpener()))
+    public LibraryGridView() : this(new SteamPlayRequest(new SteamPlayRequest.DesktopOpener()),
+        Environment.GetCommandLineArgs().Contains(FullscreenPreviewFlag, StringComparer.Ordinal))
     {
     }
 
-    internal LibraryGridView(SteamPlayRequest steamPlay)
+    internal LibraryGridView(SteamPlayRequest steamPlay, bool fullscreenPreview = false)
     {
         this.steamPlay = steamPlay;
         AvaloniaXamlLoader.Load(this);
         playButton = this.FindControl<Button>("PlayButton")!;
         playStatus = this.FindControl<TextBlock>("PlayStatus")!;
+        fullscreenButton = this.FindControl<Button>("FullscreenButton")!;
+        fullscreenButton.IsVisible = fullscreenPreview;
         playButton.Click += OnPlayClicked;
         this.FindControl<ListBox>("GameList")!.SelectionChanged += OnSelectionChanged;
         this.FindControl<Button>("PreviousButton")!.Click += OnPreviousClick;
@@ -137,7 +144,7 @@ public sealed partial class LibraryGridView : UserControl
 
         this.FindControl<TextBlock>("DetailsName")!.Text = model.Selected?.Name ?? "(none)";
         this.FindControl<TextBlock>("DetailsId")!.Text = model.Selected?.GameId ?? "(none)";
-        RefreshPlayButton();
+        RefreshLibraryActions();
         this.FindControl<TextBlock>("PageText")!.Text = model.PageIndicator;
         this.FindControl<Button>("PreviousButton")!.IsEnabled = model.CanGoPrevious;
         this.FindControl<Button>("NextButton")!.IsEnabled = model.CanGoNext;
@@ -184,7 +191,7 @@ public sealed partial class LibraryGridView : UserControl
 
     private async void OnSelectionChanged(object? sender, SelectionChangedEventArgs eventArgs)
     {
-        RefreshPlayButton();
+        RefreshLibraryActions();
         if (model is null || eventArgs.AddedItems.OfType<ListBoxItem>().FirstOrDefault()?.Tag is not LibraryRow row)
         {
             return;
@@ -208,12 +215,47 @@ public sealed partial class LibraryGridView : UserControl
             ? selected : null;
     }
 
-    private void RefreshPlayButton() =>
-        playButton.IsEnabled = !playPending && SelectedPlayRow() is not null;
+    private void RefreshLibraryActions()
+    {
+        var available = model is not null && !model.LifetimeToken.IsCancellationRequested && !playPending && !fullscreenOpen;
+        playButton.IsEnabled = available && SelectedPlayRow() is not null;
+        fullscreenButton.IsEnabled = available && fullscreenButton.IsVisible;
+    }
+
+    private async void OnOpenFullscreen(object? sender, RoutedEventArgs eventArgs)
+    {
+        if (!fullscreenButton.IsEnabled || model is not { } library
+            || TopLevel.GetTopLevel(this) is not Window owner)
+        {
+            return;
+        }
+
+        fullscreenOpen = true;
+        RefreshLibraryActions();
+        try
+        {
+            var window = new FullscreenLibraryWindow(library.CreateIndependentView(), steamPlay);
+            await window.RunAsync(owner);
+        }
+        catch (Exception exception)
+        {
+            Console.Error.WriteLine($"Could not open the fullscreen library ({exception.GetType().Name}).");
+            playStatus.Text = "Could not open the fullscreen library.";
+        }
+        finally
+        {
+            fullscreenOpen = false;
+            if (!library.LifetimeToken.IsCancellationRequested)
+            {
+                RefreshLibraryActions();
+                fullscreenButton.Focus();
+            }
+        }
+    }
 
     private async void OnPlayClicked(object? sender, RoutedEventArgs eventArgs)
     {
-        if (playPending || SelectedPlayRow() is not { SteamPlayAppId: uint appId } game)
+        if (!playButton.IsEnabled || SelectedPlayRow() is not { SteamPlayAppId: uint appId } game)
         {
             return;
         }
@@ -225,7 +267,7 @@ public sealed partial class LibraryGridView : UserControl
     private async Task RequestPlayAsync(uint appId, string name, CancellationToken cancellationToken)
     {
         playPending = true;
-        RefreshPlayButton();
+        RefreshLibraryActions();
         playStatus.Text = $"Requesting launch for {name}…";
         try
         {
@@ -245,7 +287,7 @@ public sealed partial class LibraryGridView : UserControl
             playPending = false;
             if (!cancellationToken.IsCancellationRequested)
             {
-                RefreshPlayButton();
+                RefreshLibraryActions();
             }
         }
     }
