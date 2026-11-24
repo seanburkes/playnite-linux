@@ -1,56 +1,167 @@
 <UserControl xmlns="https://github.com/avaloniaui"
-              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-              x:Class="Playnite.Desktop.Shell.LibraryGridView">
-  <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto,*,Auto">
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:shell="using:Playnite.Desktop.Shell"
+             x:Class="Playnite.Desktop.Shell.LibraryGridView">
+  <UserControl.Resources>
+    <x:Double x:Key="LibraryDetailsWidth">320</x:Double>
+    <ItemsPanelTemplate x:Key="LibraryGridPanel">
+      <WrapPanel Orientation="Horizontal" />
+    </ItemsPanelTemplate>
+    <ItemsPanelTemplate x:Key="LibraryListPanel">
+      <StackPanel />
+    </ItemsPanelTemplate>
+  </UserControl.Resources>
+  <UserControl.Styles>
+    <shell:LibraryTheme />
+  </UserControl.Styles>
+  <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto,*,Auto" RowSpacing="8" ColumnSpacing="12">
     <DockPanel Grid.Row="0" Grid.ColumnSpan="2">
-      <Button x:Name="FullscreenButton" DockPanel.Dock="Right" Classes="secondary-cta"
-              Content="Fullscreen" IsEnabled="False" Click="OnOpenFullscreen" />
-      <TextBlock x:Name="HeaderText" Text="Library" VerticalAlignment="Center"
-                 AutomationProperties.Name="Library header" />
-    </DockPanel>
-    <StackPanel x:Name="QueryBar" Grid.Row="1" Grid.ColumnSpan="2" Orientation="Horizontal"
-                AutomationProperties.Name="Library search filter and sort">
-      <TextBox x:Name="SearchBox" Width="220" Margin="0,4,8,4" PlaceholderText="Search"
-               AutomationProperties.Name="Search games" />
-      <Button x:Name="AllFilterButton" Content="All" Margin="0,4,4,4"
-              AutomationProperties.Name="All games filter" />
-      <Button x:Name="InstalledFilterButton" Content="Installed" Margin="0,4,4,4"
-              AutomationProperties.Name="Installed games filter" />
-      <Button x:Name="UninstalledFilterButton" Content="Uninstalled" Margin="0,4,4,4"
-              AutomationProperties.Name="Uninstalled games filter" />
-      <Button x:Name="HiddenFilterButton" Content="Hidden" Margin="0,4,4,4"
-              AutomationProperties.Name="Hidden games filter" />
-      <Button x:Name="FavoriteFilterButton" Content="Favorite" Margin="0,4,8,4"
-              AutomationProperties.Name="Favorite games filter" />
-      <ComboBox x:Name="SortCombo" Width="160" Margin="0,4,4,4"
-                AutomationProperties.Name="Sort by" />
-      <Button x:Name="SortDirectionButton" Content="Ascending" Margin="0,4,8,4"
-              AutomationProperties.Name="Sort direction" />
-      <TextBlock x:Name="QueryStatus" Text="" VerticalAlignment="Center"
-                 AutomationProperties.Name="Library query status" />
-    </StackPanel>
-    <ListBox x:Name="GameList" Grid.Row="2" Grid.Column="0"
-             SelectionMode="Single" AutomationProperties.Name="Game list" />
-    <Border x:Name="DetailsPane" Grid.Row="2" Grid.Column="1"
-            AutomationProperties.Name="Game details">
-      <StackPanel>
-        <TextBlock x:Name="DetailsName" Text="(none)"
-                   AutomationProperties.Name="Details name" />
-        <TextBlock x:Name="DetailsId" Text="(none)"
-                   AutomationProperties.Name="Details id" />
-        <Button x:Name="PlayButton" Classes="primary-cta" IsEnabled="False" />
-        <TextBlock x:Name="PlayStatus" MaxWidth="280" TextWrapping="Wrap"
-                   AutomationProperties.LiveSetting="Polite" />
+      <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+        <Button x:Name="SyncSteamButton" Classes="secondary-cta"
+                Content="Sync Steam" AutomationProperties.Name="Sync Steam library" />
+        <Button x:Name="FullscreenButton" Classes="secondary-cta"
+                Content="Fullscreen" IsEnabled="False" Click="OnOpenFullscreen" />
       </StackPanel>
+      <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+        <TextBlock x:Name="HeaderText" Text="Library" Classes="h1" VerticalAlignment="Center"
+                   AutomationProperties.Name="Library header" />
+        <TextBlock x:Name="LibraryCountText" Text="(0)" Classes="muted" VerticalAlignment="Center"
+                   AutomationProperties.Name="Library count" />
+        <Button x:Name="GridViewButton" Classes="secondary-cta active" Content="Grid View"
+                AutomationProperties.Name="Grid view" />
+        <Button x:Name="ListViewButton" Classes="secondary-cta" Content="List View"
+                AutomationProperties.Name="List view" />
+      </StackPanel>
+    </DockPanel>
+
+    <WrapPanel x:Name="QueryBar" Grid.Row="1" Grid.ColumnSpan="2" Orientation="Horizontal"
+               AutomationProperties.Name="Library search filter and sort">
+      <TextBox x:Name="SearchBox" Width="210" Margin="0,4,8,4" PlaceholderText="Search"
+               AutomationProperties.Name="Search games" />
+      <Button x:Name="AllFilterButton" Classes="secondary-cta active" Content="All" Margin="0,4,4,4"
+              AutomationProperties.Name="All games filter" />
+      <Button x:Name="InstalledFilterButton" Classes="secondary-cta" Content="Installed" Margin="0,4,4,4"
+              AutomationProperties.Name="Installed games filter" />
+      <Button x:Name="UninstalledFilterButton" Classes="secondary-cta" Content="Uninstalled" Margin="0,4,4,4"
+              AutomationProperties.Name="Uninstalled games filter" />
+      <Button x:Name="HiddenFilterButton" Classes="secondary-cta" Content="Hidden" Margin="0,4,4,4"
+              AutomationProperties.Name="Hidden games filter" />
+      <Button x:Name="FavoriteFilterButton" Classes="secondary-cta" Content="Favorite" Margin="0,4,8,4"
+              AutomationProperties.Name="Favorite games filter" />
+      <ComboBox x:Name="SortCombo" Width="150" Margin="0,4,4,4"
+                AutomationProperties.Name="Sort by" />
+      <Button x:Name="SortDirectionButton" Classes="secondary-cta" Content="Ascending" Margin="0,4,8,4"
+              AutomationProperties.Name="Sort direction" />
+      <ComboBox x:Name="GroupCombo" Width="150" Margin="0,4,8,4"
+                AutomationProperties.Name="Group by" />
+      <TextBlock x:Name="QueryStatus" Text="" VerticalAlignment="Center" Margin="0,4,0,4"
+                 AutomationProperties.Name="Library query status" />
+    </WrapPanel>
+
+    <Grid Grid.Row="2" Grid.Column="0">
+      <ListBox x:Name="GameList" SelectionMode="Single" AutomationProperties.Name="Game list"
+               Background="Transparent" BorderThickness="0"
+               ScrollViewer.HorizontalScrollBarVisibility="Disabled" />
+      <Border x:Name="EmptyState" IsVisible="False" HorizontalAlignment="Center" VerticalAlignment="Center"
+              Background="{DynamicResource PlayniteSurfaceBrush}"
+              BorderBrush="{DynamicResource PlayniteBorderBrush}"
+              BorderThickness="1" CornerRadius="6" Padding="24" MaxWidth="420">
+        <StackPanel Spacing="10" HorizontalAlignment="Center">
+          <TextBlock x:Name="EmptyStateTitle" Text="No games match the current view" Classes="h2"
+                     HorizontalAlignment="Center" />
+          <TextBlock x:Name="EmptyStateHint" Text="Clear your filters or sync your local Steam library."
+                     Classes="muted" TextWrapping="Wrap" HorizontalAlignment="Center" />
+          <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Center">
+            <Button x:Name="ClearFiltersButton" Classes="secondary-cta" Content="Clear filters"
+                    AutomationProperties.Name="Clear library filters" />
+            <Button x:Name="EmptySyncButton" Classes="primary-cta" Content="Sync Steam"
+                    AutomationProperties.Name="Sync Steam from empty state" />
+          </StackPanel>
+        </StackPanel>
+      </Border>
+    </Grid>
+
+    <Border x:Name="DetailsPane" Grid.Row="2" Grid.Column="1" Width="{StaticResource LibraryDetailsWidth}"
+            Background="{DynamicResource PlayniteSurfaceBrush}"
+            BorderBrush="{DynamicResource PlayniteBorderBrush}"
+            BorderThickness="1" CornerRadius="6" Padding="14"
+            AutomationProperties.Name="Game details">
+      <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+        <StackPanel Spacing="10">
+          <Border Height="135" CornerRadius="4" ClipToBounds="True"
+                  Background="{DynamicResource PlayniteCardBackgroundBrush}"
+                  BorderBrush="{DynamicResource PlayniteBorderBrush}" BorderThickness="1">
+            <Grid>
+              <TextBlock x:Name="DetailsInitials" Text="?" FontSize="44" FontWeight="Bold"
+                         Foreground="{DynamicResource PlayniteAccentMutedBrush}"
+                         HorizontalAlignment="Center" VerticalAlignment="Center" />
+              <Image x:Name="DetailsHeroImage" Stretch="UniformToFill" IsVisible="False"
+                     AutomationProperties.Name="Game hero artwork" />
+              <Border Background="{DynamicResource PlayniteChromeBrush}"
+                      Opacity="0.6"
+                      VerticalAlignment="Bottom"
+                      Height="40" />
+            </Grid>
+          </Border>
+          <StackPanel Spacing="2">
+            <TextBlock x:Name="DetailsName" Text="(none)" Classes="h2" TextWrapping="Wrap"
+                       AutomationProperties.Name="Details name" />
+            <TextBlock x:Name="DetailsId" Text="(none)" Classes="muted"
+                       AutomationProperties.Name="Details id" />
+          </StackPanel>
+          <Button x:Name="PlayButton" Classes="primary-cta" IsEnabled="False" HorizontalAlignment="Stretch" />
+          <TextBlock x:Name="PlayStatus" TextWrapping="Wrap" Classes="muted"
+                     AutomationProperties.LiveSetting="Polite" />
+          <Border Height="1" Background="{DynamicResource PlayniteBorderBrush}" />
+          <Grid x:Name="DetailsMetadataGrid" ColumnDefinitions="Auto,*"
+                RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto"
+                RowSpacing="6" ColumnSpacing="12">
+            <TextBlock Grid.Row="0" Grid.Column="0" Text="Status" Classes="meta-label" />
+            <TextBlock x:Name="DetailsStatus" Grid.Row="0" Grid.Column="1" Text="—" Classes="meta-value"
+                       AutomationProperties.Name="Details status" />
+            <TextBlock Grid.Row="1" Grid.Column="0" Text="Source" Classes="meta-label" />
+            <TextBlock x:Name="DetailsSource" Grid.Row="1" Grid.Column="1" Text="—" Classes="meta-value"
+                       AutomationProperties.Name="Details source" />
+            <TextBlock Grid.Row="2" Grid.Column="0" Text="Playtime" Classes="meta-label" />
+            <TextBlock x:Name="DetailsPlaytime" Grid.Row="2" Grid.Column="1" Text="—" Classes="meta-value"
+                       AutomationProperties.Name="Details playtime" />
+            <TextBlock Grid.Row="3" Grid.Column="0" Text="Last played" Classes="meta-label" />
+            <TextBlock x:Name="DetailsLastPlayed" Grid.Row="3" Grid.Column="1" Text="—" Classes="meta-value"
+                       AutomationProperties.Name="Details last played" />
+            <TextBlock Grid.Row="4" Grid.Column="0" Text="Released" Classes="meta-label" />
+            <TextBlock x:Name="DetailsReleaseYear" Grid.Row="4" Grid.Column="1" Text="—" Classes="meta-value"
+                       AutomationProperties.Name="Details release year" />
+            <TextBlock Grid.Row="5" Grid.Column="0" Text="Score" Classes="meta-label" />
+            <TextBlock x:Name="DetailsUserScore" Grid.Row="5" Grid.Column="1" Text="—" Classes="meta-value"
+                       AutomationProperties.Name="Details user score" />
+            <TextBlock Grid.Row="6" Grid.Column="0" Text="Version" Classes="meta-label" />
+            <TextBlock x:Name="DetailsVersion" Grid.Row="6" Grid.Column="1" Text="—" Classes="meta-value"
+                       AutomationProperties.Name="Details version" />
+            <TextBlock Grid.Row="7" Grid.Column="0" Text="Install dir" Classes="meta-label" />
+            <TextBlock x:Name="DetailsInstallDir" Grid.Row="7" Grid.Column="1" Text="—" Classes="meta-value"
+                       AutomationProperties.Name="Details install directory" />
+          </Grid>
+          <Border Height="1" Background="{DynamicResource PlayniteBorderBrush}" />
+          <TextBlock x:Name="DetailsDescription" Text="" Classes="meta-value" TextWrapping="Wrap"
+                     AutomationProperties.Name="Game description summary" />
+        </StackPanel>
+      </ScrollViewer>
     </Border>
-    <StackPanel Grid.Row="3" Grid.ColumnSpan="2" Orientation="Horizontal"
-                AutomationProperties.Name="Library pager">
-      <Button x:Name="PreviousButton" Content="Previous"
-              AutomationProperties.Name="Previous page" />
-      <TextBlock x:Name="PageText" Text="Page 1 / 1" Margin="8,0"
-                 AutomationProperties.Name="Page indicator" />
-      <Button x:Name="NextButton" Content="Next"
-              AutomationProperties.Name="Next page" />
-    </StackPanel>
+
+    <DockPanel Grid.Row="3" Grid.ColumnSpan="2" LastChildFill="True">
+      <StackPanel DockPanel.Dock="Left" Orientation="Horizontal" Spacing="4"
+                  AutomationProperties.Name="Library pager">
+        <Button x:Name="PreviousButton" Classes="secondary-cta" Content="Previous"
+                AutomationProperties.Name="Previous page" />
+        <TextBlock x:Name="PageText" Text="Page 1 / 1" Margin="8,0" VerticalAlignment="Center"
+                   AutomationProperties.Name="Page indicator" />
+        <Button x:Name="NextButton" Classes="secondary-cta" Content="Next"
+                AutomationProperties.Name="Next page" />
+      </StackPanel>
+      <TextBlock x:Name="SyncStatus" Text="" Classes="muted" VerticalAlignment="Center"
+                 HorizontalAlignment="Right" TextTrimming="CharacterEllipsis"
+                 AutomationProperties.Name="Library sync status"
+                 AutomationProperties.LiveSetting="Polite" />
+    </DockPanel>
   </Grid>
 </UserControl>

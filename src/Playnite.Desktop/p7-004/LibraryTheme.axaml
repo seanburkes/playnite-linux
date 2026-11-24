@@ -1,0 +1,171 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:shell="using:Playnite.Desktop.Shell"
+        x:Class="Playnite.Desktop.Shell.LibraryTheme">
+  <Styles.Resources>
+    <x:Double x:Key="LibraryCardWidth">220</x:Double>
+    <x:Double x:Key="LibraryCardHeight">132</x:Double>
+  </Styles.Resources>
+
+  <Style Selector="TextBlock.meta-label">
+    <Setter Property="FontSize" Value="11" />
+    <Setter Property="Foreground" Value="{DynamicResource PlayniteTextMutedBrush}" />
+    <Setter Property="VerticalAlignment" Value="Top" />
+  </Style>
+  <Style Selector="TextBlock.meta-value">
+    <Setter Property="FontSize" Value="12" />
+    <Setter Property="Foreground" Value="{DynamicResource PlayniteTextSecondaryBrush}" />
+    <Setter Property="VerticalAlignment" Value="Top" />
+    <Setter Property="TextWrapping" Value="Wrap" />
+  </Style>
+
+  <Style Selector="Button.secondary-cta.active">
+    <Setter Property="Background" Value="{DynamicResource PlayniteAccentMutedBrush}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource PlayniteAccentBrush}" />
+    <Setter Property="Foreground" Value="{DynamicResource PlayniteTextPrimaryBrush}" />
+  </Style>
+
+  <Style Selector="ListBoxItem.grid-card">
+    <Setter Property="Width" Value="{StaticResource LibraryCardWidth}" />
+    <Setter Property="Height" Value="{StaticResource LibraryCardHeight}" />
+    <Setter Property="Margin" Value="0,0,12,12" />
+    <Setter Property="Padding" Value="0" />
+    <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+    <Setter Property="VerticalContentAlignment" Value="Stretch" />
+    <Setter Property="Foreground" Value="{DynamicResource PlayniteTextPrimaryBrush}" />
+    <Setter Property="Template">
+      <ControlTemplate>
+        <Border x:Name="CardBorder"
+                x:DataType="shell:LibraryCardItem"
+                Background="{DynamicResource PlayniteCardBackgroundBrush}"
+                BorderBrush="{DynamicResource PlayniteBorderBrush}"
+                BorderThickness="1"
+                CornerRadius="6"
+                ClipToBounds="True">
+          <Grid>
+            <TextBlock Text="{Binding Initials}"
+                       FontSize="46"
+                       FontWeight="Bold"
+                       Foreground="{DynamicResource PlayniteAccentMutedBrush}"
+                       HorizontalAlignment="Right"
+                       VerticalAlignment="Top"
+                       Margin="0,6,12,0"
+                       IsVisible="{Binding !HasCoverBitmap}" />
+            <Image Source="{Binding CoverBitmap}"
+                   Stretch="UniformToFill"
+                   IsVisible="{Binding HasCoverBitmap}" />
+            <Border Background="{DynamicResource PlayniteChromeBrush}"
+                    Opacity="0.82"
+                    VerticalAlignment="Bottom"
+                    Height="54" />
+            <Border Background="{DynamicResource PlayniteChromeBrush}"
+                    BorderBrush="{DynamicResource PlayniteBorderBrush}"
+                    BorderThickness="1"
+                    CornerRadius="3"
+                    Padding="6,2"
+                    Margin="8"
+                    HorizontalAlignment="Left"
+                    VerticalAlignment="Top"
+                    IsVisible="{Binding HasGroupLabel}">
+              <TextBlock Text="{Binding GroupLabel}"
+                         FontSize="10"
+                         Foreground="{DynamicResource PlayniteTextSecondaryBrush}" />
+            </Border>
+            <StackPanel Orientation="Horizontal" Spacing="6" Margin="8"
+                        HorizontalAlignment="Right" VerticalAlignment="Top">
+              <TextBlock Text="★" FontSize="12"
+                         Foreground="{DynamicResource PlayniteMixedBrush}"
+                         IsVisible="{Binding Favorite}" />
+              <Ellipse Width="8" Height="8" VerticalAlignment="Center"
+                       Fill="{DynamicResource PlaynitePositiveBrush}"
+                       IsVisible="{Binding IsInstalled}" />
+              <Ellipse Width="8" Height="8" VerticalAlignment="Center"
+                       Fill="{DynamicResource PlayniteTextMutedBrush}"
+                       IsVisible="{Binding !IsInstalled}" />
+            </StackPanel>
+            <StackPanel VerticalAlignment="Bottom" Margin="12,0,12,10" Spacing="2">
+              <ContentPresenter Content="{TemplateBinding Content}" HorizontalAlignment="Left" />
+              <TextBlock Text="{Binding CardSubtitle}"
+                         FontSize="11"
+                         Foreground="{DynamicResource PlayniteTextSecondaryBrush}" />
+            </StackPanel>
+          </Grid>
+        </Border>
+      </ControlTemplate>
+    </Setter>
+  </Style>
+
+  <Style Selector="ListBoxItem.grid-card:pointerover /template/ Border#CardBorder">
+    <Setter Property="BorderBrush" Value="{DynamicResource PlayniteAccentBrush}" />
+  </Style>
+  <Style Selector="ListBoxItem.grid-card:selected /template/ Border#CardBorder">
+    <Setter Property="BorderBrush" Value="{DynamicResource PlayniteAccentBrush}" />
+    <Setter Property="BorderThickness" Value="2" />
+  </Style>
+  <Style Selector="ListBoxItem.grid-card:focus-visible /template/ Border#CardBorder">
+    <Setter Property="BorderBrush" Value="{DynamicResource PlayniteAccentBrush}" />
+    <Setter Property="BorderThickness" Value="2" />
+  </Style>
+
+  <Style Selector="ListBoxItem.list-row">
+    <Setter Property="Margin" Value="0,0,0,6" />
+    <Setter Property="Padding" Value="0" />
+    <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+    <Setter Property="Foreground" Value="{DynamicResource PlayniteTextPrimaryBrush}" />
+    <Setter Property="Template">
+      <ControlTemplate>
+        <Border x:Name="RowBorder"
+                x:DataType="shell:LibraryCardItem"
+                Background="{DynamicResource PlayniteCardBackgroundBrush}"
+                BorderBrush="{DynamicResource PlayniteBorderBrush}"
+                BorderThickness="1"
+                CornerRadius="4"
+                Padding="10,8">
+          <Grid ColumnDefinitions="56,*,Auto,Auto,Auto" ColumnSpacing="10">
+            <Border Background="{DynamicResource PlayniteAccentMutedBrush}"
+                    CornerRadius="4" Width="56" Height="32" ClipToBounds="True">
+              <Grid>
+                <TextBlock Text="{Binding Initials}" FontWeight="Bold"
+                           HorizontalAlignment="Center" VerticalAlignment="Center"
+                           IsVisible="{Binding !HasCoverBitmap}" />
+                <Image Source="{Binding CoverBitmap}" Stretch="UniformToFill"
+                       IsVisible="{Binding HasCoverBitmap}" />
+              </Grid>
+            </Border>
+            <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+              <ContentPresenter Content="{TemplateBinding Content}" />
+              <TextBlock Text="{Binding CardSubtitle}" FontSize="11"
+                         Foreground="{DynamicResource PlayniteTextSecondaryBrush}" />
+            </StackPanel>
+            <Border Grid.Column="2" VerticalAlignment="Center"
+                    Background="{DynamicResource PlayniteSurfaceBrush}"
+                    BorderBrush="{DynamicResource PlayniteBorderBrush}"
+                    BorderThickness="1" CornerRadius="3" Padding="6,2"
+                    IsVisible="{Binding HasGroupLabel}">
+              <TextBlock Text="{Binding GroupLabel}" FontSize="11"
+                         Foreground="{DynamicResource PlayniteTextSecondaryBrush}" />
+            </Border>
+            <TextBlock Grid.Column="3" Text="★" Foreground="{DynamicResource PlayniteMixedBrush}"
+                       VerticalAlignment="Center" IsVisible="{Binding Favorite}" />
+            <Ellipse Grid.Column="4" Width="8" Height="8" VerticalAlignment="Center"
+                     Fill="{DynamicResource PlaynitePositiveBrush}" IsVisible="{Binding IsInstalled}" />
+            <Ellipse Grid.Column="4" Width="8" Height="8" VerticalAlignment="Center"
+                     Fill="{DynamicResource PlayniteTextMutedBrush}" IsVisible="{Binding !IsInstalled}" />
+          </Grid>
+        </Border>
+      </ControlTemplate>
+    </Setter>
+  </Style>
+
+  <Style Selector="ListBoxItem.list-row:pointerover /template/ Border#RowBorder">
+    <Setter Property="BorderBrush" Value="{DynamicResource PlayniteAccentBrush}" />
+  </Style>
+  <Style Selector="ListBoxItem.list-row:selected /template/ Border#RowBorder">
+    <Setter Property="BorderBrush" Value="{DynamicResource PlayniteAccentBrush}" />
+    <Setter Property="BorderThickness" Value="2" />
+  </Style>
+  <Style Selector="ListBoxItem.list-row:focus-visible /template/ Border#RowBorder">
+    <Setter Property="BorderBrush" Value="{DynamicResource PlayniteAccentBrush}" />
+    <Setter Property="BorderThickness" Value="2" />
+  </Style>
+</Styles>
