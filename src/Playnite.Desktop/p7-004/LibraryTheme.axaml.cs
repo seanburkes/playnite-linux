@@ -35,6 +35,11 @@ internal sealed class LibraryCardItem(LibraryRow row) : INotifyPropertyChanged
 
     public bool HasGroupLabel => !string.IsNullOrEmpty(Row.GroupLabel);
 
+    public string SourceDisplay => Row.SourceDisplay;
+
+    public bool HasSourceBadge => !string.IsNullOrEmpty(Row.SourceDisplay)
+        && !string.Equals(Row.SourceDisplay, "Library", StringComparison.Ordinal);
+
     public Bitmap? CoverBitmap => coverBitmap;
 
     public bool HasCoverBitmap => coverBitmap is not null;

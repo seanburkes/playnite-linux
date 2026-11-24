@@ -402,7 +402,10 @@ internal static class GameLaunchPlanner
         }
     }
 
-    public static string DescribeLaunchTarget(Game game, bool isSteam, uint? steamPlayAppId)
+    public static string DescribeLaunchTarget(Game game, bool isSteam, uint? steamPlayAppId) =>
+        DescribeLaunchTarget(game, isSteam ? StoreCatalog.SteamPluginId : Guid.Empty, steamPlayAppId);
+
+    public static string DescribeLaunchTarget(Game game, Guid pluginId, uint? steamPlayAppId)
     {
         ArgumentNullException.ThrowIfNull(game);
         var action = FindFilePlayAction(game);
@@ -423,9 +426,14 @@ internal static class GameLaunchPlanner
             return $"[{tags}] {spec.Executable}";
         }
 
-        if (isSteam && steamPlayAppId is uint appId)
+        if (pluginId == StoreCatalog.SteamPluginId && steamPlayAppId is uint appId)
         {
             return string.Create(CultureInfo.InvariantCulture, $"Steam (App {appId})");
+        }
+
+        if (game.IsInstalled && StoreCatalog.TryBuildHeroicLaunchUri(pluginId, game.GameId, out _))
+        {
+            return $"Heroic ({StoreCatalog.GetDisplayName(pluginId)})";
         }
 
         return "Not configured";

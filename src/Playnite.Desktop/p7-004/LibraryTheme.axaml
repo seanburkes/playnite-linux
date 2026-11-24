@@ -58,31 +58,45 @@
                     Opacity="0.82"
                     VerticalAlignment="Bottom"
                     Height="54" />
-            <Border Background="{DynamicResource PlayniteChromeBrush}"
-                    BorderBrush="{DynamicResource PlayniteBorderBrush}"
-                    BorderThickness="1"
-                    CornerRadius="3"
-                    Padding="6,2"
-                    Margin="8"
-                    HorizontalAlignment="Left"
-                    VerticalAlignment="Top"
-                    IsVisible="{Binding HasGroupLabel}">
-              <TextBlock Text="{Binding GroupLabel}"
-                         FontSize="10"
-                         Foreground="{DynamicResource PlayniteTextSecondaryBrush}" />
-            </Border>
-            <StackPanel Orientation="Horizontal" Spacing="6" Margin="8"
-                        HorizontalAlignment="Right" VerticalAlignment="Top">
-              <TextBlock Text="★" FontSize="12"
-                         Foreground="{DynamicResource PlayniteMixedBrush}"
-                         IsVisible="{Binding Favorite}" />
-              <Ellipse Width="8" Height="8" VerticalAlignment="Center"
-                       Fill="{DynamicResource PlaynitePositiveBrush}"
-                       IsVisible="{Binding IsInstalled}" />
-              <Ellipse Width="8" Height="8" VerticalAlignment="Center"
-                       Fill="{DynamicResource PlayniteTextMutedBrush}"
-                       IsVisible="{Binding !IsInstalled}" />
-            </StackPanel>
+            <Grid ColumnDefinitions="*,Auto" Margin="8" VerticalAlignment="Top" ColumnSpacing="6">
+              <Border Grid.Column="0"
+                      Background="{DynamicResource PlayniteChromeBrush}"
+                      BorderBrush="{DynamicResource PlayniteBorderBrush}"
+                      BorderThickness="1"
+                      CornerRadius="3"
+                      Padding="6,2"
+                      HorizontalAlignment="Left"
+                      VerticalAlignment="Center"
+                      MaxWidth="110"
+                      IsVisible="{Binding HasGroupLabel}">
+                <TextBlock Text="{Binding GroupLabel}"
+                           FontSize="10"
+                           TextTrimming="CharacterEllipsis"
+                           Foreground="{DynamicResource PlayniteTextSecondaryBrush}" />
+              </Border>
+              <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6"
+                          HorizontalAlignment="Right" VerticalAlignment="Center">
+                <Border Background="{DynamicResource PlayniteSurfaceBrush}"
+                        BorderBrush="{DynamicResource PlayniteBorderBrush}"
+                        BorderThickness="1"
+                        CornerRadius="3"
+                        Padding="5,1"
+                        IsVisible="{Binding HasSourceBadge}">
+                  <TextBlock Text="{Binding SourceDisplay}"
+                             FontSize="10"
+                             Foreground="{DynamicResource PlayniteTextSecondaryBrush}" />
+                </Border>
+                <TextBlock Text="★" FontSize="12"
+                           Foreground="{DynamicResource PlayniteMixedBrush}"
+                           IsVisible="{Binding Favorite}" />
+                <Ellipse Width="8" Height="8" VerticalAlignment="Center"
+                         Fill="{DynamicResource PlaynitePositiveBrush}"
+                         IsVisible="{Binding IsInstalled}" />
+                <Ellipse Width="8" Height="8" VerticalAlignment="Center"
+                         Fill="{DynamicResource PlayniteTextMutedBrush}"
+                         IsVisible="{Binding !IsInstalled}" />
+              </StackPanel>
+            </Grid>
             <StackPanel VerticalAlignment="Bottom" Margin="12,0,12,10" Spacing="2">
               <ContentPresenter Content="{TemplateBinding Content}" HorizontalAlignment="Left" />
               <TextBlock Text="{Binding CardSubtitle}"
@@ -121,7 +135,7 @@
                 BorderThickness="1"
                 CornerRadius="4"
                 Padding="10,8">
-          <Grid ColumnDefinitions="56,*,Auto,Auto,Auto" ColumnSpacing="10">
+          <Grid ColumnDefinitions="56,*,Auto,Auto,Auto,Auto" ColumnSpacing="10">
             <Border Background="{DynamicResource PlayniteAccentMutedBrush}"
                     CornerRadius="4" Width="56" Height="32" ClipToBounds="True">
               <Grid>
@@ -145,11 +159,19 @@
               <TextBlock Text="{Binding GroupLabel}" FontSize="11"
                          Foreground="{DynamicResource PlayniteTextSecondaryBrush}" />
             </Border>
-            <TextBlock Grid.Column="3" Text="★" Foreground="{DynamicResource PlayniteMixedBrush}"
+            <Border Grid.Column="3" VerticalAlignment="Center"
+                    Background="{DynamicResource PlayniteSurfaceBrush}"
+                    BorderBrush="{DynamicResource PlayniteBorderBrush}"
+                    BorderThickness="1" CornerRadius="3" Padding="6,2"
+                    IsVisible="{Binding HasSourceBadge}">
+              <TextBlock Text="{Binding SourceDisplay}" FontSize="11"
+                         Foreground="{DynamicResource PlayniteTextSecondaryBrush}" />
+            </Border>
+            <TextBlock Grid.Column="4" Text="★" Foreground="{DynamicResource PlayniteMixedBrush}"
                        VerticalAlignment="Center" IsVisible="{Binding Favorite}" />
-            <Ellipse Grid.Column="4" Width="8" Height="8" VerticalAlignment="Center"
+            <Ellipse Grid.Column="5" Width="8" Height="8" VerticalAlignment="Center"
                      Fill="{DynamicResource PlaynitePositiveBrush}" IsVisible="{Binding IsInstalled}" />
-            <Ellipse Grid.Column="4" Width="8" Height="8" VerticalAlignment="Center"
+            <Ellipse Grid.Column="5" Width="8" Height="8" VerticalAlignment="Center"
                      Fill="{DynamicResource PlayniteTextMutedBrush}" IsVisible="{Binding !IsInstalled}" />
           </Grid>
         </Border>

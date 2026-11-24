@@ -11,7 +11,11 @@ namespace Playnite.Desktop.Shell;
 /// <summary>One displayed library row, detached from the database session.</summary>
 public sealed record LibraryRow(Guid Id, string Name, string GameId)
 {
+    public Guid PluginId { get; init; }
+
     internal uint? SteamPlayAppId { get; init; }
+
+    internal string? HeroicPlayUri { get; init; }
 
     public bool IsInstalled { get; init; }
 
@@ -29,7 +33,7 @@ public sealed record LibraryRow(Guid Id, string Name, string GameId)
 
     public string LaunchTargetDisplay { get; init; } = "Not configured";
 
-    public bool CanPlay => SteamPlayAppId is not null || HasFilePlayAction;
+    public bool CanPlay => SteamPlayAppId is not null || HasFilePlayAction || !string.IsNullOrEmpty(HeroicPlayUri);
 
     public string PlayCountDisplay => PlayCount switch
     {
@@ -62,7 +66,9 @@ public sealed record LibraryRow(Guid Id, string Name, string GameId)
 
     public string StatusLabel => IsInstalled ? "Installed" : "Not installed";
 
-    public string SourceDisplay => IsSteam ? "Steam" : "Library";
+    public string SourceDisplay => PluginId != Guid.Empty
+        ? StoreCatalog.GetDisplayName(PluginId)
+        : IsSteam ? "Steam" : "Library";
 
     public string ReleaseYearDisplay => ReleaseYear is int year
         ? year.ToString(CultureInfo.InvariantCulture)
@@ -205,18 +211,31 @@ public sealed class LibraryViewModel
     /// <summary>The active library grouping key.</summary>
     public LibraryGroupBy GroupBy { get; private set; } = LibraryGroupBy.None;
 
+    /// <summary>The active store source filter.</summary>
+    public LibrarySourceFilter SourceFilter { get; private set; } = LibrarySourceFilter.All;
+
     /// <summary>Groups returned for the active page when <see cref="GroupBy"/> is active.</summary>
     public IReadOnlyList<LibraryGroup> Groups { get; private set; } = [];
 
     public bool HasActiveFilters =>
         !string.IsNullOrWhiteSpace(SearchTerm)
         || FilterMode != LibraryFilterMode.All
-        || GroupBy != LibraryGroupBy.None;
+        || GroupBy != LibraryGroupBy.None
+        || SourceFilter != LibrarySourceFilter.All;
 
     /// <summary>A stable, testable summary of the current query state.</summary>
-    public string QueryStatus => GroupBy == LibraryGroupBy.None
-        ? $"Search: {SearchTerm} | Filter: {FilterMode} | Sort: {SortBy} | Direction: {(Descending ? "desc" : "asc")}"
-        : $"Search: {SearchTerm} | Filter: {FilterMode} | Sort: {SortBy} | Direction: {(Descending ? "desc" : "asc")} | Group: {GroupBy}";
+    public string QueryStatus
+    {
+        get
+        {
+            var baseStatus = GroupBy == LibraryGroupBy.None
+                ? $"Search: {SearchTerm} | Filter: {FilterMode} | Sort: {SortBy} | Direction: {(Descending ? "desc" : "asc")}"
+                : $"Search: {SearchTerm} | Filter: {FilterMode} | Sort: {SortBy} | Direction: {(Descending ? "desc" : "asc")} | Group: {GroupBy}";
+            return SourceFilter == LibrarySourceFilter.All
+                ? baseStatus
+                : $"{baseStatus} | Source: {SourceFilter}";
+        }
+    }
 
     public int PageCount => TotalCount == 0 ? 1 : (TotalCount + PageSize - 1) / PageSize;
 
@@ -363,12 +382,25 @@ public sealed class LibraryViewModel
         return ApplyQueryAsync(cancellationToken);
     }
 
-    /// <summary>Resets search, filter, and grouping back to defaults and reloads page 1.</summary>
+    /// <summary>Filters the library to a single store source (or All) and reloads page 1.</summary>
+    public Task SetSourceFilterAsync(LibrarySourceFilter sourceFilter, CancellationToken cancellationToken = default)
+    {
+        if (!Enum.IsDefined(sourceFilter))
+        {
+            throw new ArgumentOutOfRangeException(nameof(sourceFilter));
+        }
+
+        SourceFilter = sourceFilter;
+        return ApplyQueryAsync(cancellationToken);
+    }
+
+    /// <summary>Resets search, filter, store source, and grouping back to defaults and reloads page 1.</summary>
     public Task ResetFiltersAsync(CancellationToken cancellationToken = default)
     {
         SearchTerm = string.Empty;
         FilterMode = LibraryFilterMode.All;
         GroupBy = LibraryGroupBy.None;
+        SourceFilter = LibrarySourceFilter.All;
         return ApplyQueryAsync(cancellationToken);
     }
 
@@ -416,22 +448,51 @@ public sealed class LibraryViewModel
         await LoadPageAsync((CurrentPage - 2) * PageSize, cancellationToken).ConfigureAwait(false);
     }
 
-    private LibraryFilter? CreateFilter() => FilterMode switch
+    private LibraryFilter? CreateFilter()
     {
-        LibraryFilterMode.All => null,
-        LibraryFilterMode.Installed => LibraryFilter.FromSettings(new FilterSettings { IsInstalled = true }),
-        LibraryFilterMode.Uninstalled => LibraryFilter.FromSettings(new FilterSettings { IsUnInstalled = true }),
-        LibraryFilterMode.Hidden => LibraryFilter.FromSettings(new FilterSettings { Hidden = true }),
-        LibraryFilterMode.Favorite => LibraryFilter.FromSettings(new FilterSettings { Favorite = true }),
-        _ => null,
-    };
+        var hasStoreFilter = StoreCatalog.TryGetFilterPluginId(SourceFilter, out var pluginId);
+        if (FilterMode == LibraryFilterMode.All && !hasStoreFilter)
+        {
+            return null;
+        }
+
+        var settings = new FilterSettings();
+        switch (FilterMode)
+        {
+            case LibraryFilterMode.Installed:
+                settings.IsInstalled = true;
+                break;
+            case LibraryFilterMode.Uninstalled:
+                settings.IsUnInstalled = true;
+                break;
+            case LibraryFilterMode.Hidden:
+                settings.Hidden = true;
+                break;
+            case LibraryFilterMode.Favorite:
+                settings.Favorite = true;
+                break;
+        }
+
+        if (hasStoreFilter)
+        {
+            settings.Library = new IdItemFilterItemProperties { Ids = [pluginId] };
+        }
+
+        return LibraryFilter.FromSettings(settings);
+    }
 
     private async Task<LibraryRow> LoadDetailsAsync(LibraryRow row, CancellationToken cancellationToken)
     {
         var stored = await service!.GetAsync(row.Id, cancellationToken).ConfigureAwait(false);
         if (stored is null)
         {
-            return row with { SteamPlayAppId = null };
+            return row with
+            {
+                SteamPlayAppId = null,
+                HeroicPlayUri = null,
+                HasFilePlayAction = false,
+                LaunchTargetDisplay = "Not configured",
+            };
         }
 
         return CreateRow(stored.Value, row.GroupLabel);
@@ -552,6 +613,10 @@ public sealed class LibraryViewModel
 
             game.Description = string.IsNullOrWhiteSpace(input.Description) ? null : input.Description.Trim();
             game.IsInstalled = true;
+            if (game.PluginId != Guid.Empty)
+            {
+                game.OverrideInstallState = true;
+            }
             var resolvedWorkDir = string.IsNullOrWhiteSpace(input.WorkingDirectory)
                 ? Path.GetDirectoryName(input.ExecutablePath.Trim())
                 : input.WorkingDirectory.Trim();
@@ -583,12 +648,18 @@ public sealed class LibraryViewModel
         var isSteam = game.PluginId == SteamPluginId;
         uint? steamAppId = isSteam && game.IsInstalled
             && FlatpakSteamLauncher.TryParseAppId(game.GameId, out var appId) && appId != 0 ? appId : null;
+        var heroicUri = game.IsInstalled
+            && StoreCatalog.TryBuildHeroicLaunchUri(game.PluginId, game.GameId, out var builtHeroicUri)
+            ? builtHeroicUri
+            : null;
         var hasFilePlay = GameLaunchPlanner.FindFilePlayAction(game) is not null;
         return new LibraryRow(game.Id, game.Name ?? "(unnamed)", game.GameId ?? string.Empty)
         {
+            PluginId = game.PluginId,
             SteamPlayAppId = steamAppId,
+            HeroicPlayUri = heroicUri,
             HasFilePlayAction = hasFilePlay,
-            LaunchTargetDisplay = GameLaunchPlanner.DescribeLaunchTarget(game, isSteam, steamAppId),
+            LaunchTargetDisplay = GameLaunchPlanner.DescribeLaunchTarget(game, game.PluginId, steamAppId),
             IsInstalled = game.IsInstalled,
             Favorite = game.Favorite,
             Hidden = game.Hidden,

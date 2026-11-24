@@ -49,10 +49,22 @@ public sealed partial class LibraryGridView : UserControl
         LibraryGroupBy.Name,
     ];
 
+    private static readonly LibrarySourceFilter[] SourceOrders =
+    [
+        LibrarySourceFilter.All,
+        LibrarySourceFilter.Steam,
+        LibrarySourceFilter.Epic,
+        LibrarySourceFilter.Gog,
+        LibrarySourceFilter.Amazon,
+        LibrarySourceFilter.Custom,
+    ];
+
     private readonly BootstrapLocalization localization = new();
     private readonly bool searchSmoke;
     private readonly SteamPlayRequest steamPlay;
+    private readonly HeroicPlayRequest heroicPlay;
     private readonly ILibrarySteamSync steamSync;
+    private readonly ILibraryHeroicSync heroicSync;
     private readonly Func<string, LibraryArtworkLoader> artworkLoaderFactory;
     private DesktopGameSessionManager sessionManager;
     private readonly bool ownsSessionManager;
@@ -66,13 +78,16 @@ public sealed partial class LibraryGridView : UserControl
     private readonly TextBlock playStatus;
     private readonly Button fullscreenButton;
     private readonly Button syncSteamButton;
+    private readonly Button syncHeroicButton;
     private readonly Button emptySyncButton;
+    private readonly Button emptySyncHeroicButton;
     private readonly Button clearFiltersButton;
     private readonly Button gridViewButton;
     private readonly Button listViewButton;
     private readonly TextBox searchBox;
     private readonly ComboBox sortCombo;
     private readonly ComboBox groupCombo;
+    private readonly ComboBox sourceCombo;
     private readonly Image detailsHeroImage;
     private readonly TextBlock detailsInitials;
     private readonly TextBlock syncStatus;
@@ -140,10 +155,14 @@ public sealed partial class LibraryGridView : UserControl
         ILibrarySteamSync steamSync,
         Func<string, LibraryArtworkLoader>? artworkLoaderFactory,
         DesktopGameSessionManager? sessionManager,
-        Func<string, string?>? toolResolver = null)
+        Func<string, string?>? toolResolver = null,
+        ILibraryHeroicSync? heroicSync = null,
+        HeroicPlayRequest? heroicPlay = null)
     {
         this.steamPlay = steamPlay;
+        this.heroicPlay = heroicPlay ?? new HeroicPlayRequest(new SteamPlayRequest.DesktopOpener());
         this.steamSync = steamSync;
+        this.heroicSync = heroicSync ?? new HeroicLibrarySyncRunner();
         this.artworkLoaderFactory = artworkLoaderFactory ?? (path => new LibraryArtworkLoader(path));
         ownsSessionManager = sessionManager is null;
         this.sessionManager = sessionManager ?? new DesktopGameSessionManager();
@@ -160,13 +179,16 @@ public sealed partial class LibraryGridView : UserControl
         fullscreenButton = this.FindControl<Button>("FullscreenButton")!;
         fullscreenButton.IsVisible = fullscreenPreview;
         syncSteamButton = this.FindControl<Button>("SyncSteamButton")!;
+        syncHeroicButton = this.FindControl<Button>("SyncHeroicButton")!;
         emptySyncButton = this.FindControl<Button>("EmptySyncButton")!;
+        emptySyncHeroicButton = this.FindControl<Button>("EmptySyncHeroicButton")!;
         clearFiltersButton = this.FindControl<Button>("ClearFiltersButton")!;
         gridViewButton = this.FindControl<Button>("GridViewButton")!;
         listViewButton = this.FindControl<Button>("ListViewButton")!;
         searchBox = this.FindControl<TextBox>("SearchBox")!;
         sortCombo = this.FindControl<ComboBox>("SortCombo")!;
         groupCombo = this.FindControl<ComboBox>("GroupCombo")!;
+        sourceCombo = this.FindControl<ComboBox>("SourceCombo")!;
         detailsHeroImage = this.FindControl<Image>("DetailsHeroImage")!;
         detailsInitials = this.FindControl<TextBlock>("DetailsInitials")!;
         syncStatus = this.FindControl<TextBlock>("SyncStatus")!;
@@ -176,7 +198,9 @@ public sealed partial class LibraryGridView : UserControl
         configureLaunchButton.Click += OnConfigureLaunchClicked;
         addGameButton.Click += OnAddGameClicked;
         syncSteamButton.Click += OnSyncSteamClicked;
+        syncHeroicButton.Click += OnSyncHeroicClicked;
         emptySyncButton.Click += OnSyncSteamClicked;
+        emptySyncHeroicButton.Click += OnSyncHeroicClicked;
         clearFiltersButton.Click += OnClearFiltersClicked;
         gridViewButton.Click += (_, _) => SetViewMode(false);
         listViewButton.Click += (_, _) => SetViewMode(true);
@@ -199,6 +223,10 @@ public sealed partial class LibraryGridView : UserControl
         groupCombo.ItemsSource = GroupOrders.Select(GroupLabel).ToArray();
         groupCombo.SelectedIndex = 0;
         groupCombo.SelectionChanged += OnGroupChanged;
+
+        sourceCombo.ItemsSource = SourceOrders.Select(StoreCatalog.GetFilterLabel).ToArray();
+        sourceCombo.SelectedIndex = 0;
+        sourceCombo.SelectionChanged += OnSourceChanged;
 
         SetViewMode(false);
         ApplyLabels();
@@ -377,6 +405,9 @@ public sealed partial class LibraryGridView : UserControl
             $"{localization.Resolve(model.Descending ? LOC.MenuSortDescending : LOC.MenuSortAscending)}" +
             (model.GroupBy != LibraryGroupBy.None
                 ? $" | {localization.Resolve(LOC.MenuGroupByTitle)}: {GroupLabel(model.GroupBy)}"
+                : string.Empty) +
+            (model.SourceFilter != LibrarySourceFilter.All
+                ? $" | Source: {StoreCatalog.GetFilterLabel(model.SourceFilter)}"
                 : string.Empty);
         this.FindControl<Button>("SortDirectionButton")!.Content =
             localization.Resolve(model.Descending ? LOC.MenuSortDescending : LOC.MenuSortAscending);
@@ -410,6 +441,12 @@ public sealed partial class LibraryGridView : UserControl
             if (groupIndex >= 0 && groupCombo.SelectedIndex != groupIndex)
             {
                 groupCombo.SelectedIndex = groupIndex;
+            }
+
+            var sourceIndex = Array.IndexOf(SourceOrders, model.SourceFilter);
+            if (sourceIndex >= 0 && sourceCombo.SelectedIndex != sourceIndex)
+            {
+                sourceCombo.SelectedIndex = sourceIndex;
             }
         }
         finally
@@ -790,28 +827,60 @@ public sealed partial class LibraryGridView : UserControl
         configureLaunchButton.IsEnabled = available && model?.Selected is not null;
         addGameButton.IsEnabled = available;
         syncSteamButton.IsEnabled = available;
+        syncHeroicButton.IsEnabled = available;
         emptySyncButton.IsEnabled = available;
+        emptySyncHeroicButton.IsEnabled = available;
         fullscreenButton.IsEnabled = available && fullscreenButton.IsVisible;
+    }
+
+    private bool TryBeginSync(out LibraryViewModel library)
+    {
+        if (disposed || syncPending || playPending || editorPending || fullscreenOpen || sessionActive
+            || model is not { } current || current.LifetimeToken.IsCancellationRequested)
+        {
+            library = null!;
+            return false;
+        }
+
+        library = current;
+        return true;
     }
 
     private async void OnSyncSteamClicked(object? sender, RoutedEventArgs eventArgs)
     {
-        if (disposed || syncPending || fullscreenOpen || sessionActive || model is not { } library || library.LifetimeToken.IsCancellationRequested)
+        if (!TryBeginSync(out var library))
         {
             return;
         }
 
-        var task = RunSteamSyncAsync(library);
+        var task = RunSyncAsync(library, "Syncing Steam library…", "Steam sync", steamSync.SyncAsync, LibrarySteamSyncRunner.FormatSummary);
         SyncTask = task;
         await ObserveUiTaskAsync(task, "steam sync").ConfigureAwait(true);
     }
 
-    private async Task RunSteamSyncAsync(LibraryViewModel library)
+    private async void OnSyncHeroicClicked(object? sender, RoutedEventArgs eventArgs)
+    {
+        if (!TryBeginSync(out var library))
+        {
+            return;
+        }
+
+        var task = RunSyncAsync(library, "Syncing Heroic libraries…", "Heroic sync", heroicSync.SyncAsync, HeroicLibrarySyncRunner.FormatSummary);
+        SyncTask = task;
+        await ObserveUiTaskAsync(task, "heroic sync").ConfigureAwait(true);
+    }
+
+    private async Task RunSyncAsync<TResult>(
+        LibraryViewModel library,
+        string pendingMessage,
+        string operationLabel,
+        Func<string, CancellationToken, Task<TResult>> syncFunc,
+        Func<TResult, string> formatSummary)
     {
         var generation = ++syncGeneration;
         syncPending = true;
         RefreshLibraryActions();
-        syncStatus.Text = "Syncing Steam library…";
+        syncStatus.Text = pendingMessage;
 
         syncCts?.Cancel();
         syncCts?.Dispose();
@@ -820,7 +889,7 @@ public sealed partial class LibraryGridView : UserControl
 
         try
         {
-            var result = await steamSync.SyncAsync(library.DatabasePath, token).ConfigureAwait(true);
+            var result = await syncFunc(library.DatabasePath, token).ConfigureAwait(true);
             token.ThrowIfCancellationRequested();
             if (disposed || generation != syncGeneration || !ReferenceEquals(model, library) || library.LifetimeToken.IsCancellationRequested)
             {
@@ -835,7 +904,7 @@ public sealed partial class LibraryGridView : UserControl
 
             RebuildRows();
             Refresh();
-            syncStatus.Text = LibrarySteamSyncRunner.FormatSummary(result);
+            syncStatus.Text = formatSummary(result);
         }
         catch (OperationCanceledException) when (token.IsCancellationRequested || library.LifetimeToken.IsCancellationRequested)
         {
@@ -848,8 +917,8 @@ public sealed partial class LibraryGridView : UserControl
                 return;
             }
 
-            Console.Error.WriteLine($"Steam library sync failed ({exception.GetType().Name}).");
-            syncStatus.Text = "Steam sync failed: " + exception.Message;
+            Console.Error.WriteLine($"{operationLabel} failed ({exception.GetType().Name}).");
+            syncStatus.Text = $"{operationLabel} failed: {exception.Message}";
         }
         finally
         {
@@ -876,6 +945,7 @@ public sealed partial class LibraryGridView : UserControl
         {
             searchBox.Text = string.Empty;
             groupCombo.SelectedIndex = 0;
+            sourceCombo.SelectedIndex = 0;
         }
         finally
         {
@@ -940,6 +1010,14 @@ public sealed partial class LibraryGridView : UserControl
             var task = RequestPlayAsync(library, appId, game.Name, library.LifetimeToken);
             PlayTask = task;
             await ObserveUiTaskAsync(task, "play").ConfigureAwait(true);
+            return;
+        }
+
+        if (!string.IsNullOrEmpty(game.HeroicPlayUri))
+        {
+            var task = RequestHeroicPlayAsync(library, game.PluginId, game.GameId, game.Name, library.LifetimeToken);
+            PlayTask = task;
+            await ObserveUiTaskAsync(task, "heroic play").ConfigureAwait(true);
         }
     }
 
@@ -1232,7 +1310,22 @@ public sealed partial class LibraryGridView : UserControl
         }
     }
 
-    private async Task RequestPlayAsync(LibraryViewModel library, uint appId, string name, CancellationToken cancellationToken)
+    private Task RequestPlayAsync(LibraryViewModel library, uint appId, string name, CancellationToken cancellationToken) =>
+        RequestUriPlayAsync(library, name, token => steamPlay.SendAsync(appId, name, token), cancellationToken);
+
+    private Task RequestHeroicPlayAsync(
+        LibraryViewModel library,
+        Guid pluginId,
+        string gameId,
+        string name,
+        CancellationToken cancellationToken) =>
+        RequestUriPlayAsync(library, name, token => heroicPlay.SendAsync(pluginId, gameId, name, token), cancellationToken);
+
+    private async Task RequestUriPlayAsync(
+        LibraryViewModel library,
+        string name,
+        Func<CancellationToken, Task<string>> dispatchAsync,
+        CancellationToken cancellationToken)
     {
         var generation = ++playGeneration;
         playPending = true;
@@ -1240,7 +1333,7 @@ public sealed partial class LibraryGridView : UserControl
         playStatus.Text = $"Requesting launch for {name}…";
         try
         {
-            var result = await steamPlay.SendAsync(appId, name, cancellationToken).ConfigureAwait(true);
+            var result = await dispatchAsync(cancellationToken).ConfigureAwait(true);
             if (!disposed && generation == playGeneration && ReferenceEquals(model, library) && !cancellationToken.IsCancellationRequested)
             {
                 playStatus.Text = result;
@@ -1248,7 +1341,7 @@ public sealed partial class LibraryGridView : UserControl
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
-            // Unloading the library cancels the wait, not the Steam process.
+            // Unloading the library cancels the wait, not the external store launcher process.
             return;
         }
         finally
@@ -1326,19 +1419,25 @@ public sealed partial class LibraryGridView : UserControl
         Refresh();
     }
 
+    private bool CanDispatchQuery() =>
+        model is { } current
+        && !disposed
+        && !updatingQueryControls
+        && !current.LifetimeToken.IsCancellationRequested;
+
     private void OnSearchChanged(object? sender, TextChangedEventArgs eventArgs)
     {
-        if (model is null || updatingQueryControls)
+        if (!CanDispatchQuery())
         {
             return;
         }
 
-        StartQuery(model.SetSearchTermAsync(searchBox.Text ?? string.Empty), model.QueryToken);
+        StartQuery(model!.SetSearchTermAsync(searchBox.Text ?? string.Empty), model.QueryToken);
     }
 
     private void OnFilterClicked(object? sender, RoutedEventArgs eventArgs)
     {
-        if (model is null || updatingQueryControls || sender is not Button button)
+        if (!CanDispatchQuery() || sender is not Button button)
         {
             return;
         }
@@ -1351,37 +1450,47 @@ public sealed partial class LibraryGridView : UserControl
             "FavoriteFilterButton" => LibraryFilterMode.Favorite,
             _ => LibraryFilterMode.All,
         };
-        StartQuery(model.SetFilterAsync(mode), model.QueryToken);
+        StartQuery(model!.SetFilterAsync(mode), model.QueryToken);
     }
 
     private void OnSortChanged(object? sender, SelectionChangedEventArgs eventArgs)
     {
-        if (model is null || updatingQueryControls || sortCombo.SelectedIndex < 0 || sortCombo.SelectedIndex >= SortOrders.Length)
+        if (!CanDispatchQuery() || sortCombo.SelectedIndex < 0 || sortCombo.SelectedIndex >= SortOrders.Length)
         {
             return;
         }
 
-        StartQuery(model.SetSortAsync(SortOrders[sortCombo.SelectedIndex], model.Descending), model.QueryToken);
+        StartQuery(model!.SetSortAsync(SortOrders[sortCombo.SelectedIndex], model.Descending), model.QueryToken);
     }
 
     private void OnSortDirectionClicked(object? sender, RoutedEventArgs eventArgs)
     {
-        if (model is null || updatingQueryControls)
+        if (!CanDispatchQuery())
         {
             return;
         }
 
-        StartQuery(model.SetDescendingAsync(!model.Descending), model.QueryToken);
+        StartQuery(model!.SetDescendingAsync(!model.Descending), model.QueryToken);
     }
 
     private void OnGroupChanged(object? sender, SelectionChangedEventArgs eventArgs)
     {
-        if (model is null || updatingQueryControls || groupCombo.SelectedIndex < 0 || groupCombo.SelectedIndex >= GroupOrders.Length)
+        if (!CanDispatchQuery() || groupCombo.SelectedIndex < 0 || groupCombo.SelectedIndex >= GroupOrders.Length)
         {
             return;
         }
 
-        StartQuery(model.SetGroupByAsync(GroupOrders[groupCombo.SelectedIndex]), model.QueryToken);
+        StartQuery(model!.SetGroupByAsync(GroupOrders[groupCombo.SelectedIndex]), model.QueryToken);
+    }
+
+    private void OnSourceChanged(object? sender, SelectionChangedEventArgs eventArgs)
+    {
+        if (!CanDispatchQuery() || sourceCombo.SelectedIndex < 0 || sourceCombo.SelectedIndex >= SourceOrders.Length)
+        {
+            return;
+        }
+
+        StartQuery(model!.SetSourceFilterAsync(SourceOrders[sourceCombo.SelectedIndex]), model.QueryToken);
     }
 
     /// <summary>
