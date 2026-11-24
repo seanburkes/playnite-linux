@@ -3,11 +3,27 @@
              xmlns:shell="using:Playnite.Desktop.Shell"
              x:Class="Playnite.Desktop.Shell.TopPanelView"
              x:DataType="shell:ShellViewModel">
-  <StackPanel Orientation="Horizontal">
-    <TextBlock x:Name="TitleText" Text="PLAYNITE" />
-    <Button x:Name="AboutButton" Content="About" AutomationProperties.Name="About"
+  <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Spacing="10">
+    <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center" Margin="0,0,6,0">
+      <ContentControl x:Name="BrandLogoHost" VerticalAlignment="Center" />
+      <TextBlock x:Name="TitleText"
+                 Text="PLAYNITE"
+                 FontSize="14"
+                 FontWeight="Bold"
+                 LetterSpacing="1.6"
+                 VerticalAlignment="Center"
+                 Foreground="{DynamicResource PlayniteTextPrimaryBrush}" />
+    </StackPanel>
+    <Border Width="1" Height="18" Background="{DynamicResource PlayniteBorderBrush}" VerticalAlignment="Center" />
+    <Button x:Name="AboutButton"
+            Classes="secondary-cta"
+            Content="About"
+            AutomationProperties.Name="About"
             Command="{Binding AboutCommand}" />
-    <Button x:Name="MessageBoxButton" Content="Message" AutomationProperties.Name="Show message"
+    <Button x:Name="MessageBoxButton"
+            Classes="secondary-cta"
+            Content="Message"
+            AutomationProperties.Name="Show message"
             Command="{Binding MessageBoxCommand}" />
   </StackPanel>
 </UserControl>

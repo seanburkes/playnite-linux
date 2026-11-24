@@ -1,8 +1,32 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              x:Class="Playnite.Desktop.Shell.MessageBoxView">
-  <StackPanel>
-    <TextBlock x:Name="MessageBoxTitleText" AutomationProperties.Name="Message title" />
-    <TextBlock x:Name="MessageBoxMessageText" AutomationProperties.Name="Message text" />
-  </StackPanel>
+  <Border Padding="24"
+          Background="{DynamicResource PlayniteWindowBackgroundBrush}">
+    <Border Background="{DynamicResource PlayniteSurfaceBrush}"
+            BorderBrush="{DynamicResource PlayniteControlBorderBrush}"
+            BorderThickness="1"
+            CornerRadius="6"
+            Padding="22">
+      <ScrollViewer x:Name="MessageScroll" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+        <StackPanel Spacing="10">
+          <Grid ColumnDefinitions="Auto,*" ColumnSpacing="10">
+            <Border Width="4" Height="22" CornerRadius="2" VerticalAlignment="Top"
+                    Background="{DynamicResource PlayniteAccentBrush}" />
+            <TextBlock x:Name="MessageBoxTitleText"
+                       Grid.Column="1"
+                       Classes="h1"
+                       TextWrapping="Wrap"
+                       AutomationProperties.Name="Message title" />
+          </Grid>
+          <Border Height="1" Background="{DynamicResource PlayniteBorderBrush}" Margin="0,2" />
+          <TextBlock x:Name="MessageBoxMessageText"
+                     Foreground="{DynamicResource PlayniteTextSecondaryBrush}"
+                     LineHeight="20"
+                     TextWrapping="Wrap"
+                     AutomationProperties.Name="Message text" />
+        </StackPanel>
+      </ScrollViewer>
+    </Border>
+  </Border>
 </UserControl>

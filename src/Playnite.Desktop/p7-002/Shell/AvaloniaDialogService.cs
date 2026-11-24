@@ -19,5 +19,12 @@ public sealed class AvaloniaDialogService : IDialogService
         Show(new MessageBoxView(title, message), title);
 
     private void Show(Control content, string title) =>
-        new Window { Title = title, Content = content }.Show(owner);
+        new Window
+        {
+            Title = title,
+            Width = 480,
+            Height = 240,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner,
+            Content = content,
+        }.Show(owner);
 }

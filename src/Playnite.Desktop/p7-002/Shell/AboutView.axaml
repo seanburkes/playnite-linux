@@ -1,8 +1,32 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              x:Class="Playnite.Desktop.Shell.AboutView">
-  <StackPanel>
-    <TextBlock x:Name="AboutTitleText" AutomationProperties.Name="About title" />
-    <TextBlock x:Name="AboutMessageText" AutomationProperties.Name="About author" />
-  </StackPanel>
+  <Border Padding="24"
+          Background="{DynamicResource PlayniteWindowBackgroundBrush}">
+    <Border Background="{DynamicResource PlayniteSurfaceBrush}"
+            BorderBrush="{DynamicResource PlayniteControlBorderBrush}"
+            BorderThickness="1"
+            CornerRadius="6"
+            Padding="22">
+      <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+        <StackPanel Spacing="10">
+          <Grid ColumnDefinitions="Auto,*" ColumnSpacing="12">
+            <ContentControl x:Name="AboutLogoHost" VerticalAlignment="Center" />
+            <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
+              <TextBlock Text="PLAYNITE LINUX" Classes="section-label" />
+              <TextBlock x:Name="AboutTitleText"
+                         Classes="h1"
+                         TextWrapping="Wrap"
+                         AutomationProperties.Name="About title" />
+            </StackPanel>
+          </Grid>
+          <Border Height="1" Background="{DynamicResource PlayniteBorderBrush}" Margin="0,4" />
+          <TextBlock x:Name="AboutMessageText"
+                     Foreground="{DynamicResource PlayniteTextSecondaryBrush}"
+                     TextWrapping="Wrap"
+                     AutomationProperties.Name="About author" />
+        </StackPanel>
+      </ScrollViewer>
+    </Border>
+  </Border>
 </UserControl>
