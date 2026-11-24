@@ -1,11 +1,16 @@
 using Playnite.Core.Database;
 using Playnite.Core.Library;
 using Playnite.Core.Queries;
+using Playnite.Steam;
+using Playnite.Steam.Sync;
 
 namespace Playnite.Desktop.Shell;
 
 /// <summary>One displayed library row, detached from the database session.</summary>
-public sealed record LibraryRow(Guid Id, string Name, string GameId);
+public sealed record LibraryRow(Guid Id, string Name, string GameId)
+{
+    internal uint? SteamPlayAppId { get; init; }
+}
 
 /// <summary>The bounded quick-filter selection owned by the p7-004 library query bar.</summary>
 public enum LibraryFilterMode
@@ -27,6 +32,7 @@ public enum LibraryFilterMode
 public sealed class LibraryViewModel
 {
     public const int PageSize = 50;
+    private static readonly Guid SteamPluginId = new(SteamLibrarySyncService.SteamPluginId);
 
     private readonly string databasePath;
     private LibraryDatabase? database;
@@ -45,6 +51,8 @@ public sealed class LibraryViewModel
 
     /// <summary>The token of the most recently started query, for targeted supersession handling.</summary>
     internal CancellationToken QueryToken => currentQueryToken;
+
+    internal CancellationToken LifetimeToken => lifetimeToken;
 
     public LibraryViewModel(string databasePath)
     {
@@ -249,9 +257,15 @@ public sealed class LibraryViewModel
     private async Task<LibraryRow> LoadDetailsAsync(LibraryRow row, CancellationToken cancellationToken)
     {
         var stored = await service!.GetAsync(row.Id, cancellationToken).ConfigureAwait(false);
-        return stored is null
-            ? row
-            : row with { Name = stored.Value.Name ?? "(unnamed)", GameId = stored.Value.GameId };
+        if (stored is null)
+        {
+            return row with { SteamPlayAppId = null };
+        }
+
+        var game = stored.Value;
+        uint? steamAppId = game.PluginId == SteamPluginId && game.IsInstalled
+            && FlatpakSteamLauncher.TryParseAppId(game.GameId, out var appId) && appId != 0 ? appId : null;
+        return row with { Name = game.Name ?? "(unnamed)", GameId = game.GameId, SteamPlayAppId = steamAppId };
     }
 
     /// <summary>Releases the instance-owned references; the host view calls this on unload.</summary>
