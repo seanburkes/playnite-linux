@@ -144,6 +144,8 @@ src/Playnite.Desktop/MainWindow.axaml.cs	p2-004	34af4f0fb6430fbc585d3b76ce850943
 src/Playnite.Desktop/MainWindow.axaml.cs	p7-002	e0ad0f948d3ca4441f967536c50050142431a7ee	pull/224
 src/Playnite.Desktop/Program.cs	p2-004	34af4f0fb6430fbc585d3b76ce85094390a26467	pull/34
 src/Playnite.Desktop/Program.cs	p7-001	0820d568417f585ed83ba635d13998dcab010668	pull/223
+src/Playnite.Desktop/Theme/PlayniteDarkTheme.axaml	p7-009	724ba6c7f22cba17fcbc4e08b575e316086d84b8	pull/240
+src/Playnite.Desktop/Theme/PlayniteDarkTheme.axaml.cs	p7-009	724ba6c7f22cba17fcbc4e08b575e316086d84b8	pull/240
 src/Playnite.Desktop/p7-001/AppLogger.cs	p7-001	0820d568417f585ed83ba635d13998dcab010668	pull/223
 src/Playnite.Desktop/p7-001/BootstrapFiles.cs	p7-001	0820d568417f585ed83ba635d13998dcab010668	pull/223
 src/Playnite.Desktop/p7-001/BootstrapLocalization.cs	p7-001	0820d568417f585ed83ba635d13998dcab010668	pull/223
@@ -212,11 +214,11 @@ src/Playnite.Desktop/p7-007/DesktopUriCommandHost.cs	p7-007	1b31e11d19bbd402d54c
 src/Playnite.Desktop/p7-007/MainWindow.axaml.cs	p7-007	1b31e11d19bbd402d54cca05d5cb3f3de9f4463e	pull/233
 src/Playnite.Desktop/p7-007/Program.cs	p7-007	1b31e11d19bbd402d54cca05d5cb3f3de9f4463e	pull/233
 src/Playnite.Desktop/p7-007/TrayController.cs	p7-007	1b31e11d19bbd402d54cca05d5cb3f3de9f4463e	pull/233
-src/Playnite.Desktop/p7-009/App.cs	p7-009	5885aaa432ef880c5d900b1b5a7bf19a01f2f1f6	pull/229
+src/Playnite.Desktop/p7-009/App.cs	p7-009	724ba6c7f22cba17fcbc4e08b575e316086d84b8	pull/240
 src/Playnite.Desktop/p7-009/FirstTimeSetup.cs	p7-009	5885aaa432ef880c5d900b1b5a7bf19a01f2f1f6	pull/229
-src/Playnite.Desktop/p7-009/FirstTimeSetupSmoke.cs	p7-009	5885aaa432ef880c5d900b1b5a7bf19a01f2f1f6	pull/229
-src/Playnite.Desktop/p7-009/FirstTimeStartupWindow.axaml	p7-009	5885aaa432ef880c5d900b1b5a7bf19a01f2f1f6	pull/229
-src/Playnite.Desktop/p7-009/FirstTimeStartupWindow.axaml.cs	p7-009	5885aaa432ef880c5d900b1b5a7bf19a01f2f1f6	pull/229
+src/Playnite.Desktop/p7-009/FirstTimeSetupSmoke.cs	p7-009	724ba6c7f22cba17fcbc4e08b575e316086d84b8	pull/240
+src/Playnite.Desktop/p7-009/FirstTimeStartupWindow.axaml	p7-009	724ba6c7f22cba17fcbc4e08b575e316086d84b8	pull/240
+src/Playnite.Desktop/p7-009/FirstTimeStartupWindow.axaml.cs	p7-009	724ba6c7f22cba17fcbc4e08b575e316086d84b8	pull/240
 src/Playnite.Desktop/p7-009/LegacyLibraryReaderExecutable.cs	p7-009	5885aaa432ef880c5d900b1b5a7bf19a01f2f1f6	pull/229
 src/Playnite.LegacyImport.Contracts/AssemblyMarker.cs	p2-001	9afd818ae8a695e921bb98f386bfceb83d0059db	pull/29
 src/Playnite.LegacyImport.Contracts/AssemblyMarker.cs	p2-002	abdb82bedd0bcadfe93c1fc6f11937c55b116b7c	pull/37
@@ -523,7 +525,7 @@ tests/Playnite.Smoke.Tests/SettingsWelcomeSmokeTests.cs	p7-006	503d6689f887a026f
 tests/Playnite.Smoke.Tests/ShellSmokeTests.cs	p7-002	e0ad0f948d3ca4441f967536c50050142431a7ee	pull/224
 tests/Playnite.Smoke.Tests/p7-007/TrayProtocolKeyboardTests.cs	p7-007	1b31e11d19bbd402d54cca05d5cb3f3de9f4463e	pull/233
 tests/Playnite.Smoke.Tests/p7-008/ScreenBaselineTests.cs	p7-008	b59f838d9158260091370ef9d7b6afa8274f726d	pull/238
-tests/Playnite.Smoke.Tests/p7-009/FirstTimeSetupSmokeTests.cs	p7-009	5885aaa432ef880c5d900b1b5a7bf19a01f2f1f6	pull/229
+tests/Playnite.Smoke.Tests/p7-009/FirstTimeSetupSmokeTests.cs	p7-009	724ba6c7f22cba17fcbc4e08b575e316086d84b8	pull/240
 tests/README.md	p2-review-model	3497640ecdc76144381f168913785fe17b24fe73	pull/49
 tests/fixtures/.gitkeep	*	a9b884f696be6ce48e42a0f2d93b8275891fac8b	-
 tests/fixtures/archives-v10/backslash.zip	p3-008b	e71ad0db1445f0e382485eaa2a4624d5ec8eb88a	pull/79
