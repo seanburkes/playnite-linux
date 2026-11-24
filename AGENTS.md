@@ -18,8 +18,10 @@ oracle. New code is in `src/` (Phase 1 onward). Do not modify the Windows app.
    through the protected-path gate. `legacy/` and
    `oracle-lock/` are unconditionally immutable; no label overrides them. A porting change may
    not redefine correctness.
-3. **Do not weaken tests.** No `[Skip]`, `[Ignore]`, `--filter` exclusions, snapshot
-   re-acceptance, or deleting a failing test. Executed test cases must not fall; skips must stay zero.
+3. **Do not weaken tests without explicit user approval.** If a test appears to enforce the
+   wrong behavior, explain what it checks and ask before changing it. Do not use `[Skip]`,
+   `[Ignore]`, `--filter` exclusions, snapshot re-acceptance, or deletion to silence a failure.
+   Executed test cases must not fall; skips must stay zero.
 4. **No stubs.** No `TODO`, placeholder constants, `NotImplementedException` on a reachable
    path, or fake success. If it is not implemented, mark the parity row `deferred`.
 5. **No banned APIs outside the platform project:**
