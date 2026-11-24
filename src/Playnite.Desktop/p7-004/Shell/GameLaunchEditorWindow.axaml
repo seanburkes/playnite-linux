@@ -1,0 +1,89 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="Playnite.Desktop.Shell.GameLaunchEditorWindow"
+        Width="560"
+        Height="520"
+        MinWidth="460"
+        MinHeight="460"
+        WindowStartupLocation="CenterOwner"
+        Title="Configure Launch">
+  <Border Background="{DynamicResource PlayniteSurfaceBrush}"
+          BorderBrush="{DynamicResource PlayniteBorderBrush}"
+          BorderThickness="1"
+          Padding="20">
+    <Grid RowDefinitions="Auto,*,Auto" RowSpacing="14">
+      <StackPanel Grid.Row="0" Spacing="4">
+        <TextBlock x:Name="DialogTitle" Text="Configure Game Launch" Classes="h2"
+                   AutomationProperties.Name="Launch editor title" />
+        <TextBlock x:Name="DialogSubtitle"
+                   Text="Runs directly via argv vectors (no shell). Shell interpreters are blocked."
+                   Classes="muted" TextWrapping="Wrap" />
+      </StackPanel>
+
+      <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+        <StackPanel Spacing="10">
+          <StackPanel Spacing="4">
+            <TextBlock Text="Game Name" FontWeight="SemiBold" />
+            <TextBox x:Name="GameNameBox" PlaceholderText="My Linux Game"
+                     AutomationProperties.Name="Game name" />
+          </StackPanel>
+
+          <StackPanel Spacing="4">
+            <TextBlock Text="Executable Path (absolute)" FontWeight="SemiBold" />
+            <TextBox x:Name="ExecutablePathBox" PlaceholderText="/path/to/game"
+                     AutomationProperties.Name="Executable path" />
+          </StackPanel>
+
+          <StackPanel Spacing="4">
+            <TextBlock Text="Arguments" FontWeight="SemiBold" />
+            <TextBox x:Name="ArgumentsBox" PlaceholderText="--fullscreen --lang &quot;en-US&quot;"
+                     AutomationProperties.Name="Launch arguments" />
+          </StackPanel>
+
+          <StackPanel Spacing="4">
+            <TextBlock Text="Working Directory (optional, absolute)" FontWeight="SemiBold" />
+            <TextBox x:Name="WorkingDirBox" PlaceholderText="/path/to/game/dir"
+                     AutomationProperties.Name="Working directory" />
+          </StackPanel>
+
+          <StackPanel Spacing="4">
+            <TextBlock Text="Description (optional)" FontWeight="SemiBold" />
+            <TextBox x:Name="DescriptionBox" PlaceholderText="Notes about this game"
+                     AutomationProperties.Name="Game description" />
+          </StackPanel>
+
+          <StackPanel Orientation="Horizontal" Spacing="16" Margin="0,4,0,0">
+            <CheckBox x:Name="GameModeCheckBox" Content="Wrap with GameMode (gamemoderun)"
+                      AutomationProperties.Name="Wrap with GameMode" />
+            <CheckBox x:Name="MangoHudCheckBox" Content="Wrap with MangoHud (mangohud)"
+                      AutomationProperties.Name="Wrap with MangoHud" />
+          </StackPanel>
+
+          <Border Background="{DynamicResource PlayniteCardBackgroundBrush}"
+                  BorderBrush="{DynamicResource PlayniteBorderBrush}"
+                  BorderThickness="1" CornerRadius="4" Padding="10">
+            <StackPanel Spacing="4">
+              <TextBlock Text="Resolved Launch Command" Classes="muted" FontSize="11" />
+              <TextBlock x:Name="PreviewText" Text="(enter executable path)"
+                         TextWrapping="Wrap" FontSize="12"
+                         AutomationProperties.Name="Resolved launch command preview" />
+            </StackPanel>
+          </Border>
+
+          <TextBlock x:Name="ValidationErrorText" Text="" IsVisible="False"
+                     Foreground="{DynamicResource PlayniteDangerBrush}"
+                     TextWrapping="Wrap"
+                     AutomationProperties.Name="Launch validation error"
+                     AutomationProperties.LiveSetting="Assertive" />
+        </StackPanel>
+      </ScrollViewer>
+
+      <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+        <Button x:Name="CancelButton" Classes="secondary-cta" Content="Cancel" IsCancel="True"
+                AutomationProperties.Name="Cancel launch editor" />
+        <Button x:Name="SaveButton" Classes="primary-cta" Content="Save" IsDefault="True"
+                AutomationProperties.Name="Save launch configuration" />
+      </StackPanel>
+    </Grid>
+  </Border>
+</Window>
