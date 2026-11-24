@@ -1,3 +1,4 @@
+using System.Globalization;
 using Playnite.Core.Database;
 using Playnite.Core.Library;
 using Playnite.Core.Models;
@@ -11,6 +12,106 @@ namespace Playnite.Desktop.Shell;
 public sealed record LibraryRow(Guid Id, string Name, string GameId)
 {
     internal uint? SteamPlayAppId { get; init; }
+
+    public bool IsInstalled { get; init; }
+
+    public bool Favorite { get; init; }
+
+    public bool Hidden { get; init; }
+
+    public bool IsSteam { get; init; }
+
+    public ulong PlaytimeSeconds { get; init; }
+
+    public int? ReleaseYear { get; init; }
+
+    public int? UserScore { get; init; }
+
+    public DateTime? LastActivity { get; init; }
+
+    public string? CoverImage { get; init; }
+
+    public string? BackgroundImage { get; init; }
+
+    public string? Icon { get; init; }
+
+    public string? Description { get; init; }
+
+    public string? Version { get; init; }
+
+    public string? InstallDirectory { get; init; }
+
+    public string? GroupLabel { get; init; }
+
+    public string Initials => ComputeInitials(Name);
+
+    public string StatusLabel => IsInstalled ? "Installed" : "Not installed";
+
+    public string SourceDisplay => IsSteam ? "Steam" : "Library";
+
+    public string ReleaseYearDisplay => ReleaseYear is int year
+        ? year.ToString(CultureInfo.InvariantCulture)
+        : "Unknown";
+
+    public string UserScoreDisplay => UserScore is int score
+        ? string.Create(CultureInfo.InvariantCulture, $"{score}/100")
+        : "Unrated";
+
+    public string LastPlayedDisplay => LastActivity is DateTime dt && dt > DateTime.MinValue
+        ? dt.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)
+        : "Never";
+
+    public string PlaytimeDisplay
+    {
+        get
+        {
+            if (PlaytimeSeconds == 0)
+            {
+                return "Never played";
+            }
+
+            if (PlaytimeSeconds < 3600)
+            {
+                var minutes = Math.Max(1UL, PlaytimeSeconds / 60);
+                return string.Create(CultureInfo.InvariantCulture, $"{minutes}m");
+            }
+
+            var hours = PlaytimeSeconds / 3600;
+            var remMinutes = (PlaytimeSeconds % 3600) / 60;
+            return remMinutes > 0
+                ? string.Create(CultureInfo.InvariantCulture, $"{hours}h {remMinutes}m")
+                : string.Create(CultureInfo.InvariantCulture, $"{hours}h");
+        }
+    }
+
+    public string CardSubtitle
+    {
+        get
+        {
+            var yearText = ReleaseYear is int year ? year.ToString(CultureInfo.InvariantCulture) : null;
+            var playtimeText = PlaytimeSeconds > 0 ? PlaytimeDisplay : StatusLabel;
+            return yearText is not null ? $"{yearText} · {playtimeText}" : playtimeText;
+        }
+    }
+
+    private static string ComputeInitials(string name)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            return "?";
+        }
+
+        var parts = name.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (parts.Length >= 2)
+        {
+            return string.Concat(char.ToUpperInvariant(parts[0][0]), char.ToUpperInvariant(parts[1][0]));
+        }
+
+        var single = parts[0];
+        return single.Length >= 2
+            ? string.Concat(char.ToUpperInvariant(single[0]), char.ToUpperInvariant(single[1]))
+            : char.ToUpperInvariant(single[0]).ToString();
+    }
 }
 
 /// <summary>The bounded quick-filter selection owned by the p7-004 library query bar.</summary>
@@ -27,8 +128,8 @@ public enum LibraryFilterMode
 /// Instance-owned library state for the ContentHost pilot. The database destination is the new
 /// app-owned XDG data file; the frozen v10 fixture is only ever read by tests, never opened here.
 /// Bounded p6-012 windows come from <see cref="LibraryService.ListAsync"/> in the selected order;
-/// p7-004 adds the search term, quick filter and sort selection while preserving the p7-003
-/// selection, details and paging behaviour.
+/// p7-004 adds the search term, quick filter, sort, grouping, artwork metadata, and on-demand
+/// Steam sync reload while preserving the p7-003 selection, details and paging behaviour.
 /// </summary>
 public sealed class LibraryViewModel
 {
@@ -40,6 +141,7 @@ public sealed class LibraryViewModel
     private LibraryService? service;
     private int pageOffset;
     private CancellationToken lifetimeToken;
+    private CancellationTokenSource? lifetimeCts;
     private CancellationToken currentQueryToken;
     private CancellationTokenSource? queryCts;
     private long generation;
@@ -53,7 +155,9 @@ public sealed class LibraryViewModel
     /// <summary>The token of the most recently started query, for targeted supersession handling.</summary>
     internal CancellationToken QueryToken => currentQueryToken;
 
-    internal CancellationToken LifetimeToken => lifetimeToken;
+    internal CancellationToken LifetimeToken => lifetimeCts?.Token ?? lifetimeToken;
+
+    internal string DatabasePath => databasePath;
 
     internal LibraryViewModel CreateIndependentView() => new(databasePath);
 
@@ -83,9 +187,21 @@ public sealed class LibraryViewModel
     /// <summary>The active sort direction; it applies only to the primary key.</summary>
     public bool Descending { get; private set; }
 
+    /// <summary>The active library grouping key.</summary>
+    public LibraryGroupBy GroupBy { get; private set; } = LibraryGroupBy.None;
+
+    /// <summary>Groups returned for the active page when <see cref="GroupBy"/> is active.</summary>
+    public IReadOnlyList<LibraryGroup> Groups { get; private set; } = [];
+
+    public bool HasActiveFilters =>
+        !string.IsNullOrWhiteSpace(SearchTerm)
+        || FilterMode != LibraryFilterMode.All
+        || GroupBy != LibraryGroupBy.None;
+
     /// <summary>A stable, testable summary of the current query state.</summary>
-    public string QueryStatus =>
-        $"Search: {SearchTerm} | Filter: {FilterMode} | Sort: {SortBy} | Direction: {(Descending ? "desc" : "asc")}";
+    public string QueryStatus => GroupBy == LibraryGroupBy.None
+        ? $"Search: {SearchTerm} | Filter: {FilterMode} | Sort: {SortBy} | Direction: {(Descending ? "desc" : "asc")}"
+        : $"Search: {SearchTerm} | Filter: {FilterMode} | Sort: {SortBy} | Direction: {(Descending ? "desc" : "asc")} | Group: {GroupBy}";
 
     public int PageCount => TotalCount == 0 ? 1 : (TotalCount + PageSize - 1) / PageSize;
 
@@ -105,8 +221,11 @@ public sealed class LibraryViewModel
         Directory.CreateDirectory(directory);
         database = await LibraryDatabase.OpenAsync(databasePath, cancellationToken).ConfigureAwait(false);
         service = new LibraryService(database);
-        lifetimeToken = cancellationToken;
-        await LoadPageAsync(0, cancellationToken).ConfigureAwait(false);
+        lifetimeCts?.Cancel();
+        lifetimeCts?.Dispose();
+        lifetimeCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        lifetimeToken = lifetimeCts.Token;
+        await LoadPageAsync(0, lifetimeToken).ConfigureAwait(false);
     }
 
     public Task LoadPageAsync(int offset, CancellationToken cancellationToken = default)
@@ -121,17 +240,19 @@ public sealed class LibraryViewModel
             Filter: CreateFilter(),
             SortBy: SortBy,
             Descending: Descending,
-            GroupBy: LibraryGroupBy.None,
+            GroupBy: GroupBy,
             Offset: offset,
             Limit: PageSize);
 
         var page = await QueryPageAsync(service, query, cancellationToken).ConfigureAwait(false);
         cancellationToken.ThrowIfCancellationRequested();
 
+        var groupLabels = BuildGroupLabels(query.GroupBy, page.Groups);
+
         // Compute the whole result before publishing it. A superseded request never writes its
         // rows, selection or status over the current query's result.
         var rows = page.Games
-            .Select(game => CreateRow(game.Value))
+            .Select(game => CreateRow(game.Value, groupLabels.GetValueOrDefault(game.Value.Id)))
             .ToArray();
         var first = rows.Length > 0 ? rows[0] : null;
         var selected = first is null ? null : await LoadDetailsAsync(first, cancellationToken).ConfigureAwait(false);
@@ -143,6 +264,7 @@ public sealed class LibraryViewModel
 
         pageOffset = offset;
         TotalCount = page.TotalCount;
+        Groups = page.Groups;
         Rows = rows;
         Selected = selected;
         Status = TotalCount == 0 ? "empty" : "loaded";
@@ -163,7 +285,7 @@ public sealed class LibraryViewModel
 
     /// <summary>
     /// Applies a query change: cancels the previous in-flight query and reloads the first bounded
-    /// page under the current term, filter and sort. Paging is always reset to page 1.
+    /// page under the current term, filter, sort and group. Paging is always reset to page 1.
     /// </summary>
     public Task ApplyQueryAsync(CancellationToken cancellationToken = default)
     {
@@ -212,6 +334,38 @@ public sealed class LibraryViewModel
     {
         Descending = descending;
         return ApplyQueryAsync(cancellationToken);
+    }
+
+    /// <summary>Sets the grouping key and reloads page 1.</summary>
+    public Task SetGroupByAsync(LibraryGroupBy groupBy, CancellationToken cancellationToken = default)
+    {
+        if (!Enum.IsDefined(groupBy))
+        {
+            throw new ArgumentOutOfRangeException(nameof(groupBy));
+        }
+
+        GroupBy = groupBy;
+        return ApplyQueryAsync(cancellationToken);
+    }
+
+    /// <summary>Resets search, filter, and grouping back to defaults and reloads page 1.</summary>
+    public Task ResetFiltersAsync(CancellationToken cancellationToken = default)
+    {
+        SearchTerm = string.Empty;
+        FilterMode = LibraryFilterMode.All;
+        GroupBy = LibraryGroupBy.None;
+        return ApplyQueryAsync(cancellationToken);
+    }
+
+    /// <summary>Reloads the active page after an out-of-band sync or edit, clamping past-end offsets.</summary>
+    public async Task ReloadCurrentPageAsync(CancellationToken cancellationToken = default)
+    {
+        await LoadPageAsync(pageOffset, cancellationToken).ConfigureAwait(false);
+        if (pageOffset > 0 && Rows.Count == 0 && TotalCount > 0)
+        {
+            var lastValidOffset = ((TotalCount - 1) / PageSize) * PageSize;
+            await LoadPageAsync(lastValidOffset, cancellationToken).ConfigureAwait(false);
+        }
     }
 
     /// <summary>Loads the selected row's details through the service; used by the real row control.</summary>
@@ -265,24 +419,101 @@ public sealed class LibraryViewModel
             return row with { SteamPlayAppId = null };
         }
 
-        return CreateRow(stored.Value);
+        return CreateRow(stored.Value, row.GroupLabel);
     }
 
-    private static LibraryRow CreateRow(Game game)
+    private static LibraryRow CreateRow(Game game, string? groupLabel = null)
     {
-        uint? steamAppId = game.PluginId == SteamPluginId && game.IsInstalled
+        var isSteam = game.PluginId == SteamPluginId;
+        uint? steamAppId = isSteam && game.IsInstalled
             && FlatpakSteamLauncher.TryParseAppId(game.GameId, out var appId) && appId != 0 ? appId : null;
-        return new LibraryRow(game.Id, game.Name ?? "(unnamed)", game.GameId) { SteamPlayAppId = steamAppId };
+        return new LibraryRow(game.Id, game.Name ?? "(unnamed)", game.GameId ?? string.Empty)
+        {
+            SteamPlayAppId = steamAppId,
+            IsInstalled = game.IsInstalled,
+            Favorite = game.Favorite,
+            Hidden = game.Hidden,
+            IsSteam = isSteam,
+            PlaytimeSeconds = game.Playtime,
+            ReleaseYear = game.ReleaseYear,
+            UserScore = game.UserScore,
+            LastActivity = game.LastActivity,
+            CoverImage = game.CoverImage,
+            BackgroundImage = game.BackgroundImage,
+            Icon = game.Icon,
+            Description = game.Description,
+            Version = game.Version,
+            InstallDirectory = game.InstallDirectory,
+            GroupLabel = groupLabel,
+        };
     }
+
+    private static Dictionary<Guid, string> BuildGroupLabels(LibraryGroupBy groupBy, IReadOnlyList<LibraryGroup> groups)
+    {
+        var map = new Dictionary<Guid, string>();
+        if (groupBy == LibraryGroupBy.None || groups.Count == 0)
+        {
+            return map;
+        }
+
+        foreach (var group in groups)
+        {
+            var label = FormatGroupKey(groupBy, group.Key);
+            foreach (var game in group.Games)
+            {
+                map[game.Value.Id] = label;
+            }
+        }
+
+        return map;
+    }
+
+    internal static string FormatGroupKey(LibraryGroupBy groupBy, IComparable? key) => groupBy switch
+    {
+        LibraryGroupBy.InstallationStatus when key is Playnite.SDK.Models.InstallationStatus status =>
+            status == Playnite.SDK.Models.InstallationStatus.Installed ? "Installed" : "Not installed",
+        LibraryGroupBy.ReleaseYear => key is int year ? year.ToString(CultureInfo.InvariantCulture) : "Unknown year",
+        LibraryGroupBy.PlayTime when key is PlaytimeCategory category => category switch
+        {
+            PlaytimeCategory.NotPlayed => "Never played",
+            PlaytimeCategory.LessThenHour => "< 1 hour",
+            PlaytimeCategory.O1_10 => "1–10 hours",
+            PlaytimeCategory.O10_100 => "10–100 hours",
+            PlaytimeCategory.O100_500 => "100–500 hours",
+            PlaytimeCategory.O500_1000 => "500–1000 hours",
+            PlaytimeCategory.O1000plus => "1000+ hours",
+            _ => category.ToString(),
+        },
+        LibraryGroupBy.UserScore or LibraryGroupBy.CriticScore or LibraryGroupBy.CommunityScore when key is ScoreGroup score => score switch
+        {
+            ScoreGroup.None => "Unrated",
+            ScoreGroup.O0x => "0–9",
+            ScoreGroup.O1x => "10–19",
+            ScoreGroup.O2x => "20–29",
+            ScoreGroup.O3x => "30–39",
+            ScoreGroup.O4x => "40–49",
+            ScoreGroup.O5x => "50–59",
+            ScoreGroup.O6x => "60–69",
+            ScoreGroup.O7x => "70–79",
+            ScoreGroup.O8x => "80–89",
+            ScoreGroup.O9x => "90–100",
+            _ => score.ToString(),
+        },
+        _ => key?.ToString() ?? "None",
+    };
 
     /// <summary>Releases the instance-owned references; the host view calls this on unload.</summary>
     public void Dispose()
     {
+        lifetimeCts?.Cancel();
+        lifetimeCts?.Dispose();
+        lifetimeCts = null;
         queryCts?.Cancel();
         queryCts?.Dispose();
         queryCts = null;
         currentQueryToken = default;
         Rows = [];
+        Groups = [];
         Selected = null;
         service = null;
         database = null;
