@@ -5,6 +5,7 @@ using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
+using Avalonia.Threading;
 using Playnite.Core.Database;
 using Playnite.Core.Library;
 using Playnite.Core.Models;
@@ -12,6 +13,7 @@ using Playnite.Core.Queries;
 using Playnite.Desktop.Bootstrap;
 using Playnite.Desktop.Fullscreen;
 using Playnite.Desktop.Integration;
+using Playnite.Platform.Sessions;
 
 namespace Playnite.Desktop.Shell;
 
@@ -52,7 +54,15 @@ public sealed partial class LibraryGridView : UserControl
     private readonly SteamPlayRequest steamPlay;
     private readonly ILibrarySteamSync steamSync;
     private readonly Func<string, LibraryArtworkLoader> artworkLoaderFactory;
+    private DesktopGameSessionManager sessionManager;
+    private readonly bool ownsSessionManager;
+    private readonly Func<string, string?>? toolResolver;
     private readonly Button playButton;
+    private readonly Button stopButton;
+    private readonly Button configureLaunchButton;
+    private readonly Button addGameButton;
+    private readonly Border sessionBadge;
+    private readonly TextBlock sessionBadgeText;
     private readonly TextBlock playStatus;
     private readonly Button fullscreenButton;
     private readonly Button syncSteamButton;
@@ -76,15 +86,23 @@ public sealed partial class LibraryGridView : UserControl
     private CancellationTokenSource? selectionCts;
     private CancellationTokenSource? navigationCts;
     private CancellationTokenSource? syncCts;
+    private CancellationTokenSource? sessionCts;
     private int artworkGeneration;
     private int heroGeneration;
     private int selectionGeneration;
     private int navigationGeneration;
     private int syncGeneration;
     private int playGeneration;
+    private int sessionGeneration;
+    private int editorGeneration;
+    private Guid? activeSessionGameId;
     private bool playPending;
     private bool syncPending;
     private bool fullscreenOpen;
+    private bool sessionActive;
+    private volatile bool sessionAcceptingUpdates;
+    private bool stopPending;
+    private bool editorPending;
     private bool listView;
     private bool updatingQueryControls;
     private bool rebuildingRows;
@@ -96,12 +114,14 @@ public sealed partial class LibraryGridView : UserControl
         new SteamPlayRequest(new SteamPlayRequest.DesktopOpener()),
         Environment.GetCommandLineArgs().Contains(FullscreenPreviewFlag, StringComparer.Ordinal),
         new LibrarySteamSyncRunner(),
+        null,
+        null,
         null)
     {
     }
 
     internal LibraryGridView(SteamPlayRequest steamPlay, bool fullscreenPreview = false)
-        : this(steamPlay, fullscreenPreview, new LibrarySteamSyncRunner(), null)
+        : this(steamPlay, fullscreenPreview, new LibrarySteamSyncRunner(), null, null, null)
     {
     }
 
@@ -110,13 +130,32 @@ public sealed partial class LibraryGridView : UserControl
         bool fullscreenPreview,
         ILibrarySteamSync steamSync,
         Func<string, LibraryArtworkLoader>? artworkLoaderFactory = null)
+        : this(steamPlay, fullscreenPreview, steamSync, artworkLoaderFactory, null, null)
+    {
+    }
+
+    internal LibraryGridView(
+        SteamPlayRequest steamPlay,
+        bool fullscreenPreview,
+        ILibrarySteamSync steamSync,
+        Func<string, LibraryArtworkLoader>? artworkLoaderFactory,
+        DesktopGameSessionManager? sessionManager,
+        Func<string, string?>? toolResolver = null)
     {
         this.steamPlay = steamPlay;
         this.steamSync = steamSync;
         this.artworkLoaderFactory = artworkLoaderFactory ?? (path => new LibraryArtworkLoader(path));
+        ownsSessionManager = sessionManager is null;
+        this.sessionManager = sessionManager ?? new DesktopGameSessionManager();
+        this.toolResolver = toolResolver;
         AvaloniaXamlLoader.Load(this);
 
         playButton = this.FindControl<Button>("PlayButton")!;
+        stopButton = this.FindControl<Button>("StopButton")!;
+        configureLaunchButton = this.FindControl<Button>("ConfigureLaunchButton")!;
+        addGameButton = this.FindControl<Button>("AddGameButton")!;
+        sessionBadge = this.FindControl<Border>("SessionBadge")!;
+        sessionBadgeText = this.FindControl<TextBlock>("SessionBadgeText")!;
         playStatus = this.FindControl<TextBlock>("PlayStatus")!;
         fullscreenButton = this.FindControl<Button>("FullscreenButton")!;
         fullscreenButton.IsVisible = fullscreenPreview;
@@ -133,6 +172,9 @@ public sealed partial class LibraryGridView : UserControl
         syncStatus = this.FindControl<TextBlock>("SyncStatus")!;
 
         playButton.Click += OnPlayClicked;
+        stopButton.Click += OnStopClicked;
+        configureLaunchButton.Click += OnConfigureLaunchClicked;
+        addGameButton.Click += OnAddGameClicked;
         syncSteamButton.Click += OnSyncSteamClicked;
         emptySyncButton.Click += OnSyncSteamClicked;
         clearFiltersButton.Click += OnClearFiltersClicked;
@@ -161,6 +203,7 @@ public sealed partial class LibraryGridView : UserControl
         SetViewMode(false);
         ApplyLabels();
         searchSmoke = Environment.GetCommandLineArgs().Contains(SearchSmokeFlag, StringComparer.Ordinal);
+        this.sessionManager.SessionUpdated += OnSessionUpdated;
         Unloaded += OnUnloaded;
     }
 
@@ -175,6 +218,14 @@ public sealed partial class LibraryGridView : UserControl
 
     internal Task PlayTask { get; private set; } = Task.CompletedTask;
 
+    internal Task SessionTask { get; private set; } = Task.CompletedTask;
+
+    internal Task StopTask { get; private set; } = Task.CompletedTask;
+
+    internal Task EditorTask { get; private set; } = Task.CompletedTask;
+
+    internal Task UnloadTask { get; private set; } = Task.CompletedTask;
+
     internal Task SyncTask { get; private set; } = Task.CompletedTask;
 
     internal Task ArtworkTask { get; private set; } = Task.CompletedTask;
@@ -186,13 +237,30 @@ public sealed partial class LibraryGridView : UserControl
     public void Apply(LibraryViewModel viewModel)
     {
         ArgumentNullException.ThrowIfNull(viewModel);
-        CancelLocalOperations();
+        if (ownsSessionManager && sessionManager.IsDisposed)
+        {
+            sessionManager.SessionUpdated -= OnSessionUpdated;
+            sessionManager = new DesktopGameSessionManager();
+        }
+
+        sessionManager.SessionUpdated -= OnSessionUpdated;
+        sessionManager.SessionUpdated += OnSessionUpdated;
+
+        var keepSession = sessionActive;
+        CancelLocalOperations(preserveActiveSession: keepSession);
         disposed = false;
         syncPending = false;
         playPending = false;
         fullscreenOpen = false;
+        editorPending = false;
+        if (!keepSession)
+        {
+            activeSessionGameId = null;
+            stopPending = false;
+            playStatus.Text = string.Empty;
+        }
+
         syncStatus.Text = string.Empty;
-        playStatus.Text = string.Empty;
         model = viewModel;
         RebuildRows();
         Refresh();
@@ -202,12 +270,13 @@ public sealed partial class LibraryGridView : UserControl
         }
     }
 
-    private void CancelLocalOperations()
+    private void CancelLocalOperations(bool preserveActiveSession = false)
     {
         selectionGeneration++;
         navigationGeneration++;
         syncGeneration++;
         playGeneration++;
+        editorGeneration++;
 
         selectionCts?.Cancel();
         selectionCts?.Dispose();
@@ -220,6 +289,15 @@ public sealed partial class LibraryGridView : UserControl
         syncCts?.Cancel();
         syncCts?.Dispose();
         syncCts = null;
+
+        if (!preserveActiveSession)
+        {
+            Interlocked.Increment(ref sessionGeneration);
+            sessionAcceptingUpdates = false;
+            sessionCts?.Cancel();
+            sessionCts?.Dispose();
+            sessionCts = null;
+        }
     }
 
     private void RebuildRows()
@@ -290,8 +368,6 @@ public sealed partial class LibraryGridView : UserControl
         this.FindControl<TextBlock>("LibraryCountText")!.Text =
             string.Create(CultureInfo.InvariantCulture, $"({model.TotalCount})");
         this.FindControl<TextBlock>("PageText")!.Text = model.PageIndicator;
-        this.FindControl<Button>("PreviousButton")!.IsEnabled = model.CanGoPrevious && !syncPending && !fullscreenOpen;
-        this.FindControl<Button>("NextButton")!.IsEnabled = model.CanGoNext && !syncPending && !fullscreenOpen;
         this.FindControl<Border>("EmptyState")!.IsVisible = model.Rows.Count == 0;
         clearFiltersButton.IsVisible = model.HasActiveFilters;
         this.FindControl<TextBlock>("QueryStatus")!.Text =
@@ -357,6 +433,8 @@ public sealed partial class LibraryGridView : UserControl
             !string.IsNullOrWhiteSpace(selected?.Version) ? selected.Version : "—";
         this.FindControl<TextBlock>("DetailsInstallDir")!.Text =
             !string.IsNullOrWhiteSpace(selected?.InstallDirectory) ? selected.InstallDirectory : "—";
+        this.FindControl<TextBlock>("DetailsPlayCount")!.Text = selected?.PlayCountDisplay ?? "—";
+        this.FindControl<TextBlock>("DetailsLaunchTarget")!.Text = selected?.LaunchTargetDisplay ?? "—";
         this.FindControl<TextBlock>("DetailsDescription")!.Text =
             !string.IsNullOrWhiteSpace(selected?.Description) ? selected.Description : string.Empty;
 
@@ -612,6 +690,7 @@ public sealed partial class LibraryGridView : UserControl
     {
         disposed = true;
         heroGeneration++;
+        sessionManager.SessionUpdated -= OnSessionUpdated;
         CancelLocalOperations();
         heroCts?.Cancel();
         heroCts?.Dispose();
@@ -620,6 +699,20 @@ public sealed partial class LibraryGridView : UserControl
         DisposeHeroBitmap();
         artworkLoader?.Dispose();
         artworkLoader = null;
+        UnloadTask = ShutdownSessionsOnUnloadAsync();
+        _ = ObserveUiTaskAsync(UnloadTask, "session unload");
+    }
+
+    private async Task ShutdownSessionsOnUnloadAsync()
+    {
+        if (ownsSessionManager)
+        {
+            await sessionManager.DisposeAsync().ConfigureAwait(false);
+        }
+        else
+        {
+            await sessionManager.CancelAndWaitActiveSessionAsync().ConfigureAwait(false);
+        }
     }
 
     private async void OnSelectionChanged(object? sender, SelectionChangedEventArgs eventArgs)
@@ -674,7 +767,7 @@ public sealed partial class LibraryGridView : UserControl
     {
         var selected = model?.Selected;
         var item = this.FindControl<ListBox>("GameList")!.SelectedItem as ListBoxItem;
-        return selected?.SteamPlayAppId is not null && item?.Tag is LibraryRow row && row.Id == selected.Id
+        return selected is not null && selected.CanPlay && item?.Tag is LibraryRow row && row.Id == selected.Id
             ? selected : null;
     }
 
@@ -685,10 +778,17 @@ public sealed partial class LibraryGridView : UserControl
             && !model.LifetimeToken.IsCancellationRequested
             && !playPending
             && !syncPending
-            && !fullscreenOpen;
+            && !fullscreenOpen
+            && !sessionActive
+            && !editorPending;
         this.FindControl<Button>("PreviousButton")!.IsEnabled = available && model!.CanGoPrevious;
         this.FindControl<Button>("NextButton")!.IsEnabled = available && model!.CanGoNext;
         playButton.IsEnabled = available && SelectedPlayRow() is not null;
+        stopButton.IsVisible = sessionActive;
+        stopButton.IsEnabled = sessionActive && !stopPending && !disposed;
+        sessionBadge.IsVisible = sessionActive && model?.Selected?.Id == activeSessionGameId;
+        configureLaunchButton.IsEnabled = available && model?.Selected is not null;
+        addGameButton.IsEnabled = available;
         syncSteamButton.IsEnabled = available;
         emptySyncButton.IsEnabled = available;
         fullscreenButton.IsEnabled = available && fullscreenButton.IsVisible;
@@ -696,7 +796,7 @@ public sealed partial class LibraryGridView : UserControl
 
     private async void OnSyncSteamClicked(object? sender, RoutedEventArgs eventArgs)
     {
-        if (disposed || syncPending || fullscreenOpen || model is not { } library || library.LifetimeToken.IsCancellationRequested)
+        if (disposed || syncPending || fullscreenOpen || sessionActive || model is not { } library || library.LifetimeToken.IsCancellationRequested)
         {
             return;
         }
@@ -821,14 +921,315 @@ public sealed partial class LibraryGridView : UserControl
 
     private async void OnPlayClicked(object? sender, RoutedEventArgs eventArgs)
     {
-        if (!playButton.IsEnabled || disposed || model is not { } library || SelectedPlayRow() is not { SteamPlayAppId: uint appId } game)
+        if (!playButton.IsEnabled || disposed || model is not { } library || SelectedPlayRow() is not { } game)
         {
             return;
         }
 
-        var task = RequestPlayAsync(library, appId, game.Name, library.LifetimeToken);
-        PlayTask = task;
-        await ObserveUiTaskAsync(task, "play").ConfigureAwait(true);
+        if (game.HasFilePlayAction)
+        {
+            var sessionTask = RunTrackedSessionAsync(library, game);
+            SessionTask = sessionTask;
+            PlayTask = sessionTask;
+            await ObserveUiTaskAsync(sessionTask, "game session").ConfigureAwait(true);
+            return;
+        }
+
+        if (game.SteamPlayAppId is uint appId)
+        {
+            var task = RequestPlayAsync(library, appId, game.Name, library.LifetimeToken);
+            PlayTask = task;
+            await ObserveUiTaskAsync(task, "play").ConfigureAwait(true);
+        }
+    }
+
+    private async Task RunTrackedSessionAsync(LibraryViewModel library, LibraryRow game)
+    {
+        var generation = Interlocked.Increment(ref sessionGeneration);
+        sessionActive = true;
+        sessionAcceptingUpdates = true;
+        activeSessionGameId = game.Id;
+        stopPending = false;
+        sessionBadgeText.Text = "Starting";
+        RefreshLibraryActions();
+        playStatus.Text = $"Starting {game.Name}…";
+
+        sessionCts?.Cancel();
+        sessionCts?.Dispose();
+        sessionCts = CancellationTokenSource.CreateLinkedTokenSource(library.LifetimeToken);
+        var token = sessionCts.Token;
+
+        try
+        {
+            var stored = await library.GetStoredGameAsync(game.Id, token).ConfigureAwait(true);
+            if (disposed || generation != Volatile.Read(ref sessionGeneration) || !ReferenceEquals(model, library) || token.IsCancellationRequested)
+            {
+                return;
+            }
+
+            if (stored is null)
+            {
+                playStatus.Text = $"Game '{game.Name}' could not be loaded from the library.";
+                return;
+            }
+
+            var plan = GameLaunchPlanner.TryBuildLaunchRequest(stored.Value);
+            if (plan.Request is null)
+            {
+                playStatus.Text = plan.Error ?? $"'{game.Name}' could not be launched.";
+                return;
+            }
+
+            var completed = await sessionManager.RunSessionAsync(
+                library.DatabasePath,
+                game.Id,
+                game.Name,
+                plan.Request,
+                token).ConfigureAwait(true);
+
+            sessionAcceptingUpdates = false;
+            sessionActive = false;
+            activeSessionGameId = null;
+            stopPending = false;
+
+            if (disposed || generation != Volatile.Read(ref sessionGeneration) || !ReferenceEquals(model, library) || library.LifetimeToken.IsCancellationRequested)
+            {
+                return;
+            }
+
+            await library.ReloadCurrentPageAsync(library.LifetimeToken).ConfigureAwait(true);
+            await library.SelectByIdAsync(game.Id, library.LifetimeToken).ConfigureAwait(true);
+            if (disposed || generation != Volatile.Read(ref sessionGeneration) || !ReferenceEquals(model, library))
+            {
+                return;
+            }
+
+            RebuildRows();
+            Refresh();
+            playStatus.Text = completed.StatusMessage;
+        }
+        catch (OperationCanceledException) when (token.IsCancellationRequested || library.LifetimeToken.IsCancellationRequested)
+        {
+            return;
+        }
+        catch (Exception exception)
+        {
+            if (disposed || generation != Volatile.Read(ref sessionGeneration) || !ReferenceEquals(model, library))
+            {
+                return;
+            }
+
+            Console.Error.WriteLine($"Game session failed ({exception.GetType().Name}).");
+            playStatus.Text = $"Could not launch {game.Name}: {exception.Message}";
+        }
+        finally
+        {
+            sessionAcceptingUpdates = false;
+            if (generation == Volatile.Read(ref sessionGeneration))
+            {
+                sessionActive = false;
+                activeSessionGameId = null;
+                stopPending = false;
+                if (!disposed && ReferenceEquals(model, library) && !library.LifetimeToken.IsCancellationRequested)
+                {
+                    RefreshLibraryActions();
+                }
+            }
+        }
+    }
+
+    private void OnSessionUpdated(ActiveGameSession active)
+    {
+        var expectedGeneration = Volatile.Read(ref sessionGeneration);
+        Dispatcher.UIThread.Post(() =>
+        {
+            if (disposed
+                || !sessionActive
+                || !sessionAcceptingUpdates
+                || expectedGeneration != Volatile.Read(ref sessionGeneration)
+                || active.State is GameSessionState.Stopped or GameSessionState.Cancelled or GameSessionState.Failed)
+            {
+                return;
+            }
+
+            if (stopPending && active.State == GameSessionState.Running)
+            {
+                return;
+            }
+
+            sessionBadgeText.Text = active.State switch
+            {
+                GameSessionState.Running when active.IsDegraded => "Running (degraded)",
+                GameSessionState.Running => "Running",
+                GameSessionState.Stopping => "Stopping",
+                _ => active.State.ToString(),
+            };
+            playStatus.Text = active.StatusMessage;
+        });
+    }
+
+    private async void OnStopClicked(object? sender, RoutedEventArgs eventArgs)
+    {
+        if (!stopButton.IsEnabled || !sessionActive || stopPending || disposed)
+        {
+            return;
+        }
+
+        stopPending = true;
+        RefreshLibraryActions();
+        playStatus.Text = "Stopping active session…";
+        var task = StopSessionWithFallbackAsync();
+        StopTask = task;
+        await ObserveUiTaskAsync(task, "stop session").ConfigureAwait(true);
+    }
+
+    private async Task StopSessionWithFallbackAsync()
+    {
+        try
+        {
+            var stopped = await sessionManager.StopActiveSessionAsync(CancellationToken.None).ConfigureAwait(true);
+            if (!stopped && sessionCts is { IsCancellationRequested: false } cts)
+            {
+                await cts.CancelAsync().ConfigureAwait(true);
+            }
+        }
+        catch (Exception exception)
+        {
+            if (!disposed)
+            {
+                Console.Error.WriteLine($"Stop session failed ({exception.GetType().Name}).");
+                playStatus.Text = $"Could not stop session: {exception.Message}";
+            }
+        }
+        finally
+        {
+            stopPending = false;
+            if (!disposed)
+            {
+                RefreshLibraryActions();
+            }
+        }
+    }
+
+    private async void OnAddGameClicked(object? sender, RoutedEventArgs eventArgs)
+    {
+        if (!addGameButton.IsEnabled || disposed || editorPending || model is not { } library
+            || TopLevel.GetTopLevel(this) is not Window owner)
+        {
+            return;
+        }
+
+        var task = OpenAddGameEditorAsync(library, owner);
+        EditorTask = task;
+        await ObserveUiTaskAsync(task, "add game").ConfigureAwait(true);
+    }
+
+    private async void OnConfigureLaunchClicked(object? sender, RoutedEventArgs eventArgs)
+    {
+        if (!configureLaunchButton.IsEnabled || disposed || editorPending || model is not { } library
+            || library.Selected is not { } selectedRow
+            || TopLevel.GetTopLevel(this) is not Window owner)
+        {
+            return;
+        }
+
+        var task = OpenConfigureLaunchEditorAsync(library, selectedRow, owner);
+        EditorTask = task;
+        await ObserveUiTaskAsync(task, "configure launch").ConfigureAwait(true);
+    }
+
+    internal Func<GameLaunchEditorWindow, Window, Task<GameLaunchEditorResult?>>? EditorDialogRunner { get; set; }
+
+    private async Task OpenAddGameEditorAsync(LibraryViewModel library, Window owner)
+    {
+        var generation = ++editorGeneration;
+        editorPending = true;
+        RefreshLibraryActions();
+        try
+        {
+            var editor = new GameLaunchEditorWindow(isNewGame: true, initialGame: null, toolResolver: toolResolver);
+            var runner = EditorDialogRunner ?? ((dlg, parent) => dlg.ShowDialog<GameLaunchEditorResult?>(parent));
+            var result = await runner(editor, owner).ConfigureAwait(true);
+            if (result is null || disposed || generation != editorGeneration || !ReferenceEquals(model, library) || library.LifetimeToken.IsCancellationRequested)
+            {
+                return;
+            }
+
+            await SaveCustomGameAsync(result).ConfigureAwait(true);
+        }
+        finally
+        {
+            if (generation == editorGeneration)
+            {
+                editorPending = false;
+                if (!disposed && ReferenceEquals(model, library) && !library.LifetimeToken.IsCancellationRequested)
+                {
+                    RefreshLibraryActions();
+                }
+            }
+        }
+    }
+
+    private async Task OpenConfigureLaunchEditorAsync(LibraryViewModel library, LibraryRow selectedRow, Window owner)
+    {
+        var generation = ++editorGeneration;
+        editorPending = true;
+        RefreshLibraryActions();
+        try
+        {
+            var stored = await library.GetStoredGameAsync(selectedRow.Id, library.LifetimeToken).ConfigureAwait(true);
+            if (stored is null || disposed || generation != editorGeneration || !ReferenceEquals(model, library) || library.LifetimeToken.IsCancellationRequested)
+            {
+                return;
+            }
+
+            var editor = new GameLaunchEditorWindow(isNewGame: false, initialGame: stored.Value, toolResolver: toolResolver);
+            var runner = EditorDialogRunner ?? ((dlg, parent) => dlg.ShowDialog<GameLaunchEditorResult?>(parent));
+            var result = await runner(editor, owner).ConfigureAwait(true);
+            if (result is null || disposed || generation != editorGeneration || !ReferenceEquals(model, library) || library.LifetimeToken.IsCancellationRequested)
+            {
+                return;
+            }
+
+            await SaveLaunchConfigurationAsync(selectedRow.Id, result).ConfigureAwait(true);
+        }
+        finally
+        {
+            if (generation == editorGeneration)
+            {
+                editorPending = false;
+                if (!disposed && ReferenceEquals(model, library) && !library.LifetimeToken.IsCancellationRequested)
+                {
+                    RefreshLibraryActions();
+                }
+            }
+        }
+    }
+
+    internal async Task<Guid> SaveCustomGameAsync(GameLaunchEditorResult input)
+    {
+        var library = model ?? throw new InvalidOperationException("No library model is attached.");
+        var id = await library.AddCustomGameAsync(input, toolResolver, library.LifetimeToken).ConfigureAwait(true);
+        if (!disposed && ReferenceEquals(model, library))
+        {
+            RebuildRows();
+            Refresh();
+            playStatus.Text = $"Added '{input.Name}'.";
+        }
+
+        return id;
+    }
+
+    internal async Task SaveLaunchConfigurationAsync(Guid gameId, GameLaunchEditorResult input)
+    {
+        var library = model ?? throw new InvalidOperationException("No library model is attached.");
+        await library.UpdateLaunchActionAsync(gameId, input, toolResolver, library.LifetimeToken).ConfigureAwait(true);
+        if (!disposed && ReferenceEquals(model, library))
+        {
+            RebuildRows();
+            Refresh();
+            playStatus.Text = $"Saved launch configuration for '{input.Name}'.";
+        }
     }
 
     private async Task RequestPlayAsync(LibraryViewModel library, uint appId, string name, CancellationToken cancellationToken)
@@ -865,7 +1266,7 @@ public sealed partial class LibraryGridView : UserControl
 
     private async void OnPreviousClick(object? sender, RoutedEventArgs eventArgs)
     {
-        if (disposed || syncPending || fullscreenOpen || model is not { } library || library.LifetimeToken.IsCancellationRequested)
+        if (disposed || syncPending || fullscreenOpen || sessionActive || model is not { } library || library.LifetimeToken.IsCancellationRequested)
         {
             return;
         }
@@ -882,7 +1283,7 @@ public sealed partial class LibraryGridView : UserControl
 
     private async void OnNextClick(object? sender, RoutedEventArgs eventArgs)
     {
-        if (disposed || syncPending || fullscreenOpen || model is not { } library || library.LifetimeToken.IsCancellationRequested)
+        if (disposed || syncPending || fullscreenOpen || sessionActive || model is not { } library || library.LifetimeToken.IsCancellationRequested)
         {
             return;
         }

@@ -17,6 +17,8 @@
   <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto,*,Auto" RowSpacing="8" ColumnSpacing="12">
     <DockPanel Grid.Row="0" Grid.ColumnSpan="2">
       <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+        <Button x:Name="AddGameButton" Classes="secondary-cta"
+                Content="Add Game" AutomationProperties.Name="Add custom game" />
         <Button x:Name="SyncSteamButton" Classes="secondary-cta"
                 Content="Sync Steam" AutomationProperties.Name="Sync Steam library" />
         <Button x:Name="FullscreenButton" Classes="secondary-cta"
@@ -104,17 +106,37 @@
             </Grid>
           </Border>
           <StackPanel Spacing="2">
-            <TextBlock x:Name="DetailsName" Text="(none)" Classes="h2" TextWrapping="Wrap"
-                       AutomationProperties.Name="Details name" />
+            <DockPanel LastChildFill="True">
+              <Border x:Name="SessionBadge" DockPanel.Dock="Right" IsVisible="False"
+                      Background="{DynamicResource PlayniteAccentMutedBrush}"
+                      BorderBrush="{DynamicResource PlayniteAccentBrush}"
+                      BorderThickness="1" CornerRadius="3" Padding="6,2"
+                      VerticalAlignment="Center" Margin="8,0,0,0"
+                      AutomationProperties.Name="Running session badge">
+                <TextBlock x:Name="SessionBadgeText" Text="Running" FontSize="11" FontWeight="SemiBold"
+                           Foreground="{DynamicResource PlayniteTextPrimaryBrush}" />
+              </Border>
+              <TextBlock x:Name="DetailsName" Text="(none)" Classes="h2" TextWrapping="Wrap"
+                         AutomationProperties.Name="Details name" />
+            </DockPanel>
             <TextBlock x:Name="DetailsId" Text="(none)" Classes="muted"
                        AutomationProperties.Name="Details id" />
           </StackPanel>
-          <Button x:Name="PlayButton" Classes="primary-cta" IsEnabled="False" HorizontalAlignment="Stretch" />
+          <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6">
+            <Button x:Name="PlayButton" Grid.Column="0" Classes="primary-cta" IsEnabled="False"
+                    HorizontalAlignment="Stretch" />
+            <Button x:Name="StopButton" Grid.Column="1" Classes="secondary-cta" Content="Stop"
+                    IsVisible="False" IsEnabled="False"
+                    AutomationProperties.Name="Stop running game" />
+          </Grid>
+          <Button x:Name="ConfigureLaunchButton" Classes="secondary-cta" Content="Configure Launch"
+                  IsEnabled="False" HorizontalAlignment="Stretch"
+                  AutomationProperties.Name="Configure game launch" />
           <TextBlock x:Name="PlayStatus" TextWrapping="Wrap" Classes="muted"
                      AutomationProperties.LiveSetting="Polite" />
           <Border Height="1" Background="{DynamicResource PlayniteBorderBrush}" />
           <Grid x:Name="DetailsMetadataGrid" ColumnDefinitions="Auto,*"
-                RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto"
+                RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto"
                 RowSpacing="6" ColumnSpacing="12">
             <TextBlock Grid.Row="0" Grid.Column="0" Text="Status" Classes="meta-label" />
             <TextBlock x:Name="DetailsStatus" Grid.Row="0" Grid.Column="1" Text="—" Classes="meta-value"
@@ -140,6 +162,12 @@
             <TextBlock Grid.Row="7" Grid.Column="0" Text="Install dir" Classes="meta-label" />
             <TextBlock x:Name="DetailsInstallDir" Grid.Row="7" Grid.Column="1" Text="—" Classes="meta-value"
                        AutomationProperties.Name="Details install directory" />
+            <TextBlock Grid.Row="8" Grid.Column="0" Text="Plays" Classes="meta-label" />
+            <TextBlock x:Name="DetailsPlayCount" Grid.Row="8" Grid.Column="1" Text="—" Classes="meta-value"
+                       AutomationProperties.Name="Details play count" />
+            <TextBlock Grid.Row="9" Grid.Column="0" Text="Launch" Classes="meta-label" />
+            <TextBlock x:Name="DetailsLaunchTarget" Grid.Row="9" Grid.Column="1" Text="—" Classes="meta-value"
+                       AutomationProperties.Name="Details launch target" />
           </Grid>
           <Border Height="1" Background="{DynamicResource PlayniteBorderBrush}" />
           <TextBlock x:Name="DetailsDescription" Text="" Classes="meta-value" TextWrapping="Wrap"

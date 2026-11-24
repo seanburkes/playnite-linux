@@ -23,6 +23,21 @@ public sealed record LibraryRow(Guid Id, string Name, string GameId)
 
     public ulong PlaytimeSeconds { get; init; }
 
+    public ulong PlayCount { get; init; }
+
+    public bool HasFilePlayAction { get; init; }
+
+    public string LaunchTargetDisplay { get; init; } = "Not configured";
+
+    public bool CanPlay => SteamPlayAppId is not null || HasFilePlayAction;
+
+    public string PlayCountDisplay => PlayCount switch
+    {
+        0 => "0",
+        1 => "1 play",
+        _ => string.Create(CultureInfo.InvariantCulture, $"{PlayCount} plays"),
+    };
+
     public int? ReleaseYear { get; init; }
 
     public int? UserScore { get; init; }
@@ -422,19 +437,164 @@ public sealed class LibraryViewModel
         return CreateRow(stored.Value, row.GroupLabel);
     }
 
+    internal Task<StoredGame?> GetStoredGameAsync(Guid id, CancellationToken cancellationToken = default)
+    {
+        var currentService = service ?? throw new InvalidOperationException("The library has not been opened.");
+        return currentService.GetAsync(id, cancellationToken);
+    }
+
+    internal async Task<bool> SelectByIdAsync(Guid id, CancellationToken cancellationToken = default)
+    {
+        var match = Rows.FirstOrDefault(row => row.Id == id);
+        if (match is not null)
+        {
+            await SelectAsync(match, cancellationToken).ConfigureAwait(false);
+            return true;
+        }
+
+        var stored = await GetStoredGameAsync(id, cancellationToken).ConfigureAwait(false);
+        if (stored is null)
+        {
+            return false;
+        }
+
+        Selected = CreateRow(stored.Value);
+        return true;
+    }
+
+    internal async Task<Guid> AddCustomGameAsync(
+        GameLaunchEditorResult input,
+        Func<string, string?>? toolResolver = null,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(input);
+        if (service is null)
+        {
+            throw new InvalidOperationException("The library has not been opened.");
+        }
+
+        var plan = GameLaunchPlanner.CreatePlayAction(
+            input.ExecutablePath,
+            input.Arguments,
+            input.WorkingDirectory,
+            input.UseGameMode,
+            input.UseMangoHud,
+            toolResolver);
+        if (plan.Action is null || !string.IsNullOrWhiteSpace(plan.Error))
+        {
+            throw new ArgumentException(plan.Error ?? "Invalid launch configuration.", nameof(input));
+        }
+
+        var name = input.Name.Trim();
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            throw new ArgumentException("Game name is required.", nameof(input));
+        }
+
+        var db = database ?? await LibraryDatabase.OpenAsync(databasePath, cancellationToken).ConfigureAwait(false);
+        var id = Guid.NewGuid();
+        var workDir = string.IsNullOrWhiteSpace(input.WorkingDirectory)
+            ? Path.GetDirectoryName(input.ExecutablePath.Trim()) ?? string.Empty
+            : input.WorkingDirectory.Trim();
+        var game = new Game(id, "custom-" + id.ToString("N")[..8], name)
+        {
+            IsInstalled = true,
+            Description = string.IsNullOrWhiteSpace(input.Description) ? null : input.Description.Trim(),
+            InstallDirectory = string.IsNullOrWhiteSpace(workDir) ? null : workDir,
+            GameActions = [plan.Action],
+        };
+
+        await db.WriteAsync(async session =>
+        {
+            await session.Games.AddAsync(new StoredGame(game)).ConfigureAwait(false);
+            return true;
+        }, cancellationToken).ConfigureAwait(false);
+
+        await ReloadCurrentPageAsync(cancellationToken).ConfigureAwait(false);
+        await SelectByIdAsync(id, cancellationToken).ConfigureAwait(false);
+        return id;
+    }
+
+    internal async Task UpdateLaunchActionAsync(
+        Guid gameId,
+        GameLaunchEditorResult input,
+        Func<string, string?>? toolResolver = null,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(input);
+        if (service is null)
+        {
+            throw new InvalidOperationException("The library has not been opened.");
+        }
+
+        var plan = GameLaunchPlanner.CreatePlayAction(
+            input.ExecutablePath,
+            input.Arguments,
+            input.WorkingDirectory,
+            input.UseGameMode,
+            input.UseMangoHud,
+            toolResolver);
+        if (plan.Action is null || !string.IsNullOrWhiteSpace(plan.Error))
+        {
+            throw new ArgumentException(plan.Error ?? "Invalid launch configuration.", nameof(input));
+        }
+
+        var db = database ?? await LibraryDatabase.OpenAsync(databasePath, cancellationToken).ConfigureAwait(false);
+        await db.WriteAsync(async session =>
+        {
+            var existing = await session.Games.GetAsync(gameId).ConfigureAwait(false)
+                ?? throw new KeyNotFoundException($"Game {gameId} was not found.");
+            var game = existing.Value;
+            if (!string.IsNullOrWhiteSpace(input.Name))
+            {
+                game.Name = input.Name.Trim();
+            }
+
+            game.Description = string.IsNullOrWhiteSpace(input.Description) ? null : input.Description.Trim();
+            game.IsInstalled = true;
+            var resolvedWorkDir = string.IsNullOrWhiteSpace(input.WorkingDirectory)
+                ? Path.GetDirectoryName(input.ExecutablePath.Trim())
+                : input.WorkingDirectory.Trim();
+            game.InstallDirectory = string.IsNullOrWhiteSpace(resolvedWorkDir) ? null : resolvedWorkDir;
+
+            var existingActions = game.GameActions?.Where(action => action is not null).ToList() ?? [];
+            var filePlayIndex = existingActions.FindIndex(action =>
+                action.IsPlayAction && action.Type == GameActionType.File);
+            if (filePlayIndex >= 0)
+            {
+                existingActions[filePlayIndex] = plan.Action;
+            }
+            else
+            {
+                existingActions.Insert(0, plan.Action);
+            }
+
+            game.GameActions = new System.Collections.ObjectModel.ObservableCollection<GameAction>(existingActions);
+            await session.Games.UpdateAsync(new StoredGame(game, existing.LegacyJson)).ConfigureAwait(false);
+            return true;
+        }, cancellationToken).ConfigureAwait(false);
+
+        await ReloadCurrentPageAsync(cancellationToken).ConfigureAwait(false);
+        await SelectByIdAsync(gameId, cancellationToken).ConfigureAwait(false);
+    }
+
     private static LibraryRow CreateRow(Game game, string? groupLabel = null)
     {
         var isSteam = game.PluginId == SteamPluginId;
         uint? steamAppId = isSteam && game.IsInstalled
             && FlatpakSteamLauncher.TryParseAppId(game.GameId, out var appId) && appId != 0 ? appId : null;
+        var hasFilePlay = GameLaunchPlanner.FindFilePlayAction(game) is not null;
         return new LibraryRow(game.Id, game.Name ?? "(unnamed)", game.GameId ?? string.Empty)
         {
             SteamPlayAppId = steamAppId,
+            HasFilePlayAction = hasFilePlay,
+            LaunchTargetDisplay = GameLaunchPlanner.DescribeLaunchTarget(game, isSteam, steamAppId),
             IsInstalled = game.IsInstalled,
             Favorite = game.Favorite,
             Hidden = game.Hidden,
             IsSteam = isSteam,
             PlaytimeSeconds = game.Playtime,
+            PlayCount = game.PlayCount,
             ReleaseYear = game.ReleaseYear,
             UserScore = game.UserScore,
             LastActivity = game.LastActivity,
