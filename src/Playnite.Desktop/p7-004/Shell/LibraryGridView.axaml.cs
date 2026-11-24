@@ -7,6 +7,7 @@ using Playnite.Core.Library;
 using Playnite.Core.Models;
 using Playnite.Core.Queries;
 using Playnite.Desktop.Bootstrap;
+using Playnite.Desktop.Integration;
 
 namespace Playnite.Desktop.Shell;
 
@@ -32,12 +33,24 @@ public sealed partial class LibraryGridView : UserControl
 
     private readonly BootstrapLocalization localization = new();
     private readonly bool searchSmoke;
+    private readonly SteamPlayRequest steamPlay;
+    private readonly Button playButton;
+    private readonly TextBlock playStatus;
+    private bool playPending;
 
     private LibraryViewModel? model;
 
-    public LibraryGridView()
+    public LibraryGridView() : this(new SteamPlayRequest(new SteamPlayRequest.DesktopOpener()))
     {
+    }
+
+    internal LibraryGridView(SteamPlayRequest steamPlay)
+    {
+        this.steamPlay = steamPlay;
         AvaloniaXamlLoader.Load(this);
+        playButton = this.FindControl<Button>("PlayButton")!;
+        playStatus = this.FindControl<TextBlock>("PlayStatus")!;
+        playButton.Click += OnPlayClicked;
         this.FindControl<ListBox>("GameList")!.SelectionChanged += OnSelectionChanged;
         this.FindControl<Button>("PreviousButton")!.Click += OnPreviousClick;
         this.FindControl<Button>("NextButton")!.Click += OnNextClick;
@@ -67,6 +80,8 @@ public sealed partial class LibraryGridView : UserControl
 
     /// <summary>Completes when the most recent control-driven query change has been applied.</summary>
     internal Task QueryTask { get; private set; } = Task.CompletedTask;
+
+    internal Task PlayTask { get; private set; } = Task.CompletedTask;
 
     public void Apply(LibraryViewModel viewModel)
     {
@@ -122,6 +137,7 @@ public sealed partial class LibraryGridView : UserControl
 
         this.FindControl<TextBlock>("DetailsName")!.Text = model.Selected?.Name ?? "(none)";
         this.FindControl<TextBlock>("DetailsId")!.Text = model.Selected?.GameId ?? "(none)";
+        RefreshPlayButton();
         this.FindControl<TextBlock>("PageText")!.Text = model.PageIndicator;
         this.FindControl<Button>("PreviousButton")!.IsEnabled = model.CanGoPrevious;
         this.FindControl<Button>("NextButton")!.IsEnabled = model.CanGoNext;
@@ -136,6 +152,7 @@ public sealed partial class LibraryGridView : UserControl
 
     private void ApplyLabels()
     {
+        playButton.Content = localization.Resolve(LOC.PlayGame);
         this.FindControl<TextBox>("SearchBox")!.PlaceholderText = localization.Resolve(LOC.SearchLabel);
         this.FindControl<Button>("AllFilterButton")!.Content = localization.Resolve(LOC.QuickFilterAllGames);
         this.FindControl<Button>("InstalledFilterButton")!.Content = localization.Resolve(LOC.GameIsInstalledTitle);
@@ -167,6 +184,7 @@ public sealed partial class LibraryGridView : UserControl
 
     private async void OnSelectionChanged(object? sender, SelectionChangedEventArgs eventArgs)
     {
+        RefreshPlayButton();
         if (model is null || eventArgs.AddedItems.OfType<ListBoxItem>().FirstOrDefault()?.Tag is not LibraryRow row)
         {
             return;
@@ -180,6 +198,55 @@ public sealed partial class LibraryGridView : UserControl
     {
         await model!.SelectAsync(row);
         Refresh();
+    }
+
+    private LibraryRow? SelectedPlayRow()
+    {
+        var selected = model?.Selected;
+        var item = this.FindControl<ListBox>("GameList")!.SelectedItem as ListBoxItem;
+        return selected?.SteamPlayAppId is not null && item?.Tag is LibraryRow row && row.Id == selected.Id
+            ? selected : null;
+    }
+
+    private void RefreshPlayButton() =>
+        playButton.IsEnabled = !playPending && SelectedPlayRow() is not null;
+
+    private async void OnPlayClicked(object? sender, RoutedEventArgs eventArgs)
+    {
+        if (playPending || SelectedPlayRow() is not { SteamPlayAppId: uint appId } game)
+        {
+            return;
+        }
+
+        PlayTask = RequestPlayAsync(appId, game.Name, model!.LifetimeToken);
+        await PlayTask;
+    }
+
+    private async Task RequestPlayAsync(uint appId, string name, CancellationToken cancellationToken)
+    {
+        playPending = true;
+        RefreshPlayButton();
+        playStatus.Text = $"Requesting launch for {name}…";
+        try
+        {
+            var result = await steamPlay.SendAsync(appId, name, cancellationToken);
+            if (!cancellationToken.IsCancellationRequested)
+            {
+                playStatus.Text = result;
+            }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            // Unloading the library cancels the wait, not the Steam process.
+        }
+        finally
+        {
+            playPending = false;
+            if (!cancellationToken.IsCancellationRequested)
+            {
+                RefreshPlayButton();
+            }
+        }
     }
 
     private async void OnPreviousClick(object? sender, RoutedEventArgs eventArgs)

@@ -34,6 +34,9 @@
                    AutomationProperties.Name="Details name" />
         <TextBlock x:Name="DetailsId" Text="(none)"
                    AutomationProperties.Name="Details id" />
+        <Button x:Name="PlayButton" Classes="primary-cta" IsEnabled="False" />
+        <TextBlock x:Name="PlayStatus" MaxWidth="280" TextWrapping="Wrap"
+                   AutomationProperties.LiveSetting="Polite" />
       </StackPanel>
     </Border>
     <StackPanel Grid.Row="3" Grid.ColumnSpan="2" Orientation="Horizontal"
