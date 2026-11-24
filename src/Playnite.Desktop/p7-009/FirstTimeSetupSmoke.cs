@@ -1,5 +1,6 @@
 using Avalonia.Controls;
 using Avalonia.Interactivity;
+using Avalonia.Styling;
 
 namespace Playnite.Desktop.Setup;
 
@@ -23,12 +24,14 @@ internal static class FirstTimeSetupSmoke
             {
                 var mode = input[0];
                 var source = wizard.FindControl<TextBox>("SourcePath")!;
+                var importCard = wizard.FindControl<Border>("ImportSource")!;
                 var import = wizard.FindControl<Button>("ImportButton")!;
                 var steam = wizard.FindControl<Button>("SteamButton")!;
                 var keep = wizard.FindControl<Button>("KeepButton")!;
                 var finish = wizard.FindControl<Button>("FinishButton")!;
                 var progress = wizard.FindControl<ProgressBar>("ProgressBar")!;
                 Console.WriteLine($"first-run: choices import={import.IsEffectivelyVisible}; steam={steam.IsEffectivelyVisible}; keep={keep.IsEffectivelyVisible}; finish={finish.IsEffectivelyVisible}");
+                Console.WriteLine($"first-run: dark={wizard.ActualThemeVariant == ThemeVariant.Dark}; import card={importCard.IsEffectivelyVisible}; panel styled={importCard.Background is not null}");
 
                 if (mode is "import" or "fail" or "leave" or "cancel")
                 {

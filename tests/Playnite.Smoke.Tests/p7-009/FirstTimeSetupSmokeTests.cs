@@ -29,6 +29,7 @@ public sealed class FirstTimeSetupSmokeTests : IDisposable
 
         var imported = await RunAsync("leave", source, @"D:\Playnite");
         Assert.Contains("choices import=True; steam=True; keep=False; finish=False", imported);
+        Assert.Contains("dark=True; import card=True; panel styled=True", imported);
         Assert.Contains("progress=True; finish=False", imported);
         Assert.Contains("Imported 3 Steam games", imported);
         Assert.Contains("Unmapped settings paths kept as legacy data: AutoBackupDir.", imported);
@@ -51,6 +52,7 @@ public sealed class FirstTimeSetupSmokeTests : IDisposable
         Directory.Move(source, source + "-unmounted");
         var finished = await RunAsync("keep");
         Assert.Contains("choices import=False; steam=True; keep=True; finish=False", finished);
+        Assert.Contains("dark=True; import card=False; panel styled=True", finished);
         Assert.Contains("existing Linux library will be kept", finished);
         Assert.Contains("shell visible=True", finished);
         using var settings = new PlayniteSettingsService(Config);

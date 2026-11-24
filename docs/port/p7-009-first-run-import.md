@@ -53,6 +53,10 @@
 
 ## Evidence
 
+The setup window uses the shared Playnite dark palette and groups import and Steam
+actions into separate panels. When a native library exists, the entire import panel
+is hidden. The import, cancellation, and completion contracts above are unchanged.
+
 `FirstTimeSetupSmokeTests` drives real Avalonia actions against isolated XDG profiles:
 reader progress, valid and invalid mounted paths, the unchanged copied v10 corpus,
 cancellation and retry, backup/report contents, settings mapping and unmapped retention,

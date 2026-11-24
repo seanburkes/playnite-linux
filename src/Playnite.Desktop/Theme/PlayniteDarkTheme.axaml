@@ -1,0 +1,220 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="Playnite.Desktop.Theme.PlayniteDarkTheme">
+  <Styles.Resources>
+    <!-- Core Palette Colors -->
+    <Color x:Key="PlayniteBlackColor">#FF000000</Color>
+    <Color x:Key="PlayniteWhiteColor">#FFFFFFFF</Color>
+    <Color x:Key="PlayniteTextPrimaryColor">#FFF5F5F5</Color>
+    <Color x:Key="PlayniteTextSecondaryColor">#FFC4C4C4</Color>
+    <Color x:Key="PlayniteTextMutedColor">#FFA6A6A6</Color>
+    <Color x:Key="PlayniteTextOnAccentColor">#FF0A0A0A</Color>
+
+    <Color x:Key="PlayniteCanvasTopColor">#FF1C1C1C</Color>
+    <Color x:Key="PlayniteCanvasBottomColor">#FF090909</Color>
+    <Color x:Key="PlayniteChromeColor">#FF141414</Color>
+    <Color x:Key="PlayniteSurfaceColor">#FF212121</Color>
+    <Color x:Key="PlayniteRailColor">#FF101010</Color>
+    <Color x:Key="PlayniteCardBackgroundColor">#FF191919</Color>
+    <Color x:Key="PlayniteInputBackgroundColor">#FF0A0A0A</Color>
+    <Color x:Key="PlayniteRaisedHoverColor">#FF2C2C2C</Color>
+
+    <Color x:Key="PlayniteAccentColor">#FF55CDFF</Color>
+    <Color x:Key="PlayniteAccentHoverColor">#FF7AD8FF</Color>
+    <Color x:Key="PlayniteAccentPressedColor">#FF2AA7DC</Color>
+    <Color x:Key="PlayniteAccentMutedColor">#FF18303A</Color>
+    <Color x:Key="PlayniteHoverColor">#FF247BA0</Color>
+
+    <Color x:Key="PlayniteBorderColor">#FF393939</Color>
+    <Color x:Key="PlayniteControlBorderColor">#FF777777</Color>
+    <Color x:Key="PlayniteHighlightBorderColor">#5555CDFF</Color>
+
+    <Color x:Key="PlaynitePositiveColor">#FF78FFA0</Color>
+    <Color x:Key="PlayniteMixedColor">#FFFFFCA1</Color>
+    <Color x:Key="PlayniteDangerColor">#FFFF6B6B</Color>
+
+    <!-- Solid Brushes -->
+    <SolidColorBrush x:Key="PlayniteTextPrimaryBrush" Color="{StaticResource PlayniteTextPrimaryColor}" />
+    <SolidColorBrush x:Key="PlayniteTextSecondaryBrush" Color="{StaticResource PlayniteTextSecondaryColor}" />
+    <SolidColorBrush x:Key="PlayniteTextMutedBrush" Color="{StaticResource PlayniteTextMutedColor}" />
+    <SolidColorBrush x:Key="PlayniteTextOnAccentBrush" Color="{StaticResource PlayniteTextOnAccentColor}" />
+
+    <SolidColorBrush x:Key="PlayniteCanvasBrush" Color="{StaticResource PlayniteCanvasBottomColor}" />
+    <SolidColorBrush x:Key="PlayniteChromeBrush" Color="{StaticResource PlayniteChromeColor}" />
+    <SolidColorBrush x:Key="PlayniteSurfaceBrush" Color="{StaticResource PlayniteSurfaceColor}" />
+    <SolidColorBrush x:Key="PlayniteRailBrush" Color="{StaticResource PlayniteRailColor}" />
+    <SolidColorBrush x:Key="PlayniteCardBackgroundBrush" Color="{StaticResource PlayniteCardBackgroundColor}" />
+    <SolidColorBrush x:Key="PlayniteInputBackgroundBrush" Color="{StaticResource PlayniteInputBackgroundColor}" />
+    <SolidColorBrush x:Key="PlayniteRaisedHoverBrush" Color="{StaticResource PlayniteRaisedHoverColor}" />
+
+    <SolidColorBrush x:Key="PlayniteAccentBrush" Color="{StaticResource PlayniteAccentColor}" />
+    <SolidColorBrush x:Key="PlayniteAccentHoverBrush" Color="{StaticResource PlayniteAccentHoverColor}" />
+    <SolidColorBrush x:Key="PlayniteAccentPressedBrush" Color="{StaticResource PlayniteAccentPressedColor}" />
+    <SolidColorBrush x:Key="PlayniteAccentMutedBrush" Color="{StaticResource PlayniteAccentMutedColor}" />
+
+    <SolidColorBrush x:Key="PlayniteBorderBrush" Color="{StaticResource PlayniteBorderColor}" />
+    <SolidColorBrush x:Key="PlayniteControlBorderBrush" Color="{StaticResource PlayniteControlBorderColor}" />
+    <SolidColorBrush x:Key="PlayniteHighlightBorderBrush" Color="{StaticResource PlayniteHighlightBorderColor}" />
+
+    <SolidColorBrush x:Key="PlaynitePositiveBrush" Color="{StaticResource PlaynitePositiveColor}" />
+    <SolidColorBrush x:Key="PlayniteMixedBrush" Color="{StaticResource PlayniteMixedColor}" />
+    <SolidColorBrush x:Key="PlayniteDangerBrush" Color="{StaticResource PlayniteDangerColor}" />
+
+    <!-- Gradients -->
+    <LinearGradientBrush x:Key="PlayniteWindowBackgroundBrush" StartPoint="50%,0%" EndPoint="40%,100%">
+      <GradientStop Color="{StaticResource PlayniteCanvasTopColor}" Offset="0.0" />
+      <GradientStop Color="{StaticResource PlayniteCanvasBottomColor}" Offset="0.45" />
+    </LinearGradientBrush>
+
+    <!-- Fluent Theme Dark Brush Overrides -->
+    <SolidColorBrush x:Key="TextControlBackground" Color="{StaticResource PlayniteInputBackgroundColor}" />
+    <SolidColorBrush x:Key="TextControlBackgroundPointerOver" Color="{StaticResource PlayniteChromeColor}" />
+    <SolidColorBrush x:Key="TextControlBackgroundFocused" Color="{StaticResource PlayniteInputBackgroundColor}" />
+    <SolidColorBrush x:Key="TextControlBorderBrush" Color="{StaticResource PlayniteControlBorderColor}" />
+    <SolidColorBrush x:Key="TextControlBorderBrushPointerOver" Color="{StaticResource PlayniteAccentColor}" />
+    <SolidColorBrush x:Key="TextControlBorderBrushFocused" Color="{StaticResource PlayniteAccentColor}" />
+    <SolidColorBrush x:Key="TextControlForeground" Color="{StaticResource PlayniteTextPrimaryColor}" />
+    <SolidColorBrush x:Key="TextControlPlaceholderForeground" Color="{StaticResource PlayniteTextMutedColor}" />
+  </Styles.Resources>
+
+  <!-- Window Base Defaults (user themes loaded later in App.Styles override FontSize cleanly) -->
+  <Style Selector=":is(Window)">
+    <Setter Property="Background" Value="{DynamicResource PlayniteWindowBackgroundBrush}" />
+    <Setter Property="Foreground" Value="{DynamicResource PlayniteTextPrimaryBrush}" />
+    <Setter Property="FontSize" Value="13" />
+    <Setter Property="FontFamily" Value="Inter, Noto Sans, Liberation Sans, sans-serif" />
+  </Style>
+
+  <Style Selector="TextBlock.h1">
+    <Setter Property="FontSize" Value="20" />
+    <Setter Property="FontWeight" Value="SemiBold" />
+    <Setter Property="Foreground" Value="{DynamicResource PlayniteTextPrimaryBrush}" />
+  </Style>
+
+  <Style Selector="TextBlock.h2">
+    <Setter Property="FontSize" Value="16" />
+    <Setter Property="FontWeight" Value="SemiBold" />
+    <Setter Property="Foreground" Value="{DynamicResource PlayniteTextPrimaryBrush}" />
+  </Style>
+
+  <Style Selector="TextBlock.section-label">
+    <Setter Property="FontSize" Value="11" />
+    <Setter Property="FontWeight" Value="SemiBold" />
+    <Setter Property="LetterSpacing" Value="0.8" />
+    <Setter Property="Foreground" Value="{DynamicResource PlayniteTextSecondaryBrush}" />
+  </Style>
+
+  <Style Selector="TextBlock.muted">
+    <Setter Property="FontSize" Value="12" />
+    <Setter Property="Foreground" Value="{DynamicResource PlayniteTextMutedBrush}" />
+  </Style>
+
+  <!-- Shared action button template -->
+  <Style Selector="Button.primary-cta, Button.secondary-cta">
+    <Setter Property="Background" Value="{DynamicResource PlayniteSurfaceBrush}" />
+    <Setter Property="Foreground" Value="{DynamicResource PlayniteTextPrimaryBrush}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource PlayniteControlBorderBrush}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="CornerRadius" Value="3" />
+    <Setter Property="Padding" Value="12,6" />
+    <Setter Property="FontSize" Value="12" />
+    <Setter Property="FontWeight" Value="Medium" />
+    <Setter Property="HorizontalContentAlignment" Value="Center" />
+    <Setter Property="VerticalContentAlignment" Value="Center" />
+    <Setter Property="Cursor" Value="Hand" />
+    <Setter Property="Template">
+      <ControlTemplate>
+        <Border x:Name="PART_BackgroundBorder"
+                Background="{TemplateBinding Background}"
+                BorderBrush="{TemplateBinding BorderBrush}"
+                BorderThickness="{TemplateBinding BorderThickness}"
+                CornerRadius="{TemplateBinding CornerRadius}">
+          <ContentPresenter x:Name="PART_ContentPresenter"
+                            Content="{TemplateBinding Content}"
+                            ContentTemplate="{TemplateBinding ContentTemplate}"
+                            Margin="{TemplateBinding Padding}"
+                            HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                            VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                            HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"
+                            VerticalContentAlignment="{TemplateBinding VerticalContentAlignment}" />
+        </Border>
+      </ControlTemplate>
+    </Setter>
+  </Style>
+
+  <Style Selector="Button.primary-cta:pointerover, Button.secondary-cta:pointerover">
+    <Setter Property="Background" Value="{DynamicResource PlayniteRaisedHoverBrush}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource PlayniteAccentBrush}" />
+    <Setter Property="Foreground" Value="#FFFFFFFF" />
+  </Style>
+
+  <Style Selector="Button.primary-cta:pressed, Button.secondary-cta:pressed">
+    <Setter Property="Background" Value="{DynamicResource PlayniteInputBackgroundBrush}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource PlayniteAccentBrush}" />
+  </Style>
+
+  <Style Selector="Button.primary-cta:disabled, Button.secondary-cta:disabled">
+    <Setter Property="Opacity" Value="0.42" />
+  </Style>
+
+  <Style Selector="Button.primary-cta:focus-visible, Button.secondary-cta:focus-visible">
+    <Setter Property="BorderBrush" Value="{DynamicResource PlayniteAccentBrush}" />
+    <Setter Property="BorderThickness" Value="2" />
+  </Style>
+
+  <!-- Primary Cyan CTA (Play, Save, OK) -->
+  <Style Selector="Button.primary-cta">
+    <Setter Property="Background" Value="{DynamicResource PlayniteAccentBrush}" />
+    <Setter Property="Foreground" Value="{DynamicResource PlayniteTextOnAccentBrush}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource PlayniteAccentBrush}" />
+    <Setter Property="FontWeight" Value="SemiBold" />
+    <Setter Property="FontSize" Value="13" />
+  </Style>
+
+  <Style Selector="Button.primary-cta:pointerover">
+    <Setter Property="Background" Value="{DynamicResource PlayniteAccentHoverBrush}" />
+    <Setter Property="Foreground" Value="{DynamicResource PlayniteTextOnAccentBrush}" />
+    <Setter Property="BorderBrush" Value="#FFFFFFFF" />
+  </Style>
+
+  <Style Selector="Button.primary-cta:pressed">
+    <Setter Property="Background" Value="{DynamicResource PlayniteAccentPressedBrush}" />
+    <Setter Property="Foreground" Value="{DynamicResource PlayniteTextOnAccentBrush}" />
+  </Style>
+
+  <!-- Secondary Outlined CTA (More, Edit, Cancel) -->
+  <Style Selector="Button.secondary-cta">
+    <Setter Property="Background" Value="{DynamicResource PlayniteInputBackgroundBrush}" />
+    <Setter Property="Foreground" Value="{DynamicResource PlayniteTextPrimaryBrush}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource PlayniteControlBorderBrush}" />
+    <Setter Property="FontWeight" Value="Medium" />
+    <Setter Property="FontSize" Value="13" />
+  </Style>
+
+  <Style Selector="Button.secondary-cta:pointerover">
+    <Setter Property="Background" Value="{DynamicResource PlayniteRaisedHoverBrush}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource PlayniteAccentBrush}" />
+  </Style>
+
+  <!-- TextBox Styling -->
+  <Style Selector="TextBox">
+    <Setter Property="Background" Value="{DynamicResource PlayniteInputBackgroundBrush}" />
+    <Setter Property="Foreground" Value="{DynamicResource PlayniteTextPrimaryBrush}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource PlayniteControlBorderBrush}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="CornerRadius" Value="3" />
+    <Setter Property="Padding" Value="8,6" />
+    <Setter Property="FontSize" Value="12" />
+    <Setter Property="CaretBrush" Value="{DynamicResource PlayniteAccentBrush}" />
+    <Setter Property="SelectionBrush" Value="#5555CDFF" />
+  </Style>
+
+  <Style Selector="TextBox:pointerover">
+    <Setter Property="BorderBrush" Value="{DynamicResource PlayniteAccentBrush}" />
+  </Style>
+
+  <Style Selector="TextBox:focus">
+    <Setter Property="BorderBrush" Value="{DynamicResource PlayniteAccentBrush}" />
+  </Style>
+
+</Styles>

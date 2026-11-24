@@ -1,9 +1,11 @@
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
+using Avalonia.Styling;
 using Avalonia.Themes.Fluent;
 using Avalonia.Threading;
 using Playnite.Desktop.Setup;
+using Playnite.Desktop.Theme;
 
 namespace Playnite.Desktop;
 
@@ -13,7 +15,9 @@ public sealed class App : Application
 
     public override void Initialize()
     {
+        RequestedThemeVariant = ThemeVariant.Dark;
         Styles.Add(new FluentTheme());
+        Styles.Add(new PlayniteDarkTheme());
     }
 
     public override void OnFrameworkInitializationCompleted()
