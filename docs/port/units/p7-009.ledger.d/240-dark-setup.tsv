@@ -1,0 +1,2 @@
+timestamp	unit	from	to	actor	evidence
+2026-11-24T00:24:47Z	p7-009	done	done	seanburkes	PR https://github.com/seanburkes/playnite-linux/pull/240 validates head 9624ae2c3b8305a995b2b93221866b6ee1a3cf69 with successful linux-ci https://github.com/seanburkes/playnite-linux/actions/runs/45296366267. Adds the shared desktop dark theme and first-run import and Steam panels without changing setup behavior. Local Release smoke: 34 passed, zero failures or skips.

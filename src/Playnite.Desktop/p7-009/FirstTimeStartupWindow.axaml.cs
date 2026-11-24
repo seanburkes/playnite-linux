@@ -17,7 +17,7 @@ public sealed partial class FirstTimeStartupWindow : Window
     private bool ready;
     private bool startupFailed;
     private StackPanel ChoicePanel => this.FindControl<StackPanel>("Choices")!;
-    private StackPanel SourceOptions => this.FindControl<StackPanel>("ImportSource")!;
+    private Border SourceOptions => this.FindControl<Border>("ImportSource")!;
     private TextBox SourceInput => this.FindControl<TextBox>("SourcePath")!;
     private TextBox OriginalPathInput => this.FindControl<TextBox>("WindowsPath")!;
     private TextBlock Status => this.FindControl<TextBlock>("StatusText")!;
