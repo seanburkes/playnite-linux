@@ -37,7 +37,7 @@ internal sealed class SteamPlayRequest(ISteamUriOpener opener)
             {
                 return await new LinuxExternalProcessHost().RunAsync(request, cancellationToken).ConfigureAwait(false);
             }
-            catch (Exception exception) when (exception is System.ComponentModel.Win32Exception or UnauthorizedAccessException)
+            catch (Exception exception) when (exception is not OperationCanceledException)
             {
                 throw new IOException("The desktop URI opener could not be started.", exception);
             }

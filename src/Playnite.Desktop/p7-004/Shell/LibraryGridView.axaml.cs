@@ -238,6 +238,7 @@ public sealed partial class LibraryGridView : UserControl
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
             // Unloading the library cancels the wait, not the Steam process.
+            return;
         }
         finally
         {
