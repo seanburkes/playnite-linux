@@ -67,16 +67,16 @@ in [`gates/P5-pending.md`](gates/P5-pending.md).
 | Status | Units |
 | --- | ---: |
 | deferred | 1 |
-| done | 97 |
+| done | 98 |
 | in-progress | 5 |
-| todo | 10 |
+| todo | 9 |
 
 ## Ledger
 
 | Metric | Value |
 | --- | ---: |
-| Ledger rows | 375 |
-| Ledger fragments | 148 |
+| Ledger rows | 376 |
+| Ledger fragments | 149 |
 
 ## Units
 
@@ -187,7 +187,7 @@ in [`gates/P5-pending.md`](gates/P5-pending.md).
 | p7-009 | W7 | ui | Import transport/fresh-install wizard | done | `units/p7-009.*`; 2 ledger rows |
 | p8-001 | W8 | pack | AppImage x64/ARM64 | done | `units/p8-001.*`; 1 ledger rows |
 | p8-002 | W8 | pack | Flatpak x64/ARM64 | done | `units/p8-002.*`; 1 ledger rows |
-| p8-003 | W8 | hard | Benchmarks/soak | todo | `units/p8-003.*`; 0 ledger rows |
+| p8-003 | W8 | hard | Benchmarks/soak | done | `units/p8-003.*`; 1 ledger rows |
 | p8-004 | W8 | hard | Fuzz/security review | todo | `units/p8-004.*`; 0 ledger rows |
 | p8-005 | W8 | hard | Diagnostics/redaction | todo | `units/p8-005.*`; 0 ledger rows |
 | p8-006 | W8 | pack | Flatpak host launch/tracking | todo | `units/p8-006.*`; 0 ledger rows |

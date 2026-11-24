@@ -516,6 +516,7 @@ tests/Playnite.Core.Tests/p5-008/SteamAcceptanceSurvivorTests.cs	p5-008	71f4578b
 tests/Playnite.Core.Tests/p5-008/SteamLaunchTests.cs	p5-008	d82758baa26eecf25801e982a8fa32bfb98396c5	pull/137
 tests/Playnite.Core.Tests/p5-008/SteamProtonCommandLineTests.cs	p5-008	612e193c28b4a046a7edb7affb134865e8575f5c	pull/140
 tests/Playnite.Core.Tests/p5-008/SteamRealDiscoveryTests.cs	p5-008	1e842c075aeb3412323fcd467ca93aaaef03b8cb	pull/126
+tests/Playnite.Core.Tests/p8-003/BenchmarkSoakTests.cs	p8-003	b7816031b804d05bf90252e128e40cfb542095f0	pull/244
 tests/Playnite.Plugin.Tests/FakePluginHost.cs	p6-009	316a4a9da68d6379651333f8b1d4c4b1501b5db4	pull/212
 tests/Playnite.Plugin.Tests/SampleAssemblies.cs	p6-009	316a4a9da68d6379651333f8b1d4c4b1501b5db4	pull/212
 tests/Playnite.Plugin.Tests/SamplePluginBuildTests.cs	p6-009	316a4a9da68d6379651333f8b1d4c4b1501b5db4	pull/212
@@ -534,6 +535,7 @@ tests/Playnite.Smoke.Tests/p7-004/SteamPlaySmokeTests.cs	p7-004	6c8e1374ca543ca3
 tests/Playnite.Smoke.Tests/p7-007/TrayProtocolKeyboardTests.cs	p7-007	1b31e11d19bbd402d54cca05d5cb3f3de9f4463e	pull/233
 tests/Playnite.Smoke.Tests/p7-008/ScreenBaselineTests.cs	p7-008	b59f838d9158260091370ef9d7b6afa8274f726d	pull/238
 tests/Playnite.Smoke.Tests/p7-009/FirstTimeSetupSmokeTests.cs	p7-009	724ba6c7f22cba17fcbc4e08b575e316086d84b8	pull/240
+tests/Playnite.Smoke.Tests/p8-003/DesktopPerfSoakSmokeTests.cs	p8-003	b7816031b804d05bf90252e128e40cfb542095f0	pull/244
 tests/README.md	p2-review-model	3497640ecdc76144381f168913785fe17b24fe73	pull/49
 tests/fixtures/.gitkeep	*	a9b884f696be6ce48e42a0f2d93b8275891fac8b	-
 tests/fixtures/archives-v10/backslash.zip	p3-008b	e71ad0db1445f0e382485eaa2a4624d5ec8eb88a	pull/79
