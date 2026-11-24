@@ -21,6 +21,8 @@
                 Content="Add Game" AutomationProperties.Name="Add custom game" />
         <Button x:Name="SyncSteamButton" Classes="secondary-cta"
                 Content="Sync Steam" AutomationProperties.Name="Sync Steam library" />
+        <Button x:Name="SyncHeroicButton" Classes="secondary-cta"
+                Content="Sync Heroic" AutomationProperties.Name="Sync Heroic library" />
         <Button x:Name="FullscreenButton" Classes="secondary-cta"
                 Content="Fullscreen" IsEnabled="False" Click="OnOpenFullscreen" />
       </StackPanel>
@@ -56,6 +58,8 @@
               AutomationProperties.Name="Sort direction" />
       <ComboBox x:Name="GroupCombo" Width="150" Margin="0,4,8,4"
                 AutomationProperties.Name="Group by" />
+      <ComboBox x:Name="SourceCombo" Width="130" Margin="0,4,8,4"
+                AutomationProperties.Name="Filter by store" />
       <TextBlock x:Name="QueryStatus" Text="" VerticalAlignment="Center" Margin="0,4,0,4"
                  AutomationProperties.Name="Library query status" />
     </WrapPanel>
@@ -71,13 +75,15 @@
         <StackPanel Spacing="10" HorizontalAlignment="Center">
           <TextBlock x:Name="EmptyStateTitle" Text="No games match the current view" Classes="h2"
                      HorizontalAlignment="Center" />
-          <TextBlock x:Name="EmptyStateHint" Text="Clear your filters or sync your local Steam library."
+          <TextBlock x:Name="EmptyStateHint" Text="Clear your filters or sync your local Steam or Heroic libraries."
                      Classes="muted" TextWrapping="Wrap" HorizontalAlignment="Center" />
           <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Center">
             <Button x:Name="ClearFiltersButton" Classes="secondary-cta" Content="Clear filters"
                     AutomationProperties.Name="Clear library filters" />
             <Button x:Name="EmptySyncButton" Classes="primary-cta" Content="Sync Steam"
                     AutomationProperties.Name="Sync Steam from empty state" />
+            <Button x:Name="EmptySyncHeroicButton" Classes="secondary-cta" Content="Sync Heroic"
+                    AutomationProperties.Name="Sync Heroic from empty state" />
           </StackPanel>
         </StackPanel>
       </Border>

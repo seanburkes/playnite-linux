@@ -30,6 +30,7 @@ internal sealed class LibraryArtworkLoader : IDisposable
 
     private readonly string databaseDirectory;
     private readonly IReadOnlyList<string>? steamRootsOverride;
+    private readonly IReadOnlyList<string>? heroicRootsOverride;
     private readonly int maxCacheEntries;
     private readonly long maxCacheBytes;
     private readonly object cacheLock = new();
@@ -39,6 +40,7 @@ internal sealed class LibraryArtworkLoader : IDisposable
     private readonly LinuxBoundedFileReader boundedReader = new();
 
     private IReadOnlyList<string>? discoveredSteamRoots;
+    private IReadOnlyList<string>? discoveredHeroicRoots;
     private long cachedBytes;
     private volatile bool disposed;
 
@@ -46,7 +48,8 @@ internal sealed class LibraryArtworkLoader : IDisposable
         string databasePath,
         IReadOnlyList<string>? steamRootsOverride = null,
         int maxCacheEntries = 64,
-        long maxCacheBytes = 16 * 1024 * 1024)
+        long maxCacheBytes = 16 * 1024 * 1024,
+        IReadOnlyList<string>? heroicRootsOverride = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(databasePath);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maxCacheEntries);
@@ -55,6 +58,7 @@ internal sealed class LibraryArtworkLoader : IDisposable
         var fullDb = Path.GetFullPath(databasePath);
         databaseDirectory = ResolveRealDirectory(Path.GetDirectoryName(fullDb) ?? Path.GetPathRoot(fullDb)!);
         this.steamRootsOverride = steamRootsOverride;
+        this.heroicRootsOverride = heroicRootsOverride;
         this.maxCacheEntries = maxCacheEntries;
         this.maxCacheBytes = maxCacheBytes;
     }
@@ -395,6 +399,14 @@ internal sealed class LibraryArtworkLoader : IDisposable
                 }
             }
 
+            foreach (var heroicRoot in GetHeroicRoots())
+            {
+                if (ResolveSafeExistingFile(rawPath, heroicRoot) is { } inHeroic)
+                {
+                    return inHeroic;
+                }
+            }
+
             return null;
         }
 
@@ -519,6 +531,36 @@ internal sealed class LibraryArtworkLoader : IDisposable
         }
     }
 
+    private IReadOnlyList<string> GetHeroicRoots()
+    {
+        lock (steamRootsLock)
+        {
+            if (discoveredHeroicRoots is not null)
+            {
+                return discoveredHeroicRoots;
+            }
+
+            if (heroicRootsOverride is not null)
+            {
+                discoveredHeroicRoots = heroicRootsOverride
+                    .Where(Path.IsPathFullyQualified)
+                    .Select(ResolveRealDirectory)
+                    .Where(Directory.Exists)
+                    .Distinct(StringComparer.Ordinal)
+                    .ToArray();
+                return discoveredHeroicRoots;
+            }
+
+            var resolved = HeroicLibrarySyncRunner.DiscoverConfigRoots(new LinuxEnvironment());
+            if (resolved.Count > 0)
+            {
+                discoveredHeroicRoots = resolved;
+            }
+
+            return resolved;
+        }
+    }
+
     private static string? ResolveSafeExistingFile(string candidatePath, string allowedRoot)
     {
         try
@@ -585,19 +627,40 @@ internal sealed class LibraryArtworkLoader : IDisposable
 
     private static string ResolveRealDirectory(string directory)
     {
-        var full = Path.GetFullPath(directory);
-        var root = Path.GetPathRoot(full) ?? string.Empty;
-        var current = root;
-        foreach (var segment in full[root.Length..].Split(Path.DirectorySeparatorChar, StringSplitOptions.RemoveEmptyEntries))
+        var path = Path.GetFullPath(directory);
+        for (var pass = 0; pass < 16; pass++)
         {
-            current = Path.Combine(current, segment);
-            if (Directory.Exists(current))
+            var root = Path.GetPathRoot(path) ?? string.Empty;
+            var current = root;
+            var redirected = false;
+            var segments = path[root.Length..].Split(Path.DirectorySeparatorChar, StringSplitOptions.RemoveEmptyEntries);
+            for (var i = 0; i < segments.Length; i++)
             {
-                current = new DirectoryInfo(current).ResolveLinkTarget(returnFinalTarget: true)?.FullName ?? current;
+                current = Path.Combine(current, segments[i]);
+                if (!Directory.Exists(current))
+                {
+                    continue;
+                }
+
+                var resolved = new DirectoryInfo(current).ResolveLinkTarget(returnFinalTarget: true)?.FullName;
+                if (!string.IsNullOrEmpty(resolved)
+                    && !string.Equals(Path.TrimEndingDirectorySeparator(resolved), Path.TrimEndingDirectorySeparator(current), StringComparison.Ordinal))
+                {
+                    path = i + 1 < segments.Length
+                        ? Path.Combine([resolved, .. segments[(i + 1)..]])
+                        : resolved;
+                    redirected = true;
+                    break;
+                }
+            }
+
+            if (!redirected)
+            {
+                return root.Length > 0 && current == root ? root : Path.TrimEndingDirectorySeparator(current);
             }
         }
 
-        return root.Length > 0 && current == root ? root : Path.TrimEndingDirectorySeparator(current);
+        return Path.TrimEndingDirectorySeparator(path);
     }
 
     private static bool IsHex40(string value)
