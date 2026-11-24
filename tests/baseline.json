@@ -605,29 +605,36 @@
     }
   ],
   "latest_run": {
-    "run_id": 44168489471,
-    "run_url": "https://github.com/seanburkes/playnite-linux/actions/runs/44168489471",
-    "commit": "c74c8633a279986113e83dcbc2b3fdf996c71d02",
-    "captured_at": "2026-11-17T20:26:06Z",
+    "run_id": 45295995960,
+    "run_url": "https://github.com/seanburkes/playnite-linux/actions/runs/45295995960",
+    "commit": "24ea91c049d74b3e9117f69fef77d9a7555ad3c6",
+    "captured_at": "2026-11-24T00:23:08Z",
     "counts": {
       "Playnite.Architecture.Tests": {
-        "total": 173,
-        "executed": 173,
-        "passed": 173,
+        "total": 270,
+        "executed": 270,
+        "passed": 270,
         "failed": 0,
         "skipped": 0
       },
       "Playnite.Core.Tests": {
-        "total": 1781,
-        "executed": 1781,
-        "passed": 1781,
+        "total": 3129,
+        "executed": 3129,
+        "passed": 3129,
+        "failed": 0,
+        "skipped": 0
+      },
+      "Playnite.Plugin.Tests": {
+        "total": 15,
+        "executed": 15,
+        "passed": 15,
         "failed": 0,
         "skipped": 0
       },
       "Playnite.Smoke.Tests": {
-        "total": 4,
-        "executed": 4,
-        "passed": 4,
+        "total": 34,
+        "executed": 34,
+        "passed": 34,
         "failed": 0,
         "skipped": 0
       }
