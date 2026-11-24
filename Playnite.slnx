@@ -20,6 +20,7 @@
   <Folder Name="/tools/">
     <Project Path="tools/Playnite.Fuzz/Playnite.Fuzz.csproj" />
     <Project Path="tools/p5-008-steam-portal/Playnite.Steam.Import.csproj" />
+    <Project Path="tools/p8-003-benchmarks/Playnite.Benchmarks.csproj" />
   </Folder>
   <Folder Name="/samples/">
     <Project Path="samples/Playnite.Sample.HelloWorld/Playnite.Sample.HelloWorld.csproj" />
