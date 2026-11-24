@@ -2,6 +2,9 @@ using Avalonia.Controls;
 using Avalonia.Headless;
 using Avalonia.Interactivity;
 using Avalonia.Threading;
+using System.Security.Cryptography;
+using System.Text;
+using System.Net;
 using Playnite.Core;
 using Playnite.Core.Database;
 using Playnite.Core.Models;
@@ -96,6 +99,7 @@ public sealed class MultiStoreExperienceSmokeTests
             var outsideDir = Path.Combine(temp.FullName, "outside");
             Directory.CreateDirectory(Path.Combine(heroicRoot, "legendaryConfig", "legendary"));
             Directory.CreateDirectory(Path.Combine(heroicRoot, "store_cache"));
+            Directory.CreateDirectory(Path.Combine(heroicRoot, "images-cache"));
             Directory.CreateDirectory(Path.Combine(heroicRoot, "gog_store"));
             Directory.CreateDirectory(Path.Combine(heroicRoot, "nile_config", "nile"));
             Directory.CreateDirectory(epicImages);
@@ -103,10 +107,13 @@ public sealed class MultiStoreExperienceSmokeTests
 
             var validCover = Path.Combine(epicImages, "celeste.png");
             var gogSquareCover = Path.Combine(epicImages, "hollow-square.png");
+            var gogCachedCoverUrl = "https://images.example.invalid/stronghold-cover.png";
+            var gogCachedCover = Path.Combine(heroicRoot, "images-cache", Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(gogCachedCoverUrl))).ToLowerInvariant());
             var outsideSecret = Path.Combine(outsideDir, "secret.png");
             var symlinkEscape = Path.Combine(epicImages, "escape.png");
             await File.WriteAllBytesAsync(validCover, CreateMinimalPng(), token);
             await File.WriteAllBytesAsync(gogSquareCover, CreateMinimalPng(), token);
+            await File.WriteAllBytesAsync(gogCachedCover, CreateMinimalPng(), token);
             await File.WriteAllBytesAsync(outsideSecret, CreateMinimalPng(), token);
             File.CreateSymbolicLink(symlinkEscape, outsideSecret);
 
@@ -119,9 +126,11 @@ public sealed class MultiStoreExperienceSmokeTests
 
             var epicInstallDir = Path.Combine(temp.FullName, "Games", "Celeste");
             var gogInstallDir = Path.Combine(temp.FullName, "Games", "HollowGog");
+            var strongholdInstallDir = Path.Combine(temp.FullName, "Games", "Stronghold Kingdom Simulator");
             var amazonInstallDir = Path.Combine(temp.FullName, "Games", "PrimeGame");
             Directory.CreateDirectory(epicInstallDir);
             Directory.CreateDirectory(gogInstallDir);
+            Directory.CreateDirectory(strongholdInstallDir);
             Directory.CreateDirectory(amazonInstallDir);
 
             // Seed pre-existing Epic game, OverrideInstallState game, and imported DLC entry.
@@ -193,7 +202,18 @@ public sealed class MultiStoreExperienceSmokeTests
                 $$"""
                 {
                   "installed": [
-                    { "appName": "1450723045", "title": "Hollow Knight GOG", "install_path": "{{EscapeJson(gogInstallDir)}}", "version": "1.5.78", "is_dlc": false }
+                    { "appName": "1450723045", "title": "Hollow Knight GOG", "install_path": "{{EscapeJson(gogInstallDir)}}", "version": "1.5.78", "is_dlc": false },
+                    { "appName": "1441096928", "install_path": "{{EscapeJson(strongholdInstallDir)}}", "version": "1.0", "is_dlc": false }
+                  ]
+                }
+                """,
+                token);
+            await File.WriteAllTextAsync(
+                Path.Combine(heroicRoot, "store_cache", "gog_library.json"),
+                $$"""
+                {
+                  "games": [
+                    { "app_name": "1441096928", "art_square": "{{gogCachedCoverUrl}}" }
                   ]
                 }
                 """,
@@ -226,18 +246,19 @@ public sealed class MultiStoreExperienceSmokeTests
                 """,
                 token);
 
-            var runner = new HeroicLibrarySyncRunner(new FakeEnvironment(temp.FullName, symlinkedXdg));
+            using var metadataClient = CreateGogNotFoundClient();
+            var runner = new HeroicLibrarySyncRunner(new FakeEnvironment(temp.FullName, symlinkedXdg), gogMetadataClient: metadataClient);
             var firstSync = await runner.SyncAsync(dbPath, token);
             Assert.True(firstSync.RootFound);
             Assert.True(firstSync.Reconciled);
-            Assert.Equal(5, firstSync.Added);
+            Assert.Equal(6, firstSync.Added);
             Assert.Equal(1, firstSync.Updated);
             Assert.Equal(0, firstSync.Uninstalled);
             Assert.Equal(2, firstSync.Skipped);
             Assert.Empty(firstSync.Issues);
 
             var allAfterFirst = (await db.ReadAsync(s => s.Games.GetAllAsync(), token)).Select(s => s.Value).ToList();
-            Assert.Equal(8, allAfterFirst.Count);
+            Assert.Equal(9, allAfterFirst.Count);
 
             var celeste = allAfterFirst.Single(g => g.GameId == "Celeste");
             Assert.Equal(existingEpicId, celeste.Id);
@@ -269,6 +290,10 @@ public sealed class MultiStoreExperienceSmokeTests
             Assert.Equal(gogSquareCover, hollowGog.CoverImage);
             Assert.NotNull(hollowGog.Added);
 
+            var stronghold = allAfterFirst.Single(g => g.GameId == "1441096928");
+            Assert.Equal("Stronghold Kingdom Simulator", stronghold.Name);
+            Assert.Equal(Path.GetFullPath(gogCachedCover), stronghold.CoverImage);
+
             // Deterministic GUID assignment in a fresh DB.
             Assert.Equal(HeroicLibrarySyncRunner.GameIdFor(StoreCatalog.GogPluginId, "1450723045"), hollowGog.Id);
 
@@ -276,7 +301,7 @@ public sealed class MultiStoreExperienceSmokeTests
             var secondSync = await runner.SyncAsync(dbPath, token);
             Assert.Equal(0, secondSync.Added);
             Assert.Equal(0, secondSync.Updated);
-            Assert.Equal(6, secondSync.Unchanged);
+            Assert.Equal(7, secondSync.Unchanged);
 
             // Uninstall Celeste from Epic installed.json (keeping skipped DLC) -> marked uninstalled, clears InstallDirectory+Version, preserves user data.
             await File.WriteAllTextAsync(
@@ -363,7 +388,8 @@ public sealed class MultiStoreExperienceSmokeTests
                 """,
                 token);
 
-            var partialRunner = new HeroicLibrarySyncRunner(new FakeEnvironment(temp.FullName, xdgConfig));
+            using var partialMetadataClient = CreateGogNotFoundClient();
+            var partialRunner = new HeroicLibrarySyncRunner(new FakeEnvironment(temp.FullName, xdgConfig), gogMetadataClient: partialMetadataClient);
             var partialResult = await partialRunner.SyncAsync(dbPath, token);
             Assert.True(partialResult.RootFound);
             Assert.True(partialResult.Reconciled);
@@ -716,6 +742,222 @@ public sealed class MultiStoreExperienceSmokeTests
         {
             temp.Delete(recursive: true);
         }
+    }
+
+    [Fact]
+    public async Task HeroicGog_sync_uses_public_metadata_when_heroic_catalog_and_art_cache_are_missing()
+    {
+        var token = TestContext.Current.CancellationToken;
+        var temp = Directory.CreateTempSubdirectory("playnite-p7-004-gog-public-fallback-");
+        try
+        {
+            var xdgConfig = Path.Combine(temp.FullName, "xdg");
+            var heroicRoot = Path.Combine(xdgConfig, "heroic");
+            var gogStore = Path.Combine(heroicRoot, "gog_store");
+            var installDirectory = Path.Combine(temp.FullName, "Games", "1441096928");
+            var databasePath = Path.Combine(temp.FullName, "db", "library.sqlite");
+            Directory.CreateDirectory(gogStore);
+            Directory.CreateDirectory(installDirectory);
+            await File.WriteAllTextAsync(
+                Path.Combine(gogStore, "installed.json"),
+                $$"""
+                {
+                  "installed": [
+                    { "appName": "1441096928", "install_path": "{{EscapeJson(installDirectory)}}", "version": "1.0" }
+                  ]
+                }
+                """,
+                token);
+
+            var apiCalls = 0;
+            var imageCalls = 0;
+            using var metadataClient = new HttpClient(new RecordingHttpMessageHandler((request, cancellationToken) =>
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                if (request.RequestUri?.Host == "api.gog.com")
+                {
+                    Interlocked.Increment(ref apiCalls);
+                    var content = new StringContent(
+                        "{\"id\":1441096928,\"title\":\"D&D Stronghold: Kingdom Simulator\",\"images\":{\"background\":\"//images-2.gog-statics.com/stronghold.png\"}}",
+                        Encoding.UTF8,
+                        "application/json");
+                    return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = content });
+                }
+
+                Interlocked.Increment(ref imageCalls);
+                var imageContent = new ByteArrayContent(CreateMinimalPng());
+                imageContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("image/png");
+                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = imageContent });
+            }));
+
+            var runner = new HeroicLibrarySyncRunner(new FakeEnvironment(temp.FullName, xdgConfig), gogMetadataClient: metadataClient);
+            var first = await runner.SyncAsync(databasePath, token);
+            Assert.True(first.Reconciled);
+            Assert.Equal(1, first.Added);
+            Assert.Empty(first.Issues);
+            Assert.Equal(1, apiCalls);
+            Assert.Equal(1, imageCalls);
+
+            var database = await LibraryDatabase.OpenAsync(databasePath, token);
+            var game = (await database.ReadAsync(session => session.Games.GetAllAsync()).ConfigureAwait(false))
+                .Select(stored => stored.Value)
+                .Single();
+            Assert.Equal("D&D Stronghold: Kingdom Simulator", game.Name);
+            Assert.True(game.IsInstalled);
+            Assert.NotNull(game.CoverImage);
+            Assert.True(File.Exists(game.CoverImage));
+            Assert.StartsWith(Path.Combine(Path.GetDirectoryName(databasePath)!, "files", "gog-artwork"), game.CoverImage, StringComparison.Ordinal);
+
+            var second = await runner.SyncAsync(databasePath, token);
+            Assert.Equal(0, second.Updated);
+            Assert.Equal(1, second.Unchanged);
+            Assert.Equal(1, apiCalls);
+            Assert.Equal(1, imageCalls);
+        }
+        finally
+        {
+            temp.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task HeroicGog_public_metadata_fallback_observes_cancellation()
+    {
+        var temp = Directory.CreateTempSubdirectory("playnite-p7-004-gog-cancel-");
+        try
+        {
+            var xdgConfig = Path.Combine(temp.FullName, "xdg");
+            var gogStore = Path.Combine(xdgConfig, "heroic", "gog_store");
+            Directory.CreateDirectory(gogStore);
+            await File.WriteAllTextAsync(
+                Path.Combine(gogStore, "installed.json"),
+                "{\"installed\":[{\"appName\":\"1441096928\",\"install_path\":\"/games/Stronghold\"}]}");
+            using var metadataClient = new HttpClient(new RecordingHttpMessageHandler(async (_, cancellationToken) =>
+            {
+                await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+                return new HttpResponseMessage(HttpStatusCode.OK);
+            }));
+            var runner = new HeroicLibrarySyncRunner(new FakeEnvironment(temp.FullName, xdgConfig), gogMetadataClient: metadataClient);
+            using var cancellation = new CancellationTokenSource(TimeSpan.FromMilliseconds(100));
+
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(async () =>
+                await runner.SyncAsync(Path.Combine(temp.FullName, "db", "library.sqlite"), cancellation.Token));
+        }
+        finally
+        {
+            temp.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task HeroicGog_public_title_survives_artwork_failure()
+    {
+        var token = TestContext.Current.CancellationToken;
+        var temp = Directory.CreateTempSubdirectory("playnite-p7-004-gog-art-failure-");
+        try
+        {
+            var xdgConfig = Path.Combine(temp.FullName, "xdg");
+            var gogStore = Path.Combine(xdgConfig, "heroic", "gog_store");
+            Directory.CreateDirectory(gogStore);
+            await File.WriteAllTextAsync(
+                Path.Combine(gogStore, "installed.json"),
+                "{\"installed\":[{\"appName\":\"1441096928\",\"install_path\":\"/games/Stronghold\"}]}",
+                token);
+            using var metadataClient = new HttpClient(new RecordingHttpMessageHandler((request, _) =>
+            {
+                if (request.RequestUri?.Host == "api.gog.com")
+                {
+                    return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+                    {
+                        Content = new StringContent(
+                            "{\"id\":1441096928,\"title\":\"D&D Stronghold: Kingdom Simulator\",\"images\":{\"background\":\"//images-2.gog-statics.com/stronghold.png\"}}",
+                            Encoding.UTF8,
+                            "application/json"),
+                    });
+                }
+
+                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.NotFound));
+            }));
+            var runner = new HeroicLibrarySyncRunner(new FakeEnvironment(temp.FullName, xdgConfig), gogMetadataClient: metadataClient);
+
+            var result = await runner.SyncAsync(Path.Combine(temp.FullName, "db", "library.sqlite"), token);
+            Assert.True(result.Reconciled);
+            Assert.Contains(HeroicSyncIssues.GogMetadataFallbackError, result.Issues);
+            var database = await LibraryDatabase.OpenAsync(Path.Combine(temp.FullName, "db", "library.sqlite"), token);
+            var game = (await database.ReadAsync(session => session.Games.GetAllAsync()).ConfigureAwait(false))
+                .Select(stored => stored.Value)
+                .Single();
+            Assert.Equal("D&D Stronghold: Kingdom Simulator", game.Name);
+            Assert.Null(game.CoverImage);
+        }
+        finally
+        {
+            temp.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task HeroicGog_artwork_cache_rejects_external_directory_symlinks()
+    {
+        var token = TestContext.Current.CancellationToken;
+        var temp = Directory.CreateTempSubdirectory("playnite-p7-004-gog-symlink-");
+        try
+        {
+            var xdgConfig = Path.Combine(temp.FullName, "xdg");
+            var gogStore = Path.Combine(xdgConfig, "heroic", "gog_store");
+            var databaseDirectory = Path.Combine(temp.FullName, "db");
+            var outsideDirectory = Path.Combine(temp.FullName, "outside");
+            Directory.CreateDirectory(gogStore);
+            Directory.CreateDirectory(databaseDirectory);
+            Directory.CreateDirectory(outsideDirectory);
+            Directory.CreateSymbolicLink(Path.Combine(databaseDirectory, "files"), outsideDirectory);
+            await File.WriteAllTextAsync(
+                Path.Combine(gogStore, "installed.json"),
+                "{\"installed\":[{\"appName\":\"1441096928\",\"install_path\":\"/games/Stronghold\"}]}",
+                token);
+            using var metadataClient = new HttpClient(new RecordingHttpMessageHandler((request, _) =>
+            {
+                if (request.RequestUri?.Host == "api.gog.com")
+                {
+                    return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+                    {
+                        Content = new StringContent(
+                            "{\"id\":1441096928,\"title\":\"D&D Stronghold: Kingdom Simulator\",\"images\":{\"background\":\"//images-2.gog-statics.com/stronghold.png\"}}",
+                            Encoding.UTF8,
+                            "application/json"),
+                    });
+                }
+
+                var imageContent = new ByteArrayContent(CreateMinimalPng());
+                imageContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("image/png");
+                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = imageContent });
+            }));
+            var runner = new HeroicLibrarySyncRunner(new FakeEnvironment(temp.FullName, xdgConfig), gogMetadataClient: metadataClient);
+
+            var result = await runner.SyncAsync(Path.Combine(databaseDirectory, "library.sqlite"), token);
+            Assert.True(result.Reconciled);
+            Assert.False(Directory.Exists(Path.Combine(outsideDirectory, "gog-artwork")));
+            var database = await LibraryDatabase.OpenAsync(Path.Combine(databaseDirectory, "library.sqlite"), token);
+            var game = (await database.ReadAsync(session => session.Games.GetAllAsync()).ConfigureAwait(false))
+                .Select(stored => stored.Value)
+                .Single();
+            Assert.Equal("D&D Stronghold: Kingdom Simulator", game.Name);
+            Assert.Null(game.CoverImage);
+        }
+        finally
+        {
+            temp.Delete(recursive: true);
+        }
+    }
+
+    private static HttpClient CreateGogNotFoundClient() => new(new RecordingHttpMessageHandler((_, _) =>
+        Task.FromResult(new HttpResponseMessage(HttpStatusCode.NotFound))));
+
+    private sealed class RecordingHttpMessageHandler(
+        Func<HttpRequestMessage, CancellationToken, Task<HttpResponseMessage>> responder) : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) =>
+            responder(request, cancellationToken);
     }
 
     private static async Task WithHeadlessUiAsync(Func<Task> action, CancellationToken token)
