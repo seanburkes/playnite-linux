@@ -1,0 +1,2 @@
+timestamp	unit	from	to	actor	evidence
+2026-11-24T01:33:40Z	p7-002	done	done	seanburkes	PR https://github.com/seanburkes/playnite-linux/pull/241 validates head 8ee28906fa3d0a2f46c3c7ad0ae59a4594c16249 with successful linux-ci https://github.com/seanburkes/playnite-linux/actions/runs/45305324139. Refreshes the header and About and Message dialogs while preserving commands and keyboard order. Local Release smoke: 35 passed, zero failures or skips, including long message scrolling.
