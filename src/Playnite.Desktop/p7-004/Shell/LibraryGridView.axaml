@@ -2,8 +2,12 @@
               xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
               x:Class="Playnite.Desktop.Shell.LibraryGridView">
   <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto,*,Auto">
-    <TextBlock x:Name="HeaderText" Grid.Row="0" Grid.ColumnSpan="2"
-               Text="Library" AutomationProperties.Name="Library header" />
+    <DockPanel Grid.Row="0" Grid.ColumnSpan="2">
+      <Button x:Name="FullscreenButton" DockPanel.Dock="Right" Classes="secondary-cta"
+              Content="Fullscreen" IsEnabled="False" Click="OnOpenFullscreen" />
+      <TextBlock x:Name="HeaderText" Text="Library" VerticalAlignment="Center"
+                 AutomationProperties.Name="Library header" />
+    </DockPanel>
     <StackPanel x:Name="QueryBar" Grid.Row="1" Grid.ColumnSpan="2" Orientation="Horizontal"
                 AutomationProperties.Name="Library search filter and sort">
       <TextBox x:Name="SearchBox" Width="220" Margin="0,4,8,4" PlaceholderText="Search"

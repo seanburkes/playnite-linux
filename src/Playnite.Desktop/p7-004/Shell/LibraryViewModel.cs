@@ -1,5 +1,6 @@
 using Playnite.Core.Database;
 using Playnite.Core.Library;
+using Playnite.Core.Models;
 using Playnite.Core.Queries;
 using Playnite.Steam;
 using Playnite.Steam.Sync;
@@ -53,6 +54,8 @@ public sealed class LibraryViewModel
     internal CancellationToken QueryToken => currentQueryToken;
 
     internal CancellationToken LifetimeToken => lifetimeToken;
+
+    internal LibraryViewModel CreateIndependentView() => new(databasePath);
 
     public LibraryViewModel(string databasePath)
     {
@@ -128,7 +131,7 @@ public sealed class LibraryViewModel
         // Compute the whole result before publishing it. A superseded request never writes its
         // rows, selection or status over the current query's result.
         var rows = page.Games
-            .Select(game => new LibraryRow(game.Value.Id, game.Value.Name ?? "(unnamed)", game.Value.GameId))
+            .Select(game => CreateRow(game.Value))
             .ToArray();
         var first = rows.Length > 0 ? rows[0] : null;
         var selected = first is null ? null : await LoadDetailsAsync(first, cancellationToken).ConfigureAwait(false);
@@ -262,10 +265,14 @@ public sealed class LibraryViewModel
             return row with { SteamPlayAppId = null };
         }
 
-        var game = stored.Value;
+        return CreateRow(stored.Value);
+    }
+
+    private static LibraryRow CreateRow(Game game)
+    {
         uint? steamAppId = game.PluginId == SteamPluginId && game.IsInstalled
             && FlatpakSteamLauncher.TryParseAppId(game.GameId, out var appId) && appId != 0 ? appId : null;
-        return row with { Name = game.Name ?? "(unnamed)", GameId = game.GameId, SteamPlayAppId = steamAppId };
+        return new LibraryRow(game.Id, game.Name ?? "(unnamed)", game.GameId) { SteamPlayAppId = steamAppId };
     }
 
     /// <summary>Releases the instance-owned references; the host view calls this on unload.</summary>
