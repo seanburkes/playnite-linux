@@ -29,12 +29,13 @@ internal static class SourcePolicy
     internal static readonly string[] UiProjects = ["Playnite.Desktop", "Playnite.SDK"];
 
     // PORTING allows native imports only in Platform.Linux with a reviewed allow-list. The
-    // list is the closed set of libc entry points a handle-bound file read needs plus the
-    // PID-reuse-free signal pair; a declaration naming any other entry point, in another
+    // list covers handle-bound libc file reads, PID-reuse-free signaling and SDL3 gamepads.
+    // A declaration naming any other entry point, in another
     // project, or whose entry point cannot be read from source is rejected. Adding a symbol
     // is a reviewed policy change.
     internal static readonly string[] LinuxNativeImportAllowlist =
-        ["close", "openat", "read", "statx", "pidfd_open", "pidfd_send_signal"];
+        ["close", "openat", "read", "statx", "pidfd_open", "pidfd_send_signal",
+            "SDL_InitSubSystem", "SDL_QuitSubSystem", "SDL_PollEvent", "SDL_OpenGamepad", "SDL_CloseGamepad"];
 
     // pidfd_send_signal can deliver any signal, so the entry-point allow-list alone would
     // review the syscall but not its capability. The reviewed capability is exactly SIGTERM
