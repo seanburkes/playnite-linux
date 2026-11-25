@@ -1,5 +1,5 @@
-using System.ComponentModel;
 using System.Diagnostics;
+using System.Runtime.InteropServices;
 using Playnite.Core.Models;
 using Playnite.Platform.Sessions;
 
@@ -74,7 +74,7 @@ internal sealed class LunaPlayRequest(
             (startBrowser ?? StartBrowser)(new LaunchRequest(executable, [uri.AbsoluteUri]));
             return Task.FromResult(new LunaHandoff(true, $"Requested Chrome to open {gameName} on Amazon Luna."));
         }
-        catch (Exception ex) when (ex is Win32Exception or IOException or UnauthorizedAccessException)
+        catch (Exception ex) when (ex is ExternalException or IOException or UnauthorizedAccessException)
         {
             return Task.FromResult(new LunaHandoff(false, $"Could not open Google Chrome for {gameName}. Check your Chrome installation."));
         }

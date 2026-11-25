@@ -315,6 +315,25 @@ public sealed class FullscreenLibrarySmokeTests
         });
     }
 
+    [Fact]
+    public async Task Luna_reports_when_Chrome_cannot_start()
+    {
+        var directory = Directory.CreateTempSubdirectory("playnite-luna-chrome-");
+        try
+        {
+            var executable = Path.Combine(directory.FullName, "chrome");
+            await File.WriteAllTextAsync(executable, string.Empty, TestContext.Current.CancellationToken);
+            var luna = new LunaPlayRequest(configuredExecutable: executable);
+            var result = await luna.SendAsync(LunaPlayRequest.FortniteUrl, "Fortnite", TestContext.Current.CancellationToken);
+            Assert.False(result.Requested);
+            Assert.Contains("Could not open Google Chrome", result.Status);
+        }
+        finally
+        {
+            directory.Delete(recursive: true);
+        }
+    }
+
     private static void Click(Button button)
     {
         Assert.True(button.IsEnabled);
