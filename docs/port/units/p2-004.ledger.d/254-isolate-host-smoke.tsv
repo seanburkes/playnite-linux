@@ -1,0 +1,2 @@
+timestamp	unit	from	to	actor	evidence
+2026-11-25T21:58:37Z	p2-004	done	done	seanburkes	PR https://github.com/seanburkes/playnite-linux/pull/254 validates implementation head 56ac2e4fd053f068ae17febf7add4dc1449ea0ef with successful linux-ci https://github.com/seanburkes/playnite-linux/actions/runs/45708431502. Runs host smoke subprocesses with temporary XDG directories. Local smoke tests: 60 passed, zero failures or skips.
