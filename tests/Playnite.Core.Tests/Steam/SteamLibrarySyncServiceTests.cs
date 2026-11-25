@@ -61,6 +61,58 @@ public sealed class SteamLibrarySyncServiceTests
     }
 
     [Fact]
+    public async Task Linked_store_title_tracks_its_provider_and_personal_title_survives_repeated_sync()
+    {
+        using var files = new DatabaseTestDirectory();
+        var token = TestContext.Current.CancellationToken;
+        var database = await LibraryDatabase.OpenAsync(files.PathFor(), token);
+        var gogId = Guid.NewGuid();
+        var gogProvider = Guid.Parse("aebe8b7c-6dc3-4a66-af31-e7375c6b5e9e");
+        async Task<SteamSyncResult> SyncSteam(string title) =>
+            await Service(new FakeDiscovery(Discovery(App(10, title, "Same folder", SteamAppState.Installed, 100))))
+                .SyncAsync(database, token);
+
+        await SyncSteam("Original Steam title");
+        var steamId = Assert.Single(await ReadAll(database)).Value.Id;
+        await database.WriteAsync(async session =>
+        {
+            var gog = new Game(gogId, "123", "My preferred title") { PluginId = gogProvider, IsInstalled = false };
+            await session.Games.AddAsync(new StoredGame(gog));
+            await session.Titles.ObserveAsync(gog, "GOG title", isNew: false, Guid.Empty);
+            await session.Titles.SetGamePreferenceAsync(gogId, Steam, Now, linkSourceId: steamId);
+            return true;
+        }, token);
+
+        Assert.Equal(1, (await SyncSteam("Updated Steam title")).LinkedTitlesUpdated);
+        Assert.Equal(0, (await SyncSteam("Updated Steam title")).LinkedTitlesUpdated);
+        var linked = (await ReadAll(database)).Single(item => item.Value.Id == gogId).Value;
+        Assert.Equal("Updated Steam title", linked.Name);
+        Assert.Equal(gogProvider, linked.PluginId);
+        Assert.Equal("123", linked.GameId);
+        Assert.False(linked.IsInstalled);
+
+        await database.WriteAsync(async session =>
+        {
+            await session.Titles.SetGamePreferenceAsync(gogId, Guid.Empty, Now, "Updated Steam title");
+            await session.Titles.SetLibraryPreferenceAsync(Steam, Now);
+            return true;
+        }, token);
+        await SyncSteam("A newer Steam title");
+        Assert.Equal("Updated Steam title", (await ReadAll(database)).Single(item => item.Value.Id == gogId).Value.Name);
+
+        await database.WriteAsync(async session =>
+        {
+            await session.Titles.SetGamePreferenceAsync(gogId, null, Now);
+            return true;
+        }, token);
+        Assert.Equal("A newer Steam title", (await ReadAll(database)).Single(item => item.Value.Id == gogId).Value.Name);
+
+        await database.WriteAsync(session => session.Games.DeleteAsync(steamId), token);
+        Assert.Equal("Updated Steam title", Assert.Single(await ReadAll(database)).Value.Name);
+        Assert.Empty(await database.ReadAsync(session => session.Titles.GetLinkedTitlesAsync(gogId), token));
+    }
+
+    [Fact]
     public async Task Existing_Steam_game_is_matched_by_app_id_and_user_edits_survive_an_update()
     {
         using var files = new DatabaseTestDirectory();
@@ -94,7 +146,7 @@ public sealed class SteamLibrarySyncServiceTests
         Assert.Single(await ReadAll(database));
         var stored = (await ReadAll(database))[0];
         Assert.Equal(id, stored.Value.Id);
-        Assert.Equal("Steam name", stored.Value.Name);
+        Assert.Equal("User name", stored.Value.Name);
         Assert.Equal(InstallPath("Steam name"), stored.Value.InstallDirectory);
         Assert.Equal(99UL, stored.Value.InstallSize);
         Assert.True(stored.Value.IsInstalled);
@@ -352,7 +404,7 @@ public sealed class SteamLibrarySyncServiceTests
         Assert.Equal(new SteamSyncSkip(10, SteamSyncReasons.DuplicateLibraryRecord), Assert.Single(result.Skipped));
         var games = await ReadAll(database);
         Assert.Equal(2, games.Count);
-        Assert.Equal("Steam name", games[0].Value.Name);
+        Assert.Equal("First", games[0].Value.Name);
         Assert.Equal("Second", games[1].Value.Name);
     }
 
