@@ -37,9 +37,11 @@ src/Playnite.Core/Database/LibraryDatabase.cs	p4-001	ff928db55f998fd65c51f615994
 src/Playnite.Core/Database/LibraryDatabase.cs	p4-003	8ff04700cf62708a5dbf3fbbc9dae08016fed9f5	pull/97
 src/Playnite.Core/Database/LibrarySchema.cs	p4-001	ff928db55f998fd65c51f61599453f4fc753d3f5	pull/90
 src/Playnite.Core/Database/LibrarySession.cs	p4-001	ff928db55f998fd65c51f61599453f4fc753d3f5	pull/90
+src/Playnite.Core/Database/LibraryTitleRepository.cs	p4-001	897c4238618f3847f7c551bb8fc6af53307004fc	pull/253
 src/Playnite.Core/Database/MetadataRepository.cs	p4-001	ff928db55f998fd65c51f61599453f4fc753d3f5	pull/90
 src/Playnite.Core/Database/SchemaMigrator.cs	p4-001	ff928db55f998fd65c51f61599453f4fc753d3f5	pull/90
 src/Playnite.Core/Database/StorageValues.cs	p4-001	ff928db55f998fd65c51f61599453f4fc753d3f5	pull/90
+src/Playnite.Core/Database/StoreMetadataRepository.cs	p4-001	897c4238618f3847f7c551bb8fc6af53307004fc	pull/253
 src/Playnite.Core/DateTimes.cs	*	29f665a47aa385cafbf87538c4465a8ee70badef	pull/67
 src/Playnite.Core/Descriptions/HtmlDescriptionSanitizer.cs	p6-007	b80847be88f268b4b72bb34a92b8fba08a7623cb	pull/201
 src/Playnite.Core/Descriptions/HtmlDescriptionService.cs	p6-007	b80847be88f268b4b72bb34a92b8fba08a7623cb	pull/201

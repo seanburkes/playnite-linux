@@ -75,8 +75,8 @@ in [`gates/P5-pending.md`](gates/P5-pending.md).
 
 | Metric | Value |
 | --- | ---: |
-| Ledger rows | 382 |
-| Ledger fragments | 155 |
+| Ledger rows | 383 |
+| Ledger fragments | 156 |
 
 ## Units
 
@@ -141,7 +141,7 @@ in [`gates/P5-pending.md`](gates/P5-pending.md).
 | p3-exit | W3 | repo | Phase 3 exit gate, merged-board reconciliation and owner acceptance | done | `units/p3-exit.*`; 2 ledger rows |
 | p3-fuzz-ds | W3 | leaves | Bounded serialisation fuzz target and CI gate | done | `units/p3-fuzz-ds.*`; 7 ledger rows |
 | p3-loc-coverage-ds | W3 | leaves | Localisation coverage and placeholder validation | done | `units/p3-loc-coverage-ds.*`; 6 ledger rows |
-| p4-001 | W4 | data | SQLite schema/repositories | done | `units/p4-001.*`; 6 ledger rows |
+| p4-001 | W4 | data | SQLite schema/repositories | done | `units/p4-001.*`; 7 ledger rows |
 | p4-002 | W4 | data | v10 LiteDB importer | done | `units/p4-002.*`; 6 ledger rows |
 | p4-003 | W4 | data | Atomic swap/rollback | done | `units/p4-003.*`; 11 ledger rows |
 | p4-004 | W4 | data | Settings migration | done | `units/p4-004.*`; 5 ledger rows |
