@@ -1,0 +1,2 @@
+timestamp	unit	from	to	actor	evidence
+2026-11-25T21:58:20Z	p4-001	done	done	seanburkes	PR https://github.com/seanburkes/playnite-linux/pull/253 validates implementation head 3928b7d28126b7acca152c414a1dc76bb5d87075 with successful linux-ci https://github.com/seanburkes/playnite-linux/actions/runs/45708409887. Adds SQLite schema version 4 and transactional title preferences, title links, and store metadata provenance. Local Core tests: 3142 passed, zero failures or skips.
