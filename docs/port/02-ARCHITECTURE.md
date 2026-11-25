@@ -229,8 +229,8 @@ Linux implementations:
 - Freedesktop icon theme lookup; Steam artwork for Steam games.
 - WebKitGTK/WPE through Avalonia WebView is v1.1 (ADR-019). v1 uses `Avalonia.HtmlRenderer`
   and HTTP for descriptions/metadata.
-- SDL2 for gamepad is deferred; no global hotkeys in v1 on Wayland (portal limitations
-  documented).
+- Fullscreen uses an SDL3 gamepad adapter in `Playnite.Platform.Linux`. Avalonia handles
+  keyboard and mouse input. Wayland global hotkeys remain deferred.
 
 ## 5. UI architecture
 

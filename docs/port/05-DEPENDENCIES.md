@@ -89,7 +89,7 @@ Versions are the current stable lines observed on 2026-11-13. Pin exact versions
 | Web view | WebKitGTK 4.1 + libsoup 3; WPE optional | v1.1 only | distro-dependent | Not a v1 dependency (ADR-019); Ubuntu no WPE; WebKitGTK needs XWayland for embedded |
 | SQLite | `SQLitePCLRaw` bundled by Microsoft.Data.Sqlite | bundled | yes | Use bundled `e_sqlite3` |
 | Images | Magick.NET-Q8-AnyCPU | bundled native libs | verify | Covers/convert; no WIC |
-| Gamepad | SDL2 2.x | system or bundled | yes | `Silk.NET.SDL` or `SDL2-CS` |
+| Gamepad | SDL3 3.2 or newer | `libSDL3.so.0` from the application runtime | verify | Optional for fullscreen. Keyboard and mouse remain available. |
 | Notifications | D-Bus `org.freedesktop.Notifications` | system | yes | Fallback `notify-send` |
 | Tray | StatusNotifierItem/AppIndicator | system extension | yes | GNOME needs an extension; document |
 | Secret store | libsecret / `secret-tool` | system | yes | Optional; fall back to 0600 file |
