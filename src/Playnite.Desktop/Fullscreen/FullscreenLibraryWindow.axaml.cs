@@ -255,9 +255,9 @@ public sealed partial class FullscreenLibraryWindow : Window
         }
     }
 
-    private void OnSessionUpdated(ActiveGameSession session) => Dispatcher.UIThread.Post(() =>
+    private void OnSessionUpdated(ActiveGameSession session) => Dispatcher.Post(() =>
     {
-        if (trackedLaunch && IsVisible && returnGame == session.GameId)
+        if (trackedLaunch && !lifetime.IsCancellationRequested && returnGame == session.GameId && IsVisible)
         {
             SetStatus(session.StatusMessage);
         }
@@ -456,7 +456,7 @@ public sealed partial class FullscreenLibraryWindow : Window
             return;
         }
 
-        controllerTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(16) };
+        controllerTimer = new DispatcherTimer(TimeSpan.FromMilliseconds(16), DispatcherPriority.Input, Dispatcher);
         controllerTimer.Tick += (_, _) =>
         {
             if (controller is not { } input)
