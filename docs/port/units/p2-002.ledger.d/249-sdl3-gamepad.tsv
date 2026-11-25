@@ -1,0 +1,2 @@
+timestamp	unit	from	to	actor	evidence
+2026-11-25T06:25:28Z	p2-002	in-progress	in-progress	seanburkes	PR https://github.com/seanburkes/playnite-linux/pull/249 validates head 8cf24468672d3068b6a669ae0b9d83f0c60e6501 with successful linux-ci https://github.com/seanburkes/playnite-linux/actions/runs/45559834906. Adds five SDL3 gamepad entry points to the closed Linux allow-list and pins the set in Linux_native_import_allowlist_is_exactly_the_reviewed_set.
