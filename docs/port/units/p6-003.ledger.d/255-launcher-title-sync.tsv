@@ -1,0 +1,2 @@
+timestamp	unit	from	to	actor	evidence
+2026-11-25T21:58:22Z	p6-003	done	done	seanburkes	PR https://github.com/seanburkes/playnite-linux/pull/255 validates implementation head 11ecfe7d6401685e205ef515f4185fd455da1a51 with successful linux-ci https://github.com/seanburkes/playnite-linux/actions/runs/45708435734. Covers Steam title preferences, linked-title updates, repeated sync, and source deletion. Local Core tests: 3143 passed, zero failures or skips.
