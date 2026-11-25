@@ -53,22 +53,35 @@ public sealed class HostSmokeTests
 
         start.Environment.Remove("DISPLAY");
         start.Environment.Remove("WAYLAND_DISPLAY");
-        using var process = Process.Start(start)!;
-        var output = process.StandardOutput.ReadToEndAsync();
-        var error = process.StandardError.ReadToEndAsync();
-        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
-        try
+        var profile = Directory.CreateTempSubdirectory("playnite-host-smoke-");
+        foreach (var directory in new[] { "DATA", "CONFIG", "STATE", "CACHE" })
         {
-            await process.WaitForExitAsync(timeout.Token);
-        }
-        catch (OperationCanceledException)
-        {
-            process.Kill(entireProcessTree: true);
-            await process.WaitForExitAsync();
-            throw new TimeoutException($"{host} did not shut down within 30 seconds. stdout: {await output}; stderr: {await error}");
+            start.Environment[$"XDG_{directory}_HOME"] = Path.Combine(profile.FullName, directory);
         }
 
-        return (process.ExitCode, await output, await error);
+        try
+        {
+            using var process = Process.Start(start)!;
+            var output = process.StandardOutput.ReadToEndAsync();
+            var error = process.StandardError.ReadToEndAsync();
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+            try
+            {
+                await process.WaitForExitAsync(timeout.Token);
+            }
+            catch (OperationCanceledException)
+            {
+                process.Kill(entireProcessTree: true);
+                await process.WaitForExitAsync();
+                throw new TimeoutException($"{host} did not shut down within 30 seconds. stdout: {await output}; stderr: {await error}");
+            }
+
+            return (process.ExitCode, await output, await error);
+        }
+        finally
+        {
+            profile.Delete(recursive: true);
+        }
     }
 
     private static string HostPath(string host)

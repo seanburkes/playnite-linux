@@ -70,9 +70,12 @@ public sealed class SteamLibrarySyncService
         var updated = 0;
         var removed = 0;
         var unchanged = 0;
+        var linkedTitlesUpdated = 0;
 
         await database.WriteAsync(async session =>
         {
+            var titlePreference = await session.Titles.GetLibraryPreferenceAsync().ConfigureAwait(false);
+            var observedTitles = new List<Guid>();
             var stored = await session.Games.GetAllAsync().ConfigureAwait(false);
             var byAppId = new Dictionary<uint, List<StoredGame>>();
             var byId = new Dictionary<Guid, StoredGame>();
@@ -121,6 +124,8 @@ public sealed class SteamLibrarySyncService
                         Modified = now,
                     };
                     await session.Games.AddAsync(new StoredGame(game, EmptyLegacyJson)).ConfigureAwait(false);
+                    await session.Titles.ObserveAsync(game, app.Name, isNew: true, titlePreference).ConfigureAwait(false);
+                    observedTitles.Add(game.Id);
                     added++;
                     continue;
                 }
@@ -133,8 +138,11 @@ public sealed class SteamLibrarySyncService
                 }
 
                 var item = matches[0];
-                if (Apply(app, item.Value, now))
+                var titleChanged = await session.Titles.ObserveAsync(item.Value, app.Name, isNew: false, titlePreference).ConfigureAwait(false);
+                observedTitles.Add(item.Value.Id);
+                if (Apply(app, item.Value, now) || titleChanged)
                 {
+                    item.Value.Modified = now;
                     await session.Games.UpdateAsync(item).ConfigureAwait(false);
                     updated++;
                 }
@@ -171,6 +179,7 @@ public sealed class SteamLibrarySyncService
                 }
             }
 
+            linkedTitlesUpdated = await session.Titles.RefreshLinkedTitlesAsync(observedTitles, titlePreference, now).ConfigureAwait(false);
             return 0;
         }, cancellationToken).ConfigureAwait(false);
 
@@ -180,19 +189,13 @@ public sealed class SteamLibrarySyncService
             return id != 0 ? id : string.CompareOrdinal(left.Reason, right.Reason);
         });
         return new(added, updated, removed, unchanged, skipped.AsReadOnly(),
-            snapshot.Issues.ToArray(), snapshot.CanReconcile);
+            snapshot.Issues.ToArray(), snapshot.CanReconcile) { LinkedTitlesUpdated = linkedTitlesUpdated };
     }
 
     private static bool Apply(SteamApp app, Game game, DateTime now)
     {
         var changed = false;
-        if (!string.Equals(game.Name, app.Name, StringComparison.Ordinal))
-        {
-            game.Name = app.Name;
-            changed = true;
-        }
-
-        if (app.SizeOnDisk is { } size && game.InstallSize != size)
+        if (!game.OverrideInstallState && app.SizeOnDisk is { } size && game.InstallSize != size)
         {
             game.InstallSize = size;
             changed = true;

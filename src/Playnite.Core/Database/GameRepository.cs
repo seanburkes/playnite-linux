@@ -76,7 +76,16 @@ public sealed class GameRepository
 
     /// <summary>Deletes the graph and dependent rows; returns false if absent.</summary>
     public async Task<bool> DeleteAsync(Guid id)
-        => await session.ExecuteAsync("DELETE FROM game WHERE Id=@Id;", new { Id = id.ToString("D") }).ConfigureAwait(false) == 1;
+    {
+        var exists = await session.QuerySingleOrDefaultAsync<int>(
+            "SELECT 1 FROM game WHERE Id=@Id;", new { Id = id.ToString("D") }).ConfigureAwait(false) == 1;
+        if (exists)
+        {
+            await session.AtomicAsync(() => session.Titles.DeleteSourceAsync(id, TimeProvider.System.GetUtcNow().UtcDateTime))
+                .ConfigureAwait(false);
+        }
+        return exists;
+    }
 
     /// <summary>
     /// Reports actions whose emulator identity is absent from <paramref name="knownEmulators"/>.

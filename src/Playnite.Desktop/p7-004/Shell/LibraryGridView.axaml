@@ -23,6 +23,7 @@
                 Content="Sync Steam" AutomationProperties.Name="Sync Steam library" />
         <Button x:Name="SyncHeroicButton" Classes="secondary-cta"
                 Content="Sync Heroic" AutomationProperties.Name="Sync Heroic library" />
+        <Button x:Name="TitlePreferencesButton" Classes="secondary-cta" Content="Title Preferences" Click="OnTitlePreferencesClicked" />
         <Button x:Name="FullscreenButton" Classes="secondary-cta"
                 Content="Fullscreen" IsEnabled="False" Click="OnOpenFullscreen" />
       </StackPanel>
@@ -60,6 +61,7 @@
                 AutomationProperties.Name="Group by" />
       <ComboBox x:Name="SourceCombo" Width="130" Margin="0,4,8,4"
                 AutomationProperties.Name="Filter by store" />
+      <ComboBox x:Name="CollectionCombo" Width="150" Margin="0,4,8,4" AutomationProperties.Name="Filter by collection" />
       <TextBlock x:Name="QueryStatus" Text="" VerticalAlignment="Center" Margin="0,4,0,4"
                  AutomationProperties.Name="Library query status" />
     </WrapPanel>
@@ -138,6 +140,8 @@
           <Button x:Name="ConfigureLaunchButton" Classes="secondary-cta" Content="Configure Launch"
                   IsEnabled="False" HorizontalAlignment="Stretch"
                   AutomationProperties.Name="Configure game launch" />
+          <Button Classes="secondary-cta" Content="Choose Title Source" x:Name="GameTitleButton" Click="OnGameTitleClicked" />
+          <TextBlock x:Name="MetadataSources" TextWrapping="Wrap" Classes="muted" />
           <TextBlock x:Name="PlayStatus" TextWrapping="Wrap" Classes="muted"
                      AutomationProperties.LiveSetting="Polite" />
           <Border Height="1" Background="{DynamicResource PlayniteBorderBrush}" />

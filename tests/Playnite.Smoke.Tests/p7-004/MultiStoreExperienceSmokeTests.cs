@@ -262,7 +262,7 @@ public sealed class MultiStoreExperienceSmokeTests
 
             var celeste = allAfterFirst.Single(g => g.GameId == "Celeste");
             Assert.Equal(existingEpicId, celeste.Id);
-            Assert.Equal("Celeste", celeste.Name);
+            Assert.Equal("Celeste Old", celeste.Name);
             Assert.Equal(3600UL, celeste.Playtime);
             Assert.Equal(4UL, celeste.PlayCount);
             Assert.True(celeste.Favorite);
@@ -303,6 +303,15 @@ public sealed class MultiStoreExperienceSmokeTests
             Assert.Equal(0, secondSync.Updated);
             Assert.Equal(7, secondSync.Unchanged);
 
+            await db.WriteAsync(async session =>
+            {
+                var record = (await session.Games.GetAsync(existingEpicId))!;
+                record.Value.Description = null;
+                record.Value.CoverImage = null;
+                await session.Games.UpdateAsync(record);
+                return true;
+            }, token);
+
             // Uninstall Celeste from Epic installed.json (keeping skipped DLC) -> marked uninstalled, clears InstallDirectory+Version, preserves user data.
             await File.WriteAllTextAsync(
                 Path.Combine(heroicRoot, "legendaryConfig", "legendary", "installed.json"),
@@ -320,6 +329,8 @@ public sealed class MultiStoreExperienceSmokeTests
             Assert.Null(celesteAfterUninstall.Version);
             Assert.Equal(3600UL, celesteAfterUninstall.Playtime);
             Assert.Single(celesteAfterUninstall.GameActions!);
+            Assert.Null(celesteAfterUninstall.Description);
+            Assert.Null(celesteAfterUninstall.CoverImage);
         }
         finally
         {
@@ -427,6 +438,93 @@ public sealed class MultiStoreExperienceSmokeTests
     }
 
     [Fact]
+    public async Task Store_title_dialog_saves_personal_and_linked_titles_and_can_remove_a_link()
+    {
+        var token = TestContext.Current.CancellationToken;
+        var temp = Directory.CreateTempSubdirectory("playnite-title-dialog-");
+        try
+        {
+            var databasePath = Path.Combine(temp.FullName, "library.sqlite");
+            var database = await LibraryDatabase.OpenAsync(databasePath, token);
+            var id = Guid.NewGuid();
+            await database.WriteAsync(async session =>
+            {
+                var game = new Game(id, "123", "Store title") { PluginId = StoreCatalog.GogPluginId };
+                await session.Games.AddAsync(new StoredGame(game));
+                await session.Titles.ObserveAsync(game, "Store title", isNew: true, Guid.Empty);
+                var steam = new Game(Guid.NewGuid(), "456", "The Steam title") { PluginId = StoreCatalog.SteamPluginId };
+                await session.Games.AddAsync(new StoredGame(steam));
+                await session.Titles.ObserveAsync(steam, steam.Name, isNew: true, Guid.Empty);
+                return true;
+            }, token);
+
+            await WithHeadlessUiAsync(async () =>
+            {
+                var model = new LibraryViewModel(databasePath);
+                await model.LoadAsync(token);
+                var view = new LibraryGridView();
+                var owner = new Window { Content = view, Width = 1200, Height = 800 };
+                owner.Show();
+                try
+                {
+                    view.Apply(model);
+                    var choose = view.FindControl<Button>("GameTitleButton")!;
+                    choose.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                    PumpUntil(() => owner.OwnedWindows.OfType<TitlePreferenceWindow>().Any(), token);
+                    var dialog = owner.OwnedWindows.OfType<TitlePreferenceWindow>().Single();
+                    dialog.FindControl<ComboBox>("TitleSources")!.SelectedIndex = 1;
+                    dialog.FindControl<TextBox>("PersonalTitle")!.Text = "My custom title";
+                    dialog.FindControl<Button>("SaveButton")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                    await view.EditorTask;
+                    PumpUntil(() => view.FindControl<TextBlock>("DetailsName")!.Text == "My custom title", token);
+
+                    choose.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                    PumpUntil(() => owner.OwnedWindows.OfType<TitlePreferenceWindow>().Any(), token);
+                    dialog = owner.OwnedWindows.OfType<TitlePreferenceWindow>().Single();
+                    dialog.FindControl<ComboBox>("TitleSources")!.SelectedIndex = 2;
+                    dialog.FindControl<Button>("CancelButton")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                    await view.EditorTask;
+                    choose.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                    PumpUntil(() => owner.OwnedWindows.OfType<TitlePreferenceWindow>().Any(), token);
+                    dialog = owner.OwnedWindows.OfType<TitlePreferenceWindow>().Single();
+                    dialog.FindControl<TextBox>("LinkSearch")!.Text = "Steam title";
+                    dialog.FindControl<Button>("FindTitles")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                    var sources = dialog.FindControl<ComboBox>("TitleSources")!;
+                    PumpUntil(() => sources.Items.Count == 4, token);
+                    Assert.Contains("ID 456", sources.Items[3]!.ToString(), StringComparison.Ordinal);
+                    sources.SelectedIndex = 3;
+                    dialog.FindControl<Button>("SaveButton")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                    await view.EditorTask;
+                    PumpUntil(() => model.Selected is { Name: "The Steam title" } selected && selected.Id == id, token);
+
+                    choose.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                    PumpUntil(() => owner.OwnedWindows.OfType<TitlePreferenceWindow>().Any(), token);
+                    dialog = owner.OwnedWindows.OfType<TitlePreferenceWindow>().Single();
+                    sources = dialog.FindControl<ComboBox>("TitleSources")!;
+                    Assert.Contains("Remove link", sources.Items[4]!.ToString(), StringComparison.Ordinal);
+                    sources.SelectedIndex = 4;
+                    dialog.FindControl<Button>("SaveButton")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                    await view.EditorTask;
+                    PumpUntil(() => view.FindControl<TextBlock>("DetailsName")!.Text == "My custom title", token);
+
+                    var game = (await database.ReadAsync(session => session.Games.GetAsync(id), token))!.Value;
+                    Assert.Equal("My custom title", game.Name);
+                    Assert.False(game.IsInstalled);
+                    Assert.True(game.GameActions is null or { Count: 0 });
+                }
+                finally
+                {
+                    owner.Close();
+                }
+            }, token);
+        }
+        finally
+        {
+            temp.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task LibraryGridView_filters_by_store_displays_store_badges_syncs_heroic_and_clears_filters()
     {
         var token = TestContext.Current.CancellationToken;
@@ -437,8 +535,10 @@ public sealed class MultiStoreExperienceSmokeTests
             Directory.CreateDirectory(dbDir);
             var dbPath = Path.Combine(dbDir, "library.sqlite");
             var db = await LibraryDatabase.OpenAsync(dbPath, token);
+            var collectionId = Guid.NewGuid();
             await db.WriteAsync(async session =>
             {
+                await session.Metadata<Category>().AddAsync(new StoredMetadata<Category>(new Category(collectionId) { Name = "Weekend games" }));
                 await session.Games.AddAsync(new StoredGame(new Game(Guid.NewGuid(), "custom-1", "Custom Indie")
                 {
                     PluginId = Guid.Empty,
@@ -457,6 +557,7 @@ public sealed class MultiStoreExperienceSmokeTests
                 await session.Games.AddAsync(new StoredGame(new Game(Guid.NewGuid(), "1207658924", "Gog Adventure")
                 {
                     PluginId = StoreCatalog.GogPluginId,
+                    CategoryIds = [collectionId],
                     IsInstalled = false,
                 }));
                 await session.Games.AddAsync(new StoredGame(new Game(Guid.NewGuid(), "amzn1", "Amazon Prime Title")
@@ -531,6 +632,11 @@ public sealed class MultiStoreExperienceSmokeTests
                     Assert.True(view.FindControl<Button>("ClearFiltersButton")!.IsVisible);
                     Assert.Contains("Source: Epic", vm.QueryStatus, StringComparison.Ordinal);
 
+                    var collection = view.FindControl<ComboBox>("CollectionCombo")!;
+                    collection.SelectedIndex = 1;
+                    await view.QueryTask;
+                    PumpUntil(() => gameList.Items.Count == 0, token);
+
                     // GOG (index 3) + Installed filter composes FilterSettings.Library + IsInstalled.
                     sourceCombo.SelectedIndex = 3;
                     await view.QueryTask;
@@ -545,6 +651,7 @@ public sealed class MultiStoreExperienceSmokeTests
                     await view.QueryTask;
                     PumpUntil(() => gameList.Items.Count == 5, token);
                     Assert.Equal(0, sourceCombo.SelectedIndex);
+                    Assert.Equal(0, collection.SelectedIndex);
                     Assert.Equal(LibrarySourceFilter.All, vm.SourceFilter);
 
                     // Custom (index 5) filters strictly to Guid.Empty games.
