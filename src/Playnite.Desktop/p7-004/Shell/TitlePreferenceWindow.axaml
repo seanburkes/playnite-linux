@@ -1,0 +1,24 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="Playnite.Desktop.Shell.TitlePreferenceWindow"
+        Title="Title source" Width="480" SizeToContent="Height"
+        WindowStartupLocation="CenterOwner">
+  <StackPanel Margin="20" Spacing="12">
+    <TextBlock x:Name="TitleExplanation" TextWrapping="Wrap" />
+    <TextBox x:Name="PersonalTitle" PlaceholderText="My title" AutomationProperties.Name="My title" IsVisible="False" />
+    <ComboBox x:Name="TitleSources" HorizontalAlignment="Stretch"
+              AutomationProperties.Name="Preferred title source" />
+    <StackPanel x:Name="LinkedSearch" IsVisible="False" Spacing="6">
+      <TextBlock Text="Find a title from another store" />
+      <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+        <TextBox x:Name="LinkSearch" PlaceholderText="Store title" AutomationProperties.Name="Search other store titles" />
+        <Button x:Name="FindTitles" Grid.Column="1" Content="Find" Click="OnFindTitles" />
+      </Grid>
+      <TextBlock x:Name="LinkStatus" TextWrapping="Wrap" />
+    </StackPanel>
+    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+      <Button x:Name="CancelButton" Content="Cancel" IsCancel="True" Click="OnCancel" />
+      <Button x:Name="SaveButton" Content="Save" IsDefault="True" Click="OnSave" />
+    </StackPanel>
+  </StackPanel>
+</Window>

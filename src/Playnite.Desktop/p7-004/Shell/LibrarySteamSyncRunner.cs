@@ -56,6 +56,11 @@ internal sealed class LibrarySteamSyncRunner(IEnvironment? environment = null) :
         }
 
         var summary = $"Steam sync complete: {result.Added} added, {result.Updated} updated, {result.Unchanged} unchanged";
+        if (result.LinkedTitlesUpdated > 0)
+        {
+            summary += $", {result.LinkedTitlesUpdated} linked title(s) refreshed";
+        }
+
         if (result.Removed > 0)
         {
             summary += $", {result.Removed} removed";

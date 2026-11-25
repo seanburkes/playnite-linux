@@ -21,6 +21,10 @@ public sealed record LibraryRow(Guid Id, string Name, string GameId)
 
     public bool Favorite { get; init; }
 
+    public bool OverrideInstallState { get; init; }
+
+    internal string? MetadataSources { get; init; }
+
     public bool Hidden { get; init; }
 
     public bool IsSteam { get; init; }
@@ -136,6 +140,11 @@ public sealed record LibraryRow(Guid Id, string Name, string GameId)
 }
 
 /// <summary>The bounded quick-filter selection owned by the p7-004 library query bar.</summary>
+internal sealed record LibraryCollection(Guid? Id, string Name)
+{
+    public override string ToString() => Name;
+}
+
 public enum LibraryFilterMode
 {
     All,
@@ -212,6 +221,18 @@ public sealed class LibraryViewModel
     public LibraryGroupBy GroupBy { get; private set; } = LibraryGroupBy.None;
 
     /// <summary>The active store source filter.</summary>
+    internal IReadOnlyList<LibraryCollection> Collections { get; private set; } = [new(null, "All collections")];
+
+    internal Guid? CollectionId { get; private set; }
+
+    internal string? ActiveCollectionName => Collections.FirstOrDefault(collection => collection.Id == CollectionId && collection.Id.HasValue)?.Name;
+
+    internal Task SetCollectionAsync(Guid? collectionId)
+    {
+        CollectionId = collectionId;
+        return ApplyQueryAsync();
+    }
+
     public LibrarySourceFilter SourceFilter { get; private set; } = LibrarySourceFilter.All;
 
     /// <summary>Groups returned for the active page when <see cref="GroupBy"/> is active.</summary>
@@ -221,7 +242,8 @@ public sealed class LibraryViewModel
         !string.IsNullOrWhiteSpace(SearchTerm)
         || FilterMode != LibraryFilterMode.All
         || GroupBy != LibraryGroupBy.None
-        || SourceFilter != LibrarySourceFilter.All;
+        || SourceFilter != LibrarySourceFilter.All
+        || CollectionId is not null;
 
     /// <summary>A stable, testable summary of the current query state.</summary>
     public string QueryStatus
@@ -231,9 +253,11 @@ public sealed class LibraryViewModel
             var baseStatus = GroupBy == LibraryGroupBy.None
                 ? $"Search: {SearchTerm} | Filter: {FilterMode} | Sort: {SortBy} | Direction: {(Descending ? "desc" : "asc")}"
                 : $"Search: {SearchTerm} | Filter: {FilterMode} | Sort: {SortBy} | Direction: {(Descending ? "desc" : "asc")} | Group: {GroupBy}";
-            return SourceFilter == LibrarySourceFilter.All
-                ? baseStatus
-                : $"{baseStatus} | Source: {SourceFilter}";
+            if (SourceFilter != LibrarySourceFilter.All)
+            {
+                baseStatus += $" | Source: {SourceFilter}";
+            }
+            return ActiveCollectionName is { } name ? $"{baseStatus} | Collection: {name}" : baseStatus;
         }
     }
 
@@ -270,8 +294,10 @@ public sealed class LibraryViewModel
         ArgumentOutOfRangeException.ThrowIfNegative(offset);
         var service = this.service ?? throw new InvalidOperationException("The library has not been opened.");
         cancellationToken.ThrowIfCancellationRequested();
+        var categories = await database!.ReadAsync(session => session.Metadata<Category>().GetAllAsync(), cancellationToken).ConfigureAwait(false);
+        var collectionId = categories.Any(category => category.Value.Id == CollectionId) ? CollectionId : null;
         var query = new LibraryQuery(
-            Filter: CreateFilter(),
+            Filter: CreateFilter(collectionId),
             SortBy: SortBy,
             Descending: Descending,
             GroupBy: GroupBy,
@@ -294,6 +320,16 @@ public sealed class LibraryViewModel
         if (requestGeneration != Volatile.Read(ref generation))
         {
             return;
+        }
+
+        CollectionId = collectionId;
+        var collections = new LibraryCollection[] { new(null, "All collections") }
+            .Concat(categories.Select(category => new LibraryCollection(category.Value.Id, category.Value.Name ?? "(unnamed)"))
+                .OrderBy(category => category.Name, StringComparer.CurrentCultureIgnoreCase).ThenBy(category => category.Id))
+            .ToArray();
+        if (!collections.SequenceEqual(Collections))
+        {
+            Collections = collections;
         }
 
         pageOffset = offset;
@@ -401,6 +437,7 @@ public sealed class LibraryViewModel
         FilterMode = LibraryFilterMode.All;
         GroupBy = LibraryGroupBy.None;
         SourceFilter = LibrarySourceFilter.All;
+        CollectionId = null;
         return ApplyQueryAsync(cancellationToken);
     }
 
@@ -448,10 +485,10 @@ public sealed class LibraryViewModel
         await LoadPageAsync((CurrentPage - 2) * PageSize, cancellationToken).ConfigureAwait(false);
     }
 
-    private LibraryFilter? CreateFilter()
+    private LibraryFilter? CreateFilter(Guid? collectionId)
     {
         var hasStoreFilter = StoreCatalog.TryGetFilterPluginId(SourceFilter, out var pluginId);
-        if (FilterMode == LibraryFilterMode.All && !hasStoreFilter)
+        if (FilterMode == LibraryFilterMode.All && !hasStoreFilter && collectionId is null)
         {
             return null;
         }
@@ -478,24 +515,92 @@ public sealed class LibraryViewModel
             settings.Library = new IdItemFilterItemProperties { Ids = [pluginId] };
         }
 
+        if (collectionId is Guid categoryId)
+        {
+            settings.Category = new IdItemFilterItemProperties { Ids = [categoryId] };
+        }
+
         return LibraryFilter.FromSettings(settings);
     }
 
     private async Task<LibraryRow> LoadDetailsAsync(LibraryRow row, CancellationToken cancellationToken)
     {
-        var stored = await service!.GetAsync(row.Id, cancellationToken).ConfigureAwait(false);
-        if (stored is null)
+        return await database!.ReadAsync(async session =>
         {
-            return row with
+            var stored = await session.Games.GetAsync(row.Id).ConfigureAwait(false);
+            if (stored is null)
             {
-                SteamPlayAppId = null,
-                HeroicPlayUri = null,
-                HasFilePlayAction = false,
-                LaunchTargetDisplay = "Not configured",
-            };
-        }
+                return row with
+                {
+                    SteamPlayAppId = null,
+                    HeroicPlayUri = null,
+                    HasFilePlayAction = false,
+                    LaunchTargetDisplay = "Not configured",
+                };
+            }
 
-        return CreateRow(stored.Value, row.GroupLabel);
+            var game = stored.Value;
+            var origin = await session.StoreMetadata.GetAsync(row.Id).ConfigureAwait(false);
+            var source = StoreCatalog.GetDisplayName(game.PluginId);
+            var fields = new List<string>(2);
+            if (!string.IsNullOrWhiteSpace(game.Description))
+            {
+                fields.Add($"Description · {(game.Description == origin?.ImportedDescription ? source : "Library")}");
+            }
+            if (!string.IsNullOrWhiteSpace(game.CoverImage))
+            {
+                fields.Add($"Cover · {(game.CoverImage == origin?.ImportedCover ? source : "Library")}");
+            }
+
+            return CreateRow(game, row.GroupLabel) with { MetadataSources = string.Join("  |  ", fields) };
+        }, cancellationToken).ConfigureAwait(false);
+    }
+
+    internal Task<TitlePreferenceState> ReadTitlePreferencesAsync(Guid? gameId) =>
+        database!.ReadAsync(async session =>
+        {
+            var preference = await session.Titles.GetLibraryPreferenceAsync().ConfigureAwait(false);
+            if (gameId is not Guid id)
+            {
+                return new TitlePreferenceState(preference, null, null, []);
+            }
+
+            var game = await session.Games.GetAsync(id).ConfigureAwait(false)
+                ?? throw new KeyNotFoundException($"Game {id} was not found.");
+            return new TitlePreferenceState(preference, CreateRow(game.Value),
+                await session.Titles.GetAsync(id).ConfigureAwait(false),
+                await session.Titles.GetLinkedTitlesAsync(id).ConfigureAwait(false));
+        }, LifetimeToken);
+
+    internal Task<IEnumerable<StoreTitleCandidate>> FindLinkCandidatesAsync(Guid gameId, string search) =>
+        database!.ReadAsync(session => session.Titles.FindLinkCandidatesAsync(gameId, search), LifetimeToken);
+
+    internal async Task SaveTitlePreferenceAsync(Guid? gameId, TitlePreferenceSelection selection)
+    {
+        var previousSelection = Selected?.Id;
+        await database!.WriteAsync(async session =>
+        {
+            var now = DateTime.UtcNow;
+            if (gameId is Guid id && selection.UnlinkProviderId is Guid unlink)
+            {
+                await session.Titles.UnlinkAsync(id, unlink, now).ConfigureAwait(false);
+            }
+            else if (gameId is Guid game)
+            {
+                await session.Titles.SetGamePreferenceAsync(game, selection.ProviderId, now,
+                    selection.PersonalTitle, selection.LinkSourceId).ConfigureAwait(false);
+            }
+            else
+            {
+                await session.Titles.SetLibraryPreferenceAsync(selection.ProviderId ?? Guid.Empty, now).ConfigureAwait(false);
+            }
+            return true;
+        }, LifetimeToken).ConfigureAwait(false);
+        await ReloadCurrentPageAsync(LifetimeToken).ConfigureAwait(false);
+        if ((gameId ?? previousSelection) is Guid selectedId && Rows.Any(row => row.Id == selectedId))
+        {
+            await SelectByIdAsync(selectedId, LifetimeToken).ConfigureAwait(false);
+        }
     }
 
     internal Task<StoredGame?> GetStoredGameAsync(Guid id, CancellationToken cancellationToken = default)
@@ -606,9 +711,11 @@ public sealed class LibraryViewModel
             var existing = await session.Games.GetAsync(gameId).ConfigureAwait(false)
                 ?? throw new KeyNotFoundException($"Game {gameId} was not found.");
             var game = existing.Value;
-            if (!string.IsNullOrWhiteSpace(input.Name))
+            var newName = input.Name.Trim();
+            var renamed = !string.IsNullOrWhiteSpace(newName) && game.Name != newName;
+            if (renamed)
             {
-                game.Name = input.Name.Trim();
+                game.Name = newName;
             }
 
             game.Description = string.IsNullOrWhiteSpace(input.Description) ? null : input.Description.Trim();
@@ -636,6 +743,10 @@ public sealed class LibraryViewModel
 
             game.GameActions = new System.Collections.ObjectModel.ObservableCollection<GameAction>(existingActions);
             await session.Games.UpdateAsync(new StoredGame(game, existing.LegacyJson)).ConfigureAwait(false);
+            if (renamed && await session.Titles.GetAsync(gameId).ConfigureAwait(false) is not null)
+            {
+                await session.Titles.SetGamePreferenceAsync(gameId, Guid.Empty, DateTime.UtcNow, newName).ConfigureAwait(false);
+            }
             return true;
         }, cancellationToken).ConfigureAwait(false);
 
@@ -662,6 +773,7 @@ public sealed class LibraryViewModel
             LaunchTargetDisplay = GameLaunchPlanner.DescribeLaunchTarget(game, game.PluginId, steamAppId),
             IsInstalled = game.IsInstalled,
             Favorite = game.Favorite,
+            OverrideInstallState = game.OverrideInstallState,
             Hidden = game.Hidden,
             IsSteam = isSteam,
             PlaytimeSeconds = game.Playtime,

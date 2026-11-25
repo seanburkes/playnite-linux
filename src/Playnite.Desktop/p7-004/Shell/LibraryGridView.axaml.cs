@@ -87,6 +87,7 @@ public sealed partial class LibraryGridView : UserControl
     private readonly ComboBox sortCombo;
     private readonly ComboBox groupCombo;
     private readonly ComboBox sourceCombo;
+    private readonly ComboBox collectionCombo;
     private readonly Image detailsHeroImage;
     private readonly TextBlock detailsInitials;
     private readonly TextBlock syncStatus;
@@ -188,6 +189,7 @@ public sealed partial class LibraryGridView : UserControl
         sortCombo = this.FindControl<ComboBox>("SortCombo")!;
         groupCombo = this.FindControl<ComboBox>("GroupCombo")!;
         sourceCombo = this.FindControl<ComboBox>("SourceCombo")!;
+        collectionCombo = this.FindControl<ComboBox>("CollectionCombo")!;
         detailsHeroImage = this.FindControl<Image>("DetailsHeroImage")!;
         detailsInitials = this.FindControl<TextBlock>("DetailsInitials")!;
         syncStatus = this.FindControl<TextBlock>("SyncStatus")!;
@@ -226,6 +228,13 @@ public sealed partial class LibraryGridView : UserControl
         sourceCombo.ItemsSource = SourceOrders.Select(StoreCatalog.GetFilterLabel).ToArray();
         sourceCombo.SelectedIndex = 0;
         sourceCombo.SelectionChanged += OnSourceChanged;
+        collectionCombo.SelectionChanged += (_, _) =>
+        {
+            if (CanDispatchQuery() && collectionCombo.SelectedItem is LibraryCollection collection)
+            {
+                StartQuery(model!.SetCollectionAsync(collection.Id), model.QueryToken);
+            }
+        };
 
         SetViewMode(false);
         ApplyLabels();
@@ -407,7 +416,8 @@ public sealed partial class LibraryGridView : UserControl
                 : string.Empty) +
             (model.SourceFilter != LibrarySourceFilter.All
                 ? $" | Source: {StoreCatalog.GetFilterLabel(model.SourceFilter)}"
-                : string.Empty);
+                : string.Empty) +
+            (model.ActiveCollectionName is { } collection ? $" | Collection: {collection}" : string.Empty);
         this.FindControl<Button>("SortDirectionButton")!.Content =
             localization.Resolve(model.Descending ? LOC.MenuSortDescending : LOC.MenuSortAscending);
         SyncQueryControlsFromModel();
@@ -442,6 +452,12 @@ public sealed partial class LibraryGridView : UserControl
                 groupCombo.SelectedIndex = groupIndex;
             }
 
+            if (!ReferenceEquals(collectionCombo.ItemsSource, model.Collections))
+            {
+                collectionCombo.ItemsSource = model.Collections;
+            }
+
+            collectionCombo.SelectedItem = model.Collections.FirstOrDefault(collection => collection.Id == model.CollectionId);
             var sourceIndex = Array.IndexOf(SourceOrders, model.SourceFilter);
             if (sourceIndex >= 0 && sourceCombo.SelectedIndex != sourceIndex)
             {
@@ -456,10 +472,11 @@ public sealed partial class LibraryGridView : UserControl
 
     private void RefreshDetails(LibraryRow? selected)
     {
+        this.FindControl<Button>("GameTitleButton")!.IsVisible = selected is { PluginId: var pluginId } && pluginId != Guid.Empty;
         this.FindControl<TextBlock>("DetailsName")!.Text = selected?.Name ?? "(none)";
         this.FindControl<TextBlock>("DetailsId")!.Text = selected?.GameId ?? "(none)";
         detailsInitials.Text = selected?.Initials ?? "?";
-        this.FindControl<TextBlock>("DetailsStatus")!.Text = selected?.StatusLabel ?? "—";
+        this.FindControl<TextBlock>("DetailsStatus")!.Text = selected is { OverrideInstallState: true } ? $"{selected.StatusLabel} · Manual" : selected?.StatusLabel ?? "—";
         this.FindControl<TextBlock>("DetailsSource")!.Text = selected?.SourceDisplay ?? "—";
         this.FindControl<TextBlock>("DetailsPlaytime")!.Text = selected?.PlaytimeDisplay ?? "—";
         this.FindControl<TextBlock>("DetailsLastPlayed")!.Text = selected?.LastPlayedDisplay ?? "—";
@@ -474,6 +491,9 @@ public sealed partial class LibraryGridView : UserControl
         this.FindControl<TextBlock>("DetailsDescription")!.Text =
             !string.IsNullOrWhiteSpace(selected?.Description) ? selected.Description : string.Empty;
 
+        var sources = this.FindControl<TextBlock>("MetadataSources")!;
+        sources.Text = selected?.MetadataSources;
+        sources.IsVisible = !string.IsNullOrEmpty(sources.Text);
         StartHeroArtworkLoading(selected);
     }
 
@@ -1199,6 +1219,57 @@ public sealed partial class LibraryGridView : UserControl
         var task = OpenAddGameEditorAsync(library, owner);
         EditorTask = task;
         await ObserveUiTaskAsync(task, "add game").ConfigureAwait(true);
+    }
+
+    private async void OnTitlePreferencesClicked(object? sender, RoutedEventArgs args)
+    {
+        var task = OpenTitlePreferencesAsync(null);
+        EditorTask = task;
+        await ObserveUiTaskAsync(task, "title preferences").ConfigureAwait(true);
+    }
+
+    private async void OnGameTitleClicked(object? sender, RoutedEventArgs args)
+    {
+        if (model?.Selected is { } game)
+        {
+            var task = OpenTitlePreferencesAsync(game);
+            EditorTask = task;
+            await ObserveUiTaskAsync(task, "title preference").ConfigureAwait(true);
+        }
+    }
+
+    private async Task OpenTitlePreferencesAsync(LibraryRow? game)
+    {
+        if (disposed || editorPending || model is not { } library || TopLevel.GetTopLevel(this) is not Window owner)
+        {
+            return;
+        }
+
+        editorPending = true;
+        try
+        {
+            var state = await library.ReadTitlePreferencesAsync(game?.Id).ConfigureAwait(true);
+            if (disposed || !ReferenceEquals(model, library))
+            {
+                return;
+            }
+
+            var dialog = new TitlePreferenceWindow(state, library.FindLinkCandidatesAsync);
+            var choice = await dialog.ShowDialog<TitlePreferenceSelection?>(owner).ConfigureAwait(true);
+            if (choice is not null && !disposed && ReferenceEquals(model, library))
+            {
+                await library.SaveTitlePreferenceAsync(game?.Id, choice).ConfigureAwait(true);
+                if (!disposed && ReferenceEquals(model, library))
+                {
+                    RebuildRows();
+                    Refresh();
+                }
+            }
+        }
+        finally
+        {
+            editorPending = false;
+        }
     }
 
     private async void OnConfigureLaunchClicked(object? sender, RoutedEventArgs eventArgs)

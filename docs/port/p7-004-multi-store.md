@@ -2,11 +2,27 @@
 
 Extends the desktop library (`src/Playnite.Desktop/p7-004/`) to discover and reconcile local Heroic Games Launcher libraries (Epic/Legendary, GOG, Amazon/Nile), filter libraries by store source using `FilterSettings.Library`, surface store badges across cards, list rows, and details, contain Heroic local artwork under verified config roots, and dispatch Heroic launch URIs safely with custom `File` action priority intact.
 
+## Title and metadata ownership
+
+**Title Preferences** sets the source used by entries that follow the library preference.
+Existing entries keep their saved title by default. New imports display the store title
+until a personal title is available or a linked source takes precedence.
+
+**Choose Title Source** lets you edit a personal title, use a store title, or inherit the
+library preference. Search another synced store to link its title to the current entry.
+Links affect only the title. Each entry keeps its own store identity, installation state,
+and launch actions. Use **Remove link** to disconnect a source.
+
+Steam and Heroic refresh their own title candidates. Heroic can refresh imported cover art
+and descriptions while those fields still match the previous import. The details pane
+shows the source for those fields and marks a manual installation override. The collection
+picker uses the library's existing categories and combines with the store and quick filters.
+
 ## v10 references
 
 - `legacy/source/PlayniteSDK/BuiltInExtensions.cs`
 - `legacy/source/Playnite/Database/GameDatabase_Filters.cs`
-- `legacy/source/Playnite/Queries/FilterSettings.cs`
+- `legacy/source/Playnite/Settings/FilterSettings.cs`
 - `legacy/source/Playnite.DesktopApp/Themes/Desktop/Default/Views/FilterPanelView.xaml`
 
 ## Behaviour contract

@@ -29,7 +29,10 @@ internal sealed record HeroicSyncResult(
     int Skipped,
     IReadOnlyList<string> Issues,
     bool Reconciled,
-    bool RootFound);
+    bool RootFound)
+{
+    public int LinkedTitlesUpdated { get; init; }
+}
 
 internal interface ILibraryHeroicSync
 {
@@ -127,6 +130,11 @@ internal sealed class HeroicLibrarySyncRunner(
         }
 
         var summary = $"Heroic sync complete: {result.Added} added, {result.Updated} updated, {result.Unchanged} unchanged";
+        if (result.LinkedTitlesUpdated > 0)
+        {
+            summary += $", {result.LinkedTitlesUpdated} linked title(s) refreshed";
+        }
+
         if (result.Uninstalled > 0)
         {
             summary += $", {result.Uninstalled} uninstalled";
@@ -227,38 +235,34 @@ internal sealed class HeroicLibrarySyncRunner(
             return discovery;
         }
 
-        var existing = await database.ReadAsync(session => session.Games.GetAllAsync()).ConfigureAwait(false);
-        var existingByKey = existing.Select(stored => stored.Value)
-            .Where(game => game.PluginId == StoreCatalog.GogPluginId && !string.IsNullOrWhiteSpace(game.GameId))
-            .GroupBy(game => (game.PluginId, game.GameId), EqualityComparer<(Guid, string)>.Default)
-            .ToDictionary(group => group.Key, group => group.First());
+        var existingByKey = await database.ReadAsync(async session =>
+        {
+            var existing = new Dictionary<string, (string? Cover, string? ProviderTitle)>(StringComparer.Ordinal);
+            foreach (var stored in await session.Games.GetAllAsync().ConfigureAwait(false))
+            {
+                var game = stored.Value;
+                if (game.PluginId == StoreCatalog.GogPluginId && !string.IsNullOrWhiteSpace(game.GameId)
+                    && !existing.ContainsKey(game.GameId))
+                {
+                    var title = await session.Titles.GetAsync(game.Id).ConfigureAwait(false);
+                    existing.Add(game.GameId, (game.CoverImage, title?.ProviderId == game.PluginId.ToString("D")
+                        ? title.ProviderTitle : null));
+                }
+            }
+            return existing;
+        }, cancellationToken).ConfigureAwait(false);
         var games = new Dictionary<(Guid, string), HeroicDiscoveredGame>(discovery.Games);
         var candidates = new List<HeroicDiscoveredGame>();
 
         foreach (var game in gogGames)
         {
-            var enriched = game;
-            if (existingByKey.TryGetValue((game.PluginId, game.GameId), out var stored))
+            existingByKey.TryGetValue(game.GameId, out var stored);
+            var cachedTitle = !string.IsNullOrWhiteSpace(stored.ProviderTitle)
+                && !HasFallbackName(game with { Name = stored.ProviderTitle });
+            if ((string.IsNullOrWhiteSpace(game.CoverImage) && string.IsNullOrWhiteSpace(stored.Cover))
+                || (HasFallbackName(game) && !cachedTitle))
             {
-                var directoryTitle = GetInstallDirectoryName(game.InstallDirectory);
-                var hasFallbackName = string.Equals(game.Name, game.GameId, StringComparison.Ordinal)
-                    || string.Equals(game.Name, directoryTitle, StringComparison.Ordinal);
-                if (hasFallbackName && !string.IsNullOrWhiteSpace(stored.Name)
-                    && !string.Equals(stored.Name, game.GameId, StringComparison.Ordinal))
-                {
-                    enriched = enriched with { Name = stored.Name };
-                }
-
-                if (string.IsNullOrWhiteSpace(enriched.CoverImage) && !string.IsNullOrWhiteSpace(stored.CoverImage))
-                {
-                    enriched = enriched with { CoverImage = stored.CoverImage };
-                }
-            }
-
-            games[(game.PluginId, game.GameId)] = enriched;
-            if (string.IsNullOrWhiteSpace(enriched.CoverImage) || HasFallbackName(enriched))
-            {
-                candidates.Add(enriched);
+                candidates.Add(game with { CoverImage = game.CoverImage ?? stored.Cover });
             }
         }
 
@@ -285,7 +289,12 @@ internal sealed class HeroicLibrarySyncRunner(
         var hadError = candidateLimitExceeded;
         foreach (var result in results)
         {
-            games[(result.Game.PluginId, result.Game.GameId)] = result.Game;
+            var game = result.Game;
+            if (existingByKey.TryGetValue(game.GameId, out var stored) && game.CoverImage == stored.Cover)
+            {
+                game = game with { CoverImage = games[(game.PluginId, game.GameId)].CoverImage };
+            }
+            games[(game.PluginId, game.GameId)] = game;
             hadError |= result.HadError;
         }
 
@@ -1026,9 +1035,12 @@ internal sealed class HeroicLibrarySyncRunner(
         var updated = 0;
         var uninstalled = 0;
         var unchanged = 0;
+        var linkedTitlesUpdated = 0;
 
         await database.WriteAsync(async session =>
         {
+            var titlePreference = await session.Titles.GetLibraryPreferenceAsync().ConfigureAwait(false);
+            var observedTitles = new List<Guid>();
             var existingAll = await session.Games.GetAllAsync().ConfigureAwait(false);
             var existingByKey = new Dictionary<(Guid PluginId, string GameId), List<StoredGame>>();
             foreach (var stored in existingAll)
@@ -1065,6 +1077,9 @@ internal sealed class HeroicLibrarySyncRunner(
                         Modified = utcNow,
                     };
                     await session.Games.AddAsync(new StoredGame(created)).ConfigureAwait(false);
+                    await session.Titles.ObserveAsync(created, item.Name, isNew: true, titlePreference).ConfigureAwait(false);
+                    await session.StoreMetadata.ObserveAsync(created, item.Description, item.CoverImage, isNew: true).ConfigureAwait(false);
+                    observedTitles.Add(created.Id);
                     added++;
                     continue;
                 }
@@ -1072,13 +1087,10 @@ internal sealed class HeroicLibrarySyncRunner(
                 foreach (var existing in matches)
                 {
                     var game = existing.Value;
-                    var changed = false;
+                    var changed = await session.Titles.ObserveAsync(game, item.Name, isNew: false, titlePreference,
+                        isFallback: item.PluginId == StoreCatalog.GogPluginId && HasFallbackName(item)).ConfigureAwait(false);
+                    observedTitles.Add(game.Id);
                     var becameUninstalled = false;
-                    if (!string.Equals(game.Name, item.Name, StringComparison.Ordinal))
-                    {
-                        game.Name = item.Name;
-                        changed = true;
-                    }
 
                     if (!game.OverrideInstallState)
                     {
@@ -1122,17 +1134,7 @@ internal sealed class HeroicLibrarySyncRunner(
                         }
                     }
 
-                    if (string.IsNullOrWhiteSpace(game.Description) && !string.IsNullOrWhiteSpace(item.Description))
-                    {
-                        game.Description = item.Description;
-                        changed = true;
-                    }
-
-                    if (string.IsNullOrWhiteSpace(game.CoverImage) && !string.IsNullOrWhiteSpace(item.CoverImage))
-                    {
-                        game.CoverImage = item.CoverImage;
-                        changed = true;
-                    }
+                    changed |= await session.StoreMetadata.ObserveAsync(game, item.Description, item.CoverImage).ConfigureAwait(false);
 
                     if (changed)
                     {
@@ -1184,6 +1186,7 @@ internal sealed class HeroicLibrarySyncRunner(
                 }
             }
 
+            linkedTitlesUpdated = await session.Titles.RefreshLinkedTitlesAsync(observedTitles, titlePreference, utcNow).ConfigureAwait(false);
             return true;
         }, cancellationToken).ConfigureAwait(false);
 
@@ -1195,7 +1198,7 @@ internal sealed class HeroicLibrarySyncRunner(
             discovery.Skipped,
             discovery.Issues,
             Reconciled: true,
-            RootFound: true);
+            RootFound: true) { LinkedTitlesUpdated = linkedTitlesUpdated };
     }
 
     internal static Guid GameIdFor(Guid pluginId, string gameId)
