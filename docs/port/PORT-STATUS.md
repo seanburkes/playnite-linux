@@ -75,8 +75,8 @@ in [`gates/P5-pending.md`](gates/P5-pending.md).
 
 | Metric | Value |
 | --- | ---: |
-| Ledger rows | 384 |
-| Ledger fragments | 157 |
+| Ledger rows | 385 |
+| Ledger fragments | 158 |
 
 ## Units
 
@@ -163,7 +163,7 @@ in [`gates/P5-pending.md`](gates/P5-pending.md).
 | p5-shards2 | W5 | repo | Phase 5 exit assessment and merged-wave reconciliation | done | `units/p5-shards2.*`; 4 ledger rows |
 | p6-001 | W6 | core | Library service | done | `units/p6-001.*`; 2 ledger rows |
 | p6-002 | W6 | core | Import service | done | `units/p6-002.*`; 2 ledger rows |
-| p6-003 | W6 | core | Steam sync | done | `units/p6-003.*`; 2 ledger rows |
+| p6-003 | W6 | core | Steam sync | done | `units/p6-003.*`; 3 ledger rows |
 | p6-004 | W6 | core | Settings service | done | `units/p6-004.*`; 3 ledger rows |
 | p6-005 | W6 | core | Metadata service | done | `units/p6-005.*`; 2 ledger rows |
 | p6-006 | W6 | sdk | Notifications, dialogs and main-view API | done | `units/p6-006.*`; 2 ledger rows |
