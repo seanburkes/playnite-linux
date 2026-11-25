@@ -1,0 +1,2 @@
+timestamp	unit	from	to	actor	evidence
+2026-11-25T06:25:54Z	p7-004	done	done	seanburkes	PR https://github.com/seanburkes/playnite-linux/pull/250 validates head f7725644418f8e34432b27f804869fb1ddcdccea with successful linux-ci https://github.com/seanburkes/playnite-linux/actions/runs/45559945384. FullscreenLibrarySmokeTests covers controller movement, launch, tracked executable exit, search, filters, details, and the keyboard path. Local SDL3 virtual gamepad check covered attach, button input, detach, and reconnect.
