@@ -75,8 +75,8 @@ in [`gates/P5-pending.md`](gates/P5-pending.md).
 
 | Metric | Value |
 | --- | ---: |
-| Ledger rows | 380 |
-| Ledger fragments | 153 |
+| Ledger rows | 381 |
+| Ledger fragments | 154 |
 
 ## Units
 
@@ -98,7 +98,7 @@ in [`gates/P5-pending.md`](gates/P5-pending.md).
 | p1-010 | W1 | spike | Flatpak host launch/tracking | done | `units/p1-010.*`; 5 ledger rows |
 | p1-011 | W1 | repo | Port index shards + generator | done | `units/p1-011.*`; 10 ledger rows |
 | p2-001 | W2 | scaffold | Solution/projects/props | done | `units/p2-001.*`; 2 ledger rows |
-| p2-002 | W2 | scaffold | Analyzers + architecture tests | in-progress | `units/p2-002.*`; 7 ledger rows |
+| p2-002 | W2 | scaffold | Analyzers + architecture tests | in-progress | `units/p2-002.*`; 8 ledger rows |
 | p2-003 | W2 | scaffold | Linux CI + Windows oracle CI | done | `units/p2-003.*`; 4 ledger rows |
 | p2-004 | W2 | scaffold | Empty Avalonia app + CLI smoke | done | `units/p2-004.*`; 3 ledger rows |
 | p2-004-baseline2 | W2 | scaffold | Record the new-suite Linux CI baseline | done | `units/p2-004-baseline2.*`; 5 ledger rows |
