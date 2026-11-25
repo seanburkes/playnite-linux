@@ -106,6 +106,8 @@ public sealed record SteamSyncResult(
     /// <summary>Number of skipped apps; each entry carries an app id and a reason.</summary>
     public int SkippedCount => Skipped.Count;
 
-    /// <summary>Number of records this run changed. A repeat over unchanged input is zero.</summary>
+    public int LinkedTitlesUpdated { get; init; }
+
+    /// <summary>Number of source records added, updated, or removed by discovery reconciliation.</summary>
     public int Changes => Added + Updated + Removed;
 }
