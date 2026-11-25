@@ -264,7 +264,8 @@ public sealed class SourcePolicyTests
     public void Linux_native_import_allowlist_is_exactly_the_reviewed_set()
     {
         // A later edit that silently widens the capability must fail here, not only in review.
-        Assert.Equal(new[] { "close", "openat", "read", "statx", "pidfd_open", "pidfd_send_signal" },
+        Assert.Equal(new[] { "close", "openat", "read", "statx", "pidfd_open", "pidfd_send_signal",
+            "SDL_InitSubSystem", "SDL_QuitSubSystem", "SDL_PollEvent", "SDL_OpenGamepad", "SDL_CloseGamepad" },
             SourcePolicy.LinuxNativeImportAllowlist);
         // The only signal the pidfd pair may deliver is SIGTERM; re-pointing this constant
         // would silently widen the reviewed capability.
