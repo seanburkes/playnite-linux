@@ -69,7 +69,7 @@ public sealed class LibraryDatabase
     }
 
     /// <summary>Current forward-only destination schema version.</summary>
-    public const int SchemaVersion = 3;
+    public const int SchemaVersion = 4;
 
     /// <summary>Opens or upgrades a destination, refusing unknown schema versions.</summary>
     public static async Task<LibraryDatabase> OpenAsync(string path, CancellationToken cancellationToken = default)

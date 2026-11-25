@@ -89,6 +89,36 @@ internal static class LibrarySchema
         CREATE INDEX game_region_item ON game_region(ItemId);
         """;
 
+    internal const string Version4 = """
+        CREATE TABLE library_title_preference (
+            Id INTEGER PRIMARY KEY CHECK(Id = 1),
+            ProviderId TEXT NOT NULL);
+        CREATE TABLE game_title_provenance (
+            GameId TEXT PRIMARY KEY NOT NULL REFERENCES game(Id) ON DELETE CASCADE,
+            ProviderId TEXT NOT NULL,
+            StoreGameId TEXT NOT NULL,
+            ProviderTitle TEXT NOT NULL,
+            PersonalTitle TEXT,
+            AppliedTitle TEXT,
+            Preference TEXT);
+        CREATE TABLE game_title_link (
+            GameId TEXT NOT NULL REFERENCES game(Id) ON DELETE CASCADE,
+            SourceGameId TEXT NOT NULL REFERENCES game(Id) ON DELETE CASCADE,
+            TargetProviderId TEXT NOT NULL,
+            TargetStoreGameId TEXT NOT NULL,
+            ProviderId TEXT NOT NULL,
+            StoreGameId TEXT NOT NULL,
+            PRIMARY KEY(GameId, ProviderId),
+            CHECK(GameId <> SourceGameId));
+        CREATE INDEX game_title_link_source ON game_title_link(SourceGameId);
+        CREATE TABLE game_store_metadata (
+            GameId TEXT PRIMARY KEY NOT NULL REFERENCES game(Id) ON DELETE CASCADE,
+            ProviderId TEXT NOT NULL,
+            StoreGameId TEXT NOT NULL,
+            ImportedDescription TEXT,
+            ImportedCover TEXT);
+        """;
+
     // The game table's Id CHECK applies to new tables. SQLite cannot add a CHECK to an existing
     // table without rebuilding it, and these eleven tables are foreign-key parents, so the same
     // canonical-identity rule is enforced with BEFORE INSERT/UPDATE triggers instead. The rule is
