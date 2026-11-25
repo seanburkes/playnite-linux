@@ -537,7 +537,7 @@ tests/Playnite.Plugin.Tests/SamplePluginBuildTests.cs	p6-009	316a4a9da68d6379651
 tests/Playnite.Plugin.Tests/SamplePluginLoadTests.cs	p6-009	316a4a9da68d6379651333f8b1d4c4b1501b5db4	pull/212
 tests/Playnite.Smoke.Tests/BootstrapSmokeTests.cs	p7-001	0820d568417f585ed83ba635d13998dcab010668	pull/223
 tests/Playnite.Smoke.Tests/GameEditMetadataSmokeTests.cs	p7-005	0c9f5d22929818d59b9d0902fa50aa63219e3fc1	pull/227
-tests/Playnite.Smoke.Tests/HostSmokeTests.cs	p2-004	34af4f0fb6430fbc585d3b76ce85094390a26467	pull/34
+tests/Playnite.Smoke.Tests/HostSmokeTests.cs	p2-004	a4d07cbb2316a507fcac0e702c73691498f905b7	pull/254
 tests/Playnite.Smoke.Tests/LibrarySmokeTests.cs	p7-003	9ce99d4a901b0dbe7594197ac164d2e5b34a8091	pull/225
 tests/Playnite.Smoke.Tests/README.md	p2-004	34af4f0fb6430fbc585d3b76ce85094390a26467	pull/34
 tests/Playnite.Smoke.Tests/SearchFilterSortSmokeTests.cs	p7-004	8af3cc00a2ac796b4043d1f9b22242afe54186b4	pull/226
