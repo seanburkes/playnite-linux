@@ -1,3 +1,4 @@
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Headless;
 using Avalonia.Input;
@@ -168,6 +169,150 @@ public sealed class FullscreenLibrarySmokeTests
         {
             directory.Delete(recursive: true);
         }
+    }
+
+    [Fact]
+    public async Task Luna_link_saved_in_desktop_opens_in_Chrome_from_desktop_and_controller()
+    {
+        var token = TestContext.Current.CancellationToken;
+        var directory = Directory.CreateTempSubdirectory("playnite-luna-");
+        try
+        {
+            var path = Path.Combine(directory.FullName, "library.sqlite");
+            await using var session = HeadlessUnitTestSession.StartNew(typeof(HeadlessScreenApplication));
+            await session.Dispatch(async () =>
+            {
+                var opener = new Opener();
+                var browserRequests = new List<LaunchRequest>();
+                var luna = new LunaPlayRequest(name => name == "google-chrome" ? "/opt/Google Chrome/chrome" : null,
+                    browserRequests.Add);
+                var model = new LibraryViewModel(path);
+                var view = new LibraryGridView(new SteamPlayRequest(opener), fullscreenPreview: true,
+                    new LibrarySteamSyncRunner(), null, null, lunaPlay: luna);
+                var owner = new Window { Width = 1250, Height = 720, Content = view };
+                try
+                {
+                    await model.LoadAsync(token);
+                    owner.Show();
+                    view.Apply(model);
+                    owner.UpdateLayout();
+                    var listButton = view.FindControl<Button>("ListViewButton")!;
+                    var addButton = view.FindControl<Button>("AddGameButton")!;
+                    var listBounds = new Rect(listButton.TranslatePoint(default, view)!.Value, listButton.Bounds.Size);
+                    var addBounds = new Rect(addButton.TranslatePoint(default, view)!.Value, addButton.Bounds.Size);
+                    Assert.False(listBounds.Intersects(addBounds));
+                    view.LunaEditorDialogRunner = (dialog, parent) =>
+                    {
+                        dialog.Opened += (_, _) =>
+                        {
+                            Assert.Equal("Fortnite", dialog.FindControl<TextBox>("GameNameBox")!.Text);
+                            var url = dialog.FindControl<TextBox>("GameUrlBox")!;
+                            Assert.Equal(LunaPlayRequest.FortniteUrl, url.Text);
+                            url.Text = "https://luna.amazon.com.example.org/game/fortnite";
+                            Click(dialog.FindControl<Button>("SaveButton")!);
+                            Assert.True(dialog.FindControl<TextBlock>("ValidationErrorText")!.IsVisible);
+                            url.Text = LunaPlayRequest.FortniteUrl;
+                            Click(dialog.FindControl<Button>("SaveButton")!);
+                        };
+                        return dialog.ShowDialog<LunaGameInput?>(parent);
+                    };
+                    Click(view.FindControl<Button>("AddLunaGameButton")!);
+                    await view.EditorTask;
+
+                    var selected = Assert.IsType<LibraryRow>(model.Selected);
+                    Assert.Equal("Amazon Luna", selected.SourceDisplay);
+                    Assert.True(selected.CanPlay);
+                    Assert.False(selected.IsInstalled);
+                    Assert.False(view.FindControl<Button>("GameTitleButton")!.IsVisible);
+                    Assert.Equal("Amazon Luna (Google Chrome)", selected.LaunchTargetDisplay);
+                    Click(view.FindControl<Button>("PlayButton")!);
+                    await view.PlayTask;
+                    Assert.Equal([LunaPlayRequest.FortniteUrl], Assert.Single(browserRequests).Arguments);
+                    Assert.Equal("/opt/Google Chrome/chrome", browserRequests[0].Executable);
+                    Assert.Contains("Requested Chrome", view.FindControl<TextBlock>("PlayStatus")!.Text);
+
+                    const string festivalUrl = "https://luna.amazon.com/game/fortnite-festival/B0CLKBMYPV";
+                    view.LunaEditorDialogRunner = (dialog, parent) =>
+                    {
+                        dialog.Opened += (_, _) =>
+                        {
+                            dialog.FindControl<TextBox>("GameNameBox")!.Text = "Fortnite Festival";
+                            dialog.FindControl<TextBox>("GameUrlBox")!.Text = festivalUrl;
+                            Click(dialog.FindControl<Button>("SaveButton")!);
+                        };
+                        return dialog.ShowDialog<LunaGameInput?>(parent);
+                    };
+                    Click(view.FindControl<Button>("ConfigureLaunchButton")!);
+                    await view.EditorTask;
+
+                    Click(view.FindControl<Button>("FullscreenButton")!);
+                    var fullscreen = Assert.IsType<FullscreenLibraryWindow>(Assert.Single(owner.OwnedWindows));
+                    try
+                    {
+                        await fullscreen.OperationTask;
+                        fullscreen.HandleController(GamepadButton.Accept);
+                        await fullscreen.OperationTask;
+                        var returned = Assert.IsType<LibraryRow>(fullscreen.FindControl<ListBox>("GameList")!.SelectedItem);
+                        Assert.Equal(selected.Id, returned.Id);
+                        Assert.Equal("Fortnite Festival", returned.Name);
+                        Assert.Equal(2, browserRequests.Count);
+                        Assert.Equal([festivalUrl], browserRequests[1].Arguments);
+                        Assert.Same(fullscreen.FindControl<ListBox>("GameList"), fullscreen.FocusManager!.GetFocusedElement());
+                    }
+                    finally
+                    {
+                        fullscreen.Close();
+                    }
+
+                    var stored = (await model.GetStoredGameAsync(selected.Id, token))!.Value;
+                    Assert.Equal("/game/fortnite-festival/B0CLKBMYPV", stored.GameId);
+                    Assert.Equal(GameActionType.URL, Assert.Single(stored.GameActions!).Type);
+                    Assert.Equal(0UL, stored.PlayCount);
+                    Assert.Equal(0UL, stored.Playtime);
+                    Assert.Empty(opener.Requests);
+                }
+                finally
+                {
+                    owner.Close();
+                    model.Dispose();
+                }
+            }, token);
+        }
+        finally
+        {
+            directory.Delete(recursive: true);
+        }
+    }
+
+    [Theory]
+    [InlineData("http://luna.amazon.com/game/fortnite")]
+    [InlineData("https://luna.amazon.com:444/game/fortnite")]
+    [InlineData("https://user@luna.amazon.com/game/fortnite")]
+    [InlineData("https://luna.amazon.com/account")]
+    [InlineData("https://luna.amazon.com/game/../account")]
+    [InlineData("https://luna.amazon.com/game/")]
+    [InlineData("https://luna.amazon.com/game//")]
+    [InlineData("https://luna.amazon.com/game/%2F")]
+    [InlineData("https://luna.amazon.com/game/%00")]
+    public async Task Invalid_Luna_link_is_rejected_before_browser_lookup(string url)
+    {
+        var luna = new LunaPlayRequest(_ => throw new InvalidOperationException("Chrome lookup for invalid link"));
+        var status = await luna.SendAsync(url, "Fortnite", TestContext.Current.CancellationToken);
+        Assert.False(status.Requested);
+        Assert.Equal(LunaPlayRequest.InvalidUrlMessage, status.Status);
+    }
+
+    [Fact]
+    public async Task Luna_reports_missing_Chrome_and_honors_cancellation()
+    {
+        var luna = new LunaPlayRequest(_ => null);
+        var status = await luna.SendAsync(LunaPlayRequest.FortniteUrl, "Fortnite", TestContext.Current.CancellationToken);
+        Assert.False(status.Requested);
+        Assert.Contains("Chrome was not found", status.Status);
+        Assert.Throws<OperationCanceledException>(() =>
+        {
+            _ = luna.SendAsync(LunaPlayRequest.FortniteUrl, "Fortnite", new CancellationToken(canceled: true));
+        });
     }
 
     private static void Click(Button button)

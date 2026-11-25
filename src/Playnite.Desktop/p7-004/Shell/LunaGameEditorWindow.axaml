@@ -1,0 +1,26 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="Playnite.Desktop.Shell.LunaGameEditorWindow"
+        Width="560" SizeToContent="Height" WindowStartupLocation="CenterOwner">
+  <Border Background="{DynamicResource PlayniteSurfaceBrush}"
+          BorderBrush="{DynamicResource PlayniteBorderBrush}" BorderThickness="1" Padding="20">
+    <StackPanel Spacing="10">
+      <TextBlock Text="Play opens the game in Google Chrome." Classes="muted" />
+      <StackPanel Spacing="4">
+        <TextBlock Text="Game name" FontWeight="SemiBold" />
+        <TextBox x:Name="GameNameBox" AutomationProperties.Name="Game name" />
+      </StackPanel>
+      <StackPanel Spacing="4">
+        <TextBlock Text="Amazon Luna game link" FontWeight="SemiBold" />
+        <TextBox x:Name="GameUrlBox" AutomationProperties.Name="Amazon Luna game link" />
+      </StackPanel>
+      <TextBlock x:Name="ValidationErrorText" IsVisible="False" TextWrapping="Wrap"
+                 Foreground="{DynamicResource PlayniteDangerBrush}"
+                 AutomationProperties.LiveSetting="Assertive" />
+      <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+        <Button Classes="secondary-cta" Content="Cancel" IsCancel="True" Click="OnCancel" />
+        <Button x:Name="SaveButton" Classes="primary-cta" Content="Save" IsDefault="True" Click="OnSave" />
+      </StackPanel>
+    </StackPanel>
+  </Border>
+</Window>
