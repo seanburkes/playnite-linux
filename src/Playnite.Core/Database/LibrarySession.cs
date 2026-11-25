@@ -20,10 +20,16 @@ public sealed class LibrarySession
         this.transaction = transaction;
         this.cancellationToken = cancellationToken;
         Games = new GameRepository(this);
+        Titles = new LibraryTitleRepository(this);
+        StoreMetadata = new StoreMetadataRepository(this);
     }
 
     /// <summary>Games, including their ordered dependent rows.</summary>
     public GameRepository Games { get; }
+
+    public LibraryTitleRepository Titles { get; }
+
+    public StoreMetadataRepository StoreMetadata { get; }
 
     /// <summary>Named metadata. Only v10 library metadata model types are accepted.</summary>
     public MetadataRepository<T> Metadata<T>() where T : DatabaseObject => new(this);

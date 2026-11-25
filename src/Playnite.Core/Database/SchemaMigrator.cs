@@ -48,6 +48,7 @@ internal static class SchemaMigrator
                 1 => LibrarySchema.Version1,
                 2 => LibrarySchema.Version2,
                 3 => LibrarySchema.Version3,
+                4 => LibrarySchema.Version4,
                 _ => throw new InvalidDataException($"No migration is defined for schema version {version}."),
             })).ConfigureAwait(false);
             checkpoint?.Invoke(version, MigrationStage.AfterSql);
