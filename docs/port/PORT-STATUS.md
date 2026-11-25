@@ -75,8 +75,8 @@ in [`gates/P5-pending.md`](gates/P5-pending.md).
 
 | Metric | Value |
 | --- | ---: |
-| Ledger rows | 382 |
-| Ledger fragments | 155 |
+| Ledger rows | 385 |
+| Ledger fragments | 158 |
 
 ## Units
 
@@ -100,7 +100,7 @@ in [`gates/P5-pending.md`](gates/P5-pending.md).
 | p2-001 | W2 | scaffold | Solution/projects/props | done | `units/p2-001.*`; 2 ledger rows |
 | p2-002 | W2 | scaffold | Analyzers + architecture tests | in-progress | `units/p2-002.*`; 8 ledger rows |
 | p2-003 | W2 | scaffold | Linux CI + Windows oracle CI | done | `units/p2-003.*`; 4 ledger rows |
-| p2-004 | W2 | scaffold | Empty Avalonia app + CLI smoke | done | `units/p2-004.*`; 3 ledger rows |
+| p2-004 | W2 | scaffold | Empty Avalonia app + CLI smoke | done | `units/p2-004.*`; 4 ledger rows |
 | p2-004-baseline2 | W2 | scaffold | Record the new-suite Linux CI baseline | done | `units/p2-004-baseline2.*`; 5 ledger rows |
 | p2-005 | W2 | scaffold | Packaging smoke | done | `units/p2-005.*`; 5 ledger rows |
 | p2-006 | W2 | scaffold | SDK Abstractions project + PublicAPI | done | `units/p2-006.*`; 3 ledger rows |
@@ -141,7 +141,7 @@ in [`gates/P5-pending.md`](gates/P5-pending.md).
 | p3-exit | W3 | repo | Phase 3 exit gate, merged-board reconciliation and owner acceptance | done | `units/p3-exit.*`; 2 ledger rows |
 | p3-fuzz-ds | W3 | leaves | Bounded serialisation fuzz target and CI gate | done | `units/p3-fuzz-ds.*`; 7 ledger rows |
 | p3-loc-coverage-ds | W3 | leaves | Localisation coverage and placeholder validation | done | `units/p3-loc-coverage-ds.*`; 6 ledger rows |
-| p4-001 | W4 | data | SQLite schema/repositories | done | `units/p4-001.*`; 6 ledger rows |
+| p4-001 | W4 | data | SQLite schema/repositories | done | `units/p4-001.*`; 7 ledger rows |
 | p4-002 | W4 | data | v10 LiteDB importer | done | `units/p4-002.*`; 6 ledger rows |
 | p4-003 | W4 | data | Atomic swap/rollback | done | `units/p4-003.*`; 11 ledger rows |
 | p4-004 | W4 | data | Settings migration | done | `units/p4-004.*`; 5 ledger rows |
@@ -163,7 +163,7 @@ in [`gates/P5-pending.md`](gates/P5-pending.md).
 | p5-shards2 | W5 | repo | Phase 5 exit assessment and merged-wave reconciliation | done | `units/p5-shards2.*`; 4 ledger rows |
 | p6-001 | W6 | core | Library service | done | `units/p6-001.*`; 2 ledger rows |
 | p6-002 | W6 | core | Import service | done | `units/p6-002.*`; 2 ledger rows |
-| p6-003 | W6 | core | Steam sync | done | `units/p6-003.*`; 2 ledger rows |
+| p6-003 | W6 | core | Steam sync | done | `units/p6-003.*`; 3 ledger rows |
 | p6-004 | W6 | core | Settings service | done | `units/p6-004.*`; 3 ledger rows |
 | p6-005 | W6 | core | Metadata service | done | `units/p6-005.*`; 2 ledger rows |
 | p6-006 | W6 | sdk | Notifications, dialogs and main-view API | done | `units/p6-006.*`; 2 ledger rows |
