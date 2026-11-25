@@ -7,6 +7,7 @@ using Playnite.Core.Models;
 using Playnite.Desktop.Fullscreen;
 using Playnite.Desktop.Integration;
 using Playnite.Desktop.Shell;
+using Playnite.Platform.Linux;
 using Playnite.Platform.Sessions;
 using Playnite.Steam;
 using Playnite.Steam.Sync;
@@ -35,6 +36,20 @@ public sealed class FullscreenLibrarySmokeTests
                     {
                         game.PluginId = new Guid(SteamLibrarySyncService.SteamPluginId);
                         game.IsInstalled = true;
+                    }
+                    if (index == 8)
+                    {
+                        game.IsInstalled = true;
+                        game.GameActions =
+                        [
+                            new GameAction
+                            {
+                                Type = GameActionType.File,
+                                IsPlayAction = true,
+                                Path = "/usr/bin/sleep",
+                                Arguments = "1",
+                            },
+                        ];
                     }
                     await session.Games.AddAsync(new StoredGame(game));
                 }
@@ -83,6 +98,55 @@ public sealed class FullscreenLibrarySmokeTests
                     Click(previous);
                     await fullscreen.OperationTask;
                     Assert.Equal("Game 00", Assert.IsType<LibraryRow>(games.SelectedItem).Name);
+
+                    fullscreen.HandleController(GamepadButton.Down);
+                    Assert.Equal("Game 04", Assert.IsType<LibraryRow>(games.SelectedItem).Name);
+                    fullscreen.HandleController(GamepadButton.Accept);
+                    await fullscreen.OperationTask;
+                    Assert.Equal(2, opener.Requests.Count);
+                    Assert.Equal("Game 04", Assert.IsType<LibraryRow>(games.SelectedItem).Name);
+
+                    fullscreen.HandleController(GamepadButton.Down);
+                    fullscreen.HandleController(GamepadButton.Accept);
+                    await fullscreen.OperationTask;
+                    var returned = Assert.IsType<LibraryRow>(games.SelectedItem);
+                    Assert.Equal("Game 08", returned.Name);
+                    Assert.Equal(1UL, returned.PlayCount);
+                    Assert.Same(games, fullscreen.FocusManager!.GetFocusedElement());
+
+                    fullscreen.FindControl<Button>("SearchButton")!.Focus();
+                    fullscreen.HandleController(GamepadButton.Accept);
+                    Assert.True(fullscreen.FindControl<StackPanel>("SearchPanel")!.IsVisible);
+                    fullscreen.HandleController(GamepadButton.Right);
+                    fullscreen.HandleController(GamepadButton.Accept);
+                    Assert.Equal("b", fullscreen.FindControl<TextBox>("SearchInput")!.Text);
+                    fullscreen.HandleController(GamepadButton.Back);
+                    Assert.False(fullscreen.FindControl<StackPanel>("SearchPanel")!.IsVisible);
+
+                    fullscreen.HandleController(GamepadButton.Right);
+                    fullscreen.HandleController(GamepadButton.Accept);
+                    await fullscreen.OperationTask;
+                    Assert.Equal(["Game 04", "Game 08"], games.Items.Cast<LibraryRow>().Select(row => row.Name));
+                    fullscreen.FindControl<Button>("DetailsButton")!.Focus();
+                    fullscreen.HandleController(GamepadButton.Accept);
+                    await fullscreen.OperationTask;
+                    Assert.Contains("Game 04", fullscreen.FindControl<TextBlock>("DetailsText")!.Text);
+                    fullscreen.HandleController(GamepadButton.Back);
+                    Assert.False(fullscreen.FindControl<ScrollViewer>("DetailsPanel")!.IsVisible);
+
+                    fullscreen.FindControl<Button>("SearchButton")!.Focus();
+                    fullscreen.HandleController(GamepadButton.Accept);
+                    for (var step = 0; step < 4; step++)
+                    {
+                        fullscreen.HandleController(GamepadButton.Down);
+                    }
+                    // The keyboard footer ends in Cancel. Move left to Apply after entering a query.
+                    var search = fullscreen.FindControl<TextBox>("SearchInput")!;
+                    search.Text = "08";
+                    fullscreen.HandleController(GamepadButton.Left);
+                    fullscreen.HandleController(GamepadButton.Accept);
+                    await fullscreen.OperationTask;
+                    Assert.Equal("Game 08", Assert.IsType<LibraryRow>(Assert.Single(games.Items)).Name);
 
                     fullscreen.KeyPress(Key.Escape, RawInputModifiers.None, PhysicalKey.Escape, "");
                     Assert.False(fullscreen.IsVisible);

@@ -6,7 +6,7 @@
   <Window.Resources>
     <x:Int32 x:Key="FullscreenColumns">4</x:Int32>
   </Window.Resources>
-  <Grid Margin="32" RowDefinitions="Auto,*,Auto,Auto" RowSpacing="16">
+  <Grid Margin="32" RowDefinitions="Auto,Auto,*,Auto,Auto,Auto" RowSpacing="16">
     <DockPanel>
       <Button x:Name="ExitButton" DockPanel.Dock="Right" Classes="secondary-cta"
               Content="Back to desktop" Click="OnExit" />
@@ -15,7 +15,29 @@
         <TextBlock Text="Fullscreen library" Classes="h1" />
       </StackPanel>
     </DockPanel>
-    <ListBox x:Name="GameList" Grid.Row="1" SelectionMode="Single"
+    <StackPanel Grid.Row="1" Spacing="8">
+      <WrapPanel>
+        <Button x:Name="SearchButton" Content="Search" Click="OnSearch" />
+        <Button x:Name="FilterButton" Content="Filter: All" Click="OnFilter" />
+        <Button x:Name="DetailsButton" Content="Game details" Click="OnDetails" />
+      </WrapPanel>
+      <TextBlock x:Name="ControllerText" AutomationProperties.LiveSetting="Polite" />
+      <StackPanel x:Name="SearchPanel" IsVisible="False" Spacing="8">
+        <TextBox x:Name="SearchInput" AutomationProperties.Name="Search games" KeyDown="OnSearchKeyDown" />
+        <UniformGrid x:Name="SearchKeys" Columns="10" />
+        <WrapPanel>
+          <Button x:Name="SpaceButton" Content="Space" Click="OnSpace" />
+          <Button x:Name="EraseButton" Content="Backspace" Click="OnErase" />
+          <Button x:Name="ClearButton" Content="Clear" Click="OnClear" />
+          <Button x:Name="ApplyButton" Content="Apply search" Click="OnApplySearch" />
+          <Button x:Name="CancelSearchButton" Content="Cancel" Click="OnCancelSearch" />
+        </WrapPanel>
+      </StackPanel>
+    </StackPanel>
+    <ScrollViewer x:Name="DetailsPanel" Grid.Row="3" IsVisible="False" MaxHeight="180" Focusable="False">
+      <TextBlock x:Name="DetailsText" TextWrapping="Wrap" />
+    </ScrollViewer>
+    <ListBox x:Name="GameList" Grid.Row="2" SelectionMode="Single"
              Focusable="True" ScrollViewer.HorizontalScrollBarVisibility="Disabled"
              AutomationProperties.Name="Fullscreen game grid">
       <ListBox.ItemsPanel>
@@ -33,9 +55,9 @@
         </DataTemplate>
       </ListBox.ItemTemplate>
     </ListBox>
-    <TextBlock x:Name="StatusText" Grid.Row="2" TextWrapping="Wrap"
+    <TextBlock x:Name="StatusText" Grid.Row="4" TextWrapping="Wrap"
                AutomationProperties.LiveSetting="Polite" />
-    <DockPanel Grid.Row="3">
+    <DockPanel Grid.Row="5">
       <Button x:Name="PlayButton" DockPanel.Dock="Right" Classes="primary-cta"
               Content="Play" Click="OnPlay" IsEnabled="False" />
       <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">

@@ -25,7 +25,6 @@ namespace Playnite.Desktop.Shell;
 public sealed partial class LibraryGridView : UserControl
 {
     private const string SearchSmokeFlag = "--search-filter-sort-smoke";
-    private const string FullscreenPreviewFlag = "--fullscreen-preview";
     private const int CoverDecodeWidth = 320;
     private const int HeroDecodeWidth = 640;
 
@@ -127,7 +126,7 @@ public sealed partial class LibraryGridView : UserControl
 
     public LibraryGridView() : this(
         new SteamPlayRequest(new SteamPlayRequest.DesktopOpener()),
-        Environment.GetCommandLineArgs().Contains(FullscreenPreviewFlag, StringComparer.Ordinal),
+        true,
         new LibrarySteamSyncRunner(),
         null,
         null,
@@ -967,7 +966,7 @@ public sealed partial class LibraryGridView : UserControl
         RefreshLibraryActions();
         try
         {
-            var window = new FullscreenLibraryWindow(library.CreateIndependentView(), steamPlay);
+            var window = new FullscreenLibraryWindow(library.CreateIndependentView(), steamPlay, sessionManager, heroicPlay);
             await window.RunAsync(owner);
         }
         catch (Exception exception)

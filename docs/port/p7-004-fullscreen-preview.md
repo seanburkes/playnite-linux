@@ -1,21 +1,27 @@
 # Fullscreen library preview
 
-Fullscreen is a fast-follow under [ADR-008](00-DECISIONS.md#adr-008--v1-scope-desktop-steam-only)
-and `ui-019`. The desktop library exposes an opt-in preview; the normal startup
-has no fullscreen entry. The v10 references are
+The desktop library exposes **Fullscreen** alongside its usual library controls.
+The v10 references are
 `legacy/source/Playnite.FullscreenApp/Windows/MainWindow.xaml` and
 `legacy/source/Playnite.FullscreenApp/Themes/Fullscreen/Default/Views/Main.xaml`.
 
-```sh
-dotnet run --project src/Playnite.Desktop -- --fullscreen-preview
-```
+Use the arrow keys to move between games, **Previous** and **Next** to change
+pages, and **Enter** or **Play** to launch the selected game. Use **Escape**
+or **Back to desktop** to return to the desktop library and its previous
+selection.
 
-After setup, choose **Fullscreen** in the library. Use the arrow keys to move
-between games, **Previous** and **Next** to change pages, and **Enter** or
-**Play** to request a Steam launch for an installed Steam game. **Escape** or
-**Back to desktop** closes the preview without changing desktop selection or
-stopping Steam. The launch response does not confirm the game started.
+## Living-room controls
 
-The preview does not include a hero/details view, controller input, or
-fullscreen theme parity. Headless smoke covers entry, keyboard navigation,
-paging, dispatch through a fake opener, and return to the original selection.
+Open **Fullscreen** from the desktop library. Use the D-pad to move through
+games and controls, A to select, B to go back, and the shoulder buttons to
+change pages. In **Game details**, use Up and Down to scroll. **Search** opens
+a controller keyboard and also accepts text from a physical keyboard.
+
+Controller input requires `libSDL3.so.0` in the application's runtime.
+Keyboard and mouse work when SDL3 is unavailable. The controller can reconnect
+without leaving fullscreen or resetting the current selection.
+
+For a tracked executable launch, fullscreen displays the session status and
+restores the launched game when the session ends and the window is active.
+For Steam and Heroic URI launches, fullscreen reports the handoff and
+restores the launched game when the window regains focus.
