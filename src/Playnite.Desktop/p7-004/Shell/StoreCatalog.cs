@@ -11,6 +11,7 @@ public enum LibrarySourceFilter
     Gog = 3,
     Amazon = 4,
     Custom = 5,
+    Luna = 6,
 }
 
 /// <summary>
@@ -26,6 +27,8 @@ internal static class StoreCatalog
     public static readonly Guid ItchioPluginId = Guid.Parse("00000001-ebb2-4eec-abcb-7c89937a42bb");
     public static readonly Guid BattleNetPluginId = Guid.Parse("e3c26a3d-d695-4cb7-a769-5ff7612c7edd");
     public static readonly Guid HumblePluginId = Guid.Parse("96e8c4bc-ec5c-4c8b-87e7-18ee5a690626");
+
+    public static readonly Guid LunaPluginId = new("885cec14-5e05-432e-96ff-23bf5b1bff31");
 
     private const int MaxHeroicAppIdLength = 128;
 
@@ -66,7 +69,7 @@ internal static class StoreCatalog
             return "Humble";
         }
 
-        return "Library";
+        return pluginId == LunaPluginId ? "Amazon Luna" : "Library";
     }
 
     public static string GetFilterLabel(LibrarySourceFilter filter) => filter switch
@@ -76,6 +79,7 @@ internal static class StoreCatalog
         LibrarySourceFilter.Epic => "Epic",
         LibrarySourceFilter.Gog => "GOG",
         LibrarySourceFilter.Amazon => "Amazon",
+        LibrarySourceFilter.Luna => "Amazon Luna",
         LibrarySourceFilter.Custom => "Custom",
         _ => "All stores",
     };
@@ -95,6 +99,9 @@ internal static class StoreCatalog
                 return true;
             case LibrarySourceFilter.Amazon:
                 pluginId = AmazonPluginId;
+                return true;
+            case LibrarySourceFilter.Luna:
+                pluginId = LunaPluginId;
                 return true;
             case LibrarySourceFilter.Custom:
                 pluginId = Guid.Empty;

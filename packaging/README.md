@@ -29,7 +29,7 @@ AppImages run without installation; `--appimage-extract-and-run` supports hosts 
 
 Flatpak uses **flatpak-builder 1.4.2** (Ubuntu `1.4.2-1build2`) and
 **Flatpak 1.14.6** (Ubuntu `1.14.6-1ubuntu0.1`), and host **elfutils 0.190**
-(Ubuntu `0.190-1.1ubuntu0.1`) for native library stripping. The manifest pins both
+(Ubuntu `0.190-1.1ubuntu0.2`) for native library stripping. The manifest pins both
 Freedesktop runtime and SDK to **25.08**. Their exact OSTree commits, the
 bundled .NET runtime versions, tool versions and artifact byte sizes are recorded
 in each successful workflow summary. `flatpak-runtime-lock.json` pins both `x86_64` and `aarch64` runtime refs to exact

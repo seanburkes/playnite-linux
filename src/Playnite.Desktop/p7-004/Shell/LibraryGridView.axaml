@@ -15,18 +15,7 @@
     <shell:LibraryTheme />
   </UserControl.Styles>
   <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto,*,Auto" RowSpacing="8" ColumnSpacing="12">
-    <DockPanel Grid.Row="0" Grid.ColumnSpan="2">
-      <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-        <Button x:Name="AddGameButton" Classes="secondary-cta"
-                Content="Add Game" AutomationProperties.Name="Add custom game" />
-        <Button x:Name="SyncSteamButton" Classes="secondary-cta"
-                Content="Sync Steam" AutomationProperties.Name="Sync Steam library" />
-        <Button x:Name="SyncHeroicButton" Classes="secondary-cta"
-                Content="Sync Heroic" AutomationProperties.Name="Sync Heroic library" />
-        <Button x:Name="TitlePreferencesButton" Classes="secondary-cta" Content="Title Preferences" Click="OnTitlePreferencesClicked" />
-        <Button x:Name="FullscreenButton" Classes="secondary-cta"
-                Content="Fullscreen" IsEnabled="False" Click="OnOpenFullscreen" />
-      </StackPanel>
+    <WrapPanel Grid.Row="0" Grid.ColumnSpan="2" Orientation="Horizontal" ItemSpacing="8" LineSpacing="4">
       <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
         <TextBlock x:Name="HeaderText" Text="Library" Classes="h1" VerticalAlignment="Center"
                    AutomationProperties.Name="Library header" />
@@ -37,7 +26,18 @@
         <Button x:Name="ListViewButton" Classes="secondary-cta" Content="List View"
                 AutomationProperties.Name="List view" />
       </StackPanel>
-    </DockPanel>
+      <Button x:Name="AddGameButton" Classes="secondary-cta"
+              Content="Add Game" AutomationProperties.Name="Add custom game" />
+      <Button x:Name="AddLunaGameButton" Classes="secondary-cta" Content="Add Luna Game"
+              AutomationProperties.Name="Add Amazon Luna game" Click="OnAddLunaGameClicked" />
+      <Button x:Name="SyncSteamButton" Classes="secondary-cta"
+              Content="Sync Steam" AutomationProperties.Name="Sync Steam library" />
+      <Button x:Name="SyncHeroicButton" Classes="secondary-cta"
+              Content="Sync Heroic" AutomationProperties.Name="Sync Heroic library" />
+      <Button x:Name="TitlePreferencesButton" Classes="secondary-cta" Content="Title Preferences" Click="OnTitlePreferencesClicked" />
+      <Button x:Name="FullscreenButton" Classes="secondary-cta"
+              Content="Fullscreen" IsEnabled="False" Click="OnOpenFullscreen" />
+    </WrapPanel>
 
     <WrapPanel x:Name="QueryBar" Grid.Row="1" Grid.ColumnSpan="2" Orientation="Horizontal"
                AutomationProperties.Name="Library search filter and sort">

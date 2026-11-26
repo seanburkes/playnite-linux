@@ -20,6 +20,7 @@ public sealed partial class FullscreenLibraryWindow : Window
     private readonly ListBox games;
     private readonly DesktopGameSessionManager? sessions;
     private readonly HeroicPlayRequest heroicPlay;
+    private readonly LunaPlayRequest lunaPlay;
     private SdlGamepad? controller;
     private DispatcherTimer? controllerTimer;
     private LibraryFilterMode filter;
@@ -37,16 +38,23 @@ public sealed partial class FullscreenLibraryWindow : Window
     }
 
     internal FullscreenLibraryWindow(LibraryViewModel model, SteamPlayRequest steamPlay,
-        DesktopGameSessionManager? sessions = null, HeroicPlayRequest? heroicPlay = null)
+        DesktopGameSessionManager? sessions = null, HeroicPlayRequest? heroicPlay = null, LunaPlayRequest? lunaPlay = null)
     {
         this.model = model;
         this.steamPlay = steamPlay;
+        this.lunaPlay = lunaPlay ?? LunaPlayRequest.CreateDefault();
         this.sessions = sessions;
         this.heroicPlay = heroicPlay ?? new HeroicPlayRequest(new SteamPlayRequest.DesktopOpener());
         AvaloniaXamlLoader.Load(this);
         games = this.FindControl<ListBox>("GameList")!;
         games.SelectionChanged += (_, _) =>
         {
+            if (!launchPending && returnGame is Guid id && games.SelectedItem is LibraryRow row
+                && row.Id != id && model.Rows.Any(item => item.Id == id && item.LunaPlayUrl is not null))
+            {
+                returnGame = null;
+            }
+
             UpdateActions();
             Control<ScrollViewer>("DetailsPanel").IsVisible = false;
         };
@@ -210,6 +218,7 @@ public sealed partial class FullscreenLibraryWindow : Window
                 var result = game switch
                 {
                     { HasFilePlayAction: true } when sessions is not null => await TrackAsync(game),
+                    { LunaPlayUrl: { } url } => await RequestLunaPlayAsync(url, game.Name),
                     { SteamPlayAppId: uint appId } => await steamPlay.SendAsync(appId, game.Name, lifetime.Token),
                     { HeroicPlayUri: not null } => await heroicPlay.SendAsync(game.PluginId, game.GameId, game.Name, lifetime.Token),
                     _ => $"No launch handler is available for {game.Name}.",
@@ -225,6 +234,17 @@ public sealed partial class FullscreenLibraryWindow : Window
                 RestoreGameFocus();
             }
         });
+    }
+
+    private async Task<string> RequestLunaPlayAsync(string url, string name)
+    {
+        var result = await lunaPlay.SendAsync(url, name, lifetime.Token);
+        if (!result.Requested)
+        {
+            waitForFocusReturn = false;
+        }
+
+        return result.Status;
     }
 
     private async Task<string> TrackAsync(LibraryRow game)

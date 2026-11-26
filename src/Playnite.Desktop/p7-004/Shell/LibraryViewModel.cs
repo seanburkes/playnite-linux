@@ -17,6 +17,8 @@ public sealed record LibraryRow(Guid Id, string Name, string GameId)
 
     internal string? HeroicPlayUri { get; init; }
 
+    internal string? LunaPlayUrl { get; init; }
+
     public bool IsInstalled { get; init; }
 
     public bool Favorite { get; init; }
@@ -37,7 +39,7 @@ public sealed record LibraryRow(Guid Id, string Name, string GameId)
 
     public string LaunchTargetDisplay { get; init; } = "Not configured";
 
-    public bool CanPlay => SteamPlayAppId is not null || HasFilePlayAction || !string.IsNullOrEmpty(HeroicPlayUri);
+    public bool CanPlay => SteamPlayAppId is not null || HasFilePlayAction || HeroicPlayUri is not null || LunaPlayUrl is not null;
 
     public string PlayCountDisplay => PlayCount switch
     {
@@ -68,7 +70,9 @@ public sealed record LibraryRow(Guid Id, string Name, string GameId)
 
     public string Initials => ComputeInitials(Name);
 
-    public string StatusLabel => IsInstalled ? "Installed" : "Not installed";
+    public string StatusLabel => PluginId == StoreCatalog.LunaPluginId
+        ? "Cloud streaming"
+        : IsInstalled ? "Installed" : "Not installed";
 
     public string SourceDisplay => PluginId != Guid.Empty
         ? StoreCatalog.GetDisplayName(PluginId)
@@ -534,6 +538,7 @@ public sealed class LibraryViewModel
                 {
                     SteamPlayAppId = null,
                     HeroicPlayUri = null,
+                    LunaPlayUrl = null,
                     HasFilePlayAction = false,
                     LaunchTargetDisplay = "Not configured",
                 };
@@ -754,6 +759,57 @@ public sealed class LibraryViewModel
         await SelectByIdAsync(gameId, cancellationToken).ConfigureAwait(false);
     }
 
+    internal async Task<Guid> SaveLunaGameAsync(LunaGameInput input, Guid? gameId, CancellationToken cancellationToken)
+    {
+        var db = database ?? throw new InvalidOperationException("The library has not been opened.");
+        var name = input.Name.Trim();
+        var url = LunaPlayRequest.ParseGameUrl(input.Url)
+            ?? throw new ArgumentException(LunaPlayRequest.InvalidUrlMessage, nameof(input));
+        ArgumentException.ThrowIfNullOrWhiteSpace(name);
+        var id = gameId ?? Guid.NewGuid();
+        await db.WriteAsync(async session =>
+        {
+            var existing = gameId is null ? null : await session.Games.GetAsync(id).ConfigureAwait(false)
+                ?? throw new KeyNotFoundException($"Game {id} was not found.");
+            var game = existing?.Value ?? new Game(id, url.AbsolutePath, name) { PluginId = StoreCatalog.LunaPluginId };
+            if (game.PluginId != StoreCatalog.LunaPluginId)
+            {
+                throw new InvalidOperationException("Only Amazon Luna games can be edited here.");
+            }
+
+            game.GameId = url.AbsolutePath;
+            var renamed = game.Name != name;
+            game.Name = name;
+            var action = LunaPlayRequest.FindPlayAction(game);
+            if (action is null)
+            {
+                action = new GameAction { Name = "Play", Type = GameActionType.URL, IsPlayAction = true };
+                game.GameActions ??= [];
+                game.GameActions.Insert(0, action);
+            }
+
+            action.Path = url.AbsoluteUri;
+            if (existing is null)
+            {
+                await session.Games.AddAsync(new StoredGame(game)).ConfigureAwait(false);
+            }
+            else
+            {
+                await session.Games.UpdateAsync(new StoredGame(game, existing.LegacyJson)).ConfigureAwait(false);
+                if (renamed && await session.Titles.GetAsync(id).ConfigureAwait(false) is not null)
+                {
+                    await session.Titles.SetGamePreferenceAsync(id, Guid.Empty, DateTime.UtcNow, name).ConfigureAwait(false);
+                }
+            }
+
+            return true;
+        }, cancellationToken).ConfigureAwait(false);
+
+        await ReloadCurrentPageAsync(cancellationToken).ConfigureAwait(false);
+        await SelectByIdAsync(id, cancellationToken).ConfigureAwait(false);
+        return id;
+    }
+
     private static LibraryRow CreateRow(Game game, string? groupLabel = null)
     {
         var isSteam = game.PluginId == SteamPluginId;
@@ -763,14 +819,19 @@ public sealed class LibraryViewModel
             && StoreCatalog.TryBuildHeroicLaunchUri(game.PluginId, game.GameId, out var builtHeroicUri)
             ? builtHeroicUri
             : null;
-        var hasFilePlay = GameLaunchPlanner.FindFilePlayAction(game) is not null;
+        var isLuna = game.PluginId == StoreCatalog.LunaPluginId;
+        var lunaUrl = LunaPlayRequest.ParseGameUrl(LunaPlayRequest.FindPlayAction(game)?.Path)?.AbsoluteUri;
+        var hasFilePlay = !isLuna && GameLaunchPlanner.FindFilePlayAction(game) is not null;
         return new LibraryRow(game.Id, game.Name ?? "(unnamed)", game.GameId ?? string.Empty)
         {
             PluginId = game.PluginId,
             SteamPlayAppId = steamAppId,
             HeroicPlayUri = heroicUri,
+            LunaPlayUrl = lunaUrl,
             HasFilePlayAction = hasFilePlay,
-            LaunchTargetDisplay = GameLaunchPlanner.DescribeLaunchTarget(game, game.PluginId, steamAppId),
+            LaunchTargetDisplay = isLuna
+                ? lunaUrl is not null ? "Amazon Luna (Google Chrome)" : "Invalid Amazon Luna game link"
+                : GameLaunchPlanner.DescribeLaunchTarget(game, game.PluginId, steamAppId),
             IsInstalled = game.IsInstalled,
             Favorite = game.Favorite,
             OverrideInstallState = game.OverrideInstallState,

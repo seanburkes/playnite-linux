@@ -56,12 +56,15 @@ public sealed partial class LibraryGridView : UserControl
         LibrarySourceFilter.Gog,
         LibrarySourceFilter.Amazon,
         LibrarySourceFilter.Custom,
+        LibrarySourceFilter.Luna,
     ];
 
     private readonly BootstrapLocalization localization = new();
     private readonly bool searchSmoke;
     private readonly SteamPlayRequest steamPlay;
     private readonly HeroicPlayRequest heroicPlay;
+    private readonly LunaPlayRequest lunaPlay;
+    private readonly Button addLunaGameButton;
     private readonly ILibrarySteamSync steamSync;
     private readonly ILibraryHeroicSync heroicSync;
     private readonly Func<string, LibraryArtworkLoader> artworkLoaderFactory;
@@ -157,9 +160,11 @@ public sealed partial class LibraryGridView : UserControl
         DesktopGameSessionManager? sessionManager,
         Func<string, string?>? toolResolver = null,
         ILibraryHeroicSync? heroicSync = null,
-        HeroicPlayRequest? heroicPlay = null)
+        HeroicPlayRequest? heroicPlay = null,
+        LunaPlayRequest? lunaPlay = null)
     {
         this.steamPlay = steamPlay;
+        this.lunaPlay = lunaPlay ?? LunaPlayRequest.CreateDefault();
         this.heroicPlay = heroicPlay ?? new HeroicPlayRequest(new SteamPlayRequest.DesktopOpener());
         this.steamSync = steamSync;
         this.heroicSync = heroicSync ?? new HeroicLibrarySyncRunner();
@@ -173,6 +178,7 @@ public sealed partial class LibraryGridView : UserControl
         stopButton = this.FindControl<Button>("StopButton")!;
         configureLaunchButton = this.FindControl<Button>("ConfigureLaunchButton")!;
         addGameButton = this.FindControl<Button>("AddGameButton")!;
+        addLunaGameButton = this.FindControl<Button>("AddLunaGameButton")!;
         sessionBadge = this.FindControl<Border>("SessionBadge")!;
         sessionBadgeText = this.FindControl<TextBlock>("SessionBadgeText")!;
         playStatus = this.FindControl<TextBlock>("PlayStatus")!;
@@ -472,7 +478,8 @@ public sealed partial class LibraryGridView : UserControl
 
     private void RefreshDetails(LibraryRow? selected)
     {
-        this.FindControl<Button>("GameTitleButton")!.IsVisible = selected is { PluginId: var pluginId } && pluginId != Guid.Empty;
+        this.FindControl<Button>("GameTitleButton")!.IsVisible = selected is { PluginId: var pluginId }
+            && pluginId != Guid.Empty && pluginId != StoreCatalog.LunaPluginId;
         this.FindControl<TextBlock>("DetailsName")!.Text = selected?.Name ?? "(none)";
         this.FindControl<TextBlock>("DetailsId")!.Text = selected?.GameId ?? "(none)";
         detailsInitials.Text = selected?.Initials ?? "?";
@@ -845,6 +852,7 @@ public sealed partial class LibraryGridView : UserControl
         sessionBadge.IsVisible = sessionActive && model?.Selected?.Id == activeSessionGameId;
         configureLaunchButton.IsEnabled = available && model?.Selected is not null;
         addGameButton.IsEnabled = available;
+        addLunaGameButton.IsEnabled = available;
         syncSteamButton.IsEnabled = available;
         syncHeroicButton.IsEnabled = available;
         emptySyncButton.IsEnabled = available;
@@ -986,7 +994,7 @@ public sealed partial class LibraryGridView : UserControl
         RefreshLibraryActions();
         try
         {
-            var window = new FullscreenLibraryWindow(library.CreateIndependentView(), steamPlay, sessionManager, heroicPlay);
+            var window = new FullscreenLibraryWindow(library.CreateIndependentView(), steamPlay, sessionManager, heroicPlay, lunaPlay);
             await window.RunAsync(owner);
         }
         catch (Exception exception)
@@ -1012,6 +1020,15 @@ public sealed partial class LibraryGridView : UserControl
     {
         if (!playButton.IsEnabled || disposed || model is not { } library || SelectedPlayRow() is not { } game)
         {
+            return;
+        }
+
+        if (game.LunaPlayUrl is { } url)
+        {
+            var task = RequestUriPlayAsync(library, game.Name, async token => (await lunaPlay.SendAsync(url, game.Name, token).ConfigureAwait(false)).Status,
+                library.LifetimeToken);
+            PlayTask = task;
+            await ObserveUiTaskAsync(task, "Luna play").ConfigureAwait(true);
             return;
         }
 
@@ -1281,9 +1298,74 @@ public sealed partial class LibraryGridView : UserControl
             return;
         }
 
-        var task = OpenConfigureLaunchEditorAsync(library, selectedRow, owner);
+        var task = selectedRow.PluginId == StoreCatalog.LunaPluginId
+            ? OpenLunaGameEditorAsync(library, owner, selectedRow.Id)
+            : OpenConfigureLaunchEditorAsync(library, selectedRow, owner);
         EditorTask = task;
         await ObserveUiTaskAsync(task, "configure launch").ConfigureAwait(true);
+    }
+
+    private async void OnAddLunaGameClicked(object? sender, RoutedEventArgs args)
+    {
+        if (!addLunaGameButton.IsEnabled || disposed || editorPending || model is not { } library
+            || TopLevel.GetTopLevel(this) is not Window owner)
+        {
+            return;
+        }
+
+        var task = OpenLunaGameEditorAsync(library, owner, null);
+        EditorTask = task;
+        await ObserveUiTaskAsync(task, "add Luna game").ConfigureAwait(true);
+    }
+
+    internal Func<LunaGameEditorWindow, Window, Task<LunaGameInput?>>? LunaEditorDialogRunner { get; set; }
+
+    private async Task OpenLunaGameEditorAsync(LibraryViewModel library, Window owner, Guid? gameId)
+    {
+        var generation = ++editorGeneration;
+        editorPending = true;
+        RefreshLibraryActions();
+        var token = library.LifetimeToken;
+        bool IsCurrent() => !disposed && generation == editorGeneration && ReferenceEquals(model, library)
+            && !token.IsCancellationRequested;
+
+        try
+        {
+            var stored = gameId is Guid id ? await library.GetStoredGameAsync(id, token).ConfigureAwait(true) : null;
+            if (!IsCurrent() || (gameId is not null && stored is null))
+            {
+                return;
+            }
+
+            var editor = new LunaGameEditorWindow(stored?.Value);
+            var runner = LunaEditorDialogRunner ?? ((dlg, parent) => dlg.ShowDialog<LunaGameInput?>(parent));
+            var input = await runner(editor, owner).ConfigureAwait(true);
+            if (input is null || !IsCurrent())
+            {
+                return;
+            }
+
+            var savedId = await library.SaveLunaGameAsync(input, gameId, token).ConfigureAwait(true);
+            if (IsCurrent())
+            {
+                RebuildRows();
+                Refresh();
+                playStatus.Text = library.Rows.Any(row => row.Id == savedId)
+                    ? $"Saved Amazon Luna game '{input.Name}'."
+                    : $"Saved '{input.Name}'. Clear filters or choose Amazon Luna to find it.";
+            }
+        }
+        finally
+        {
+            if (generation == editorGeneration)
+            {
+                editorPending = false;
+                if (IsCurrent())
+                {
+                    RefreshLibraryActions();
+                }
+            }
+        }
     }
 
     internal Func<GameLaunchEditorWindow, Window, Task<GameLaunchEditorResult?>>? EditorDialogRunner { get; set; }
