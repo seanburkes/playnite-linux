@@ -1,0 +1,2 @@
+timestamp	unit	from	to	actor	evidence
+2026-11-26T18:20:07Z	p7-004	done	done	seanburkes	PR https://github.com/seanburkes/playnite-linux/pull/257 validates head 001a645d5054a91b56301f04d269841f72b867ce in successful linux-ci https://github.com/seanburkes/playnite-linux/actions/runs/45874524564. Adds recursive SNES folder import, stable entries and tracked Snes9x and RetroArch launches. 74 smoke tests and 270 architecture tests passed locally with zero skips. Two adversarial reviews completed and findings addressed.
