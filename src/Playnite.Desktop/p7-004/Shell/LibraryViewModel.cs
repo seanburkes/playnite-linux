@@ -1,3 +1,4 @@
+using System.Collections.ObjectModel;
 using System.Globalization;
 using Playnite.Core.Database;
 using Playnite.Core.Library;
@@ -37,9 +38,13 @@ public sealed record LibraryRow(Guid Id, string Name, string GameId)
 
     public bool HasFilePlayAction { get; init; }
 
+    internal bool HasEmulatorPlayAction { get; init; }
+
+    internal bool HasTrackedPlayAction => HasFilePlayAction || HasEmulatorPlayAction;
+
     public string LaunchTargetDisplay { get; init; } = "Not configured";
 
-    public bool CanPlay => SteamPlayAppId is not null || HasFilePlayAction || HeroicPlayUri is not null || LunaPlayUrl is not null;
+    public bool CanPlay => SteamPlayAppId is not null || HasTrackedPlayAction || HeroicPlayUri is not null || LunaPlayUrl is not null;
 
     public string PlayCountDisplay => PlayCount switch
     {
@@ -540,6 +545,7 @@ public sealed class LibraryViewModel
                     HeroicPlayUri = null,
                     LunaPlayUrl = null,
                     HasFilePlayAction = false,
+                    HasEmulatorPlayAction = false,
                     LaunchTargetDisplay = "Not configured",
                 };
             }
@@ -810,6 +816,68 @@ public sealed class LibraryViewModel
         return id;
     }
 
+    internal async Task<(int Added, int Updated)> ImportSnesFolderAsync(
+        string folder, SnesRomProfile profile, string? core, CancellationToken cancellationToken)
+    {
+        var db = database ?? throw new InvalidOperationException("The library has not been opened.");
+        var paths = await Task.Run(() => SnesRomProfile.Scan(folder, cancellationToken), cancellationToken)
+            .ConfigureAwait(false);
+        var counts = await db.WriteAsync(async session =>
+        {
+            var added = 0;
+            var updated = 0;
+            foreach (var path in paths)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var id = SnesRomProfile.LibraryId(path);
+                var existing = await session.Games.GetAsync(id).ConfigureAwait(false);
+                if (existing is null)
+                {
+                    var name = Path.GetFileNameWithoutExtension(path);
+                    var game = new Game(id, path, name)
+                    {
+                        PluginId = SnesRomProfile.SourceId,
+                        IsInstalled = true,
+                        Roms = new ObservableCollection<GameRom> { new(name, path) },
+                        GameActions = [profile.CreateAction(core)],
+                    };
+                    await session.Games.AddAsync(new StoredGame(game)).ConfigureAwait(false);
+                    added++;
+                }
+                else
+                {
+                    var game = existing.Value;
+                    if (game.PluginId != SnesRomProfile.SourceId || game.GameId != path)
+                    {
+                        throw new InvalidOperationException("The SNES ROM has a conflicting library identity.");
+                    }
+
+                    var action = SnesRomProfile.FindAction(game);
+                    if (action?.EmulatorId == profile.Id && action.Path == core)
+                    {
+                        continue;
+                    }
+
+                    game.GameActions ??= [];
+                    if (action is not null)
+                    {
+                        game.GameActions.Remove(action);
+                    }
+
+                    game.GameActions.Insert(0, profile.CreateAction(core));
+                    await session.Games.UpdateAsync(existing).ConfigureAwait(false);
+                    updated++;
+                }
+            }
+
+            cancellationToken.ThrowIfCancellationRequested();
+            return (added, updated);
+        }, cancellationToken).ConfigureAwait(false);
+
+        await ReloadCurrentPageAsync(cancellationToken).ConfigureAwait(false);
+        return counts;
+    }
+
     private static LibraryRow CreateRow(Game game, string? groupLabel = null)
     {
         var isSteam = game.PluginId == SteamPluginId;
@@ -821,6 +889,7 @@ public sealed class LibraryViewModel
             : null;
         var isLuna = game.PluginId == StoreCatalog.LunaPluginId;
         var lunaUrl = LunaPlayRequest.ParseGameUrl(LunaPlayRequest.FindPlayAction(game)?.Path)?.AbsoluteUri;
+        var emulator = SnesRomProfile.FindAction(game);
         var hasFilePlay = !isLuna && GameLaunchPlanner.FindFilePlayAction(game) is not null;
         return new LibraryRow(game.Id, game.Name ?? "(unnamed)", game.GameId ?? string.Empty)
         {
@@ -829,9 +898,10 @@ public sealed class LibraryViewModel
             HeroicPlayUri = heroicUri,
             LunaPlayUrl = lunaUrl,
             HasFilePlayAction = hasFilePlay,
+            HasEmulatorPlayAction = emulator is not null,
             LaunchTargetDisplay = isLuna
                 ? lunaUrl is not null ? "Amazon Luna (Google Chrome)" : "Invalid Amazon Luna game link"
-                : GameLaunchPlanner.DescribeLaunchTarget(game, game.PluginId, steamAppId),
+                : emulator?.Name ?? GameLaunchPlanner.DescribeLaunchTarget(game, game.PluginId, steamAppId),
             IsInstalled = game.IsInstalled,
             Favorite = game.Favorite,
             OverrideInstallState = game.OverrideInstallState,

@@ -30,6 +30,14 @@
               Content="Add Game" AutomationProperties.Name="Add custom game" />
       <Button x:Name="AddLunaGameButton" Classes="secondary-cta" Content="Add Luna Game"
               AutomationProperties.Name="Add Amazon Luna game" Click="OnAddLunaGameClicked" />
+      <Button x:Name="ImportSnesButton" Classes="secondary-cta" Content="Import SNES ROMs">
+        <Button.Flyout>
+          <MenuFlyout>
+            <MenuItem Header="Scan with Snes9x" Click="OnImportSnes9xClicked" />
+            <MenuItem Header="Scan with RetroArch (Snes9x)" Click="OnImportRetroArchClicked" />
+          </MenuFlyout>
+        </Button.Flyout>
+      </Button>
       <Button x:Name="SyncSteamButton" Classes="secondary-cta"
               Content="Sync Steam" AutomationProperties.Name="Sync Steam library" />
       <Button x:Name="SyncHeroicButton" Classes="secondary-cta"

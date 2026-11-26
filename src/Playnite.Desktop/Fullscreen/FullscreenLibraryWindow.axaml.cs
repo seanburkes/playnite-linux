@@ -211,13 +211,13 @@ public sealed partial class FullscreenLibraryWindow : Window
             returnGame = game.Id;
             launchPending = true;
             handedOffFocus = false;
-            waitForFocusReturn = !game.HasFilePlayAction || sessions is null;
+            waitForFocusReturn = !game.HasTrackedPlayAction || sessions is null;
             SetStatus($"Starting {game.Name}…");
             try
             {
                 var result = game switch
                 {
-                    { HasFilePlayAction: true } when sessions is not null => await TrackAsync(game),
+                    { HasTrackedPlayAction: true } when sessions is not null => await TrackAsync(game),
                     { LunaPlayUrl: { } url } => await RequestLunaPlayAsync(url, game.Name),
                     { SteamPlayAppId: uint appId } => await steamPlay.SendAsync(appId, game.Name, lifetime.Token),
                     { HeroicPlayUri: not null } => await heroicPlay.SendAsync(game.PluginId, game.GameId, game.Name, lifetime.Token),
@@ -345,7 +345,7 @@ public sealed partial class FullscreenLibraryWindow : Window
     {
         this.FindControl<Button>("PlayButton")!.IsEnabled =
             !busy && games.SelectedItem is LibraryRow { CanPlay: true } row
-            && (!row.HasFilePlayAction || sessions is not null || row.SteamPlayAppId is not null || row.HeroicPlayUri is not null);
+            && (!row.HasTrackedPlayAction || sessions is not null || row.SteamPlayAppId is not null || row.HeroicPlayUri is not null);
         Control<Button>("SearchButton").IsEnabled = !busy;
         Control<Button>("FilterButton").IsEnabled = !busy;
         Control<Button>("DetailsButton").IsEnabled = !busy && games.SelectedIndex >= 0;

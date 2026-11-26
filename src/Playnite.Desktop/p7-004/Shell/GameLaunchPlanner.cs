@@ -348,9 +348,14 @@ internal static class GameLaunchPlanner
             && !string.IsNullOrWhiteSpace(action.Path));
     }
 
-    public static LaunchPlanResult TryBuildLaunchRequest(Game game)
+    public static LaunchPlanResult TryBuildLaunchRequest(Game game, Func<string, string?>? toolResolver = null)
     {
         ArgumentNullException.ThrowIfNull(game);
+        if (SnesRomProfile.FindAction(game) is { } emulator)
+        {
+            return SnesRomProfile.Plan(game, emulator, toolResolver);
+        }
+
         var action = FindFilePlayAction(game);
         if (action is null)
         {

@@ -12,6 +12,7 @@ public enum LibrarySourceFilter
     Amazon = 4,
     Custom = 5,
     Luna = 6,
+    Snes = 7,
 }
 
 /// <summary>
@@ -69,6 +70,11 @@ internal static class StoreCatalog
             return "Humble";
         }
 
+        if (pluginId == SnesRomProfile.SourceId)
+        {
+            return "SNES";
+        }
+
         return pluginId == LunaPluginId ? "Amazon Luna" : "Library";
     }
 
@@ -80,6 +86,7 @@ internal static class StoreCatalog
         LibrarySourceFilter.Gog => "GOG",
         LibrarySourceFilter.Amazon => "Amazon",
         LibrarySourceFilter.Luna => "Amazon Luna",
+        LibrarySourceFilter.Snes => "SNES",
         LibrarySourceFilter.Custom => "Custom",
         _ => "All stores",
     };
@@ -102,6 +109,9 @@ internal static class StoreCatalog
                 return true;
             case LibrarySourceFilter.Luna:
                 pluginId = LunaPluginId;
+                return true;
+            case LibrarySourceFilter.Snes:
+                pluginId = SnesRomProfile.SourceId;
                 return true;
             case LibrarySourceFilter.Custom:
                 pluginId = Guid.Empty;
