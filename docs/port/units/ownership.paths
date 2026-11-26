@@ -204,7 +204,7 @@ src/Playnite.Desktop/p7-004/LibraryTheme.axaml.cs	p7-004	adfc74619c7f5b5805a0c23
 src/Playnite.Desktop/p7-004/Shell/DesktopGameSessionManager.cs	p7-004	325f12215044170989dd7b4bfad003277a7ec52b	pull/246
 src/Playnite.Desktop/p7-004/Shell/GameLaunchEditorWindow.axaml	p7-004	325f12215044170989dd7b4bfad003277a7ec52b	pull/246
 src/Playnite.Desktop/p7-004/Shell/GameLaunchEditorWindow.axaml.cs	p7-004	325f12215044170989dd7b4bfad003277a7ec52b	pull/246
-src/Playnite.Desktop/p7-004/Shell/GameLaunchPlanner.cs	p7-004	8023b6dc0c971f2784a48656ee288633e505c877	pull/247
+src/Playnite.Desktop/p7-004/Shell/GameLaunchPlanner.cs	p7-004	b99124c00b9d6d7d3d94a3ec3037639ba96e5b4d	pull/257
 src/Playnite.Desktop/p7-004/Shell/HeroicLibrarySyncService.cs	p7-004	db6a8fa8c2b0f062278ee2e94d2b6a23b4e284e2	pull/252
 src/Playnite.Desktop/p7-004/Shell/HeroicPlayRequest.cs	p7-004	8023b6dc0c971f2784a48656ee288633e505c877	pull/247
 src/Playnite.Desktop/p7-004/Shell/LibraryArtworkLoader.cs	p7-004	adfc74619c7f5b5805a0c230011187c120cf6b59	pull/245
@@ -215,6 +215,7 @@ src/Playnite.Desktop/p7-004/Shell/LibraryViewModel.cs	p7-004	db6a8fa8c2b0f062278
 src/Playnite.Desktop/p7-004/Shell/LunaGameEditorWindow.axaml	p7-004	da44229a9e3e6ff9aa656017e2529a19adc1fdd7	pull/256
 src/Playnite.Desktop/p7-004/Shell/LunaGameEditorWindow.axaml.cs	p7-004	da44229a9e3e6ff9aa656017e2529a19adc1fdd7	pull/256
 src/Playnite.Desktop/p7-004/Shell/LunaPlayRequest.cs	p7-004	da44229a9e3e6ff9aa656017e2529a19adc1fdd7	pull/256
+src/Playnite.Desktop/p7-004/Shell/SnesRomProfile.cs	p7-004	b99124c00b9d6d7d3d94a3ec3037639ba96e5b4d	pull/257
 src/Playnite.Desktop/p7-004/Shell/StoreCatalog.cs	p7-004	da44229a9e3e6ff9aa656017e2529a19adc1fdd7	pull/256
 src/Playnite.Desktop/p7-004/Shell/TitlePreferenceWindow.axaml	p7-004	db6a8fa8c2b0f062278ee2e94d2b6a23b4e284e2	pull/252
 src/Playnite.Desktop/p7-004/Shell/TitlePreferenceWindow.axaml.cs	p7-004	db6a8fa8c2b0f062278ee2e94d2b6a23b4e284e2	pull/252
