@@ -5,6 +5,7 @@ using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
+using Avalonia.Platform.Storage;
 using Avalonia.Threading;
 using Playnite.Core.Database;
 using Playnite.Core.Library;
@@ -57,6 +58,7 @@ public sealed partial class LibraryGridView : UserControl
         LibrarySourceFilter.Amazon,
         LibrarySourceFilter.Custom,
         LibrarySourceFilter.Luna,
+        LibrarySourceFilter.Snes,
     ];
 
     private readonly BootstrapLocalization localization = new();
@@ -479,7 +481,7 @@ public sealed partial class LibraryGridView : UserControl
     private void RefreshDetails(LibraryRow? selected)
     {
         this.FindControl<Button>("GameTitleButton")!.IsVisible = selected is { PluginId: var pluginId }
-            && pluginId != Guid.Empty && pluginId != StoreCatalog.LunaPluginId;
+            && pluginId != Guid.Empty && pluginId != StoreCatalog.LunaPluginId && pluginId != SnesRomProfile.SourceId;
         this.FindControl<TextBlock>("DetailsName")!.Text = selected?.Name ?? "(none)";
         this.FindControl<TextBlock>("DetailsId")!.Text = selected?.GameId ?? "(none)";
         detailsInitials.Text = selected?.Initials ?? "?";
@@ -850,9 +852,11 @@ public sealed partial class LibraryGridView : UserControl
         stopButton.IsVisible = sessionActive;
         stopButton.IsEnabled = sessionActive && !stopPending && !disposed;
         sessionBadge.IsVisible = sessionActive && model?.Selected?.Id == activeSessionGameId;
-        configureLaunchButton.IsEnabled = available && model?.Selected is not null;
+        configureLaunchButton.IsEnabled = available && model?.Selected is { } selected
+            && selected.PluginId != SnesRomProfile.SourceId;
         addGameButton.IsEnabled = available;
         addLunaGameButton.IsEnabled = available;
+        this.FindControl<Button>("ImportSnesButton")!.IsEnabled = available;
         syncSteamButton.IsEnabled = available;
         syncHeroicButton.IsEnabled = available;
         emptySyncButton.IsEnabled = available;
@@ -1032,7 +1036,7 @@ public sealed partial class LibraryGridView : UserControl
             return;
         }
 
-        if (game.HasFilePlayAction)
+        if (game.HasTrackedPlayAction)
         {
             var sessionTask = RunTrackedSessionAsync(library, game);
             SessionTask = sessionTask;
@@ -1303,6 +1307,90 @@ public sealed partial class LibraryGridView : UserControl
             : OpenConfigureLaunchEditorAsync(library, selectedRow, owner);
         EditorTask = task;
         await ObserveUiTaskAsync(task, "configure launch").ConfigureAwait(true);
+    }
+
+    private async void OnImportSnes9xClicked(object? sender, RoutedEventArgs args) =>
+        await ObserveUiTaskAsync(ImportSnesAsync(SnesRomProfile.Standalone), "SNES ROM scan").ConfigureAwait(true);
+
+    private async void OnImportRetroArchClicked(object? sender, RoutedEventArgs args) =>
+        await ObserveUiTaskAsync(ImportSnesAsync(SnesRomProfile.RetroArch), "SNES ROM scan").ConfigureAwait(true);
+
+    private async Task ImportSnesAsync(SnesRomProfile profile)
+    {
+        if (!this.FindControl<Button>("ImportSnesButton")!.IsEnabled || disposed || editorPending || model is not { } library
+            || TopLevel.GetTopLevel(this) is not Window owner)
+        {
+            return;
+        }
+
+        var generation = ++editorGeneration;
+        editorPending = true;
+        RefreshLibraryActions();
+        var token = library.LifetimeToken;
+        bool IsCurrent() => !disposed && generation == editorGeneration && ReferenceEquals(model, library)
+            && !token.IsCancellationRequested;
+        try
+        {
+            var folders = await owner.StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions
+            {
+                Title = $"Choose a folder to import or switch SNES games to {profile.Name}",
+            }).ConfigureAwait(true);
+            using var folder = folders.FirstOrDefault();
+            if (folder is null || !IsCurrent())
+            {
+                return;
+            }
+
+            var path = folder.TryGetLocalPath()
+                ?? throw new IOException("Select a locally mounted ROM folder.");
+            string? core = null;
+            if (profile == SnesRomProfile.RetroArch)
+            {
+                var files = await owner.StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+                {
+                    Title = "Choose the installed snes9x_libretro.so core",
+                    FileTypeFilter = [new FilePickerFileType("Snes9x libretro core") { Patterns = ["snes9x_libretro.so"] }],
+                }).ConfigureAwait(true);
+                using var file = files.FirstOrDefault();
+                if (file is null || !IsCurrent())
+                {
+                    return;
+                }
+
+                core = file.TryGetLocalPath();
+                if (Path.GetFileName(core) != "snes9x_libretro.so")
+                {
+                    throw new IOException("Select the locally installed snes9x_libretro.so core.");
+                }
+            }
+
+            playStatus.Text = "Scanning for SNES ROMs…";
+            var (added, updated) = await library.ImportSnesFolderAsync(path, profile, core, token).ConfigureAwait(true);
+            if (IsCurrent())
+            {
+                RebuildRows();
+                Refresh();
+                playStatus.Text = $"SNES scan complete. Added {added}, updated {updated}.";
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException)
+        {
+            if (IsCurrent())
+            {
+                playStatus.Text = $"Could not scan for SNES ROMs. {ex.Message}";
+            }
+        }
+        finally
+        {
+            if (generation == editorGeneration)
+            {
+                editorPending = false;
+                if (IsCurrent())
+                {
+                    RefreshLibraryActions();
+                }
+            }
+        }
     }
 
     private async void OnAddLunaGameClicked(object? sender, RoutedEventArgs args)

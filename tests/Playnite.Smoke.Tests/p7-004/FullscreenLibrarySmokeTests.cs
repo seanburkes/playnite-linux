@@ -20,6 +20,73 @@ namespace Playnite.Smoke.Tests;
 public sealed class FullscreenLibrarySmokeTests
 {
     [Fact]
+    public async Task Snes_folder_scan_keeps_one_entry_per_rom_and_switches_emulator_profiles()
+    {
+        var token = TestContext.Current.CancellationToken;
+        var directory = Directory.CreateTempSubdirectory("playnite-snes-");
+        var dbPath = Path.Combine(directory.FullName, "library.sqlite");
+        var model = new LibraryViewModel(dbPath);
+        try
+        {
+            var folder = directory.CreateSubdirectory("ROM Collection");
+            var nested = folder.CreateSubdirectory("SNES");
+            var rom = Path.Combine(nested.FullName, "Example 'SNES'.SFC");
+            var second = Path.Combine(folder.FullName, "Another.smc");
+            var core = Path.Combine(directory.FullName, "snes9x_libretro.so");
+            await File.WriteAllBytesAsync(rom, [], token);
+            await File.WriteAllBytesAsync(second, [], token);
+            await File.WriteAllBytesAsync(core, [], token);
+            await File.WriteAllTextAsync(Path.Combine(folder.FullName, "README.txt"), "Ignored", token);
+            Directory.CreateSymbolicLink(Path.Combine(nested.FullName, "cycle"), folder.FullName);
+
+            await model.LoadAsync(token);
+            Assert.Equal((2, 0), await model.ImportSnesFolderAsync(folder.FullName, SnesRomProfile.Standalone, null, token));
+            Assert.Equal((0, 0), await model.ImportSnesFolderAsync(folder.FullName, SnesRomProfile.Standalone, null, token));
+            Assert.Equal(2, model.Rows.Count);
+            Assert.All(model.Rows, row => Assert.True(row.CanPlay));
+
+            var row = Assert.Single(model.Rows, item => item.GameId == rom);
+            var database = await LibraryDatabase.OpenAsync(dbPath, token);
+            async Task<Game> ReadAsync() => (await database.ReadAsync(session => session.Games.GetAsync(row.Id), token))!.Value;
+            var game = await ReadAsync();
+            Assert.Equal(rom, Assert.Single(game.Roms).Path);
+            await database.WriteAsync(async session =>
+            {
+                var stored = (await session.Games.GetAsync(row.Id))!;
+                stored.Value.Name = "My SNES game";
+                stored.Value.Favorite = true;
+                await session.Games.UpdateAsync(stored);
+                return true;
+            }, token);
+            var standalone = GameLaunchPlanner.TryBuildLaunchRequest(game,
+                name => name == "snes9x-gtk" ? "/opt/snes9x-gtk" : null);
+            Assert.Null(standalone.Error);
+            Assert.Equal("/opt/snes9x-gtk", standalone.Request!.Executable);
+            Assert.Equal([rom], standalone.Request.Arguments);
+
+            Assert.Equal((0, 2), await model.ImportSnesFolderAsync(folder.FullName, SnesRomProfile.RetroArch, core, token));
+            game = await ReadAsync();
+            Assert.Equal("My SNES game", game.Name);
+            Assert.True(game.Favorite);
+            Assert.Single(game.GameActions);
+            var retroArch = GameLaunchPlanner.TryBuildLaunchRequest(game, name => name == "retroarch" ? "/opt/retroarch" : null);
+            Assert.Null(retroArch.Error);
+            Assert.Equal("/opt/retroarch", retroArch.Request!.Executable);
+            Assert.Equal(["-L", core, rom], retroArch.Request.Arguments);
+
+            File.Delete(rom);
+            var missing = GameLaunchPlanner.TryBuildLaunchRequest(game);
+            Assert.Null(missing.Request);
+            Assert.Contains("ROM file could not be found", missing.Error);
+        }
+        finally
+        {
+            model.Dispose();
+            directory.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task Fullscreen_browses_and_plays_without_changing_the_desktop_selection()
     {
         var token = TestContext.Current.CancellationToken;
