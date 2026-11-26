@@ -141,7 +141,7 @@ src/Playnite.Desktop/App.cs	p7-009	5885aaa432ef880c5d900b1b5a7bf19a01f2f1f6	pull
 src/Playnite.Desktop/AssemblyMarker.cs	p2-001	9afd818ae8a695e921bb98f386bfceb83d0059db	pull/29
 src/Playnite.Desktop/AssemblyMarker.cs	p2-002	abdb82bedd0bcadfe93c1fc6f11937c55b116b7c	pull/37
 src/Playnite.Desktop/Fullscreen/FullscreenLibraryWindow.axaml	p7-004	93daa30982bd4cc5bf5f55f2f09935d8e1f1267d	pull/250
-src/Playnite.Desktop/Fullscreen/FullscreenLibraryWindow.axaml.cs	p7-004	93daa30982bd4cc5bf5f55f2f09935d8e1f1267d	pull/250
+src/Playnite.Desktop/Fullscreen/FullscreenLibraryWindow.axaml.cs	p7-004	da44229a9e3e6ff9aa656017e2529a19adc1fdd7	pull/256
 src/Playnite.Desktop/Integration/SteamPlayRequest.cs	p7-004	6c8e1374ca543ca3cb9d4134071a5842328ac1b3	pull/242
 src/Playnite.Desktop/MainWindow.axaml	p2-004	34af4f0fb6430fbc585d3b76ce85094390a26467	pull/34
 src/Playnite.Desktop/MainWindow.axaml	p7-002	e0ad0f948d3ca4441f967536c50050142431a7ee	pull/224
@@ -212,7 +212,10 @@ src/Playnite.Desktop/p7-004/Shell/LibraryGridView.axaml	p7-004	db6a8fa8c2b0f0622
 src/Playnite.Desktop/p7-004/Shell/LibraryGridView.axaml.cs	p7-004	db6a8fa8c2b0f062278ee2e94d2b6a23b4e284e2	pull/252
 src/Playnite.Desktop/p7-004/Shell/LibrarySteamSyncRunner.cs	p7-004	db6a8fa8c2b0f062278ee2e94d2b6a23b4e284e2	pull/252
 src/Playnite.Desktop/p7-004/Shell/LibraryViewModel.cs	p7-004	db6a8fa8c2b0f062278ee2e94d2b6a23b4e284e2	pull/252
-src/Playnite.Desktop/p7-004/Shell/StoreCatalog.cs	p7-004	8023b6dc0c971f2784a48656ee288633e505c877	pull/247
+src/Playnite.Desktop/p7-004/Shell/LunaGameEditorWindow.axaml	p7-004	da44229a9e3e6ff9aa656017e2529a19adc1fdd7	pull/256
+src/Playnite.Desktop/p7-004/Shell/LunaGameEditorWindow.axaml.cs	p7-004	da44229a9e3e6ff9aa656017e2529a19adc1fdd7	pull/256
+src/Playnite.Desktop/p7-004/Shell/LunaPlayRequest.cs	p7-004	da44229a9e3e6ff9aa656017e2529a19adc1fdd7	pull/256
+src/Playnite.Desktop/p7-004/Shell/StoreCatalog.cs	p7-004	da44229a9e3e6ff9aa656017e2529a19adc1fdd7	pull/256
 src/Playnite.Desktop/p7-004/Shell/TitlePreferenceWindow.axaml	p7-004	db6a8fa8c2b0f062278ee2e94d2b6a23b4e284e2	pull/252
 src/Playnite.Desktop/p7-004/Shell/TitlePreferenceWindow.axaml.cs	p7-004	db6a8fa8c2b0f062278ee2e94d2b6a23b4e284e2	pull/252
 src/Playnite.Desktop/p7-005/Shell/ContentHostView.axaml	p7-005	0c9f5d22929818d59b9d0902fa50aa63219e3fc1	pull/227
@@ -546,7 +549,7 @@ tests/Playnite.Smoke.Tests/SearchFilterSortSmokeTests.cs	p7-004	8af3cc00a2ac796b
 tests/Playnite.Smoke.Tests/SettingsWelcomeSmokeTests.cs	p7-006	503d6689f887a026f0753573c30f1b92fcb4ffc1	pull/228
 tests/Playnite.Smoke.Tests/ShellSmokeTests.cs	p7-002	e0ad0f948d3ca4441f967536c50050142431a7ee	pull/224
 tests/Playnite.Smoke.Tests/p7-002/DialogChromeTests.cs	p7-002	1ad4a9c55f890ae956b13286918e8bb7f2dba800	pull/241
-tests/Playnite.Smoke.Tests/p7-004/FullscreenLibrarySmokeTests.cs	p7-004	93daa30982bd4cc5bf5f55f2f09935d8e1f1267d	pull/250
+tests/Playnite.Smoke.Tests/p7-004/FullscreenLibrarySmokeTests.cs	p7-004	da44229a9e3e6ff9aa656017e2529a19adc1fdd7	pull/256
 tests/Playnite.Smoke.Tests/p7-004/GameSessionExperienceSmokeTests.cs	p7-004	325f12215044170989dd7b4bfad003277a7ec52b	pull/246
 tests/Playnite.Smoke.Tests/p7-004/LibraryExperienceSmokeTests.cs	p7-004	adfc74619c7f5b5805a0c230011187c120cf6b59	pull/245
 tests/Playnite.Smoke.Tests/p7-004/MultiStoreExperienceSmokeTests.cs	p7-004	db6a8fa8c2b0f062278ee2e94d2b6a23b4e284e2	pull/252
