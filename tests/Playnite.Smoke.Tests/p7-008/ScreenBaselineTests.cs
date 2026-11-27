@@ -45,6 +45,88 @@ public sealed class ScreenBaselineTests
     private static readonly Guid GameOneId = Guid.Parse("11111111-2222-4333-8444-555555555551");
     private static readonly Guid GameTwoId = Guid.Parse("11111111-2222-4333-8444-555555555552");
 
+    [Theory]
+    [InlineData(920)]
+    [InlineData(1280)]
+    public async Task Library_toolbar_keeps_sort_and_view_actions_aligned(int width)
+    {
+        using var profile = new ScopedXdgProfile();
+        await profile.WriteWelcomeAcknowledgedAsync();
+        await RunHeadlessAsync(() =>
+        {
+            var window = new MainWindow { Width = width, Height = 720 };
+            window.Styles.Add(new Playnite.Desktop.Theme.PlayniteDarkTheme());
+            try
+            {
+                window.Show();
+                Dispatcher.UIThread.RunJobs();
+                var library = FindDescendant<LibraryGridView>(window)!;
+                double CenterY(string name)
+                {
+                    var control = library.FindControl<Control>(name)!;
+                    return control.TranslatePoint(new Point(0, control.Bounds.Height / 2), library)!.Value.Y;
+                }
+
+                var searchCenter = CenterY("SearchBox");
+                foreach (var name in new[]
+                {
+                    "HeaderText", "AllFilterButton", "InstalledFilterButton", "UninstalledFilterButton",
+                    "SortCombo", "SortDirectionButton", "GridViewButton", "ListViewButton",
+                })
+                {
+                    Assert.True(Math.Abs(CenterY(name) - searchCenter) <= 1, $"{name} is off the first row at {width}px.");
+                }
+            }
+            finally
+            {
+                window.Close();
+            }
+        });
+    }
+
+    [Fact]
+    public async Task Selecting_games_keeps_the_editor_closed_and_sidebar_filters_follow_the_library()
+    {
+        using var profile = new ScopedXdgProfile();
+        await profile.WriteWelcomeAcknowledgedAsync();
+        await profile.SeedLibraryAsync();
+        await RunHeadlessAsync(() =>
+        {
+            var window = new MainWindow { Width = 1280, Height = 720 };
+            try
+            {
+                window.Show();
+                var library = FindDescendant<LibraryGridView>(window)!;
+                var list = library.FindControl<ListBox>("GameList")!;
+                var editor = FindDescendant<GameEditView>(window)!;
+                var edit = library.FindControl<Button>("EditGameButton")!;
+                PumpUntil(() => list.ItemCount == 2 && edit.IsEnabled);
+                Assert.False(editor.IsVisible);
+                list.SelectedIndex = 1;
+                Assert.False(editor.IsVisible);
+                edit.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+                PumpUntil(() => editor.IsVisible);
+                Assert.Equal("Beta Game", editor.FindControl<TextBox>("NameBox")!.Text);
+                list.SelectedIndex = 0;
+                Assert.False(editor.IsVisible);
+
+                var shell = window.FindControl<ShellView>("ShellRoot")!;
+                var installed = shell.FindControl<Button>("InstalledButton")!;
+                installed.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+                PumpUntil(() => list.ItemCount == 1 && installed.Classes.Contains("active"));
+                Assert.True(library.FindControl<Button>("InstalledFilterButton")!.Classes.Contains("active"));
+
+                var all = library.FindControl<Button>("AllFilterButton")!;
+                all.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+                PumpUntil(() => list.ItemCount == 2 && shell.FindControl<Button>("AllButton")!.Classes.Contains("active"));
+            }
+            finally
+            {
+                window.Close();
+            }
+        });
+    }
+
     [Fact]
     public async Task Main_shell_exposes_key_controls_and_supports_tab_navigation()
     {

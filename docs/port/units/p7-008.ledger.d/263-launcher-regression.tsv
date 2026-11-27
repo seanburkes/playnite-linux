@@ -1,0 +1,2 @@
+timestamp	unit	from	to	actor	evidence
+2026-11-27T00:25:08Z	p7-008	done	done	seanburkes	PR https://github.com/seanburkes/playnite-linux/pull/263 validates head 405fca52587fa2776a07d169e052e57cf3ca442c in successful linux-ci https://github.com/seanburkes/playnite-linux/actions/runs/45915963206. Verifies toolbar alignment at 920 and 1280 pixels, explicit metadata editing, and synchronized filters. Local full smoke and architecture suites passed 77 and 270 cases, with zero skips.
