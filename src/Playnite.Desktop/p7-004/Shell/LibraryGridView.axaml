@@ -38,6 +38,8 @@
       <Button x:Name="SyncHeroicButton" Classes="secondary-cta"
               Content="Sync Heroic" AutomationProperties.Name="Sync Heroic library" />
       <Button x:Name="TitlePreferencesButton" Classes="secondary-cta" Content="Title Preferences" Click="OnTitlePreferencesClicked" />
+      <Button x:Name="PluginsButton" Classes="secondary-cta" Content="Plugins"
+              AutomationProperties.Name="Manage plugins and settings" Click="OnPluginsClicked" />
       <Button x:Name="FullscreenButton" Classes="secondary-cta"
               Content="Fullscreen" IsEnabled="False" Click="OnOpenFullscreen" />
     </WrapPanel>

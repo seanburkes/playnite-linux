@@ -1,8 +1,8 @@
-# Plugin Architecture — Iterations 1, 2 & 3
+# Plugin Architecture — Iterations 1–4
 
 This document records the OpenCode v2–inspired plugin kernel, built-in store extractions,
-declarative UI extension slots, and community-style compatibility plugin in Playnite Linux
-(`Playnite.Core.Plugins` and `Playnite.Desktop`).
+declarative UI extension slots, community-style compatibility plugin, and host-rendered
+Plugins & Add-ons manager in Playnite Linux (`Playnite.Core.Plugins` and `Playnite.Desktop`).
 
 ## Speed & Isolation Design
 
@@ -12,13 +12,15 @@ declarative UI extension slots, and community-style compatibility plugin in Play
 2. **Manifest-first lazy activation:** External plugins declare `plugin.json` (or legacy
    `extension.yaml`) with `surfaces`, `capabilities`, `sourceId`, and relative `entryPoints`.
    `PluginHost.DiscoverExternal` validates manifest sizes (1 MiB cap), rejects duplicate JSON keys,
-   traversal, intermediate/leaf/root symlinks, and non-regular files via `IRegularFileProbe`, and
-   indexes capability owners **without** loading assemblies. `LibraryViewModel` construction and
-   `SourceCombo` population use non-materializing `PluginHost.GetDeclaredSources()` and
-   `PluginHost.HasUiSlotProviders()` so external `librarySource` or `uiSlots` plugins stay
-   unmaterialized until accessed. Collectible `AssemblyLoadContext` loading happens only when a
-   plugin's capability (`SourceId`, `LibrarySync`, `Commands`, `EventHooks`, `UiSlots`, `Metadata`,
-   or `Settings`) is first accessed, re-verifying file/dependency containment at load time.
+   reserved host IDs, traversal, intermediate/leaf/root symlinks, and non-regular files via
+   `IRegularFileProbe`, and indexes capability owners **without** loading assemblies.
+   `LibraryViewModel` construction, `SourceCombo` population, and `PluginManagerWindow` browsing
+   keep lazy (`Registered`) and disabled plugins unmaterialized until activated on demand (or
+   explicitly via `Load Settings`, with `GetSettingsSchema(id, activateIfLazy: false)` /
+   `GetSettingsValues(id, activateIfLazy: false)` also available on `PluginHost`). Collectible
+   `AssemblyLoadContext` loading happens only when a plugin's capability (`SourceId`,
+   `LibrarySync`, `Commands`, `EventHooks`, `UiSlots`, `Metadata`, or Settings activation)
+   is first accessed, re-verifying file/dependency containment at load time.
 3. **Surface splitting:** Each manifest declares which surfaces it targets (`core`, `desktop`,
    `fullscreen`, `theme`). Headless hosts skip UI-only plugins without loading Avalonia, and
    theme-only manifests are indexed without attempting `.NET` assembly loading.
@@ -28,15 +30,20 @@ declarative UI extension slots, and community-style compatibility plugin in Play
    guards and link/attribute sanitization. Events with zero subscribers and no pending lazy hook
    plugins return `Task.CompletedTask` synchronously, while `HasUiSlotProviders` provides an O(1)
    non-materializing check before `ResolveUiSlotAsync` runs.
-5. **DTO-only capability contracts:** `LibrarySourceInfo`, `PluginLaunchSpec`, `PluginSyncResult`,
-   `PluginCommandDescriptor`, `PluginEvent`, `PluginSettingField`, `PluginGameSnapshot`,
-   `PluginUiSlotContribution`, and `PluginGameMetadata` contain no raw database or UI types,
-   preserving compatibility with a future out-of-process JSON-RPC adapter.
+5. **Persisted enablement & validated settings:** `PluginHost` persists per-plugin enable/disable
+   overrides under reserved `HostStatePluginId` (`playnite.host.state`) in `IPluginSettingsStore`,
+   sanitizes untrusted `IPluginSettingsCapability.Fields` schemas, and validates all entries
+   atomically against `PluginSettingType` in `SaveSettings` before writing.
+6. **DTO-only capability contracts:** `LibrarySourceInfo`, `PluginLaunchSpec`, `PluginSyncResult`,
+   `PluginCommandDescriptor`, `PluginEvent`, `PluginSettingField`, `PluginSettingsSaveResult`,
+   `PluginGameSnapshot`, `PluginUiSlotContribution`, and `PluginGameMetadata` contain no raw
+   database or UI types, preserving compatibility with a future out-of-process JSON-RPC adapter.
 
-## Iteration 1–3 Deliverables
+## Iteration 1–4 Deliverables
 
-- **`src/Playnite.Core/Plugins/`**: `PluginHost`, `FilePluginSettingsStore` (per-plugin atomic
-  JSON persistence with symlink/regular-file/size/key guards), `PluginManifestParser`, `IPlaynitePlugin`,
+- **`src/Playnite.Core/Plugins/`**: `PluginHost` (persisted enablement state, schema sanitization,
+  validated `SaveSettings`, `GetDiagnostics`), `FilePluginSettingsStore` (per-plugin atomic JSON
+  persistence with symlink/regular-file/size/key guards), `PluginManifestParser`, `IPlaynitePlugin`,
   `ILibrarySourceCapability`, `ILaunchCapability`, `ILibrarySyncCapability`, `ICommandCapability`,
   `IEventHookCapability`, `IUiSlotCapability`, `IMetadataCapability`,
   `IPluginSettingsCapability`, and DTO models.
@@ -53,18 +60,18 @@ declarative UI extension slots, and community-style compatibility plugin in Play
   - `DesktopPluginHostFactory`: registers built-ins, wires `FilePluginSettingsStore` under
     `plugin-settings`, and lazily discovers external plugins from `PLAYNITE_PLUGINS_DIR` or
     `<libraryDir>/plugins` via `LinuxRegularFileProbe`.
-- **Dynamic Shell Integration**:
+- **Dynamic Shell & Plugins Manager Integration**:
   - `StoreCatalog`, `GameLaunchPlanner`, `LibraryViewModel`, `LibraryGridView`, `SteamPlayRequest`,
     `LibraryTheme`, and `FullscreenLibraryWindow` resolve source names, launch planning, sync
     dispatch, `GameStarting`/`GameStopped`/`LibrarySynced` events, and dynamic `SourceCombo` filters
     through `PluginHost`.
   - `LibraryGridView` and `LibraryTheme` render fault-isolated `card.badge`, `details.badges`, and
-    `details.section` contributions through `PluginHost`; `FullscreenLibraryWindow` uses `PluginHost`
-    for launch planning and session events without desktop UI slot rendering.
-  - Note: rendering and editing `IPluginSettingsCapability` fields in the desktop Settings UI and
-    declarative theme packs (`theme.yaml` + `.axaml`) belong to Iteration 4.
+    `details.section` contributions through `PluginHost`, and `PluginsButton` opens
+    `PluginManagerWindow` for enable/disable toggles, lazy settings activation, host-rendered typed
+    settings editing, reset-to-defaults, and discovery/plugin diagnostics with live library refresh.
 
 ## Planned Next Iteration
 
-- **Iteration 4:** Host-rendered settings UI & Add-ons manager in `SettingsWindow` (`p7-006`) and
-  declarative theme packs (`theme.yaml` + `.axaml`).
+- **Iteration 5:** Declarative theme packs (`theme.yaml` + `.axaml`) and live theme switching,
+  plus dynamic plugin-contributed commands (`ICommandCapability`) and `IMetadataCapability`
+  integration in the game metadata editor (`p7-005`).

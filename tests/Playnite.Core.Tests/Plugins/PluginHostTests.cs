@@ -792,6 +792,328 @@ public sealed class PluginHostTests
         Assert.Contains(host.GetRecords(), r => r.Descriptor.Id == "test.cancel-slot" && r.State == PluginLifecycleState.Active);
     }
 
+    [Fact]
+    public void PluginHost_persists_enable_disable_state_and_rejects_reserved_host_id()
+    {
+        var token = TestContext.Current.CancellationToken;
+        _ = token;
+        var tempDir = Directory.CreateTempSubdirectory("playnite-plugin-state-");
+        try
+        {
+            var settingsRoot = Path.Combine(tempDir.FullName, "settings");
+            var storeErrors = new List<(string PluginId, string Message)>();
+            var store = new FilePluginSettingsStore(settingsRoot, (id, msg) => storeErrors.Add((id, msg)), new AlwaysRegularFileProbe());
+
+            var lazySourceId = Guid.Parse("e1111111-1111-1111-1111-111111111111");
+            var optInSourceId = Guid.Parse("e2222222-2222-2222-2222-222222222222");
+
+            using (var host1 = new PluginHost(PluginSurface.Core | PluginSurface.Desktop, settingsStore: store))
+            {
+                // Reserved host state identifier is rejected across built-in, lazy, and external discovery.
+                var reservedBuiltIn = new FakeBuiltInPlugin(PluginHost.HostStatePluginId, Guid.Parse("e3333333-3333-3333-3333-333333333333"), "Reserved");
+                Assert.Throws<InvalidOperationException>(() => host1.RegisterBuiltIn(reservedBuiltIn));
+
+                var reservedLazy = new PluginDescriptor(
+                    PluginHost.HostStatePluginId,
+                    Guid.Empty,
+                    "Reserved Lazy",
+                    new Version(1, 0, 0),
+                    PluginLoadKind.ExternalAssembly,
+                    PluginSurface.Desktop,
+                    PluginCapabilityKind.Settings,
+                    new PluginEntryPoints(Desktop: "reserved.dll"));
+                Assert.Throws<InvalidOperationException>(() => host1.RegisterLazy(reservedLazy, () => reservedBuiltIn));
+
+                var pluginsDir = Path.Combine(tempDir.FullName, "plugins");
+                var reservedDir = Path.Combine(pluginsDir, "reserved-plugin");
+                Directory.CreateDirectory(reservedDir);
+                File.WriteAllText(
+                    Path.Combine(reservedDir, PluginManifestParser.PluginManifestFileName),
+                    $$"""
+                    {
+                      "id": "{{PluginHost.HostStatePluginId}}",
+                      "name": "Reserved External",
+                      "version": "1.0.0",
+                      "surfaces": ["desktop"],
+                      "capabilities": ["settings"],
+                      "entryPoints": { "desktop": "Reserved.dll", "entryType": "Reserved.Entry" }
+                    }
+                    """);
+                File.WriteAllBytes(Path.Combine(reservedDir, "Reserved.dll"), [1, 2, 3]);
+                var discovery = host1.DiscoverExternal(pluginsDir, new AlwaysRegularFileProbe());
+                Assert.Empty(discovery.Discovered);
+                Assert.Contains(discovery.Diagnostics, d => d.Code == "reserved-plugin-id");
+
+                Assert.True(host1.RegisterBuiltIn(new FakeBuiltInPlugin()));
+                var lazyDescriptor = new PluginDescriptor(
+                    "test.persisted.lazy",
+                    lazySourceId,
+                    "Persisted Lazy",
+                    new Version(1, 0, 0),
+                    PluginLoadKind.ExternalAssembly,
+                    PluginSurface.Desktop,
+                    PluginCapabilityKind.LibrarySource | PluginCapabilityKind.UiSlots,
+                    new PluginEntryPoints(Desktop: "lazy.dll"));
+                host1.RegisterLazy(lazyDescriptor, () => new FakeBuiltInPlugin("test.persisted.lazy", lazySourceId, "Persisted Lazy"));
+
+                var optInDescriptor = new PluginDescriptor(
+                    "test.persisted.optin",
+                    optInSourceId,
+                    "Persisted Opt-In",
+                    new Version(1, 0, 0),
+                    PluginLoadKind.ExternalAssembly,
+                    PluginSurface.Desktop,
+                    PluginCapabilityKind.LibrarySource,
+                    new PluginEntryPoints(Desktop: "optin.dll"),
+                    EnabledByDefault: false);
+                host1.RegisterLazy(optInDescriptor, () => new FakeBuiltInPlugin("test.persisted.optin", optInSourceId, "Persisted Opt-In"));
+
+                Assert.Contains(host1.GetRecords(), r => r.Descriptor.Id == "test.persisted.optin" && r.State == PluginLifecycleState.Disabled);
+                Assert.DoesNotContain(host1.GetDeclaredSources(), s => s.SourceId == optInSourceId);
+
+                Assert.True(host1.Disable(FakeBuiltInPlugin.Id));
+                Assert.True(host1.Disable("test.persisted.lazy"));
+                Assert.True(host1.Enable("test.persisted.optin"));
+                Assert.Contains(host1.GetDeclaredSources(), s => s.SourceId == optInSourceId);
+            }
+
+            // Host 2 reads persisted overrides cleanly without activating lazy plugins or waking disabled ones.
+            var storeReloaded = new FilePluginSettingsStore(settingsRoot, (id, msg) => storeErrors.Add((id, msg)), new AlwaysRegularFileProbe());
+            var lazyFactoryCalls = 0;
+            var optInFactoryCalls = 0;
+            using (var host2 = new PluginHost(PluginSurface.Core | PluginSurface.Desktop, settingsStore: storeReloaded))
+            {
+                Assert.True(host2.RegisterBuiltIn(new FakeBuiltInPlugin()));
+                var lazyDescriptor = new PluginDescriptor(
+                    "test.persisted.lazy",
+                    lazySourceId,
+                    "Persisted Lazy",
+                    new Version(1, 0, 0),
+                    PluginLoadKind.ExternalAssembly,
+                    PluginSurface.Desktop,
+                    PluginCapabilityKind.LibrarySource | PluginCapabilityKind.UiSlots,
+                    new PluginEntryPoints(Desktop: "lazy.dll"));
+                host2.RegisterLazy(lazyDescriptor, () =>
+                {
+                    lazyFactoryCalls++;
+                    return new FakeBuiltInPlugin("test.persisted.lazy", lazySourceId, "Persisted Lazy");
+                });
+
+                var optInDescriptor = new PluginDescriptor(
+                    "test.persisted.optin",
+                    optInSourceId,
+                    "Persisted Opt-In",
+                    new Version(1, 0, 0),
+                    PluginLoadKind.ExternalAssembly,
+                    PluginSurface.Desktop,
+                    PluginCapabilityKind.LibrarySource,
+                    new PluginEntryPoints(Desktop: "optin.dll"),
+                    EnabledByDefault: false);
+                host2.RegisterLazy(optInDescriptor, () =>
+                {
+                    optInFactoryCalls++;
+                    return new FakeBuiltInPlugin("test.persisted.optin", optInSourceId, "Persisted Opt-In");
+                });
+
+                Assert.Contains(host2.GetRecords(), r => r.Descriptor.Id == FakeBuiltInPlugin.Id && r.State == PluginLifecycleState.Disabled);
+                Assert.Contains(host2.GetRecords(), r => r.Descriptor.Id == "test.persisted.lazy" && r.State == PluginLifecycleState.Disabled && !r.IsMaterialized);
+                Assert.Contains(host2.GetRecords(), r => r.Descriptor.Id == "test.persisted.optin" && r.State == PluginLifecycleState.Registered && !r.IsMaterialized);
+                Assert.Equal(0, lazyFactoryCalls);
+                Assert.Equal(0, optInFactoryCalls);
+                Assert.False(host2.HasUiSlotProviders(PluginUiSlots.CardBadge));
+                Assert.DoesNotContain(host2.GetDeclaredSources(), s => s.SourceId == FakeBuiltInPlugin.SourceGuid);
+                Assert.DoesNotContain(host2.GetDeclaredSources(), s => s.SourceId == lazySourceId);
+                Assert.Contains(host2.GetDeclaredSources(), s => s.SourceId == optInSourceId);
+
+                Assert.True(host2.TryGetSource(optInSourceId, out var loadedOptIn));
+                Assert.Equal("Persisted Opt-In", loadedOptIn.DisplayName);
+                Assert.Equal(1, optInFactoryCalls);
+
+                // Re-enabling built-in persists "true" for future restarts.
+                Assert.True(host2.Enable(FakeBuiltInPlugin.Id));
+
+                // Opt-in plugin (EnabledByDefault: false) failing activation once then succeeding persists "true".
+                var failOptIn = true;
+                var retryOptInDescriptor = new PluginDescriptor(
+                    "test.optin.retry",
+                    Guid.Empty,
+                    "Retry Opt-In",
+                    new Version(1, 0, 0),
+                    PluginLoadKind.ExternalAssembly,
+                    PluginSurface.Desktop,
+                    PluginCapabilityKind.None,
+                    new PluginEntryPoints(Desktop: "retry.dll"),
+                    EnabledByDefault: false);
+                host2.RegisterLazy(retryOptInDescriptor, () => new ConditionalFaultPlugin("test.optin.retry", () => failOptIn));
+                Assert.False(host2.Enable("test.optin.retry"));
+                Assert.Contains(host2.GetRecords(), r => r.Descriptor.Id == "test.optin.retry" && r.State == PluginLifecycleState.Faulted);
+                failOptIn = false;
+                Assert.True(host2.Enable("test.optin.retry"));
+                Assert.Contains(host2.GetRecords(), r => r.Descriptor.Id == "test.optin.retry" && r.State == PluginLifecycleState.Active);
+            }
+
+            using var host3 = new PluginHost(
+                PluginSurface.Core | PluginSurface.Desktop,
+                settingsStore: new FilePluginSettingsStore(settingsRoot, regularFileProbe: new AlwaysRegularFileProbe()));
+            Assert.True(host3.RegisterBuiltIn(new FakeBuiltInPlugin()));
+            host3.RegisterLazy(
+                new PluginDescriptor(
+                    "test.optin.retry",
+                    Guid.Empty,
+                    "Retry Opt-In",
+                    new Version(1, 0, 0),
+                    PluginLoadKind.ExternalAssembly,
+                    PluginSurface.Desktop,
+                    PluginCapabilityKind.None,
+                    new PluginEntryPoints(Desktop: "retry.dll"),
+                    EnabledByDefault: false),
+                () => new ConditionalFaultPlugin("test.optin.retry", () => false));
+            Assert.Contains(host3.GetRecords(), r => r.Descriptor.Id == FakeBuiltInPlugin.Id && r.State == PluginLifecycleState.Active);
+            Assert.Contains(host3.GetRecords(), r => r.Descriptor.Id == "test.optin.retry" && r.State == PluginLifecycleState.Registered);
+            Assert.Empty(storeErrors);
+        }
+        finally
+        {
+            tempDir.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
+    public void PluginHost_sanitizes_settings_schema_validates_atomically_and_filters_diagnostics()
+    {
+        var lazySettingsCalls = 0;
+        var store = new InMemoryPluginSettingsStore();
+        using var host = new PluginHost(PluginSurface.Desktop | PluginSurface.Core, settingsStore: store);
+
+        var lazyDescriptor = new PluginDescriptor(
+            "test.lazy-settings",
+            Guid.Empty,
+            "Lazy Settings",
+            new Version(1, 0, 0),
+            PluginLoadKind.ExternalAssembly,
+            PluginSurface.Desktop,
+            PluginCapabilityKind.Settings,
+            new PluginEntryPoints(Desktop: "lazy-settings.dll"));
+        host.RegisterLazy(lazyDescriptor, () =>
+        {
+            lazySettingsCalls++;
+            return new MultiFieldSettingsPlugin("test.lazy-settings");
+        });
+
+        // activateIfLazy: false inspects schema/values without materializing lazy plugins.
+        Assert.Empty(host.GetSettingsSchema("test.lazy-settings", activateIfLazy: false));
+        Assert.Empty(host.GetSettingsValues("test.lazy-settings", activateIfLazy: false));
+        Assert.Equal(0, lazySettingsCalls);
+
+        // activateIfLazy: true activates on demand and returns sanitized fields.
+        var schema = host.GetSettingsSchema("test.lazy-settings", activateIfLazy: true);
+        Assert.Equal(1, lazySettingsCalls);
+        Assert.Equal(5, schema.Count);
+        Assert.Equal("Clean Boolean", schema[0].Label);
+        Assert.Equal("false", schema[0].DefaultValue);
+        Assert.Equal("Low", schema[4].DefaultValue); // Unknown Choice default normalized to first valid choice.
+        Assert.Equal(["Low", "Medium", "High"], schema[4].Choices);
+
+        // Defaults merged cleanly when store is empty.
+        var defaults = host.GetSettingsValues("test.lazy-settings", activateIfLazy: false);
+        Assert.Equal("false", defaults["flag"]);
+        Assert.Equal("default-name", defaults["label"]);
+        Assert.Equal("/tmp/games", defaults["folder"]);
+        Assert.Equal("10", defaults["limit"]);
+        Assert.Equal("Low", defaults["tier"]);
+
+        // Invalid batch rejects atomically without persisting even the valid keys.
+        var invalidResult = host.SaveSettings("test.lazy-settings", new Dictionary<string, string?>
+        {
+            ["flag"] = "true",
+            ["limit"] = "not-a-number",
+            ["tier"] = "Ultra",
+            ["folder"] = "/bad\npath",
+            ["unknown"] = "x",
+        });
+        Assert.False(invalidResult.Succeeded);
+        Assert.NotNull(invalidResult.FieldErrors);
+        Assert.True(invalidResult.FieldErrors.ContainsKey("limit"));
+        Assert.True(invalidResult.FieldErrors.ContainsKey("tier"));
+        Assert.True(invalidResult.FieldErrors.ContainsKey("folder"));
+        Assert.True(invalidResult.FieldErrors.ContainsKey("unknown"));
+        Assert.Null(store.Get("test.lazy-settings", "flag")); // Atomic: valid key not written either.
+
+        // Valid batch normalizes and persists cleanly.
+        var validResult = host.SaveSettings("test.lazy-settings", new Dictionary<string, string?>
+        {
+            ["flag"] = " TRUE ",
+            ["label"] = "My Label",
+            ["folder"] = "  /opt/roms  ",
+            ["limit"] = " 042 ",
+            ["tier"] = "High",
+        });
+        Assert.True(validResult.Succeeded);
+        Assert.Equal("true", store.Get("test.lazy-settings", "flag"));
+        Assert.Equal("/opt/roms", store.Get("test.lazy-settings", "folder"));
+        Assert.Equal("42", store.Get("test.lazy-settings", "limit"));
+        Assert.Equal("High", store.Get("test.lazy-settings", "tier"));
+
+        // 64-field schema cap, duplicate key rejection, and throwing Fields isolation.
+        Assert.True(host.RegisterBuiltIn(new OversizedSchemaPlugin("test.oversized-schema")));
+        Assert.Equal(64, host.GetSettingsSchema("test.oversized-schema").Count);
+
+        Assert.True(host.RegisterBuiltIn(new ThrowingSchemaPlugin("test.throwing-schema")));
+        Assert.Empty(host.GetSettingsSchema("test.throwing-schema"));
+        Assert.Contains(host.GetRecords(), r => r.Descriptor.Id == "test.throwing-schema" && r.State == PluginLifecycleState.Faulted);
+        Assert.Contains(host.GetDiagnostics("test.throwing-schema"), d => d.Code == "settings-schema-failed");
+
+        // Reserved host ID cannot be edited via SaveSettings.
+        Assert.False(host.SaveSettings(PluginHost.HostStatePluginId, new Dictionary<string, string?> { ["k"] = "v" }).Succeeded);
+
+        // Storage write exceptions on SaveSettings record diagnostics and return clean failure.
+        var failingHost = new PluginHost(PluginSurface.Desktop, settingsStore: new ThrowingWriteSettingsStore());
+        Assert.True(failingHost.RegisterBuiltIn(new MultiFieldSettingsPlugin("test.write-fail")));
+        var writeFail = failingHost.SaveSettings("test.write-fail", new Dictionary<string, string?> { ["flag"] = "true" });
+        Assert.False(writeFail.Succeeded);
+        Assert.Contains(failingHost.GetDiagnostics("test.write-fail"), d => d.Code == "settings-save-failed");
+
+        // Disabled plugin rejects SaveSettings cleanly; corrupt stored values fall back to sanitized defaults;
+        // Path rejects tab/control characters uniformly in schema default and SaveSettings.
+        Assert.True(host.Disable("test.lazy-settings"));
+        var disabledSave = host.SaveSettings("test.lazy-settings", new Dictionary<string, string?> { ["flag"] = "true" });
+        Assert.False(disabledSave.Succeeded);
+        Assert.Contains("disabled", disabledSave.ErrorMessage, StringComparison.OrdinalIgnoreCase);
+
+        Assert.True(host.RegisterBuiltIn(new ControlPathPlugin("test.control-path")));
+        var pathSchema = host.GetSettingsSchema("test.control-path");
+        Assert.Equal(string.Empty, Assert.Single(pathSchema).DefaultValue);
+        store.Set("test.control-path", "pathKey", "/bad\tpath");
+        Assert.Equal(string.Empty, host.GetSettingsValues("test.control-path")["pathKey"]);
+        var tabSave = host.SaveSettings("test.control-path", new Dictionary<string, string?> { ["pathKey"] = "/bad\tpath" });
+        Assert.False(tabSave.Succeeded);
+        Assert.True(tabSave.FieldErrors!.ContainsKey("pathKey"));
+
+        // Multi-key SaveSettings via FilePluginSettingsStore is atomic when combined JSON exceeds 256 KiB MaxFileBytes.
+        var atomicTemp = Directory.CreateTempSubdirectory("playnite-atomic-save-");
+        try
+        {
+            var fileStore = new FilePluginSettingsStore(atomicTemp.FullName, regularFileProbe: new AlwaysRegularFileProbe());
+            using var atomicHost = new PluginHost(PluginSurface.Desktop, settingsStore: fileStore);
+            Assert.True(atomicHost.RegisterBuiltIn(new OversizedSchemaPlugin("test.atomic-overflow")));
+            var huge = new string('x', FilePluginSettingsStore.MaxValueLength - 8);
+            var overflowSave = atomicHost.SaveSettings("test.atomic-overflow", new Dictionary<string, string?>
+            {
+                ["key0"] = huge,
+                ["key1"] = huge,
+                ["key2"] = huge,
+                ["key3"] = huge,
+                ["key4"] = huge,
+            });
+            Assert.False(overflowSave.Succeeded);
+            Assert.Empty(fileStore.GetAll("test.atomic-overflow")); // Key 0 was NOT partially persisted.
+        }
+        finally
+        {
+            atomicTemp.Delete(recursive: true);
+        }
+    }
+
     private sealed class AlwaysRegularFileProbe : IRegularFileProbe
     {
         public bool IsRegularFile(string path) => true;
@@ -849,7 +1171,7 @@ public sealed class PluginHostTests
         public LibrarySourceInfo Source => new(sourceId, displayName, displayName);
         public Guid SourceId => sourceId;
         public IReadOnlyList<PluginCommandDescriptor> Commands =>
-            [new PluginCommandDescriptor("fake.sync", pluginId, "Sync Fake", PluginCommandPlacement.LibraryToolbar, sourceId)];
+            [new PluginCommandDescriptor(pluginId == Id ? "fake.sync" : $"{pluginId}.sync", pluginId, "Sync Fake", PluginCommandPlacement.LibraryToolbar, sourceId)];
         public IReadOnlyList<string> SubscribedEvents => [PluginEvents.AppStarted, PluginEvents.GameStarting, PluginEvents.LibrarySynced];
         public IReadOnlyList<PluginSettingField> Fields =>
             [new PluginSettingField("apiKey", "API Key", PluginSettingType.String)];
@@ -1152,6 +1474,137 @@ public sealed class PluginHostTests
             cancellationToken.ThrowIfCancellationRequested();
             return null;
         }
+    }
+
+    private sealed class MultiFieldSettingsPlugin(string pluginId) : IPlaynitePlugin, IPluginSettingsCapability
+    {
+        public PluginDescriptor Descriptor { get; } = new(
+            pluginId,
+            Guid.Empty,
+            "Multi Field Settings",
+            new Version(1, 0, 0),
+            PluginLoadKind.BuiltIn,
+            PluginSurface.Desktop,
+            PluginCapabilityKind.Settings,
+            new PluginEntryPoints());
+
+        public IReadOnlyList<PluginSettingField> Fields =>
+        [
+            new("flag", "Clean\u0007 Boolean", PluginSettingType.Boolean, DefaultValue: "invalid-bool"),
+            new("flag", "Duplicate Key", PluginSettingType.Boolean, DefaultValue: "true"),
+            new("   ", "Blank Key", PluginSettingType.String),
+            new("bad\nkey", "Control Key", PluginSettingType.String),
+            new("noLabel", "   \u0001   ", PluginSettingType.String),
+            new("label", "Display Label", PluginSettingType.String, DefaultValue: "default-name"),
+            new("folder", "ROM Folder", PluginSettingType.Path, DefaultValue: "/tmp/games"),
+            new("limit", "Retry Limit", PluginSettingType.Integer, DefaultValue: "10"),
+            new("emptyChoices", "No Valid Choices", PluginSettingType.Choice, Choices: ["  ", "\u0002"]),
+            new("tier", "Quality Tier", PluginSettingType.Choice, DefaultValue: "NonExistent", Choices: ["Low", "Medium", "High", "Low"]),
+        ];
+
+        public PluginRegistration Setup(PluginContext context) => new()
+        {
+            Settings = this,
+        };
+    }
+
+    private sealed class OversizedSchemaPlugin(string pluginId) : IPlaynitePlugin, IPluginSettingsCapability
+    {
+        public PluginDescriptor Descriptor { get; } = new(
+            pluginId,
+            Guid.Empty,
+            pluginId,
+            new Version(1, 0, 0),
+            PluginLoadKind.BuiltIn,
+            PluginSurface.Desktop,
+            PluginCapabilityKind.Settings,
+            new PluginEntryPoints());
+
+        public IReadOnlyList<PluginSettingField> Fields =>
+            Enumerable.Range(0, 80)
+                .Select(i => new PluginSettingField($"key{i}", $"Field {i}", PluginSettingType.String))
+                .ToArray();
+
+        public PluginRegistration Setup(PluginContext context) => new()
+        {
+            Settings = this,
+        };
+    }
+
+    private sealed class ThrowingSchemaPlugin(string pluginId) : IPlaynitePlugin, IPluginSettingsCapability
+    {
+        public PluginDescriptor Descriptor { get; } = new(
+            pluginId,
+            Guid.Empty,
+            pluginId,
+            new Version(1, 0, 0),
+            PluginLoadKind.BuiltIn,
+            PluginSurface.Desktop,
+            PluginCapabilityKind.Settings,
+            new PluginEntryPoints());
+
+        public IReadOnlyList<PluginSettingField> Fields =>
+            throw new InvalidOperationException("Settings schema exploded");
+
+        public PluginRegistration Setup(PluginContext context) => new()
+        {
+            Settings = this,
+        };
+    }
+
+    private sealed class ThrowingWriteSettingsStore : IPluginSettingsStore
+    {
+        public string? Get(string pluginId, string key) => null;
+
+        public void Set(string pluginId, string key, string? value) =>
+            throw new IOException("Read-only filesystem");
+
+        public IReadOnlyDictionary<string, string> GetAll(string pluginId) =>
+            new Dictionary<string, string>(StringComparer.Ordinal);
+    }
+
+    private sealed class ConditionalFaultPlugin(string pluginId, Func<bool> shouldFail) : IPlaynitePlugin
+    {
+        public PluginDescriptor Descriptor { get; } = new(
+            pluginId,
+            Guid.Empty,
+            pluginId,
+            new Version(1, 0, 0),
+            PluginLoadKind.BuiltIn,
+            PluginSurface.Desktop,
+            PluginCapabilityKind.None,
+            new PluginEntryPoints());
+
+        public PluginRegistration Setup(PluginContext context)
+        {
+            if (shouldFail())
+            {
+                throw new InvalidOperationException("Transient setup failure");
+            }
+
+            return new PluginRegistration();
+        }
+    }
+
+    private sealed class ControlPathPlugin(string pluginId) : IPlaynitePlugin, IPluginSettingsCapability
+    {
+        public PluginDescriptor Descriptor { get; } = new(
+            pluginId,
+            Guid.Empty,
+            pluginId,
+            new Version(1, 0, 0),
+            PluginLoadKind.BuiltIn,
+            PluginSurface.Desktop,
+            PluginCapabilityKind.Settings,
+            new PluginEntryPoints());
+
+        public IReadOnlyList<PluginSettingField> Fields =>
+            [new("pathKey", "Control Path", PluginSettingType.Path, DefaultValue: "/tmp/a\t\nb")];
+
+        public PluginRegistration Setup(PluginContext context) => new()
+        {
+            Settings = this,
+        };
     }
 }
 

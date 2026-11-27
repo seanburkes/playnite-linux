@@ -82,6 +82,7 @@ public sealed partial class LibraryGridView : UserControl
     private readonly Button syncHeroicButton;
     private readonly Button emptySyncButton;
     private readonly Button emptySyncHeroicButton;
+    private readonly Button pluginsButton;
     private readonly Button clearFiltersButton;
     private readonly Button gridViewButton;
     private readonly Button listViewButton;
@@ -100,6 +101,7 @@ public sealed partial class LibraryGridView : UserControl
 
     private LibraryArtworkLoader? artworkLoader;
     private Bitmap? activeHeroBitmap;
+    private Window? activePluginsDialog;
     private CancellationTokenSource? artworkCts;
     private CancellationTokenSource? heroCts;
     private CancellationTokenSource? cardSlotsCts;
@@ -195,6 +197,7 @@ public sealed partial class LibraryGridView : UserControl
         syncHeroicButton = this.FindControl<Button>("SyncHeroicButton")!;
         emptySyncButton = this.FindControl<Button>("EmptySyncButton")!;
         emptySyncHeroicButton = this.FindControl<Button>("EmptySyncHeroicButton")!;
+        pluginsButton = this.FindControl<Button>("PluginsButton")!;
         clearFiltersButton = this.FindControl<Button>("ClearFiltersButton")!;
         gridViewButton = this.FindControl<Button>("GridViewButton")!;
         listViewButton = this.FindControl<Button>("ListViewButton")!;
@@ -274,6 +277,8 @@ public sealed partial class LibraryGridView : UserControl
     internal Task StopTask { get; private set; } = Task.CompletedTask;
 
     internal Task EditorTask { get; private set; } = Task.CompletedTask;
+
+    internal Task PluginsDialogTask { get; private set; } = Task.CompletedTask;
 
     internal Task UnloadTask { get; private set; } = Task.CompletedTask;
 
@@ -356,6 +361,9 @@ public sealed partial class LibraryGridView : UserControl
         syncCts?.Cancel();
         syncCts?.Dispose();
         syncCts = null;
+
+        activePluginsDialog?.Close();
+        activePluginsDialog = null;
 
         if (!preserveActiveSession)
         {
@@ -1267,6 +1275,7 @@ public sealed partial class LibraryGridView : UserControl
         syncHeroicButton.IsEnabled = available;
         emptySyncButton.IsEnabled = available;
         emptySyncHeroicButton.IsEnabled = available;
+        pluginsButton.IsEnabled = available && model?.Plugins is { IsDisposed: false };
         fullscreenButton.IsEnabled = available && fullscreenButton.IsVisible;
     }
 
@@ -1785,6 +1794,98 @@ public sealed partial class LibraryGridView : UserControl
         finally
         {
             editorPending = false;
+        }
+    }
+
+    private async void OnPluginsClicked(object? sender, RoutedEventArgs args)
+    {
+        if (!pluginsButton.IsEnabled
+            || disposed
+            || editorPending
+            || playPending
+            || syncPending
+            || fullscreenOpen
+            || sessionActive
+            || model is not { } library
+            || library.Plugins.IsDisposed
+            || library.LifetimeToken.IsCancellationRequested)
+        {
+            return;
+        }
+
+        var task = OpenPluginsManagerAsync();
+        PluginsDialogTask = task;
+        await ObserveUiTaskAsync(task, "plugins manager").ConfigureAwait(true);
+    }
+
+    private async Task OpenPluginsManagerAsync()
+    {
+        if (!pluginsButton.IsEnabled
+            || disposed
+            || editorPending
+            || playPending
+            || syncPending
+            || fullscreenOpen
+            || sessionActive
+            || model is not { } library
+            || library.Plugins.IsDisposed
+            || library.LifetimeToken.IsCancellationRequested
+            || TopLevel.GetTopLevel(this) is not Window owner)
+        {
+            return;
+        }
+
+        var generation = ++editorGeneration;
+        editorPending = true;
+        RefreshLibraryActions();
+        PluginManagerWindow? dialog = null;
+        try
+        {
+            dialog = new PluginManagerWindow(library.Plugins);
+            activePluginsDialog = dialog;
+            await dialog.ShowDialog(owner).ConfigureAwait(true);
+            if (dialog.HasChanges
+                && !disposed
+                && ReferenceEquals(model, library)
+                && generation == editorGeneration
+                && !library.Plugins.IsDisposed
+                && !library.LifetimeToken.IsCancellationRequested)
+            {
+                try
+                {
+                    await library.ReloadCurrentPageAsync(library.LifetimeToken).ConfigureAwait(true);
+                }
+                catch (OperationCanceledException) when (library.LifetimeToken.IsCancellationRequested)
+                {
+                    return;
+                }
+                catch (ObjectDisposedException)
+                {
+                    return;
+                }
+
+                if (!disposed
+                    && ReferenceEquals(model, library)
+                    && generation == editorGeneration
+                    && !library.Plugins.IsDisposed)
+                {
+                    RebuildRows();
+                    Refresh();
+                }
+            }
+        }
+        finally
+        {
+            if (ReferenceEquals(activePluginsDialog, dialog))
+            {
+                activePluginsDialog = null;
+            }
+
+            if (!disposed && ReferenceEquals(model, library) && generation == editorGeneration)
+            {
+                editorPending = false;
+                RefreshLibraryActions();
+            }
         }
     }
 

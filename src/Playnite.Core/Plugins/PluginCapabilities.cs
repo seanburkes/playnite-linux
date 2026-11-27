@@ -146,6 +146,12 @@ public interface IPluginSettingsCapability
     IReadOnlyList<PluginSettingField> Fields { get; }
 }
 
+/// <summary>Result of validating and persisting host-managed plugin settings.</summary>
+public sealed record PluginSettingsSaveResult(
+    bool Succeeded,
+    string? ErrorMessage = null,
+    IReadOnlyDictionary<string, string>? FieldErrors = null);
+
 /// <summary>Structured summary returned by <see cref="ILibrarySyncCapability.SyncAsync"/>.</summary>
 public sealed record PluginSyncResult(
     string PluginId,

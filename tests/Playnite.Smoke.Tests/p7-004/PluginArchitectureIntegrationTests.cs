@@ -938,6 +938,314 @@ public sealed class PluginArchitectureIntegrationTests
         }
     }
 
+    [Fact]
+    public async Task PluginManagerWindow_configures_settings_lazily_refreshes_ui_and_persists_plugin_state()
+    {
+        var token = TestContext.Current.CancellationToken;
+        var tempDir = Directory.CreateTempSubdirectory("playnite-plugin-manager-");
+        try
+        {
+            var dbPath = Path.Combine(tempDir.FullName, "library.sqlite");
+            var database = await LibraryDatabase.OpenAsync(dbPath, token);
+            await database.WriteAsync(async session =>
+            {
+                await session.Games.AddAsync(new StoredGame(new Game(Guid.NewGuid(), "220", "Half-Life 2")
+                {
+                    PluginId = StoreCatalog.SteamPluginId,
+                    IsInstalled = true,
+                }));
+                return true;
+            }, token);
+
+            // Broken external manifest under <libraryDir>/plugins exercises discovery diagnostics panel.
+            var pluginsRoot = Path.Combine(tempDir.FullName, "plugins");
+            var brokenDir = Path.Combine(pluginsRoot, "broken-manifest");
+            Directory.CreateDirectory(brokenDir);
+            await File.WriteAllTextAsync(Path.Combine(brokenDir, PluginManifestParser.PluginManifestFileName), "{ invalid json", token);
+
+            var requests = new List<string>();
+            using var httpClient = new HttpClient(new StubHttpMessageHandler((request, _) =>
+            {
+                var uri = request.RequestUri!.ToString();
+                requests.Add(uri);
+                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent(
+                        """{"tier":"platinum","bestReportedTier":"native","confidence":"strong","total":512}""",
+                        Encoding.UTF8,
+                        "application/json"),
+                });
+            }));
+
+            var customSourceId = Guid.Parse("f4444444-4444-4444-4444-444444444444");
+            var lazySettingsActivations = 0;
+
+            void RegisterCustomTestPlugins(PluginHost targetHost)
+            {
+                var lazyDesc = new PluginDescriptor(
+                    "smoke.lazy-settings",
+                    Guid.Empty,
+                    "Smoke Lazy Settings",
+                    new Version(1, 0, 0),
+                    PluginLoadKind.ExternalAssembly,
+                    PluginSurface.Desktop,
+                    PluginCapabilityKind.Settings,
+                    new PluginEntryPoints(Desktop: "smoke-lazy.dll"),
+                    Description: "Lazy test plugin with settings.");
+                targetHost.RegisterLazy(lazyDesc, () =>
+                {
+                    lazySettingsActivations++;
+                    return new SmokeMultiSettingsPlugin("smoke.lazy-settings", Guid.Empty, "Smoke Lazy Settings", isSource: false);
+                });
+
+                Assert.True(targetHost.RegisterBuiltIn(
+                    new SmokeMultiSettingsPlugin("smoke.custom-source", customSourceId, "Custom Toggle Source", isSource: true)));
+                Assert.True(targetHost.RegisterBuiltIn(
+                    new SmokeThrowingSchemaPlugin("smoke.throwing-schema")));
+            }
+
+            using (var host1 = DesktopPluginHostFactory.CreateForLibrary(dbPath, protonDbClient: httpClient))
+            {
+                RegisterCustomTestPlugins(host1);
+                await WithHeadlessUiAsync(async () =>
+                {
+                    var opener = new FakeOpener();
+                    var model = new LibraryViewModel(dbPath, host1, ownsPlugins: false);
+                    var view = new LibraryGridView(new SteamPlayRequest(opener), fullscreenPreview: false);
+                    var window = new Window { Width = 1200, Height = 720, Content = view };
+                    try
+                    {
+                        await model.LoadAsync(token);
+                        window.Show();
+                        view.Apply(model);
+                        await view.CardSlotsTask;
+                        await view.DetailsSlotsTask;
+
+                        // Initially offline: zero HTTP calls, no ProtonDB details badges, custom source present.
+                        Assert.Empty(requests);
+                        Assert.False(view.FindControl<WrapPanel>("DetailsPluginBadges")!.IsVisible);
+                        Assert.Contains(model.SourceFilterOptions, o => o.PluginId == customSourceId);
+
+                        // Open Plugins Manager via toolbar PluginsButton.
+                        view.FindControl<Button>("PluginsButton")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                        PumpUntil(() => window.OwnedWindows.OfType<PluginManagerWindow>().Any(), token);
+                        var manager = window.OwnedWindows.OfType<PluginManagerWindow>().Single();
+
+                        // Host & discovery diagnostics panel surfaces the malformed external manifest.
+                        var hostDiagPanel = manager.FindControl<Border>("HostDiagnosticsPanel")!;
+                        Assert.True(hostDiagPanel.IsVisible);
+
+                        // Selecting lazy external settings plugin does NOT activate it eagerly.
+                        var pluginList = manager.FindControl<ListBox>("PluginList")!;
+                        var lazyItem = pluginList.Items.OfType<ListBoxItem>().Single(i => Equals(i.Tag, "smoke.lazy-settings"));
+                        pluginList.SelectedItem = lazyItem;
+                        Dispatcher.UIThread.RunJobs();
+                        Assert.Equal(0, lazySettingsActivations);
+                        var loadSettingsBtn = manager.FindControl<Button>("LoadSettingsButton")!;
+                        Assert.True(loadSettingsBtn.IsVisible);
+
+                        // Clicking Load Settings activates lazily and renders controls.
+                        loadSettingsBtn.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                        Assert.Equal(1, lazySettingsActivations);
+                        Assert.False(loadSettingsBtn.IsVisible);
+
+                        // Select custom built-in settings plugin and test invalid -> valid -> Reset Defaults.
+                        var customItem = pluginList.Items.OfType<ListBoxItem>().Single(i => Equals(i.Tag, "smoke.custom-source"));
+                        pluginList.SelectedItem = customItem;
+                        Dispatcher.UIThread.RunJobs();
+                        var fieldsPanel = manager.FindControl<StackPanel>("SettingsFieldsPanel")!;
+                        Assert.True(fieldsPanel.IsVisible);
+
+                        var textBoxes = GetDescendants<TextBox>(fieldsPanel).ToList();
+                        var checkBoxes = GetDescendants<CheckBox>(fieldsPanel).ToList();
+                        var combos = GetDescendants<ComboBox>(fieldsPanel).ToList();
+                        Assert.Equal(3, textBoxes.Count); // String, Path, Integer
+                        Assert.Single(checkBoxes);
+                        Assert.Single(combos);
+
+                        textBoxes[2].Text = "invalid-int";
+                        manager.FindControl<Button>("SaveSettingsButton")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                        var statusText = manager.FindControl<TextBlock>("SettingsStatusText")!;
+                        Assert.True(statusText.IsVisible);
+                        Assert.Contains("invalid", statusText.Text, StringComparison.OrdinalIgnoreCase);
+                        Assert.Null(host1.SettingsStore.Get("smoke.custom-source", "limit"));
+
+                        checkBoxes[0].IsChecked = true;
+                        textBoxes[0].Text = "custom-value";
+                        textBoxes[1].Text = "/games/custom";
+                        textBoxes[2].Text = "42";
+                        combos[0].SelectedItem = "Beta";
+                        manager.FindControl<Button>("SaveSettingsButton")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                        Assert.Equal("Settings saved.", statusText.Text);
+                        Assert.Equal("42", host1.SettingsStore.Get("smoke.custom-source", "limit"));
+
+                        manager.FindControl<Button>("ResetDefaultsButton")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                        Assert.Equal("Defaults restored and saved.", statusText.Text);
+                        Assert.False(checkBoxes[0].IsChecked == true);
+                        Assert.Equal("default", textBoxes[0].Text);
+                        Assert.Equal("/tmp/custom", textBoxes[1].Text);
+                        Assert.Equal("10", textBoxes[2].Text);
+                        Assert.Equal("Alpha", combos[0].SelectedItem);
+                        Assert.Equal("10", host1.SettingsStore.Get("smoke.custom-source", "limit"));
+                        Assert.Equal("Alpha", host1.SettingsStore.Get("smoke.custom-source", "mode"));
+
+                        // Selecting an active plugin whose Fields getter throws immediately transitions UI to Faulted + shows diagnostics.
+                        var throwingSchemaItem = pluginList.Items.OfType<ListBoxItem>().Single(i => Equals(i.Tag, "smoke.throwing-schema"));
+                        pluginList.SelectedItem = throwingSchemaItem;
+                        Dispatcher.UIThread.RunJobs();
+                        Assert.False(manager.FindControl<CheckBox>("EnabledToggle")!.IsChecked == true);
+                        Assert.True(manager.FindControl<Border>("SelectedDiagnosticsPanel")!.IsVisible);
+                        Assert.Contains(host1.GetRecords(), r => r.Descriptor.Id == "smoke.throwing-schema" && r.State == PluginLifecycleState.Faulted);
+
+                        // Select ProtonDbPlugin and enable onlineLookup via its checkbox, then save & close.
+                        var protonItem = pluginList.Items.OfType<ListBoxItem>().Single(i => Equals(i.Tag, ProtonDbPlugin.PluginId));
+                        pluginList.SelectedItem = protonItem;
+                        Dispatcher.UIThread.RunJobs();
+                        var protonCheckBoxes = GetDescendants<CheckBox>(fieldsPanel).ToList();
+                        Assert.Equal(2, protonCheckBoxes.Count);
+                        protonCheckBoxes[1].IsChecked = true; // onlineLookup
+                        manager.FindControl<Button>("SaveSettingsButton")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                        Assert.Equal("Settings saved.", statusText.Text);
+
+                        manager.FindControl<Button>("CloseButton")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                        await view.PluginsDialogTask;
+                        await view.CardSlotsTask;
+                        await view.DetailsSlotsTask;
+
+                        // Closing with changes refreshed LibraryGridView & ProtonDB fetched Platinum rating.
+                        Assert.Single(requests);
+                        Assert.True(view.FindControl<WrapPanel>("DetailsPluginBadges")!.IsVisible);
+                        Assert.True(view.FindControl<StackPanel>("DetailsPluginSections")!.IsVisible);
+
+                        // Select custom source in SourceCombo before disabling it in PluginManagerWindow.
+                        var sourceCombo = view.FindControl<ComboBox>("SourceCombo")!;
+                        var customOption = model.SourceFilterOptions.Single(o => o.PluginId == customSourceId);
+                        sourceCombo.SelectedItem = customOption;
+                        await view.QueryTask;
+                        Assert.Equal(customSourceId, model.SourcePluginFilterId);
+
+                        // Open Plugins Manager again to disable both ProtonDbPlugin and smoke.custom-source.
+                        view.FindControl<Button>("PluginsButton")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                        PumpUntil(() => window.OwnedWindows.OfType<PluginManagerWindow>().Any(), token);
+                        var manager2 = window.OwnedWindows.OfType<PluginManagerWindow>().Single();
+                        var pluginList2 = manager2.FindControl<ListBox>("PluginList")!;
+                        var enabledToggle = manager2.FindControl<CheckBox>("EnabledToggle")!;
+
+                        pluginList2.SelectedItem = pluginList2.Items.OfType<ListBoxItem>().Single(i => Equals(i.Tag, ProtonDbPlugin.PluginId));
+                        Dispatcher.UIThread.RunJobs();
+                        enabledToggle.IsChecked = false;
+
+                        pluginList2.SelectedItem = pluginList2.Items.OfType<ListBoxItem>().Single(i => Equals(i.Tag, "smoke.custom-source"));
+                        Dispatcher.UIThread.RunJobs();
+                        enabledToggle.IsChecked = false;
+
+                        manager2.FindControl<Button>("CloseButton")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                        await view.PluginsDialogTask;
+                        await view.CardSlotsTask;
+                        await view.DetailsSlotsTask;
+
+                        // Disabled source dropped from SourceCombo (resetting active filter to All) and badges/sections cleared.
+                        Assert.DoesNotContain(model.SourceFilterOptions, o => o.PluginId == customSourceId);
+                        Assert.Equal(0, sourceCombo.SelectedIndex);
+                        Assert.False(view.FindControl<WrapPanel>("DetailsPluginBadges")!.IsVisible);
+                        Assert.False(view.FindControl<StackPanel>("DetailsPluginSections")!.IsVisible);
+                    }
+                    finally
+                    {
+                        window.Close();
+                        await view.UnloadTask;
+                        model.Dispose();
+                    }
+                }, token);
+            }
+
+            // Fresh host after restart respects persisted Disabled state with zero HTTP lookups and excludes disabled source.
+            requests.Clear();
+            using var host2 = DesktopPluginHostFactory.CreateForLibrary(dbPath, protonDbClient: httpClient);
+            RegisterCustomTestPlugins(host2);
+            Assert.Contains(host2.GetRecords(), r => r.Descriptor.Id == ProtonDbPlugin.PluginId && r.State == PluginLifecycleState.Disabled);
+            Assert.Contains(host2.GetRecords(), r => r.Descriptor.Id == "smoke.custom-source" && r.State == PluginLifecycleState.Disabled);
+
+            await WithHeadlessUiAsync(async () =>
+            {
+                var opener = new FakeOpener();
+                var model = new LibraryViewModel(dbPath, host2, ownsPlugins: false);
+                var view = new LibraryGridView(new SteamPlayRequest(opener), fullscreenPreview: false);
+                var window = new Window { Width = 1200, Height = 720, Content = view };
+                try
+                {
+                    await model.LoadAsync(token);
+                    window.Show();
+                    view.Apply(model);
+                    await view.CardSlotsTask;
+                    await view.DetailsSlotsTask;
+
+                    Assert.Empty(requests);
+                    Assert.DoesNotContain(model.SourceFilterOptions, o => o.PluginId == customSourceId);
+                    Assert.False(view.FindControl<WrapPanel>("DetailsPluginBadges")!.IsVisible);
+                    Assert.False(view.FindControl<StackPanel>("DetailsPluginSections")!.IsVisible);
+
+                    // Re-enabling disabled source plugin via PluginManagerWindow restores it dynamically in SourceCombo.
+                    view.FindControl<Button>("PluginsButton")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                    PumpUntil(() => window.OwnedWindows.OfType<PluginManagerWindow>().Any(), token);
+                    var manager3 = window.OwnedWindows.OfType<PluginManagerWindow>().Single();
+                    var pluginList3 = manager3.FindControl<ListBox>("PluginList")!;
+                    pluginList3.SelectedItem = pluginList3.Items.OfType<ListBoxItem>().Single(i => Equals(i.Tag, "smoke.custom-source"));
+                    Dispatcher.UIThread.RunJobs();
+                    manager3.FindControl<CheckBox>("EnabledToggle")!.IsChecked = true;
+                    manager3.FindControl<Button>("CloseButton")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                    await view.PluginsDialogTask;
+                    Assert.Contains(model.SourceFilterOptions, o => o.PluginId == customSourceId);
+                }
+                finally
+                {
+                    window.Close();
+                    await view.UnloadTask;
+                    model.Dispose();
+                }
+            }, token);
+        }
+        finally
+        {
+            tempDir.Delete(recursive: true);
+        }
+    }
+
+    private static void PumpUntil(Func<bool> condition, CancellationToken token, int timeoutMs = 5000)
+    {
+        var deadline = Environment.TickCount64 + timeoutMs;
+        while (!condition())
+        {
+            token.ThrowIfCancellationRequested();
+            if (Environment.TickCount64 > deadline)
+            {
+                throw new TimeoutException("Timed out waiting for headless UI condition.");
+            }
+
+            Dispatcher.UIThread.RunJobs();
+            Thread.Sleep(10);
+        }
+    }
+
+    private static IEnumerable<T> GetDescendants<T>(Control root) where T : Control
+    {
+        if (root is T match)
+        {
+            yield return match;
+        }
+
+        if (root is Panel panel)
+        {
+            foreach (var child in panel.Children.OfType<Control>())
+            {
+                foreach (var nested in GetDescendants<T>(child))
+                {
+                    yield return nested;
+                }
+            }
+        }
+    }
+
     private static async Task WithHeadlessUiAsync(Func<Task> action, CancellationToken token)
     {
         await using var session = HeadlessUnitTestSession.StartNew(typeof(HeadlessScreenApplication));
@@ -1309,6 +1617,64 @@ public sealed class PluginArchitectureIntegrationTests
             PluginGameSnapshot game,
             CancellationToken cancellationToken) =>
             throw new InvalidOperationException("Simulated slot crash");
+    }
+
+    private sealed class SmokeMultiSettingsPlugin(
+        string pluginId,
+        Guid sourceId,
+        string displayName,
+        bool isSource)
+        : IPlaynitePlugin, ILibrarySourceCapability, IPluginSettingsCapability
+    {
+        public PluginDescriptor Descriptor { get; } = new(
+            pluginId,
+            sourceId,
+            displayName,
+            new Version(1, 0, 0),
+            PluginLoadKind.BuiltIn,
+            PluginSurface.Desktop,
+            isSource ? PluginCapabilityKind.LibrarySource | PluginCapabilityKind.Settings : PluginCapabilityKind.Settings,
+            new PluginEntryPoints());
+
+        public LibrarySourceInfo Source { get; } = new(sourceId, displayName, displayName);
+
+        public Guid SourceId => sourceId;
+
+        public IReadOnlyList<PluginSettingField> Fields =>
+        [
+            new("enabledOpt", "Enable Custom Feature", PluginSettingType.Boolean, DefaultValue: "false", Description: "Toggle feature"),
+            new("apiToken", "Display Token", PluginSettingType.String, DefaultValue: "default"),
+            new("dataPath", "Data Folder", PluginSettingType.Path, DefaultValue: "/tmp/custom"),
+            new("limit", "Batch Limit", PluginSettingType.Integer, DefaultValue: "10"),
+            new("mode", "Sync Mode", PluginSettingType.Choice, DefaultValue: "Alpha", Choices: ["Alpha", "Beta"]),
+        ];
+
+        public PluginRegistration Setup(PluginContext context) => new()
+        {
+            LibrarySources = isSource ? [this] : [],
+            Settings = this,
+        };
+    }
+
+    private sealed class SmokeThrowingSchemaPlugin(string pluginId) : IPlaynitePlugin, IPluginSettingsCapability
+    {
+        public PluginDescriptor Descriptor { get; } = new(
+            pluginId,
+            Guid.Empty,
+            "Throwing Schema Plugin",
+            new Version(1, 0, 0),
+            PluginLoadKind.BuiltIn,
+            PluginSurface.Desktop,
+            PluginCapabilityKind.Settings,
+            new PluginEntryPoints());
+
+        public IReadOnlyList<PluginSettingField> Fields =>
+            throw new InvalidOperationException("Simulated schema failure");
+
+        public PluginRegistration Setup(PluginContext context) => new()
+        {
+            Settings = this,
+        };
     }
 }
 

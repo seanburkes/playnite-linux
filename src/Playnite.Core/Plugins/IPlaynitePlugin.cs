@@ -9,6 +9,17 @@ public interface IPluginSettingsStore
     /// <summary>Writes or clears a setting value for one plugin.</summary>
     void Set(string pluginId, string key, string? value);
 
+    /// <summary>Writes or clears multiple setting values for one plugin atomically where supported.</summary>
+    void SetMany(string pluginId, IReadOnlyDictionary<string, string?> values)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(pluginId);
+        ArgumentNullException.ThrowIfNull(values);
+        foreach (var (key, value) in values)
+        {
+            Set(pluginId, key, value);
+        }
+    }
+
     /// <summary>Returns a snapshot of all stored settings for one plugin.</summary>
     IReadOnlyDictionary<string, string> GetAll(string pluginId);
 }
@@ -37,25 +48,48 @@ public sealed class InMemoryPluginSettingsStore : IPluginSettingsStore
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(pluginId);
         ArgumentException.ThrowIfNullOrWhiteSpace(key);
+        SetMany(pluginId, new Dictionary<string, string?>(1, StringComparer.Ordinal) { [key] = value });
+    }
+
+    /// <inheritdoc/>
+    public void SetMany(string pluginId, IReadOnlyDictionary<string, string?> values)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(pluginId);
+        ArgumentNullException.ThrowIfNull(values);
+        foreach (var (key, _) in values)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(key);
+        }
+
+        if (values.Count == 0)
+        {
+            return;
+        }
+
         lock (gate)
         {
-            if (value is null)
+            if (!this.values.TryGetValue(pluginId, out var pluginMap))
             {
-                if (values.TryGetValue(pluginId, out var existing))
+                if (values.Values.All(static v => v is null))
                 {
-                    existing.Remove(key);
+                    return;
                 }
 
-                return;
-            }
-
-            if (!values.TryGetValue(pluginId, out var pluginMap))
-            {
                 pluginMap = new Dictionary<string, string>(StringComparer.Ordinal);
-                values[pluginId] = pluginMap;
+                this.values[pluginId] = pluginMap;
             }
 
-            pluginMap[key] = value;
+            foreach (var (key, value) in values)
+            {
+                if (value is null)
+                {
+                    pluginMap.Remove(key);
+                }
+                else
+                {
+                    pluginMap[key] = value;
+                }
+            }
         }
     }
 

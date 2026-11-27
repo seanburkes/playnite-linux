@@ -71,11 +71,24 @@ public sealed class FilePluginSettingsStore : IPluginSettingsStore
     public void Set(string pluginId, string key, string? value)
     {
         ValidatePluginAndKey(pluginId, key);
-        if (value is not null && value.Length > MaxValueLength)
+        ValidateValueLength(value);
+        SetMany(pluginId, new Dictionary<string, string?>(1, StringComparer.Ordinal) { [key] = value });
+    }
+
+    /// <inheritdoc/>
+    public void SetMany(string pluginId, IReadOnlyDictionary<string, string?> values)
+    {
+        ValidatePluginId(pluginId);
+        ArgumentNullException.ThrowIfNull(values);
+        if (values.Count == 0)
         {
-            throw new ArgumentOutOfRangeException(
-                nameof(value),
-                $"Setting value length ({value.Length}) exceeds the {MaxValueLength}-character limit.");
+            return;
+        }
+
+        foreach (var (key, value) in values)
+        {
+            ValidatePluginAndKey(pluginId, key);
+            ValidateValueLength(value);
         }
 
         string? pendingError = null;
@@ -90,22 +103,36 @@ public sealed class FilePluginSettingsStore : IPluginSettingsStore
                 }
 
                 var updated = new Dictionary<string, string>(current, StringComparer.Ordinal);
-                if (value is null)
+                var mutated = false;
+                foreach (var (key, value) in values)
                 {
-                    if (!updated.Remove(key))
+                    if (value is null)
                     {
-                        return;
+                        if (updated.Remove(key))
+                        {
+                            mutated = true;
+                        }
+                    }
+                    else
+                    {
+                        if (!updated.ContainsKey(key) && updated.Count >= MaxKeysPerPlugin)
+                        {
+                            throw new InvalidOperationException(
+                                $"Plugin '{pluginId}' exceeded the {MaxKeysPerPlugin}-key settings limit.");
+                        }
+
+                        if (!updated.TryGetValue(key, out var existingValue)
+                            || !string.Equals(existingValue, value, StringComparison.Ordinal))
+                        {
+                            updated[key] = value;
+                            mutated = true;
+                        }
                     }
                 }
-                else
-                {
-                    if (!updated.ContainsKey(key) && updated.Count >= MaxKeysPerPlugin)
-                    {
-                        throw new InvalidOperationException(
-                            $"Plugin '{pluginId}' exceeded the {MaxKeysPerPlugin}-key settings limit.");
-                    }
 
-                    updated[key] = value;
+                if (!mutated)
+                {
+                    return;
                 }
 
                 WritePluginMapLocked(pluginId, updated);
@@ -115,6 +142,16 @@ public sealed class FilePluginSettingsStore : IPluginSettingsStore
         finally
         {
             NotifyError(pluginId, pendingError);
+        }
+    }
+
+    private static void ValidateValueLength(string? value)
+    {
+        if (value is not null && value.Length > MaxValueLength)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(value),
+                $"Setting value length ({value.Length}) exceeds the {MaxValueLength}-character limit.");
         }
     }
 
