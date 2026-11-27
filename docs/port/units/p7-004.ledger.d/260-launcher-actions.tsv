@@ -1,0 +1,2 @@
+timestamp	unit	from	to	actor	evidence
+2026-11-27T00:21:06Z	p7-004	done	done	seanburkes	PR https://github.com/seanburkes/playnite-linux/pull/260 validates head d127a2857406df9369135714b7dd14683bfff73f in successful linux-ci https://github.com/seanburkes/playnite-linux/actions/runs/45915830494. Exposes existing quick filter dispatch to the shell and provides the explicit desktop metadata action.

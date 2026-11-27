@@ -514,6 +514,16 @@ public sealed partial class LibraryGridView : UserControl
         listViewButton.Classes.Set("active", useList);
     }
 
+    internal event EventHandler<LibraryFilterMode>? FilterChanged;
+
+    internal void ApplyQuickFilter(LibraryFilterMode mode)
+    {
+        if (CanDispatchQuery())
+        {
+            StartQuery(model!.SetFilterAsync(mode), model.QueryToken);
+        }
+    }
+
     private void UpdateFilterHighlights()
     {
         if (model is null)
@@ -526,6 +536,7 @@ public sealed partial class LibraryGridView : UserControl
         this.FindControl<Button>("UninstalledFilterButton")!.Classes.Set("active", model.FilterMode == LibraryFilterMode.Uninstalled);
         this.FindControl<Button>("HiddenFilterButton")!.Classes.Set("active", model.FilterMode == LibraryFilterMode.Hidden);
         this.FindControl<Button>("FavoriteFilterButton")!.Classes.Set("active", model.FilterMode == LibraryFilterMode.Favorite);
+        FilterChanged?.Invoke(this, model.FilterMode);
     }
 
     private void ApplyLabels()
@@ -832,6 +843,7 @@ public sealed partial class LibraryGridView : UserControl
         sessionBadge.IsVisible = sessionActive && model?.Selected?.Id == activeSessionGameId;
         configureLaunchButton.IsEnabled = available && model?.Selected is { } selected
             && selected.PluginId != SnesRomProfile.SourceId;
+        this.FindControl<Button>("EditGameButton")!.IsEnabled = available && model?.Selected is not null;
         addGameButton.IsEnabled = available;
         addLunaGameButton.IsEnabled = available;
         this.FindControl<Button>("ImportSnesButton")!.IsEnabled = available;
@@ -1655,7 +1667,7 @@ public sealed partial class LibraryGridView : UserControl
 
     private void OnFilterClicked(object? sender, RoutedEventArgs eventArgs)
     {
-        if (!CanDispatchQuery() || sender is not Button button)
+        if (sender is not Button button)
         {
             return;
         }
@@ -1668,7 +1680,7 @@ public sealed partial class LibraryGridView : UserControl
             "FavoriteFilterButton" => LibraryFilterMode.Favorite,
             _ => LibraryFilterMode.All,
         };
-        StartQuery(model!.SetFilterAsync(mode), model.QueryToken);
+        ApplyQuickFilter(mode);
     }
 
     private void OnSortChanged(object? sender, SelectionChangedEventArgs eventArgs)
