@@ -75,8 +75,8 @@ in [`gates/P5-pending.md`](gates/P5-pending.md).
 
 | Metric | Value |
 | --- | ---: |
-| Ledger rows | 388 |
-| Ledger fragments | 161 |
+| Ledger rows | 390 |
+| Ledger fragments | 163 |
 
 ## Units
 
@@ -177,9 +177,9 @@ in [`gates/P5-pending.md`](gates/P5-pending.md).
 | p6-guard-move2 | W6 | repo | Cross-Unit-Move ownership exception | in-progress | `units/p6-guard-move2.*`; 1 ledger rows |
 | p6-shards | W6 | repo | Phase 6 core services and SDK v7 board | done | `units/p6-shards.*`; 7 ledger rows |
 | p7-001 | W7 | ui | Bootstrap/DI/theme/localisation | done | `units/p7-001.*`; 2 ledger rows |
-| p7-002 | W7 | ui | Shell/main window | done | `units/p7-002.*`; 4 ledger rows |
+| p7-002 | W7 | ui | Shell/main window | done | `units/p7-002.*`; 5 ledger rows |
 | p7-003 | W7 | ui | Library grid/list/details | done | `units/p7-003.*`; 4 ledger rows |
-| p7-004 | W7 | ui | Search/filter/sort and library Play | done | `units/p7-004.*`; 13 ledger rows |
+| p7-004 | W7 | ui | Search/filter/sort and library Play | done | `units/p7-004.*`; 14 ledger rows |
 | p7-005 | W7 | ui | Game edit/metadata | done | `units/p7-005.*`; 4 ledger rows |
 | p7-006 | W7 | ui | Settings/first-run/import | done | `units/p7-006.*`; 2 ledger rows |
 | p7-007 | W7 | ui | Tray/protocol/keyboard | done | `units/p7-007.*`; 2 ledger rows |
