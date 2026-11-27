@@ -220,7 +220,7 @@ src/Playnite.Desktop/p7-004/Shell/StoreCatalog.cs	p7-004	da44229a9e3e6ff9aa65601
 src/Playnite.Desktop/p7-004/Shell/TitlePreferenceWindow.axaml	p7-004	db6a8fa8c2b0f062278ee2e94d2b6a23b4e284e2	pull/252
 src/Playnite.Desktop/p7-004/Shell/TitlePreferenceWindow.axaml.cs	p7-004	db6a8fa8c2b0f062278ee2e94d2b6a23b4e284e2	pull/252
 src/Playnite.Desktop/p7-005/Shell/ContentHostView.axaml	p7-005	0c9f5d22929818d59b9d0902fa50aa63219e3fc1	pull/227
-src/Playnite.Desktop/p7-005/Shell/ContentHostView.axaml.cs	p7-005	0c9f5d22929818d59b9d0902fa50aa63219e3fc1	pull/227
+src/Playnite.Desktop/p7-005/Shell/ContentHostView.axaml.cs	p7-005	a4e9bcf3c618b54369144a6427fd3238331c41f1	pull/261
 src/Playnite.Desktop/p7-005/Shell/GameEditStore.cs	p7-005	0c9f5d22929818d59b9d0902fa50aa63219e3fc1	pull/227
 src/Playnite.Desktop/p7-005/Shell/GameEditView.axaml	p7-005	0c9f5d22929818d59b9d0902fa50aa63219e3fc1	pull/227
 src/Playnite.Desktop/p7-005/Shell/GameEditView.axaml.cs	p7-005	0c9f5d22929818d59b9d0902fa50aa63219e3fc1	pull/227
