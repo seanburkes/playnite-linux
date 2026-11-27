@@ -10,6 +10,7 @@ using Avalonia.Threading;
 using Playnite.Core.Database;
 using Playnite.Core.Library;
 using Playnite.Core.Models;
+using Playnite.Core.Plugins;
 using Playnite.Core.Queries;
 using Playnite.Desktop.Bootstrap;
 using Playnite.Desktop.Fullscreen;
@@ -1026,6 +1027,17 @@ public sealed partial class LibraryGridView : UserControl
             return;
         }
 
+        if (game.PluginPlayUri is { } pluginUri)
+        {
+            var httpsOnly = game.LaunchKind == PluginLaunchKind.BrowserHandoff;
+            var task = RequestUriPlayAsync(library, game.Name,
+                token => steamPlay.OpenExternalUriAsync(pluginUri, httpsOnly, game.Name, token),
+                library.LifetimeToken);
+            PlayTask = task;
+            await ObserveUiTaskAsync(task, "plugin URI play").ConfigureAwait(true);
+            return;
+        }
+
         if (game.HasTrackedPlayAction)
         {
             var sessionTask = RunTrackedSessionAsync(library, game);
@@ -1081,19 +1093,42 @@ public sealed partial class LibraryGridView : UserControl
                 return;
             }
 
-            var plan = GameLaunchPlanner.TryBuildLaunchRequest(stored.Value);
+            var plan = GameLaunchPlanner.TryBuildLaunchRequest(stored.Value, toolResolver, library.Plugins);
             if (plan.Request is null)
             {
                 playStatus.Text = plan.Error ?? $"'{game.Name}' could not be launched.";
                 return;
             }
 
-            var completed = await sessionManager.RunSessionAsync(
-                library.DatabasePath,
+            await library.TryPublishSessionEventAsync(
+                PluginEvents.GameStarting,
                 game.Id,
-                game.Name,
-                plan.Request,
+                game.PluginId,
                 token).ConfigureAwait(true);
+
+            if (disposed || generation != Volatile.Read(ref sessionGeneration) || !ReferenceEquals(model, library) || token.IsCancellationRequested)
+            {
+                return;
+            }
+
+            GameSessionCompleted completed;
+            try
+            {
+                completed = await sessionManager.RunSessionAsync(
+                    library.DatabasePath,
+                    game.Id,
+                    game.Name,
+                    plan.Request,
+                    token).ConfigureAwait(true);
+            }
+            finally
+            {
+                await library.TryPublishSessionEventAsync(
+                    PluginEvents.GameStopped,
+                    game.Id,
+                    game.PluginId,
+                    CancellationToken.None).ConfigureAwait(true);
+            }
 
             sessionAcceptingUpdates = false;
             sessionActive = false;

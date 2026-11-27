@@ -1,3 +1,5 @@
+using Playnite.Core.Plugins;
+using Playnite.Desktop.Plugins;
 using Playnite.Steam.Sync;
 
 namespace Playnite.Desktop.Shell;
@@ -33,8 +35,14 @@ internal static class StoreCatalog
 
     private const int MaxHeroicAppIdLength = 128;
 
-    public static string GetDisplayName(Guid pluginId)
+    public static string GetDisplayName(Guid pluginId, PluginHost? plugins = null)
     {
+        if (pluginId != Guid.Empty
+            && (plugins ?? DesktopPluginHostFactory.DefaultBuiltInHost).TryGetSource(pluginId, out var pluginSource))
+        {
+            return pluginSource.DisplayName;
+        }
+
         if (pluginId == SteamPluginId)
         {
             return "Steam";
@@ -70,12 +78,19 @@ internal static class StoreCatalog
             return "Humble";
         }
 
-        if (pluginId == SnesRomProfile.SourceId)
+        return "Library";
+    }
+
+    public static string GetStatusLabel(Guid pluginId, bool isInstalled, PluginHost? plugins = null)
+    {
+        if (pluginId != Guid.Empty
+            && (plugins ?? DesktopPluginHostFactory.DefaultBuiltInHost).TryGetSource(pluginId, out var pluginSource)
+            && !string.IsNullOrWhiteSpace(pluginSource.DefaultStatusLabel))
         {
-            return "SNES";
+            return pluginSource.DefaultStatusLabel;
         }
 
-        return pluginId == LunaPluginId ? "Amazon Luna" : "Library";
+        return isInstalled ? "Installed" : "Not installed";
     }
 
     public static string GetFilterLabel(LibrarySourceFilter filter) => filter switch

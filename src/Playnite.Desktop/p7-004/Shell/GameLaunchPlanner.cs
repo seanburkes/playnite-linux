@@ -1,6 +1,8 @@
 using System.Globalization;
 using System.Text;
 using Playnite.Core.Models;
+using Playnite.Core.Plugins;
+using Playnite.Desktop.Plugins;
 using Playnite.Platform.Sessions;
 
 namespace Playnite.Desktop.Shell;
@@ -348,12 +350,63 @@ internal static class GameLaunchPlanner
             && !string.IsNullOrWhiteSpace(action.Path));
     }
 
-    public static LaunchPlanResult TryBuildLaunchRequest(Game game, Func<string, string?>? toolResolver = null)
+    public static LaunchPlanResult TryBuildLaunchRequest(Game game, Func<string, string?>? toolResolver = null) =>
+        TryBuildLaunchRequest(game, toolResolver, DesktopPluginHostFactory.DefaultBuiltInHost);
+
+    internal static LaunchPlanResult TryBuildLaunchRequest(
+        Game game,
+        Func<string, string?>? toolResolver,
+        PluginHost? pluginHost)
     {
         ArgumentNullException.ThrowIfNull(game);
-        if (SnesRomProfile.FindAction(game) is { } emulator)
+        var host = pluginHost ?? DesktopPluginHostFactory.DefaultBuiltInHost;
+        if (game.PluginId != Guid.Empty && host.TryGetLaunchProvider(game.PluginId, out var launchProvider))
         {
-            return SnesRomProfile.Plan(game, emulator, toolResolver);
+            PluginLaunchSpec pluginSpec;
+            try
+            {
+                pluginSpec = launchProvider.ResolveLaunch(game, toolResolver);
+            }
+            catch (Exception exception)
+            {
+                return new LaunchPlanResult(null, $"Plugin launch resolution failed: {exception.Message}");
+            }
+
+            if (pluginSpec.Error is not null)
+            {
+                return new LaunchPlanResult(null, pluginSpec.Error);
+            }
+
+            if (pluginSpec.Kind == PluginLaunchKind.TrackedProcess)
+            {
+                if (string.IsNullOrWhiteSpace(pluginSpec.Executable))
+                {
+                    return new LaunchPlanResult(null, $"'{game.Name}' plugin launch did not specify an executable.");
+                }
+
+                var args = pluginSpec.Arguments ?? [];
+                var validationError = ValidateExecutableAndTarget(pluginSpec.Executable.Trim(), args, pluginSpec.WorkingDirectory);
+                if (validationError is not null)
+                {
+                    return new LaunchPlanResult(null, validationError);
+                }
+
+                try
+                {
+                    return new LaunchPlanResult(
+                        new LaunchRequest(pluginSpec.Executable.Trim(), args, pluginSpec.WorkingDirectory),
+                        null);
+                }
+                catch (ArgumentException ex)
+                {
+                    return new LaunchPlanResult(null, ex.Message);
+                }
+            }
+
+            if (pluginSpec.Kind is PluginLaunchKind.BrowserHandoff or PluginLaunchKind.UriHandoff)
+            {
+                return new LaunchPlanResult(null, $"'{game.Name}' uses {pluginSpec.Kind} and cannot run as a tracked process.");
+            }
         }
 
         var action = FindFilePlayAction(game);
@@ -410,9 +463,29 @@ internal static class GameLaunchPlanner
     public static string DescribeLaunchTarget(Game game, bool isSteam, uint? steamPlayAppId) =>
         DescribeLaunchTarget(game, isSteam ? StoreCatalog.SteamPluginId : Guid.Empty, steamPlayAppId);
 
-    public static string DescribeLaunchTarget(Game game, Guid pluginId, uint? steamPlayAppId)
+    public static string DescribeLaunchTarget(Game game, Guid pluginId, uint? steamPlayAppId) =>
+        DescribeLaunchTarget(game, pluginId, steamPlayAppId, null);
+
+    internal static string DescribeLaunchTarget(Game game, Guid pluginId, uint? steamPlayAppId, PluginHost? pluginHost)
     {
         ArgumentNullException.ThrowIfNull(game);
+        var host = pluginHost ?? DesktopPluginHostFactory.DefaultBuiltInHost;
+        if (pluginId != Guid.Empty && host.TryGetLaunchProvider(pluginId, out var launchProvider))
+        {
+            try
+            {
+                var spec = launchProvider.DescribeLaunch(game);
+                if (spec.CanLaunch || spec.Error is not null)
+                {
+                    return spec.TargetDisplay;
+                }
+            }
+            catch (Exception)
+            {
+                return "Plugin error";
+            }
+        }
+
         var action = FindFilePlayAction(game);
         if (action is not null)
         {
