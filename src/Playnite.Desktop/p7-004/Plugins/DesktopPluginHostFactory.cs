@@ -1,3 +1,4 @@
+using System.Net.Http;
 using Playnite.Core;
 using Playnite.Core.Plugins;
 using Playnite.Desktop.Shell;
@@ -19,13 +20,15 @@ internal static class DesktopPluginHostFactory
         TimeProvider? timeProvider = null,
         IPluginSettingsStore? settingsStore = null,
         ILibrarySteamSync? steamSync = null,
-        ILibraryHeroicSync? heroicSync = null)
+        ILibraryHeroicSync? heroicSync = null,
+        HttpClient? protonDbClient = null)
     {
         var host = new PluginHost(surface, timeProvider, settingsStore);
         host.RegisterBuiltIn(new SteamPlugin(steamSync));
         host.RegisterBuiltIn(new HeroicPlugin(heroicSync));
         host.RegisterBuiltIn(new AmazonLunaPlugin());
         host.RegisterBuiltIn(new SnesRomPlugin());
+        host.RegisterBuiltIn(new ProtonDbPlugin(protonDbClient));
         return host;
     }
 
@@ -37,17 +40,46 @@ internal static class DesktopPluginHostFactory
         IRegularFileProbe? regularFileProbe = null,
         string? externalPluginsRoot = null,
         ILibrarySteamSync? steamSync = null,
-        ILibraryHeroicSync? heroicSync = null)
+        ILibraryHeroicSync? heroicSync = null,
+        HttpClient? protonDbClient = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(databasePath);
-        var host = CreateDefault(surface, timeProvider, settingsStore, steamSync, heroicSync);
+        var effectiveProbe = regularFileProbe ?? new LinuxRegularFileProbe();
+        var settingsDir = ResolveSettingsDirectory(databasePath);
+        PluginHost? createdHost = null;
+        var resolvedSettings = settingsStore ?? (settingsDir is not null
+            ? new FilePluginSettingsStore(
+                settingsDir,
+                (pluginId, msg) => createdHost?.RecordDiagnostic(pluginId, "settings-store-error", msg),
+                effectiveProbe)
+            : new InMemoryPluginSettingsStore());
+
+        var host = new PluginHost(surface, timeProvider, resolvedSettings);
+        createdHost = host;
+        host.RegisterBuiltIn(new SteamPlugin(steamSync));
+        host.RegisterBuiltIn(new HeroicPlugin(heroicSync));
+        host.RegisterBuiltIn(new AmazonLunaPlugin());
+        host.RegisterBuiltIn(new SnesRomPlugin());
+        host.RegisterBuiltIn(new ProtonDbPlugin(protonDbClient, settingsDir, effectiveProbe));
+
         var pluginsDir = ResolvePluginsDirectory(databasePath, externalPluginsRoot);
         if (pluginsDir is not null && Directory.Exists(pluginsDir))
         {
-            host.DiscoverExternal(pluginsDir, regularFileProbe ?? new LinuxRegularFileProbe());
+            host.DiscoverExternal(pluginsDir, effectiveProbe);
         }
 
         return host;
+    }
+
+    private static string? ResolveSettingsDirectory(string databasePath)
+    {
+        if (!Path.IsPathFullyQualified(databasePath) || databasePath.Contains('\0'))
+        {
+            return null;
+        }
+
+        var parent = Path.GetDirectoryName(Path.GetFullPath(databasePath));
+        return string.IsNullOrWhiteSpace(parent) ? null : Path.Combine(parent, "plugin-settings");
     }
 
     internal static string? ResolvePluginsDirectory(string databasePath, string? externalPluginsRoot = null)

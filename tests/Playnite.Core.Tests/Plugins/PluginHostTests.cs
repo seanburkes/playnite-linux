@@ -611,6 +611,187 @@ public sealed class PluginHostTests
         }
     }
 
+    [Fact]
+    public void FilePluginSettingsStore_persists_atomically_enforces_limits_and_recovers_from_corruption()
+    {
+        var tempDir = Directory.CreateTempSubdirectory("playnite-plugin-settings-");
+        try
+        {
+            var settingsRoot = Path.Combine(tempDir.FullName, "plugin-settings");
+            var errors = new List<(string PluginId, string Message)>();
+            var store1 = new FilePluginSettingsStore(settingsRoot, (id, msg) => errors.Add((id, msg)));
+
+            store1.Set("demo.plugin", "apiKey", "secret-123");
+            store1.Set("demo.plugin", "enabled", "true");
+            store1.Set("demo.plugin", "enabled", "false");
+            Assert.Equal("false", store1.Get("demo.plugin", "enabled"));
+
+            var store2 = new FilePluginSettingsStore(settingsRoot, (id, msg) => errors.Add((id, msg)));
+            Assert.Equal("secret-123", store2.Get("demo.plugin", "apiKey"));
+            Assert.Equal("false", store2.Get("demo.plugin", "enabled"));
+            var all = store2.GetAll("demo.plugin");
+            Assert.Equal(2, all.Count);
+
+            store2.Set("demo.plugin", "apiKey", null);
+            var store3 = new FilePluginSettingsStore(settingsRoot);
+            Assert.Null(store3.Get("demo.plugin", "apiKey"));
+            Assert.Equal("false", store3.Get("demo.plugin", "enabled"));
+
+            Assert.Throws<ArgumentException>(() => store3.Set("../escape", "k", "v"));
+            Assert.Throws<ArgumentException>(() => new FilePluginSettingsStore("relative/path"));
+            Assert.Throws<ArgumentOutOfRangeException>(() =>
+                store3.Set("demo.plugin", "huge", new string('a', FilePluginSettingsStore.MaxValueLength + 1)));
+
+            // 256-key cap permits updating existing keys and rejects adding key #257.
+            for (var i = 0; i < FilePluginSettingsStore.MaxKeysPerPlugin; i++)
+            {
+                store3.Set("capped.plugin", $"k{i}", "v");
+            }
+
+            store3.Set("capped.plugin", "k0", "updated");
+            Assert.Throws<InvalidOperationException>(() => store3.Set("capped.plugin", "k256", "overflow"));
+
+            // Duplicate JSON keys, oversized files (> MaxFileBytes), and non-regular files fail safely cleanly.
+            File.WriteAllText(Path.Combine(settingsRoot, "dup.plugin.json"), """{"a":"1","a":"2"}""");
+            var probeRejectPath = Path.Combine(settingsRoot, "fifo.plugin.json");
+            File.WriteAllText(probeRejectPath, """{"a":"1"}""");
+            File.WriteAllText(Path.Combine(settingsRoot, "oversized.plugin.json"), new string('x', FilePluginSettingsStore.MaxFileBytes + 32));
+            File.WriteAllText(Path.Combine(settingsRoot, "corrupt.plugin.json"), "{ not-json");
+
+            // Locking is reentrancy-safe when onError calls back into Get/GetAll.
+            var reentrantErrors = new List<string>();
+            FilePluginSettingsStore? store4 = null;
+            store4 = new FilePluginSettingsStore(
+                settingsRoot,
+                (id, msg) =>
+                {
+                    reentrantErrors.Add($"{id}:{msg}");
+                    _ = store4!.GetAll(id);
+                },
+                new RejectPathProbe(probeRejectPath));
+            Assert.Null(store4.Get("corrupt.plugin", "anything"));
+            Assert.Null(store4.Get("dup.plugin", "a"));
+            Assert.Null(store4.Get("fifo.plugin", "a"));
+            Assert.Null(store4.Get("oversized.plugin", "a"));
+            Assert.Contains(reentrantErrors, e => e.StartsWith("corrupt.plugin:", StringComparison.Ordinal));
+            Assert.Contains(reentrantErrors, e => e.StartsWith("dup.plugin:", StringComparison.Ordinal));
+            Assert.Contains(reentrantErrors, e => e.StartsWith("fifo.plugin:", StringComparison.Ordinal));
+            Assert.Contains(reentrantErrors, e => e.StartsWith("oversized.plugin:", StringComparison.Ordinal));
+
+            // Transient read failure does NOT overwrite existing corrupted/protected disk file on Set.
+            Assert.Throws<IOException>(() => store4.Set("corrupt.plugin", "new", "val"));
+            Assert.Equal("{ not-json", File.ReadAllText(Path.Combine(settingsRoot, "corrupt.plugin.json")));
+
+            // Dangling symlink leaf refuses both Get and Set without touching outside path.
+            var danglingLink = Path.Combine(settingsRoot, "dangling.plugin.json");
+            File.CreateSymbolicLink(danglingLink, Path.Combine(tempDir.FullName, "does-not-exist.json"));
+            Assert.Null(store4.Get("dangling.plugin", "k"));
+            Assert.Throws<IOException>(() => store4.Set("dangling.plugin", "k", "v"));
+
+            // Symlinked root directory refuses reads/writes safely.
+            var realTarget = Path.Combine(tempDir.FullName, "real-target");
+            Directory.CreateDirectory(realTarget);
+            var symlinkRoot = Path.Combine(tempDir.FullName, "symlink-settings");
+            Directory.CreateSymbolicLink(symlinkRoot, realTarget);
+            var symlinkStore = new FilePluginSettingsStore(symlinkRoot, (id, msg) => errors.Add((id, msg)));
+            Assert.Null(symlinkStore.Get("demo.plugin", "enabled"));
+            Assert.Throws<IOException>(() => symlinkStore.Set("demo.plugin", "k", "v"));
+
+            // Live symlinked plugin JSON file refuses reads/writes safely.
+            var dummyTarget = Path.Combine(tempDir.FullName, "outside.json");
+            File.WriteAllText(dummyTarget, "{\"secret\":\"leak\"}");
+            File.CreateSymbolicLink(Path.Combine(settingsRoot, "symlink.plugin.json"), dummyTarget);
+            var leafCheckStore = new FilePluginSettingsStore(settingsRoot, (id, msg) => errors.Add((id, msg)));
+            Assert.Null(leafCheckStore.Get("symlink.plugin", "secret"));
+            Assert.Throws<IOException>(() => leafCheckStore.Set("symlink.plugin", "k", "v"));
+        }
+        finally
+        {
+            tempDir.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task UiSlots_and_metadata_activate_lazily_sanitize_urls_cap_items_and_isolate_faults()
+    {
+        var token = TestContext.Current.CancellationToken;
+        using var host = new PluginHost(PluginSurface.Core | PluginSurface.Desktop);
+        var lazyFactoryCalls = 0;
+
+        var lazyDescriptor = new PluginDescriptor(
+            "test.lazy-slots",
+            Guid.Empty,
+            "Lazy Slots",
+            new Version(1, 0, 0),
+            PluginLoadKind.ExternalAssembly,
+            PluginSurface.Desktop,
+            PluginCapabilityKind.UiSlots | PluginCapabilityKind.Metadata,
+            new PluginEntryPoints(Desktop: "lazy-slots.dll"));
+        host.RegisterLazy(lazyDescriptor, () =>
+        {
+            lazyFactoryCalls++;
+            return new FakeSlotAndMetadataPlugin("test.lazy-slots", "meta.lazy");
+        });
+
+        Assert.True(host.HasUiSlotProviders(PluginUiSlots.CardBadge));
+        Assert.Equal(0, lazyFactoryCalls);
+        Assert.Contains(host.GetRecords(), r => r.Descriptor.Id == "test.lazy-slots" && !r.IsMaterialized);
+
+        Assert.True(host.RegisterBuiltIn(new ThrowingSlotAndMetadataPlugin("test.broken-slots")));
+
+        var snapshot = new PluginGameSnapshot(Guid.NewGuid(), "Half-Life 2", "220", Guid.Parse("cb91dfc9-b977-43bf-8e70-55f46e410fab"), true);
+        var cardContributions = await host.ResolveUiSlotAsync(PluginUiSlots.CardBadge, snapshot, token);
+        Assert.Equal(1, lazyFactoryCalls);
+
+        var contribution = Assert.Single(cardContributions);
+        Assert.Equal("test.lazy-slots", contribution.PluginId);
+        Assert.NotNull(contribution.Badges);
+        Assert.Equal(4, contribution.Badges.Count); // Capped to 4 per plugin, blank label filtered out.
+        Assert.Equal("https://protondb.com/app/220", contribution.Badges[0].LinkUrl);
+        Assert.Null(contribution.Badges[1].LinkUrl); // javascript: stripped
+        Assert.Null(contribution.Badges[2].LinkUrl); // http: stripped
+
+        // Broken plugin transitioned to Faulted without breaking healthy slot resolution or metadata.
+        Assert.Contains(host.GetRecords(), r => r.Descriptor.Id == "test.broken-slots" && r.State == PluginLifecycleState.Faulted);
+
+        var metadata = await host.FetchMetadataAsync(snapshot, token);
+        var metaItem = Assert.Single(metadata);
+        Assert.Equal("test.lazy-slots", metaItem.PluginId);
+        Assert.Equal(100, metaItem.CommunityScore); // Clamped to [0..100]
+        Assert.Equal(32, metaItem.Attributes!.Count); // Capped to 32 & duplicate trimmed key handled inside try.
+        Assert.True(host.TryGetMetadataProvider("meta.lazy", out _));
+        Assert.Single(host.GetMetadataProviders());
+
+        // DetailsSection sanitization caps: max 2 sections, 12 fields/section, URL UserInfo rejected & LinkLabel stripped.
+        var sectionResults = await host.ResolveUiSlotAsync(PluginUiSlots.DetailsSection, snapshot, token);
+        var sectionContrib = Assert.Single(sectionResults);
+        Assert.Equal(2, sectionContrib.Sections!.Count);
+        Assert.Equal(12, sectionContrib.Sections[0].Fields!.Count);
+        Assert.Null(sectionContrib.Sections[0].LinkUrl);
+        Assert.Null(sectionContrib.Sections[0].LinkLabel);
+        Assert.Equal("https://protondb.com/app/220", sectionContrib.Sections[1].LinkUrl);
+        Assert.Equal("Open", sectionContrib.Sections[1].LinkLabel);
+
+        // Disable/Enable removes & restores trimmed slot subscriptions and updates HasUiSlotProviders accurately.
+        Assert.True(host.Disable("test.lazy-slots"));
+        Assert.False(host.HasUiSlotProviders(PluginUiSlots.CardBadge));
+        Assert.False(host.HasUiSlotProviders(PluginUiSlots.DetailsSection));
+        Assert.True(host.Enable("test.lazy-slots"));
+        Assert.True(host.HasUiSlotProviders(PluginUiSlots.CardBadge));
+
+        // Conflicting ProviderId is rejected without taking over active provider.
+        Assert.False(host.RegisterBuiltIn(new FakeSlotAndMetadataPlugin("test.conflict-meta", "meta.lazy")));
+        Assert.Contains(host.GetRecords(), r => r.Descriptor.Id == "test.conflict-meta" && r.State == PluginLifecycleState.Faulted);
+
+        // Caller cancellation propagates without faulting active UI slot plugin.
+        using var cancelCts = new CancellationTokenSource();
+        var cancelPlugin = new CancelingSlotPlugin("test.cancel-slot", cancelCts);
+        Assert.True(host.RegisterBuiltIn(cancelPlugin));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            host.ResolveUiSlotAsync(PluginUiSlots.DetailsBadges, snapshot, cancelCts.Token));
+        Assert.Contains(host.GetRecords(), r => r.Descriptor.Id == "test.cancel-slot" && r.State == PluginLifecycleState.Active);
+    }
+
     private sealed class AlwaysRegularFileProbe : IRegularFileProbe
     {
         public bool IsRegularFile(string path) => true;
@@ -831,6 +1012,146 @@ public sealed class PluginHostTests
         {
             LibrarySources = [this],
         };
+    }
+
+    private sealed class FakeSlotAndMetadataPlugin(string pluginId, string providerId)
+        : IPlaynitePlugin, IUiSlotCapability, IMetadataCapability
+    {
+        public PluginDescriptor Descriptor { get; } = new(
+            pluginId,
+            Guid.Empty,
+            pluginId,
+            new Version(1, 0, 0),
+            PluginLoadKind.BuiltIn,
+            PluginSurface.Core | PluginSurface.Desktop,
+            PluginCapabilityKind.UiSlots | PluginCapabilityKind.Metadata,
+            new PluginEntryPoints());
+
+        public IReadOnlyList<string> SubscribedSlots => ["  card.badge  ", PluginUiSlots.DetailsSection];
+        public string ProviderId => providerId;
+        public string DisplayName => pluginId;
+
+        public PluginRegistration Setup(PluginContext context) => new()
+        {
+            UiSlotProviders = [this],
+            MetadataProviders = [this],
+        };
+
+        public Task<PluginUiSlotContribution?> ResolveSlotAsync(
+            string slotId,
+            PluginGameSnapshot game,
+            CancellationToken cancellationToken)
+        {
+            if (slotId == PluginUiSlots.DetailsSection)
+            {
+                var tooManyFields = Enumerable.Range(0, 15)
+                    .Select(i => new PluginUiSectionField($"Field{i}", $"Val{i}"))
+                    .ToArray();
+                return Task.FromResult<PluginUiSlotContribution?>(new PluginUiSlotContribution(
+                    "forged-id",
+                    slotId,
+                    Sections:
+                    [
+                        new PluginUiSection("s0", "  ", "ignored"),
+                        new PluginUiSection("s1", "First\nSection", "Summary\r\nText", tooManyFields, "Blocked", "https://user:pass@protondb.com/app/220"),
+                        new PluginUiSection("s2", "Second Section", "Ok", [new PluginUiSectionField("Tier", "Gold")], "Open", "https://protondb.com/app/220"),
+                        new PluginUiSection("s3", "Third Truncated"),
+                    ]));
+            }
+
+            return Task.FromResult<PluginUiSlotContribution?>(new PluginUiSlotContribution(
+                "forged-id",
+                slotId,
+                Badges:
+                [
+                    new PluginUiBadge("b0", "   ", PluginBadgeTone.Neutral),
+                    new PluginUiBadge("b1", "Platinum", PluginBadgeTone.Accent, LinkUrl: "https://protondb.com/app/220"),
+                    new PluginUiBadge("b2", "Xss", PluginBadgeTone.Danger, LinkUrl: "javascript:alert(1)"),
+                    new PluginUiBadge("b3", "Insecure", PluginBadgeTone.Warning, LinkUrl: "http://example.com"),
+                    new PluginUiBadge("b4", "Fourth", PluginBadgeTone.Positive),
+                    new PluginUiBadge("b5", "FifthTruncated", PluginBadgeTone.Muted),
+                ]));
+        }
+
+        public Task<PluginGameMetadata?> FetchMetadataAsync(PluginGameSnapshot game, CancellationToken cancellationToken)
+        {
+            var attrs = new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["tier"] = "platinum",
+                [" tier "] = "trimmed-duplicate",
+            };
+            for (var i = 0; i < 40; i++)
+            {
+                attrs[$"extra{i}"] = $"v{i}";
+            }
+
+            return Task.FromResult<PluginGameMetadata?>(new PluginGameMetadata(
+                "forged-meta",
+                Summary: "  Rich metadata  ",
+                CommunityScore: 150,
+                Attributes: attrs));
+        }
+    }
+
+    private sealed class ThrowingSlotAndMetadataPlugin(string pluginId)
+        : IPlaynitePlugin, IUiSlotCapability, IMetadataCapability
+    {
+        public PluginDescriptor Descriptor { get; } = new(
+            pluginId,
+            Guid.Empty,
+            pluginId,
+            new Version(1, 0, 0),
+            PluginLoadKind.BuiltIn,
+            PluginSurface.Core | PluginSurface.Desktop,
+            PluginCapabilityKind.UiSlots | PluginCapabilityKind.Metadata,
+            new PluginEntryPoints());
+
+        public IReadOnlyList<string> SubscribedSlots => [PluginUiSlots.CardBadge];
+        public string ProviderId => pluginId;
+        public string DisplayName => pluginId;
+
+        public PluginRegistration Setup(PluginContext context) => new()
+        {
+            UiSlotProviders = [this],
+            MetadataProviders = [this],
+        };
+
+        public Task<PluginUiSlotContribution?> ResolveSlotAsync(string slotId, PluginGameSnapshot game, CancellationToken cancellationToken) =>
+            throw new InvalidOperationException("Slot boom");
+
+        public Task<PluginGameMetadata?> FetchMetadataAsync(PluginGameSnapshot game, CancellationToken cancellationToken) =>
+            throw new InvalidOperationException("Meta boom");
+    }
+
+    private sealed class CancelingSlotPlugin(string pluginId, CancellationTokenSource cts)
+        : IPlaynitePlugin, IUiSlotCapability
+    {
+        public PluginDescriptor Descriptor { get; } = new(
+            pluginId,
+            Guid.Empty,
+            pluginId,
+            new Version(1, 0, 0),
+            PluginLoadKind.BuiltIn,
+            PluginSurface.Desktop,
+            PluginCapabilityKind.UiSlots,
+            new PluginEntryPoints());
+
+        public IReadOnlyList<string> SubscribedSlots => [PluginUiSlots.DetailsBadges];
+
+        public PluginRegistration Setup(PluginContext context) => new()
+        {
+            UiSlotProviders = [this],
+        };
+
+        public async Task<PluginUiSlotContribution?> ResolveSlotAsync(
+            string slotId,
+            PluginGameSnapshot game,
+            CancellationToken cancellationToken)
+        {
+            await cts.CancelAsync();
+            cancellationToken.ThrowIfCancellationRequested();
+            return null;
+        }
     }
 }
 

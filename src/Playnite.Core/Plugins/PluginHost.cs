@@ -33,6 +33,10 @@ public sealed class PluginHost : IDisposable
         new(StringComparer.Ordinal);
     private readonly Dictionary<string, List<(string PluginId, IEventHookCapability Hook)>> eventIndex =
         new(StringComparer.Ordinal);
+    private readonly Dictionary<string, List<(string PluginId, IUiSlotCapability Capability)>> uiSlotIndex =
+        new(StringComparer.Ordinal);
+    private readonly Dictionary<string, (string OwnerPluginId, IMetadataCapability Capability)> metadataIndex =
+        new(StringComparer.Ordinal);
     private readonly Dictionary<string, IPluginSettingsCapability> settingsIndex =
         new(StringComparer.Ordinal);
 
@@ -58,6 +62,25 @@ public sealed class PluginHost : IDisposable
 
     /// <summary>Gets the active host surface mask.</summary>
     public PluginSurface ActiveSurface => activeSurface;
+
+    /// <summary>Gets the plugin settings store backing this host.</summary>
+    public IPluginSettingsStore SettingsStore => settingsStore;
+
+    /// <summary>Records a host diagnostic entry for <paramref name="pluginId"/>.</summary>
+    public void RecordDiagnostic(string pluginId, string code, string message)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(code);
+        ArgumentException.ThrowIfNullOrWhiteSpace(message);
+        lock (gate)
+        {
+            if (!disposed)
+            {
+                diagnostics.Add(new PluginDiagnostic(pluginId ?? string.Empty, code, message));
+            }
+        }
+
+        log?.Invoke(pluginId ?? string.Empty, message);
+    }
 
     /// <summary>Gets whether this host has been disposed.</summary>
     public bool IsDisposed
@@ -805,6 +828,280 @@ public sealed class PluginHost : IDisposable
         return DispatchEventAsync(subscribers, pluginEvent, cancellationToken);
     }
 
+    /// <summary>
+    /// Returns true when any active subscriber or unmaterialized lazy UI-slot plugin can populate
+    /// <paramref name="slotId"/>, without loading external assemblies.
+    /// </summary>
+    public bool HasUiSlotProviders(string slotId)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(slotId);
+        var normalizedSlot = slotId.Trim();
+        lock (gate)
+        {
+            ThrowIfDisposed();
+            if (uiSlotIndex.TryGetValue(normalizedSlot, out var activeList)
+                && activeList.Any(item => entriesById.TryGetValue(item.PluginId, out var entry)
+                    && entry.State == PluginLifecycleState.Active))
+            {
+                return true;
+            }
+
+            foreach (var id in registrationOrder)
+            {
+                var entry = entriesById[id];
+                if (entry.State == PluginLifecycleState.Registered
+                    && entry.Descriptor.Capabilities.HasFlag(PluginCapabilityKind.UiSlots))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Resolves sanitized declarative UI badges and sections from all active and lazy UI-slot plugins
+    /// subscribed to <paramref name="slotId"/>.
+    /// </summary>
+    public async Task<IReadOnlyList<PluginUiSlotContribution>> ResolveUiSlotAsync(
+        string slotId,
+        PluginGameSnapshot game,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(slotId);
+        ArgumentNullException.ThrowIfNull(game);
+        cancellationToken.ThrowIfCancellationRequested();
+        var normalizedSlot = slotId.Trim();
+
+        var pending = SnapshotLazyEntries(PluginCapabilityKind.UiSlots);
+        foreach (var lazyEntry in pending)
+        {
+            ActivateEntry(lazyEntry);
+        }
+
+        (string PluginId, IUiSlotCapability Capability)[] subscribers;
+        lock (gate)
+        {
+            ThrowIfDisposed();
+            if (!uiSlotIndex.TryGetValue(normalizedSlot, out var list) || list.Count == 0)
+            {
+                return [];
+            }
+
+            subscribers = list.ToArray();
+        }
+
+        var results = new List<PluginUiSlotContribution>(subscribers.Length);
+        foreach (var (pluginId, capability) in subscribers)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            lock (gate)
+            {
+                if (disposed || !entriesById.TryGetValue(pluginId, out var entry) || entry.State != PluginLifecycleState.Active)
+                {
+                    continue;
+                }
+            }
+
+            PluginUiSlotContribution? sanitized;
+            try
+            {
+                var raw = await capability.ResolveSlotAsync(normalizedSlot, game, cancellationToken).ConfigureAwait(false);
+                cancellationToken.ThrowIfCancellationRequested();
+                sanitized = SanitizeUiSlotContribution(pluginId, normalizedSlot, raw);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception exception)
+            {
+                RecordRuntimeFault(pluginId, "ui-slot-failed",
+                    $"UI slot '{normalizedSlot}' failed: {exception.Message}");
+                continue;
+            }
+
+            if (sanitized is not null)
+            {
+                results.Add(sanitized);
+            }
+        }
+
+        return results;
+    }
+
+    /// <summary>Returns active metadata providers, activating any pending lazy metadata plugins.</summary>
+    public IReadOnlyList<IMetadataCapability> GetMetadataProviders()
+    {
+        var pending = SnapshotLazyEntries(PluginCapabilityKind.Metadata);
+        foreach (var lazyEntry in pending)
+        {
+            ActivateEntry(lazyEntry);
+        }
+
+        lock (gate)
+        {
+            ThrowIfDisposed();
+            return metadataIndex.Values
+                .Select(item => item.Capability)
+                .OrderBy(item => item.ProviderId, StringComparer.Ordinal)
+                .ToArray();
+        }
+    }
+
+    /// <summary>Looks up a metadata provider by identifier, activating pending lazy metadata plugins if needed.</summary>
+    public bool TryGetMetadataProvider(string providerId, out IMetadataCapability capability)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(providerId);
+
+        PluginEntry? lazyCandidate = null;
+        lock (gate)
+        {
+            ThrowIfDisposed();
+            if (metadataIndex.TryGetValue(providerId, out var found))
+            {
+                capability = found.Capability;
+                return true;
+            }
+
+            if (entriesById.TryGetValue(providerId, out var exact)
+                && exact.State == PluginLifecycleState.Registered
+                && exact.Descriptor.Capabilities.HasFlag(PluginCapabilityKind.Metadata))
+            {
+                lazyCandidate = exact;
+            }
+        }
+
+        if (lazyCandidate is not null)
+        {
+            ActivateEntry(lazyCandidate);
+            lock (gate)
+            {
+                ThrowIfDisposed();
+                if (metadataIndex.TryGetValue(providerId, out var found))
+                {
+                    capability = found.Capability;
+                    return true;
+                }
+            }
+        }
+
+        var pending = SnapshotLazyEntries(PluginCapabilityKind.Metadata);
+        foreach (var lazyEntry in pending)
+        {
+            ActivateEntry(lazyEntry);
+        }
+
+        lock (gate)
+        {
+            ThrowIfDisposed();
+            if (metadataIndex.TryGetValue(providerId, out var found))
+            {
+                capability = found.Capability;
+                return true;
+            }
+        }
+
+        capability = null!;
+        return false;
+    }
+
+    /// <summary>Fetches fault-isolated metadata contributions across active and lazy metadata plugins.</summary>
+    public async Task<IReadOnlyList<PluginGameMetadata>> FetchMetadataAsync(
+        PluginGameSnapshot game,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(game);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        var pending = SnapshotLazyEntries(PluginCapabilityKind.Metadata);
+        foreach (var lazyEntry in pending)
+        {
+            ActivateEntry(lazyEntry);
+        }
+
+        (string OwnerPluginId, IMetadataCapability Capability)[] providers;
+        lock (gate)
+        {
+            ThrowIfDisposed();
+            if (metadataIndex.Count == 0)
+            {
+                return [];
+            }
+
+            providers = metadataIndex.Values
+                .OrderBy(item => item.Capability.ProviderId, StringComparer.Ordinal)
+                .ToArray();
+        }
+
+        var results = new List<PluginGameMetadata>(providers.Length);
+        foreach (var (ownerPluginId, capability) in providers)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            lock (gate)
+            {
+                if (disposed || !entriesById.TryGetValue(ownerPluginId, out var entry) || entry.State != PluginLifecycleState.Active)
+                {
+                    continue;
+                }
+            }
+
+            PluginGameMetadata? sanitizedMetadata = null;
+            try
+            {
+                var raw = await capability.FetchMetadataAsync(game, cancellationToken).ConfigureAwait(false);
+                cancellationToken.ThrowIfCancellationRequested();
+                if (raw is not null)
+                {
+                    int? clampedScore = raw.CommunityScore is int score
+                        ? Math.Clamp(score, 0, 100)
+                        : null;
+                    var sanitizedSummary = NormalizeDisplayText(raw.Summary, 512);
+                    var attributes = new Dictionary<string, string>(StringComparer.Ordinal);
+                    if (raw.Attributes is not null)
+                    {
+                        foreach (var pair in raw.Attributes)
+                        {
+                            var normalizedKey = NormalizeDisplayText(pair.Key, 64);
+                            var normalizedValue = NormalizeDisplayText(pair.Value, 256);
+                            if (normalizedKey is null || normalizedValue is null)
+                            {
+                                continue;
+                            }
+
+                            if (!attributes.ContainsKey(normalizedKey) && attributes.Count >= 32)
+                            {
+                                break;
+                            }
+
+                            attributes[normalizedKey] = normalizedValue;
+                        }
+                    }
+
+                    sanitizedMetadata = new PluginGameMetadata(ownerPluginId, sanitizedSummary, clampedScore, attributes);
+                }
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception exception)
+            {
+                RecordRuntimeFault(ownerPluginId, "metadata-failed",
+                    $"Metadata provider '{capability.ProviderId}' failed: {exception.Message}");
+                continue;
+            }
+
+            if (sanitizedMetadata is not null)
+            {
+                results.Add(sanitizedMetadata);
+            }
+        }
+
+        return results;
+    }
+
     /// <inheritdoc/>
     public void Dispose()
     {
@@ -827,6 +1124,8 @@ public sealed class PluginHost : IDisposable
             syncIndex.Clear();
             commandIndex.Clear();
             eventIndex.Clear();
+            uiSlotIndex.Clear();
+            metadataIndex.Clear();
             settingsIndex.Clear();
         }
 
@@ -1443,6 +1742,41 @@ public sealed class PluginHost : IDisposable
             }
         }
 
+        foreach (var slotProvider in registration.UiSlotProviders)
+        {
+            if (slotProvider?.SubscribedSlots is null || !slotProvider.SubscribedSlots.Any(s => !string.IsNullOrWhiteSpace(s)))
+            {
+                return $"Plugin '{pluginId}' declared a UI slot provider without any subscribed slots.";
+            }
+        }
+
+        var seenMetadataIds = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var provider in registration.MetadataProviders)
+        {
+            if (provider is null || string.IsNullOrWhiteSpace(provider.ProviderId))
+            {
+                return $"Plugin '{pluginId}' declared a metadata provider with a blank ProviderId.";
+            }
+
+            var normalizedId = provider.ProviderId.Trim();
+            if (!seenMetadataIds.Add(normalizedId))
+            {
+                return $"Plugin '{pluginId}' declared duplicate metadata provider '{normalizedId}'.";
+            }
+
+            if (metadataIndex.TryGetValue(normalizedId, out var existing)
+                && !string.Equals(existing.OwnerPluginId, pluginId, StringComparison.Ordinal))
+            {
+                return $"Metadata provider '{normalizedId}' is already registered by plugin '{existing.OwnerPluginId}'.";
+            }
+
+            if (!string.Equals(normalizedId, pluginId, StringComparison.Ordinal)
+                && entriesById.ContainsKey(normalizedId))
+            {
+                return $"Metadata provider '{normalizedId}' collides with plugin ID '{normalizedId}'.";
+            }
+        }
+
         return null;
     }
 
@@ -1515,6 +1849,35 @@ public sealed class PluginHost : IDisposable
             }
         }
 
+        foreach (var slotProvider in registration.UiSlotProviders)
+        {
+            foreach (var slotId in slotProvider.SubscribedSlots
+                .Where(slot => !string.IsNullOrWhiteSpace(slot))
+                .Select(slot => slot.Trim())
+                .Distinct(StringComparer.Ordinal))
+            {
+                if (!uiSlotIndex.TryGetValue(slotId, out var list))
+                {
+                    list = [];
+                    uiSlotIndex[slotId] = list;
+                }
+
+                if (!list.Any(item => string.Equals(item.PluginId, entry.Descriptor.Id, StringComparison.Ordinal)
+                        && ReferenceEquals(item.Capability, slotProvider)))
+                {
+                    list.Add((entry.Descriptor.Id, slotProvider));
+                }
+            }
+        }
+
+        foreach (var metadataProvider in registration.MetadataProviders)
+        {
+            if (!string.IsNullOrWhiteSpace(metadataProvider.ProviderId))
+            {
+                metadataIndex[metadataProvider.ProviderId.Trim()] = (entry.Descriptor.Id, metadataProvider);
+            }
+        }
+
         if (registration.Settings is not null)
         {
             settingsIndex[entry.Descriptor.Id] = registration.Settings;
@@ -1582,7 +1945,218 @@ public sealed class PluginHost : IDisposable
             }
         }
 
+        foreach (var slotProvider in registration.UiSlotProviders)
+        {
+            if (slotProvider?.SubscribedSlots is null)
+            {
+                continue;
+            }
+
+            foreach (var rawSlot in slotProvider.SubscribedSlots)
+            {
+                if (string.IsNullOrWhiteSpace(rawSlot))
+                {
+                    continue;
+                }
+
+                var slotId = rawSlot.Trim();
+                if (uiSlotIndex.TryGetValue(slotId, out var list))
+                {
+                    list.RemoveAll(item => string.Equals(item.PluginId, entry.Descriptor.Id, StringComparison.Ordinal));
+                    if (list.Count == 0)
+                    {
+                        uiSlotIndex.Remove(slotId);
+                    }
+                }
+            }
+        }
+
+        foreach (var metadataProvider in registration.MetadataProviders)
+        {
+            if (metadataProvider is null || string.IsNullOrWhiteSpace(metadataProvider.ProviderId))
+            {
+                continue;
+            }
+
+            var providerId = metadataProvider.ProviderId.Trim();
+            if (metadataIndex.TryGetValue(providerId, out var existing)
+                && string.Equals(existing.OwnerPluginId, entry.Descriptor.Id, StringComparison.Ordinal))
+            {
+                metadataIndex.Remove(providerId);
+            }
+        }
+
         settingsIndex.Remove(entry.Descriptor.Id);
+    }
+
+    private static PluginUiSlotContribution? SanitizeUiSlotContribution(
+        string pluginId,
+        string slotId,
+        PluginUiSlotContribution? raw)
+    {
+        if (raw is null)
+        {
+            return null;
+        }
+
+        const int maxBadgesPerPlugin = 4;
+        const int maxSectionsPerPlugin = 2;
+        const int maxFieldsPerSection = 12;
+
+        List<PluginUiBadge>? sanitizedBadges = null;
+        if (raw.Badges is { Count: > 0 })
+        {
+            foreach (var badge in raw.Badges)
+            {
+                if (badge is null)
+                {
+                    continue;
+                }
+
+                var label = NormalizeDisplayText(badge.Label, 64);
+                if (label is null)
+                {
+                    continue;
+                }
+
+                sanitizedBadges ??= [];
+                var id = NormalizeDisplayText(badge.Id, 64) ?? $"{pluginId}.badge.{sanitizedBadges.Count}";
+                var tooltip = NormalizeDisplayText(badge.Tooltip, 256);
+                sanitizedBadges.Add(new PluginUiBadge(
+                    id,
+                    label,
+                    badge.Tone,
+                    tooltip,
+                    TrySanitizeHttpsUrl(badge.LinkUrl)));
+
+                if (sanitizedBadges.Count >= maxBadgesPerPlugin)
+                {
+                    break;
+                }
+            }
+        }
+
+        List<PluginUiSection>? sanitizedSections = null;
+        if (raw.Sections is { Count: > 0 })
+        {
+            foreach (var section in raw.Sections)
+            {
+                if (section is null)
+                {
+                    continue;
+                }
+
+                var title = NormalizeDisplayText(section.Title, 80);
+                if (title is null)
+                {
+                    continue;
+                }
+
+                sanitizedSections ??= [];
+                var id = NormalizeDisplayText(section.Id, 64) ?? $"{pluginId}.section.{sanitizedSections.Count}";
+                var summary = NormalizeDisplayText(section.Summary, 512);
+                var sanitizedUrl = TrySanitizeHttpsUrl(section.LinkUrl);
+                var linkLabel = sanitizedUrl is null ? null : NormalizeDisplayText(section.LinkLabel, 64);
+
+                var sanitizedFields = new List<PluginUiSectionField>();
+                if (section.Fields is { Count: > 0 })
+                {
+                    foreach (var field in section.Fields)
+                    {
+                        if (field is null)
+                        {
+                            continue;
+                        }
+
+                        var fieldLabel = NormalizeDisplayText(field.Label, 64);
+                        var fieldValue = NormalizeDisplayText(field.Value, 256);
+                        if (fieldLabel is null || fieldValue is null)
+                        {
+                            continue;
+                        }
+
+                        sanitizedFields.Add(new PluginUiSectionField(fieldLabel, fieldValue));
+                        if (sanitizedFields.Count >= maxFieldsPerSection)
+                        {
+                            break;
+                        }
+                    }
+                }
+
+                sanitizedSections.Add(new PluginUiSection(
+                    id,
+                    title,
+                    summary,
+                    sanitizedFields,
+                    linkLabel,
+                    sanitizedUrl));
+
+                if (sanitizedSections.Count >= maxSectionsPerPlugin)
+                {
+                    break;
+                }
+            }
+        }
+
+        if ((sanitizedBadges is null || sanitizedBadges.Count == 0)
+            && (sanitizedSections is null || sanitizedSections.Count == 0))
+        {
+            return null;
+        }
+
+        return new PluginUiSlotContribution(
+            pluginId,
+            slotId,
+            sanitizedBadges ?? (IReadOnlyList<PluginUiBadge>)[],
+            sanitizedSections ?? (IReadOnlyList<PluginUiSection>)[]);
+    }
+
+    private static string? NormalizeDisplayText(string? rawText, int maxLength)
+    {
+        if (string.IsNullOrWhiteSpace(rawText))
+        {
+            return null;
+        }
+
+        Span<char> buffer = rawText.Length <= 512
+            ? stackalloc char[Math.Min(rawText.Length, maxLength)]
+            : new char[maxLength];
+        var written = 0;
+        var span = rawText.AsSpan().Trim();
+        for (var i = 0; i < span.Length && written < maxLength; i++)
+        {
+            var ch = span[i];
+            if (!char.IsControl(ch))
+            {
+                buffer[written++] = ch;
+            }
+        }
+
+        if (written == 0)
+        {
+            return null;
+        }
+
+        var result = new string(buffer[..written]).Trim();
+        return result.Length == 0 ? null : result;
+    }
+
+    private static string? TrySanitizeHttpsUrl(string? rawUrl)
+    {
+        if (string.IsNullOrWhiteSpace(rawUrl) || rawUrl.Any(char.IsControl))
+        {
+            return null;
+        }
+
+        var trimmed = rawUrl.Trim();
+        if (!Uri.TryCreate(trimmed, UriKind.Absolute, out var uri)
+            || !string.Equals(uri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase)
+            || uri.UserInfo.Length != 0)
+        {
+            return null;
+        }
+
+        return uri.AbsoluteUri;
     }
 
     private async Task DispatchEventAsync(

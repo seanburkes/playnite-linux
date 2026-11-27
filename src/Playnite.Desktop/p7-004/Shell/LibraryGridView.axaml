@@ -152,6 +152,8 @@
             </DockPanel>
             <TextBlock x:Name="DetailsId" Text="(none)" Classes="muted"
                        AutomationProperties.Name="Details id" />
+            <WrapPanel x:Name="DetailsPluginBadges" Orientation="Horizontal" IsVisible="False"
+                       Margin="0,4,0,0" AutomationProperties.Name="Plugin game badges" />
           </StackPanel>
           <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="6">
             <Button x:Name="PlayButton" Grid.Column="0" Classes="primary-cta" IsEnabled="False"
@@ -207,6 +209,8 @@
           <Border Height="1" Background="{DynamicResource PlayniteBorderBrush}" />
           <TextBlock x:Name="DetailsDescription" Text="" Classes="meta-value" TextWrapping="Wrap"
                      AutomationProperties.Name="Game description summary" />
+          <StackPanel x:Name="DetailsPluginSections" Spacing="8" IsVisible="False"
+                      AutomationProperties.Name="Plugin game sections" />
         </StackPanel>
       </ScrollViewer>
     </Border>
