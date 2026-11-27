@@ -1,0 +1,2 @@
+timestamp	unit	from	to	actor	evidence
+2026-11-27T00:18:25Z	p7-002	done	done	seanburkes	PR https://github.com/seanburkes/playnite-linux/pull/259 validates head 9ca72def6b88ffb6a0e662f2517f02dc12749118 in successful linux-ci https://github.com/seanburkes/playnite-linux/actions/runs/45915546136. Styles About and Message as text while preserving the existing command and keyboard paths.

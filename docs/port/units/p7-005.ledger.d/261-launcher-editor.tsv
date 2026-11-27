@@ -1,0 +1,2 @@
+timestamp	unit	from	to	actor	evidence
+2026-11-27T00:22:29Z	p7-005	done	done	seanburkes	PR https://github.com/seanburkes/playnite-linux/pull/261 validates head 55dd7d330bb421ad21d5f633211393cc288577d5 in successful linux-ci https://github.com/seanburkes/playnite-linux/actions/runs/45915855022. Verifies explicit desktop metadata editing while retaining the existing save and cancellation smoke coverage.
