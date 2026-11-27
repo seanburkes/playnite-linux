@@ -204,7 +204,7 @@ public sealed class LibraryExperienceSmokeTests
                 groupCombo.SelectedIndex = 1; // InstallationStatus
                 await view.QueryTask;
                 Assert.Equal(LibraryGroupBy.InstallationStatus, model.GroupBy);
-                Assert.Contains("Group By", view.FindControl<TextBlock>("QueryStatus")!.Text, StringComparison.Ordinal);
+                Assert.Equal("Installation Status", groupCombo.SelectedItem);
                 var statusCards = list.Items.OfType<ListBoxItem>()
                     .Select(item => Assert.IsType<LibraryCardItem>(item.DataContext))
                     .ToArray();
