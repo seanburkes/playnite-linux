@@ -13,10 +13,8 @@ namespace Playnite.Desktop.Shell;
 /// byte-for-byte valid. The grid, its view-model and the database destination are instance-owned
 /// here; no static locator reaches p7-001's private ServiceRegistry.
 ///
-/// p7-005 composes the game edit/metadata view beside the untouched p7-004 grid: it listens to the
-/// existing GameList selection event, reads the selected ListBoxItem tag (a p7-004 LibraryRow),
-/// loads the full StoredGame through its own second database wrapper, and after a save reloads the
-/// current page and re-applies the grid. No p7-004 file is edited in place.
+/// The metadata editor opens on request for the selected game. After a save, the host
+/// reloads the library page and applies it to the grid.
 /// </summary>
 public sealed partial class ContentHostView : UserControl
 {
@@ -33,6 +31,7 @@ public sealed partial class ContentHostView : UserControl
 
     private GameEditStore? editStore;
     private GameEditViewModel? editModel;
+    private int editRequestVersion;
 
     public ContentHostView()
     {
@@ -45,6 +44,10 @@ public sealed partial class ContentHostView : UserControl
         model = new LibraryViewModel(databasePath);
         grid = this.FindControl<LibraryGridView>("LibraryGrid")!;
         editView = this.FindControl<GameEditView>("GameEdit")!;
+        editView.IsVisible = gameEditSmoke;
+        var editButton = grid.FindControl<Button>("EditGameButton")!;
+        editButton.IsVisible = !gameEditSmoke;
+        editButton.Click += OnEditRequested;
 
         grid.FindControl<ListBox>("GameList")!.SelectionChanged += OnEditSelectionChanged;
         editView.SaveRequested += OnSaveRequested;
@@ -53,11 +56,49 @@ public sealed partial class ContentHostView : UserControl
         Unloaded += OnUnloaded;
     }
 
-    /// <summary>Completes when the selection-driven edit load has been applied.</summary>
+    internal LibraryGridView LibraryGridControl => grid;
+
+    /// <summary>Completes when the selection-driven smoke edit load has been applied.</summary>
     internal Task EditLoadTask { get; private set; } = Task.CompletedTask;
 
     /// <summary>Completes when the control-driven save, page reload and grid re-apply are applied.</summary>
     internal Task EditSaveTask { get; private set; } = Task.CompletedTask;
+
+    private async void OnEditRequested(object? sender, EventArgs e)
+    {
+        var list = grid.FindControl<ListBox>("GameList")!;
+        if (gameEditSmoke || editStore is null || list.SelectedItem is not ListBoxItem { Tag: LibraryRow row })
+        {
+            return;
+        }
+
+        var requestVersion = ++editRequestVersion;
+        if (editView.IsVisible)
+        {
+            editView.IsVisible = false;
+            return;
+        }
+
+        var draft = new GameEditViewModel(editStore);
+        try
+        {
+            await draft.LoadAsync(row.Id, lifetime.Token);
+            if (editRequestVersion == requestVersion && draft.IsLoaded)
+            {
+                editModel = draft;
+                editView.Apply(draft);
+                editView.IsVisible = true;
+            }
+        }
+        catch (OperationCanceledException) when (lifetime.IsCancellationRequested)
+        {
+            return;
+        }
+        catch (Exception exception)
+        {
+            Console.WriteLine("game-edit: load-failed=" + exception.Message);
+        }
+    }
 
     private async void OnLoaded(object? sender, RoutedEventArgs eventArgs)
     {
@@ -95,6 +136,13 @@ public sealed partial class ContentHostView : UserControl
 
     private async void OnEditSelectionChanged(object? sender, SelectionChangedEventArgs eventArgs)
     {
+        if (!gameEditSmoke)
+        {
+            editRequestVersion++;
+            editView.IsVisible = false;
+            return;
+        }
+
         if (editModel is null
             || eventArgs.AddedItems.OfType<ListBoxItem>().FirstOrDefault()?.Tag is not LibraryRow row)
         {
@@ -164,6 +212,13 @@ public sealed partial class ContentHostView : UserControl
 
     private async void OnCancelRequested(object? sender, EventArgs eventArgs)
     {
+        if (!gameEditSmoke)
+        {
+            editRequestVersion++;
+            editView.IsVisible = false;
+            return;
+        }
+
         EditLoadTask = CancelEditAsync();
         await EditLoadTask;
     }
