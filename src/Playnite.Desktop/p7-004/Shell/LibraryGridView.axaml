@@ -153,10 +153,12 @@
             <TextBlock x:Name="DetailsId" Text="(none)" Classes="muted"
                        AutomationProperties.Name="Details id" />
           </StackPanel>
-          <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6">
+          <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="6">
             <Button x:Name="PlayButton" Grid.Column="0" Classes="primary-cta" IsEnabled="False"
                     HorizontalAlignment="Stretch" />
-            <Button x:Name="StopButton" Grid.Column="1" Classes="secondary-cta" Content="Stop"
+            <Button x:Name="EditGameButton" Grid.Column="1" Classes="secondary-cta" Content="Edit" IsEnabled="False" IsVisible="False"
+                  AutomationProperties.Name="Edit selected game" />
+            <Button x:Name="StopButton" Grid.Column="2" Classes="secondary-cta" Content="Stop"
                     IsVisible="False" IsEnabled="False"
                     AutomationProperties.Name="Stop running game" />
           </Grid>
