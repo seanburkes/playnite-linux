@@ -403,7 +403,13 @@ internal static class GameLaunchPlanner
                 }
             }
 
-            if (pluginSpec.Kind is PluginLaunchKind.BrowserHandoff or PluginLaunchKind.UriHandoff)
+            var isCloudStreaming = host.TryGetSource(game.PluginId, out var sourceInfo) && sourceInfo.IsCloudStreaming;
+            if (pluginSpec.Kind == PluginLaunchKind.BrowserHandoff || isCloudStreaming)
+            {
+                return new LaunchPlanResult(null, $"'{game.Name}' uses {pluginSpec.Kind} and cannot run as a tracked process.");
+            }
+
+            if (pluginSpec.Kind == PluginLaunchKind.UriHandoff && FindFilePlayAction(game) is null)
             {
                 return new LaunchPlanResult(null, $"'{game.Name}' uses {pluginSpec.Kind} and cannot run as a tracked process.");
             }
@@ -470,14 +476,16 @@ internal static class GameLaunchPlanner
     {
         ArgumentNullException.ThrowIfNull(game);
         var host = pluginHost ?? DesktopPluginHostFactory.DefaultBuiltInHost;
+        PluginLaunchSpec? pluginSpec = null;
         if (pluginId != Guid.Empty && host.TryGetLaunchProvider(pluginId, out var launchProvider))
         {
             try
             {
-                var spec = launchProvider.DescribeLaunch(game);
-                if (spec.CanLaunch || spec.Error is not null)
+                pluginSpec = launchProvider.DescribeLaunch(game);
+                if (pluginSpec.Kind is PluginLaunchKind.TrackedProcess or PluginLaunchKind.BrowserHandoff
+                    && (pluginSpec.CanLaunch || pluginSpec.Error is not null))
                 {
-                    return spec.TargetDisplay;
+                    return pluginSpec.TargetDisplay;
                 }
             }
             catch (Exception)
@@ -504,14 +512,9 @@ internal static class GameLaunchPlanner
             return $"[{tags}] {spec.Executable}";
         }
 
-        if (pluginId == StoreCatalog.SteamPluginId && steamPlayAppId is uint appId)
+        if (pluginSpec is not null && (pluginSpec.CanLaunch || pluginSpec.Error is not null))
         {
-            return string.Create(CultureInfo.InvariantCulture, $"Steam (App {appId})");
-        }
-
-        if (game.IsInstalled && StoreCatalog.TryBuildHeroicLaunchUri(pluginId, game.GameId, out _))
-        {
-            return $"Heroic ({StoreCatalog.GetDisplayName(pluginId)})";
+            return pluginSpec.TargetDisplay;
         }
 
         return "Not configured";

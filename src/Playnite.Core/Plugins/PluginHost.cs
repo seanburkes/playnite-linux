@@ -27,6 +27,8 @@ public sealed class PluginHost : IDisposable
     private readonly Dictionary<Guid, string> lazySourceOwners = [];
     private readonly Dictionary<Guid, (string PluginId, ILaunchCapability Capability)> launchIndex = [];
     private readonly Dictionary<Guid, string> lazyLaunchOwners = [];
+    private readonly Dictionary<string, (string OwnerPluginId, ILibrarySyncCapability Capability)> syncIndex =
+        new(StringComparer.Ordinal);
     private readonly Dictionary<string, (string PluginId, PluginCommandDescriptor Descriptor, ICommandCapability Capability)> commandIndex =
         new(StringComparer.Ordinal);
     private readonly Dictionary<string, List<(string PluginId, IEventHookCapability Hook)>> eventIndex =
@@ -56,6 +58,18 @@ public sealed class PluginHost : IDisposable
 
     /// <summary>Gets the active host surface mask.</summary>
     public PluginSurface ActiveSurface => activeSurface;
+
+    /// <summary>Gets whether this host has been disposed.</summary>
+    public bool IsDisposed
+    {
+        get
+        {
+            lock (gate)
+            {
+                return disposed;
+            }
+        }
+    }
 
     /// <summary>Gets all diagnostics recorded by this host.</summary>
     public IReadOnlyList<PluginDiagnostic> Diagnostics
@@ -164,8 +178,26 @@ public sealed class PluginHost : IDisposable
             return new PluginDiscoveryResult(discovered, discoveryDiagnostics);
         }
 
+        var rootInfo = new DirectoryInfo(fullRoot);
+        if (IsSymlinkOrReparsePoint(rootInfo))
+        {
+            var rootDiagnostic = new PluginDiagnostic(
+                string.Empty,
+                "unsafe-plugins-root",
+                $"Refusing symlinked plugins root '{fullRoot}'.");
+            discoveryDiagnostics.Add(rootDiagnostic);
+            lock (gate)
+            {
+                if (!disposed)
+                {
+                    diagnostics.Add(rootDiagnostic);
+                }
+            }
+            return new PluginDiscoveryResult(discovered, discoveryDiagnostics);
+        }
+
         var pending = new Stack<(DirectoryInfo Directory, int Depth)>();
-        pending.Push((new DirectoryInfo(fullRoot), 0));
+        pending.Push((rootInfo, 0));
 
         while (pending.Count > 0)
         {
@@ -352,6 +384,45 @@ public sealed class PluginHost : IDisposable
         return false;
     }
 
+    /// <summary>
+    /// Returns library source descriptors from active plugins plus unmaterialized lazy library
+    /// manifests without loading any external assemblies.
+    /// </summary>
+    public IReadOnlyList<LibrarySourceInfo> GetDeclaredSources()
+    {
+        lock (gate)
+        {
+            ThrowIfDisposed();
+            var sources = new List<LibrarySourceInfo>();
+            foreach (var id in registrationOrder)
+            {
+                var entry = entriesById[id];
+                if (entry.State == PluginLifecycleState.Active && entry.Registration is not null)
+                {
+                    foreach (var cap in entry.Registration.LibrarySources)
+                    {
+                        if (cap.Source.SourceId != Guid.Empty)
+                        {
+                            sources.Add(cap.Source);
+                        }
+                    }
+                }
+                else if (entry.State == PluginLifecycleState.Registered
+                    && entry.Descriptor.SourceId != Guid.Empty
+                    && entry.Descriptor.Capabilities.HasFlag(PluginCapabilityKind.LibrarySource))
+                {
+                    sources.Add(new LibrarySourceInfo(
+                        entry.Descriptor.SourceId,
+                        entry.Descriptor.Name,
+                        entry.Descriptor.Name,
+                        SupportsSync: entry.Descriptor.Capabilities.HasFlag(PluginCapabilityKind.LibrarySync)));
+                }
+            }
+
+            return sources;
+        }
+    }
+
     /// <summary>Returns all active library sources, materializing enabled lazy library plugins.</summary>
     public IReadOnlyList<LibrarySourceInfo> GetSources()
     {
@@ -368,6 +439,7 @@ public sealed class PluginHost : IDisposable
                 .Select(id => entriesById[id])
                 .Where(entry => entry.State == PluginLifecycleState.Active && entry.Registration is not null)
                 .SelectMany(entry => entry.Registration!.LibrarySources.Select(cap => cap.Source))
+                .Where(source => source.SourceId != Guid.Empty)
                 .ToArray();
         }
     }
@@ -415,6 +487,187 @@ public sealed class PluginHost : IDisposable
 
         capability = null!;
         return false;
+    }
+
+    /// <summary>Looks up a library sync provider by identifier, activating a lazy owner if needed.</summary>
+    public bool TryGetSyncProvider(string pluginId, out ILibrarySyncCapability capability)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(pluginId);
+
+        PluginEntry? lazyTarget = null;
+        lock (gate)
+        {
+            ThrowIfDisposed();
+            if (syncIndex.TryGetValue(pluginId, out var found))
+            {
+                capability = found.Capability;
+                return true;
+            }
+
+            if (entriesById.TryGetValue(pluginId, out var entry)
+                && entry.State == PluginLifecycleState.Registered
+                && entry.Descriptor.Capabilities.HasFlag(PluginCapabilityKind.LibrarySync))
+            {
+                lazyTarget = entry;
+            }
+        }
+
+        if (lazyTarget is not null)
+        {
+            ActivateEntry(lazyTarget);
+            lock (gate)
+            {
+                ThrowIfDisposed();
+                if (syncIndex.TryGetValue(pluginId, out var found))
+                {
+                    capability = found.Capability;
+                    return true;
+                }
+            }
+        }
+
+        // Fallback if a lazy LibrarySync plugin uses a custom SyncProvider.PluginId != Descriptor.Id.
+        var pendingSyncs = SnapshotLazyEntries(PluginCapabilityKind.LibrarySync);
+        foreach (var pending in pendingSyncs)
+        {
+            ActivateEntry(pending);
+            lock (gate)
+            {
+                ThrowIfDisposed();
+                if (syncIndex.TryGetValue(pluginId, out var found))
+                {
+                    capability = found.Capability;
+                    return true;
+                }
+            }
+        }
+
+        capability = null!;
+        return false;
+    }
+
+    /// <summary>Returns all active library sync providers, activating pending lazy sync plugins.</summary>
+    public IReadOnlyList<ILibrarySyncCapability> GetSyncProviders()
+    {
+        var pending = SnapshotLazyEntries(PluginCapabilityKind.LibrarySync);
+        foreach (var entry in pending)
+        {
+            ActivateEntry(entry);
+        }
+
+        lock (gate)
+        {
+            ThrowIfDisposed();
+            return registrationOrder
+                .Select(id => entriesById[id])
+                .Where(entry => entry.State == PluginLifecycleState.Active && entry.Registration is not null)
+                .SelectMany(entry => entry.Registration!.SyncProviders)
+                .ToArray();
+        }
+    }
+
+    /// <summary>Executes a registered library sync provider and publishes <see cref="PluginEvents.LibrarySynced"/>.</summary>
+    public async Task<PluginSyncResult> RunSyncAsync(
+        string pluginId,
+        string databasePath,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(pluginId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(databasePath);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        if (!TryGetSyncProvider(pluginId, out var capability))
+        {
+            return new PluginSyncResult(
+                pluginId,
+                Succeeded: false,
+                Reconciled: false,
+                Added: 0,
+                Updated: 0,
+                Removed: 0,
+                Unchanged: 0,
+                Skipped: 0,
+                Summary: $"Sync provider '{pluginId}' is not available.",
+                Issues: ["sync-provider-unavailable"]);
+        }
+
+        string ownerPluginId;
+        lock (gate)
+        {
+            ThrowIfDisposed();
+            if (!syncIndex.TryGetValue(pluginId, out var entry)
+                || !entriesById.TryGetValue(entry.OwnerPluginId, out var pluginEntry)
+                || pluginEntry.State != PluginLifecycleState.Active)
+            {
+                return new PluginSyncResult(
+                    pluginId,
+                    Succeeded: false,
+                    Reconciled: false,
+                    Added: 0,
+                    Updated: 0,
+                    Removed: 0,
+                    Unchanged: 0,
+                    Skipped: 0,
+                    Summary: $"Sync provider '{pluginId}' is not available.",
+                    Issues: ["sync-provider-unavailable"]);
+            }
+
+            ownerPluginId = entry.OwnerPluginId;
+            capability = entry.Capability;
+        }
+
+        PluginSyncResult result;
+        try
+        {
+            result = await capability.SyncAsync(databasePath, cancellationToken).ConfigureAwait(false)
+                ?? throw new InvalidOperationException($"Sync provider '{pluginId}' returned null.");
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            RecordRuntimeFault(ownerPluginId, "sync-failed", $"Sync '{pluginId}' failed: {exception.Message}");
+            return new PluginSyncResult(
+                pluginId,
+                Succeeded: false,
+                Reconciled: false,
+                Added: 0,
+                Updated: 0,
+                Removed: 0,
+                Unchanged: 0,
+                Skipped: 0,
+                Summary: $"{capability.DisplayName} sync failed: {exception.Message}",
+                Issues: [exception.Message]);
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
+
+        if (result.Succeeded)
+        {
+            var payload = new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["pluginId"] = string.IsNullOrWhiteSpace(result.PluginId) ? pluginId : result.PluginId,
+                ["succeeded"] = "true",
+                ["added"] = result.Added.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                ["updated"] = result.Updated.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                ["removed"] = result.Removed.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                ["reconciled"] = result.Reconciled ? "true" : "false",
+            };
+            try
+            {
+                await PublishEventAsync(
+                    new PluginEvent(PluginEvents.LibrarySynced, timeProvider.GetUtcNow(), Payload: payload),
+                    CancellationToken.None).ConfigureAwait(false);
+            }
+            catch (ObjectDisposedException exception)
+            {
+                log?.Invoke(ownerPluginId, $"Skipping library.synced event after host disposal ({exception.GetType().Name}).");
+            }
+        }
+
+        return result;
     }
 
     /// <summary>Returns active plugin commands, activating any pending lazy command plugins.</summary>
@@ -571,6 +824,7 @@ public sealed class PluginHost : IDisposable
             lazySourceOwners.Clear();
             launchIndex.Clear();
             lazyLaunchOwners.Clear();
+            syncIndex.Clear();
             commandIndex.Clear();
             eventIndex.Clear();
             settingsIndex.Clear();
@@ -578,7 +832,10 @@ public sealed class PluginHost : IDisposable
 
         foreach (var entry in toDispose)
         {
-            DisposeEntryArtifacts(entry, markDisposed: true);
+            lock (entry.ActivationGate)
+            {
+                DisposeEntryArtifacts(entry, markDisposed: true);
+            }
         }
     }
 
@@ -1104,23 +1361,73 @@ public sealed class PluginHost : IDisposable
 
     private string? ValidateRegistrationConflictsLocked(string pluginId, PluginRegistration registration)
     {
+        var seenSources = new HashSet<Guid>();
         foreach (var library in registration.LibrarySources)
         {
             var id = library.Source.SourceId;
+            if (id != Guid.Empty && !seenSources.Add(id))
+            {
+                return $"Plugin '{pluginId}' declared duplicate SourceId '{id}'.";
+            }
+
             if (id != Guid.Empty && sourceIndex.TryGetValue(id, out var existing)
                 && !string.Equals(existing.PluginId, pluginId, StringComparison.Ordinal))
             {
                 return $"SourceId '{id}' is already registered by plugin '{existing.PluginId}'.";
             }
+
+            if (id != Guid.Empty && lazySourceOwners.TryGetValue(id, out var lazyOwner)
+                && !string.Equals(lazyOwner, pluginId, StringComparison.Ordinal))
+            {
+                return $"SourceId '{id}' is reserved by lazy plugin '{lazyOwner}'.";
+            }
         }
 
+        var seenLaunchers = new HashSet<Guid>();
         foreach (var launch in registration.LaunchProviders)
         {
             var id = launch.SourceId;
+            if (id != Guid.Empty && !seenLaunchers.Add(id))
+            {
+                return $"Plugin '{pluginId}' declared duplicate launch SourceId '{id}'.";
+            }
+
             if (id != Guid.Empty && launchIndex.TryGetValue(id, out var existing)
                 && !string.Equals(existing.PluginId, pluginId, StringComparison.Ordinal))
             {
                 return $"Launch SourceId '{id}' is already registered by plugin '{existing.PluginId}'.";
+            }
+
+            if (id != Guid.Empty && lazyLaunchOwners.TryGetValue(id, out var lazyOwner)
+                && !string.Equals(lazyOwner, pluginId, StringComparison.Ordinal))
+            {
+                return $"Launch SourceId '{id}' is reserved by lazy plugin '{lazyOwner}'.";
+            }
+        }
+
+        var seenSyncIds = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var provider in registration.SyncProviders)
+        {
+            if (string.IsNullOrWhiteSpace(provider.PluginId))
+            {
+                return $"Plugin '{pluginId}' declared a sync provider with a blank PluginId.";
+            }
+
+            if (!seenSyncIds.Add(provider.PluginId))
+            {
+                return $"Plugin '{pluginId}' declared duplicate sync provider '{provider.PluginId}'.";
+            }
+
+            if (syncIndex.TryGetValue(provider.PluginId, out var existing)
+                && !string.Equals(existing.OwnerPluginId, pluginId, StringComparison.Ordinal))
+            {
+                return $"Sync provider '{provider.PluginId}' is already registered by plugin '{existing.OwnerPluginId}'.";
+            }
+
+            if (!string.Equals(provider.PluginId, pluginId, StringComparison.Ordinal)
+                && entriesById.ContainsKey(provider.PluginId))
+            {
+                return $"Sync provider '{provider.PluginId}' collides with plugin ID '{provider.PluginId}'.";
             }
         }
 
@@ -1171,6 +1478,14 @@ public sealed class PluginHost : IDisposable
                 {
                     lazyLaunchOwners.Remove(launch.SourceId);
                 }
+            }
+        }
+
+        foreach (var provider in registration.SyncProviders)
+        {
+            if (!string.IsNullOrWhiteSpace(provider.PluginId))
+            {
+                syncIndex[provider.PluginId] = (entry.Descriptor.Id, provider);
             }
         }
 
@@ -1228,6 +1543,15 @@ public sealed class PluginHost : IDisposable
                 && string.Equals(existing.PluginId, entry.Descriptor.Id, StringComparison.Ordinal))
             {
                 launchIndex.Remove(launch.SourceId);
+            }
+        }
+
+        foreach (var provider in registration.SyncProviders)
+        {
+            if (syncIndex.TryGetValue(provider.PluginId, out var existing)
+                && string.Equals(existing.OwnerPluginId, entry.Descriptor.Id, StringComparison.Ordinal))
+            {
+                syncIndex.Remove(provider.PluginId);
             }
         }
 

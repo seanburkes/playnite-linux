@@ -370,7 +370,7 @@ public sealed partial class FullscreenLibraryWindow : Window
     {
         this.FindControl<Button>("PlayButton")!.IsEnabled =
             !busy && games.SelectedItem is LibraryRow { CanPlay: true } row
-            && (!row.HasTrackedPlayAction || sessions is not null || row.SteamPlayAppId is not null || row.HeroicPlayUri is not null);
+            && (!row.HasTrackedPlayAction || sessions is not null || row.SteamPlayAppId is not null || row.HeroicPlayUri is not null || row.PluginPlayUri is not null);
         Control<Button>("SearchButton").IsEnabled = !busy;
         Control<Button>("FilterButton").IsEnabled = !busy;
         Control<Button>("DetailsButton").IsEnabled = !busy && games.SelectedIndex >= 0;

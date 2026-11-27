@@ -24,6 +24,7 @@ public enum PluginCapabilityKind
     Settings = 32,
     UiSlots = 64,
     Theme = 128,
+    LibrarySync = 256,
 }
 
 /// <summary>How a plugin is hosted inside the runtime.</summary>

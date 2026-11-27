@@ -130,6 +130,9 @@ public sealed class PluginRegistration
     /// <summary>Gets the launch capabilities contributed by the plugin.</summary>
     public IReadOnlyList<ILaunchCapability> LaunchProviders { get; init; } = [];
 
+    /// <summary>Gets the library sync providers contributed by the plugin.</summary>
+    public IReadOnlyList<ILibrarySyncCapability> SyncProviders { get; init; } = [];
+
     /// <summary>Gets the command providers contributed by the plugin.</summary>
     public IReadOnlyList<ICommandCapability> CommandProviders { get; init; } = [];
 

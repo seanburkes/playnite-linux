@@ -161,6 +161,12 @@ public sealed record LibraryRow(Guid Id, string Name, string GameId)
     }
 }
 
+/// <summary>One dynamic source filter option surfaced in the library source selector.</summary>
+internal sealed record LibrarySourceFilterOption(Guid? PluginId, string Label, LibrarySourceFilter? LegacyFilter)
+{
+    public override string ToString() => Label;
+}
+
 /// <summary>The bounded quick-filter selection owned by the p7-004 library query bar.</summary>
 internal sealed record LibraryCollection(Guid? Id, string Name)
 {
@@ -246,7 +252,7 @@ public sealed class LibraryViewModel
         this.databasePath = databasePath;
         if (pluginHost is null)
         {
-            plugins = DesktopPluginHostFactory.CreateDefault();
+            plugins = DesktopPluginHostFactory.CreateForLibrary(databasePath);
             this.ownsPlugins = true;
         }
         else
@@ -254,6 +260,8 @@ public sealed class LibraryViewModel
             plugins = pluginHost;
             this.ownsPlugins = ownsPlugins;
         }
+
+        SourceFilterOptions = BuildSourceFilterOptions(plugins);
     }
 
     public IReadOnlyList<LibraryRow> Rows { get; private set; } = [];
@@ -294,6 +302,12 @@ public sealed class LibraryViewModel
 
     public LibrarySourceFilter SourceFilter { get; private set; } = LibrarySourceFilter.All;
 
+    internal IReadOnlyList<LibrarySourceFilterOption> SourceFilterOptions { get; private set; } = [];
+
+    internal Guid? SourcePluginFilterId { get; private set; }
+
+    internal string? SourcePluginFilterLabel { get; private set; }
+
     /// <summary>Groups returned for the active page when <see cref="GroupBy"/> is active.</summary>
     public IReadOnlyList<LibraryGroup> Groups { get; private set; } = [];
 
@@ -302,6 +316,7 @@ public sealed class LibraryViewModel
         || FilterMode != LibraryFilterMode.All
         || GroupBy != LibraryGroupBy.None
         || SourceFilter != LibrarySourceFilter.All
+        || SourcePluginFilterId is not null
         || CollectionId is not null;
 
     /// <summary>A stable, testable summary of the current query state.</summary>
@@ -315,6 +330,10 @@ public sealed class LibraryViewModel
             if (SourceFilter != LibrarySourceFilter.All)
             {
                 baseStatus += $" | Source: {SourceFilter}";
+            }
+            else if (SourcePluginFilterId is not null && !string.IsNullOrWhiteSpace(SourcePluginFilterLabel))
+            {
+                baseStatus += $" | Source: {SourcePluginFilterLabel}";
             }
             return ActiveCollectionName is { } name ? $"{baseStatus} | Collection: {name}" : baseStatus;
         }
@@ -355,8 +374,19 @@ public sealed class LibraryViewModel
         cancellationToken.ThrowIfCancellationRequested();
         var categories = await database!.ReadAsync(session => session.Metadata<Category>().GetAllAsync(), cancellationToken).ConfigureAwait(false);
         var collectionId = categories.Any(category => category.Value.Id == CollectionId) ? CollectionId : null;
+        var sourceOptions = BuildSourceFilterOptions(plugins);
+        var effectiveSourceFilter = SourceFilter;
+        var effectiveSourcePluginId = SourcePluginFilterId;
+        var effectiveSourceLabel = SourcePluginFilterLabel;
+        if (effectiveSourcePluginId is Guid activeSourceId && !sourceOptions.Any(option => option.PluginId == activeSourceId))
+        {
+            effectiveSourceFilter = LibrarySourceFilter.All;
+            effectiveSourcePluginId = null;
+            effectiveSourceLabel = null;
+        }
+
         var query = new LibraryQuery(
-            Filter: CreateFilter(collectionId),
+            Filter: CreateFilter(collectionId, effectiveSourcePluginId, effectiveSourceFilter),
             SortBy: SortBy,
             Descending: Descending,
             GroupBy: GroupBy,
@@ -382,6 +412,14 @@ public sealed class LibraryViewModel
         }
 
         CollectionId = collectionId;
+        SourceFilter = effectiveSourceFilter;
+        SourcePluginFilterId = effectiveSourcePluginId;
+        SourcePluginFilterLabel = effectiveSourceLabel;
+        if (!sourceOptions.SequenceEqual(SourceFilterOptions))
+        {
+            SourceFilterOptions = sourceOptions;
+        }
+
         var collections = new LibraryCollection[] { new(null, "All collections") }
             .Concat(categories.Select(category => new LibraryCollection(category.Value.Id, category.Value.Name ?? "(unnamed)"))
                 .OrderBy(category => category.Name, StringComparer.CurrentCultureIgnoreCase).ThenBy(category => category.Id))
@@ -486,6 +524,17 @@ public sealed class LibraryViewModel
         }
 
         SourceFilter = sourceFilter;
+        SourcePluginFilterId = StoreCatalog.TryGetFilterPluginId(sourceFilter, out var id) ? id : null;
+        SourcePluginFilterLabel = SourcePluginFilterId is not null ? StoreCatalog.GetFilterLabel(sourceFilter) : null;
+        return ApplyQueryAsync(cancellationToken);
+    }
+
+    internal Task SetSourceFilterOptionAsync(LibrarySourceFilterOption option, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(option);
+        SourceFilter = option.LegacyFilter ?? LibrarySourceFilter.All;
+        SourcePluginFilterId = option.PluginId;
+        SourcePluginFilterLabel = option.PluginId is not null ? option.Label : null;
         return ApplyQueryAsync(cancellationToken);
     }
 
@@ -496,6 +545,8 @@ public sealed class LibraryViewModel
         FilterMode = LibraryFilterMode.All;
         GroupBy = LibraryGroupBy.None;
         SourceFilter = LibrarySourceFilter.All;
+        SourcePluginFilterId = null;
+        SourcePluginFilterLabel = null;
         CollectionId = null;
         return ApplyQueryAsync(cancellationToken);
     }
@@ -544,9 +595,12 @@ public sealed class LibraryViewModel
         await LoadPageAsync((CurrentPage - 2) * PageSize, cancellationToken).ConfigureAwait(false);
     }
 
-    private LibraryFilter? CreateFilter(Guid? collectionId)
+    private LibraryFilter? CreateFilter(Guid? collectionId, Guid? sourcePluginId, LibrarySourceFilter sourceFilter)
     {
-        var hasStoreFilter = StoreCatalog.TryGetFilterPluginId(SourceFilter, out var pluginId);
+        Guid pluginId = Guid.Empty;
+        var hasStoreFilter = sourcePluginId is Guid explicitId
+            ? (pluginId = explicitId) == explicitId
+            : StoreCatalog.TryGetFilterPluginId(sourceFilter, out pluginId);
         if (FilterMode == LibraryFilterMode.All && !hasStoreFilter && collectionId is null)
         {
             return null;
@@ -933,12 +987,6 @@ public sealed class LibraryViewModel
     private LibraryRow CreateRow(Game game, string? groupLabel = null)
     {
         var isSteam = game.PluginId == SteamPluginId;
-        uint? steamAppId = isSteam && game.IsInstalled
-            && FlatpakSteamLauncher.TryParseAppId(game.GameId, out var appId) && appId != 0 ? appId : null;
-        var heroicUri = game.IsInstalled
-            && StoreCatalog.TryBuildHeroicLaunchUri(game.PluginId, game.GameId, out var builtHeroicUri)
-            ? builtHeroicUri
-            : null;
         var hasSourceInfo = plugins.TryGetSource(game.PluginId, out var sourceInfo);
         var hasLaunchProvider = plugins.TryGetLaunchProvider(game.PluginId, out var launchProvider);
         PluginLaunchSpec? pluginLaunch = null;
@@ -954,22 +1002,37 @@ public sealed class LibraryViewModel
             }
         }
 
+        uint? steamAppId = isSteam && pluginLaunch is { Kind: PluginLaunchKind.UriHandoff, CanLaunch: true }
+            && FlatpakSteamLauncher.TryParseAppId(game.GameId, out var appId) && appId != 0
+            ? appId
+            : null;
+        var heroicUri = StoreCatalog.IsHeroicStore(game.PluginId)
+            && pluginLaunch is { Kind: PluginLaunchKind.UriHandoff, CanLaunch: true, Uri: { Length: > 0 } hUri }
+            ? hUri
+            : null;
+
         var isCloudStreaming = hasSourceInfo && sourceInfo.IsCloudStreaming;
         var lunaUrl = game.PluginId == StoreCatalog.LunaPluginId && pluginLaunch is { Kind: PluginLaunchKind.BrowserHandoff }
             ? pluginLaunch.Uri
             : null;
         var pluginPlayUri = lunaUrl is null
+            && steamAppId is null
+            && heroicUri is null
             && pluginLaunch is { Kind: PluginLaunchKind.BrowserHandoff or PluginLaunchKind.UriHandoff, CanLaunch: true, Uri: { Length: > 0 } uri }
             ? uri
             : null;
         var hasPluginTracked = pluginLaunch is { Kind: PluginLaunchKind.TrackedProcess, CanLaunch: true };
-        var hasFilePlay = !isCloudStreaming && GameLaunchPlanner.FindFilePlayAction(game) is not null;
-        var launchTarget = pluginLaunch is not null && (pluginLaunch.CanLaunch || pluginLaunch.Error is not null)
+        var hasFilePlay = !isCloudStreaming
+            && pluginLaunch is not { Kind: PluginLaunchKind.BrowserHandoff }
+            && GameLaunchPlanner.FindFilePlayAction(game) is not null;
+        var launchTarget = pluginLaunch is not null
+            && (pluginLaunch.Kind is PluginLaunchKind.TrackedProcess or PluginLaunchKind.BrowserHandoff || !hasFilePlay)
+            && (pluginLaunch.CanLaunch || pluginLaunch.Error is not null)
             ? pluginLaunch.TargetDisplay
             : GameLaunchPlanner.DescribeLaunchTarget(game, game.PluginId, steamAppId, plugins);
         var sourceDisplay = hasSourceInfo
             ? sourceInfo.DisplayName
-            : game.PluginId != Guid.Empty ? StoreCatalog.GetDisplayName(game.PluginId, plugins) : isSteam ? "Steam" : "Library";
+            : StoreCatalog.GetDisplayName(game.PluginId, plugins);
         var statusLabel = hasSourceInfo && !string.IsNullOrWhiteSpace(sourceInfo.DefaultStatusLabel)
             ? sourceInfo.DefaultStatusLabel
             : game.IsInstalled ? "Installed" : "Not installed";
@@ -1060,6 +1123,93 @@ public sealed class LibraryViewModel
         },
         _ => key?.ToString() ?? "None",
     };
+
+    internal static IReadOnlyList<LibrarySourceFilterOption> BuildSourceFilterOptions(PluginHost host)
+    {
+        var declared = host.GetDeclaredSources();
+        var byId = new Dictionary<Guid, LibrarySourceInfo>();
+        var additional = new List<LibrarySourceInfo>();
+        foreach (var source in declared)
+        {
+            if (source.SourceId == Guid.Empty || !byId.TryAdd(source.SourceId, source))
+            {
+                continue;
+            }
+
+            if (LegacyFilterForSource(source.SourceId) is null)
+            {
+                additional.Add(source);
+            }
+        }
+
+        var options = new List<LibrarySourceFilterOption>(byId.Count + 2)
+        {
+            new(null, StoreCatalog.GetFilterLabel(LibrarySourceFilter.All), LibrarySourceFilter.All),
+        };
+
+        void TryAddBuiltIn(Guid id, LibrarySourceFilter filter)
+        {
+            if (byId.TryGetValue(id, out var info))
+            {
+                options.Add(new LibrarySourceFilterOption(info.SourceId, info.FilterLabel, filter));
+            }
+        }
+
+        // Preserve canonical 0..7 slot order so existing indices stay stable while adding new sources after slot 7.
+        TryAddBuiltIn(StoreCatalog.SteamPluginId, LibrarySourceFilter.Steam);
+        TryAddBuiltIn(StoreCatalog.EpicPluginId, LibrarySourceFilter.Epic);
+        TryAddBuiltIn(StoreCatalog.GogPluginId, LibrarySourceFilter.Gog);
+        TryAddBuiltIn(StoreCatalog.AmazonPluginId, LibrarySourceFilter.Amazon);
+        options.Add(new LibrarySourceFilterOption(
+            Guid.Empty,
+            StoreCatalog.GetFilterLabel(LibrarySourceFilter.Custom),
+            LibrarySourceFilter.Custom));
+        TryAddBuiltIn(StoreCatalog.LunaPluginId, LibrarySourceFilter.Luna);
+        TryAddBuiltIn(SnesRomProfile.SourceId, LibrarySourceFilter.Snes);
+
+        foreach (var extra in additional)
+        {
+            var label = string.IsNullOrWhiteSpace(extra.FilterLabel) ? extra.DisplayName : extra.FilterLabel;
+            options.Add(new LibrarySourceFilterOption(extra.SourceId, label, null));
+        }
+
+        return options;
+    }
+
+    private static LibrarySourceFilter? LegacyFilterForSource(Guid sourceId)
+    {
+        if (sourceId == StoreCatalog.SteamPluginId)
+        {
+            return LibrarySourceFilter.Steam;
+        }
+
+        if (sourceId == StoreCatalog.EpicPluginId)
+        {
+            return LibrarySourceFilter.Epic;
+        }
+
+        if (sourceId == StoreCatalog.GogPluginId)
+        {
+            return LibrarySourceFilter.Gog;
+        }
+
+        if (sourceId == StoreCatalog.AmazonPluginId)
+        {
+            return LibrarySourceFilter.Amazon;
+        }
+
+        if (sourceId == StoreCatalog.LunaPluginId)
+        {
+            return LibrarySourceFilter.Luna;
+        }
+
+        if (sourceId == SnesRomProfile.SourceId)
+        {
+            return LibrarySourceFilter.Snes;
+        }
+
+        return null;
+    }
 
     /// <summary>Releases the instance-owned references; the host view calls this on unload.</summary>
     public void Dispose()

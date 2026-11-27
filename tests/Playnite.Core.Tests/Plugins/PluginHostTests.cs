@@ -421,6 +421,196 @@ public sealed class PluginHostTests
         Assert.True(healthy.Disposed);
     }
 
+    [Fact]
+    public async Task Sync_providers_activate_lazily_publish_library_synced_and_isolate_faults_and_conflicts()
+    {
+        var token = TestContext.Current.CancellationToken;
+        var v2SyncManifest = PluginManifestParser.ParseV2Manifest(
+            """
+            {
+              "id": "sync.sample",
+              "sourceId": "a3333333-3333-3333-3333-333333333333",
+              "name": "Sync Sample",
+              "version": "1.0.0",
+              "surfaces": ["core"],
+              "capabilities": ["librarySource", "librarySync"],
+              "entryPoints": { "core": "sync.dll" }
+            }
+            """,
+            "/tmp/plugins/sync-sample");
+        Assert.NotNull(v2SyncManifest.Descriptor);
+        Assert.True(v2SyncManifest.Descriptor.Capabilities.HasFlag(PluginCapabilityKind.LibrarySync));
+
+        using var host = new PluginHost(PluginSurface.Core);
+        var listener = new FakeBuiltInPlugin("test.listener", Guid.Parse("b3333333-3333-3333-3333-333333333333"), "Listener");
+        Assert.True(host.RegisterBuiltIn(listener));
+
+        var lazySyncFactoryCalls = 0;
+        var syncDescriptor = new PluginDescriptor(
+            "test.lazy-sync",
+            Guid.Parse("b4444444-4444-4444-4444-444444444444"),
+            "Lazy Sync",
+            new Version(1, 0, 0),
+            PluginLoadKind.ExternalAssembly,
+            PluginSurface.Core,
+            PluginCapabilityKind.LibrarySource | PluginCapabilityKind.LibrarySync,
+            new PluginEntryPoints(Core: "lazy-sync.dll"));
+        host.RegisterLazy(syncDescriptor, () =>
+        {
+            lazySyncFactoryCalls++;
+            return new FakeSyncPlugin("test.lazy-sync", syncDescriptor.SourceId);
+        });
+
+        Assert.Equal(0, lazySyncFactoryCalls);
+        var syncResult = await host.RunSyncAsync("test.lazy-sync", "/tmp/library.sqlite", token);
+        Assert.Equal(1, lazySyncFactoryCalls);
+        Assert.True(syncResult.Succeeded);
+        Assert.Equal(2, syncResult.Added);
+        Assert.Equal([PluginEvents.LibrarySynced], listener.ReceivedEvents);
+        var syncedEvent = Assert.Single(listener.ReceivedEventRecords);
+        Assert.NotNull(syncedEvent.Payload);
+        Assert.Equal("test.lazy-sync", syncedEvent.Payload["pluginId"]);
+        Assert.Equal("true", syncedEvent.Payload["succeeded"]);
+        Assert.Equal("2", syncedEvent.Payload["added"]);
+        Assert.Equal("0", syncedEvent.Payload["updated"]);
+        Assert.Equal("0", syncedEvent.Payload["removed"]);
+        Assert.Equal("true", syncedEvent.Payload["reconciled"]);
+        Assert.Single(host.GetSyncProviders());
+
+        // Non-succeeded sync result does not fault and does not publish LibrarySynced.
+        var nonSucceededSync = new FakeSyncPlugin(
+            "test.unsucceeded-sync",
+            Guid.Parse("b7777777-7777-7777-7777-777777777777"),
+            succeeded: false);
+        Assert.True(host.RegisterBuiltIn(nonSucceededSync));
+        var nonSucceededResult = await host.RunSyncAsync("test.unsucceeded-sync", "/tmp/library.sqlite", token);
+        Assert.False(nonSucceededResult.Succeeded);
+        Assert.Single(listener.ReceivedEvents);
+        Assert.Contains(host.GetRecords(), r => r.Descriptor.Id == "test.unsucceeded-sync" && r.State == PluginLifecycleState.Active);
+
+        // Duplicate sync provider id conflicts cleanly and transitions only the conflicting plugin to Faulted.
+        var conflictingSync = new FakeSyncPlugin("test.conflict-sync", Guid.Parse("b5555555-5555-5555-5555-555555555555"), overrideSyncId: "test.lazy-sync");
+        Assert.False(host.RegisterBuiltIn(conflictingSync));
+        Assert.Contains(host.GetRecords(), r => r.Descriptor.Id == "test.conflict-sync" && r.State == PluginLifecycleState.Faulted);
+
+        // Disabled sync provider returns unavailable result without running.
+        Assert.True(host.Disable("test.lazy-sync"));
+        var disabledResult = await host.RunSyncAsync("test.lazy-sync", "/tmp/library.sqlite", token);
+        Assert.False(disabledResult.Succeeded);
+        Assert.Contains("sync-provider-unavailable", disabledResult.Issues);
+
+        // Throwing sync provider faults only that plugin and returns a failed summary.
+        var throwingSync = new FakeSyncPlugin("test.throwing-sync", Guid.Parse("b6666666-6666-6666-6666-666666666666"), shouldThrow: true);
+        Assert.True(host.RegisterBuiltIn(throwingSync));
+        var failedResult = await host.RunSyncAsync("test.throwing-sync", "/tmp/library.sqlite", token);
+        Assert.False(failedResult.Succeeded);
+        Assert.Contains(host.GetRecords(), r => r.Descriptor.Id == "test.throwing-sync" && r.State == PluginLifecycleState.Faulted);
+
+        // Null return from SyncAsync faults cleanly without NRE.
+        var nullSync = new FakeSyncPlugin("test.null-sync", Guid.Parse("b8888888-8888-8888-8888-888888888888"), returnNull: true);
+        Assert.True(host.RegisterBuiltIn(nullSync));
+        var nullResult = await host.RunSyncAsync("test.null-sync", "/tmp/library.sqlite", token);
+        Assert.False(nullResult.Succeeded);
+        Assert.Contains(host.GetRecords(), r => r.Descriptor.Id == "test.null-sync" && r.State == PluginLifecycleState.Faulted);
+
+        // Caller cancellation during SyncAsync propagates without faulting the sync plugin.
+        using var cancelCts = new CancellationTokenSource();
+        var cancelSync = new FakeSyncPlugin("test.cancel-sync", Guid.Parse("b9999999-9999-9999-9999-999999999999"), cancelOnSync: cancelCts);
+        Assert.True(host.RegisterBuiltIn(cancelSync));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => host.RunSyncAsync("test.cancel-sync", "/tmp/library.sqlite", cancelCts.Token));
+        Assert.Contains(host.GetRecords(), r => r.Descriptor.Id == "test.cancel-sync" && r.State == PluginLifecycleState.Active);
+    }
+
+    [Fact]
+    public void GetDeclaredSources_is_non_materializing_and_excludes_empty_source_ids()
+    {
+        using var host = new PluginHost(PluginSurface.Core);
+        var lazySourceId = Guid.Parse("c4444444-4444-4444-4444-444444444444");
+        var lazyFactoryCalls = 0;
+
+        host.RegisterLazy(
+            new PluginDescriptor(
+                "test.lazy-declared",
+                lazySourceId,
+                "Lazy Declared",
+                new Version(1, 0, 0),
+                PluginLoadKind.ExternalAssembly,
+                PluginSurface.Core,
+                PluginCapabilityKind.LibrarySource | PluginCapabilityKind.LibrarySync,
+                new PluginEntryPoints(Core: "lazy-declared.dll")),
+            () =>
+            {
+                lazyFactoryCalls++;
+                return new FakeSourceOnlyPlugin("test.lazy-declared", lazySourceId, "Lazy Materialized");
+            });
+
+        host.RegisterLazy(
+            new PluginDescriptor(
+                "test.lazy-empty-source",
+                Guid.Empty,
+                "Lazy Empty",
+                new Version(1, 0, 0),
+                PluginLoadKind.ExternalAssembly,
+                PluginSurface.Core,
+                PluginCapabilityKind.LibrarySource,
+                new PluginEntryPoints(Core: "lazy-empty.dll")),
+            () => new FakeSourceOnlyPlugin("test.lazy-empty-source", Guid.Empty, "Lazy Empty"));
+
+        Assert.True(host.RegisterBuiltIn(new FakeSourceOnlyPlugin("test.active-empty-source", Guid.Empty, "Active Empty")));
+
+        var declared = host.GetDeclaredSources();
+        Assert.Equal(0, lazyFactoryCalls);
+        var declaredSource = Assert.Single(declared);
+        Assert.Equal(lazySourceId, declaredSource.SourceId);
+        Assert.Equal("Lazy Declared", declaredSource.DisplayName);
+        Assert.True(declaredSource.SupportsSync);
+        Assert.Contains(host.GetRecords(), r => r.Descriptor.Id == "test.lazy-declared" && !r.IsMaterialized);
+
+        var materialized = host.GetSources();
+        Assert.Equal(1, lazyFactoryCalls);
+        var materializedSource = Assert.Single(materialized);
+        Assert.Equal(lazySourceId, materializedSource.SourceId);
+        Assert.Equal("Lazy Materialized", materializedSource.DisplayName);
+        Assert.Contains(host.GetRecords(), r => r.Descriptor.Id == "test.lazy-declared" && r.IsMaterialized);
+    }
+
+    [Fact]
+    public void DiscoverExternal_rejects_depth_zero_symlinked_plugins_root()
+    {
+        var tempDir = Directory.CreateTempSubdirectory("playnite-symlink-root-");
+        try
+        {
+            var realRoot = Path.Combine(tempDir.FullName, "real-plugins");
+            var pluginDir = Path.Combine(realRoot, "sample");
+            Directory.CreateDirectory(pluginDir);
+            File.WriteAllText(
+                Path.Combine(pluginDir, "plugin.json"),
+                """
+                {
+                  "id": "symlink.sample",
+                  "name": "Symlink Sample",
+                  "version": "1.0.0",
+                  "surfaces": ["core"],
+                  "capabilities": ["commands"],
+                  "entryPoints": { "core": "sample.dll" }
+                }
+                """);
+
+            var symlinkRoot = Path.Combine(tempDir.FullName, "plugins-link");
+            Directory.CreateSymbolicLink(symlinkRoot, realRoot);
+
+            using var host = new PluginHost(PluginSurface.Core);
+            var discovery = host.DiscoverExternal(symlinkRoot, new AlwaysRegularFileProbe());
+            Assert.Empty(discovery.Discovered);
+            Assert.Contains(discovery.Diagnostics, d => d.Code == "unsafe-plugins-root");
+            Assert.Empty(host.GetRecords());
+        }
+        finally
+        {
+            tempDir.Delete(recursive: true);
+        }
+    }
+
     private sealed class AlwaysRegularFileProbe : IRegularFileProbe
     {
         public bool IsRegularFile(string path) => true;
@@ -471,6 +661,7 @@ public sealed class PluginHostTests
         }
 
         public List<string> ReceivedEvents { get; } = [];
+        public List<PluginEvent> ReceivedEventRecords { get; } = [];
         public bool Disposed { get; private set; }
 
         public PluginDescriptor Descriptor { get; }
@@ -478,7 +669,7 @@ public sealed class PluginHostTests
         public Guid SourceId => sourceId;
         public IReadOnlyList<PluginCommandDescriptor> Commands =>
             [new PluginCommandDescriptor("fake.sync", pluginId, "Sync Fake", PluginCommandPlacement.LibraryToolbar, sourceId)];
-        public IReadOnlyList<string> SubscribedEvents => [PluginEvents.AppStarted, PluginEvents.GameStarting];
+        public IReadOnlyList<string> SubscribedEvents => [PluginEvents.AppStarted, PluginEvents.GameStarting, PluginEvents.LibrarySynced];
         public IReadOnlyList<PluginSettingField> Fields =>
             [new PluginSettingField("apiKey", "API Key", PluginSettingType.String)];
 
@@ -508,6 +699,7 @@ public sealed class PluginHostTests
         public Task OnEventAsync(PluginEvent pluginEvent, CancellationToken cancellationToken)
         {
             ReceivedEvents.Add(pluginEvent.Name);
+            ReceivedEventRecords.Add(pluginEvent);
             return Task.CompletedTask;
         }
     }
@@ -556,6 +748,89 @@ public sealed class PluginHostTests
 
         public Task OnEventAsync(PluginEvent pluginEvent, CancellationToken cancellationToken) =>
             throw new InvalidOperationException("Hook boom");
+    }
+
+    private sealed class FakeSyncPlugin(
+        string pluginId,
+        Guid sourceId,
+        string? overrideSyncId = null,
+        bool shouldThrow = false,
+        bool succeeded = true,
+        bool returnNull = false,
+        CancellationTokenSource? cancelOnSync = null)
+        : IPlaynitePlugin, ILibrarySourceCapability, ILibrarySyncCapability
+    {
+        public PluginDescriptor Descriptor { get; } = new(
+            pluginId,
+            sourceId,
+            pluginId,
+            new Version(1, 0, 0),
+            PluginLoadKind.BuiltIn,
+            PluginSurface.Core,
+            PluginCapabilityKind.LibrarySource | PluginCapabilityKind.LibrarySync,
+            new PluginEntryPoints());
+
+        public LibrarySourceInfo Source { get; } = new(sourceId, pluginId, pluginId, SupportsSync: true);
+        string ILibrarySyncCapability.PluginId => overrideSyncId ?? pluginId;
+        public string DisplayName => pluginId;
+
+        public PluginRegistration Setup(PluginContext context) => new()
+        {
+            LibrarySources = [this],
+            SyncProviders = [this],
+        };
+
+        public async Task<PluginSyncResult> SyncAsync(string databasePath, CancellationToken cancellationToken)
+        {
+            if (cancelOnSync is not null)
+            {
+                await cancelOnSync.CancelAsync();
+                cancellationToken.ThrowIfCancellationRequested();
+            }
+
+            if (shouldThrow)
+            {
+                throw new InvalidOperationException("Sync boom");
+            }
+
+            if (returnNull)
+            {
+                return null!;
+            }
+
+            return new PluginSyncResult(
+                pluginId,
+                Succeeded: succeeded,
+                Reconciled: succeeded,
+                Added: succeeded ? 2 : 0,
+                Updated: 0,
+                Removed: 0,
+                Unchanged: 1,
+                Skipped: 0,
+                Summary: succeeded ? "Synced 2 games." : "Not synced.",
+                Issues: succeeded ? [] : ["sync-declined"]);
+        }
+    }
+
+    private sealed class FakeSourceOnlyPlugin(string pluginId, Guid sourceId, string displayName)
+        : IPlaynitePlugin, ILibrarySourceCapability
+    {
+        public PluginDescriptor Descriptor { get; } = new(
+            pluginId,
+            sourceId,
+            displayName,
+            new Version(1, 0, 0),
+            PluginLoadKind.BuiltIn,
+            PluginSurface.Core,
+            PluginCapabilityKind.LibrarySource,
+            new PluginEntryPoints());
+
+        public LibrarySourceInfo Source { get; } = new(sourceId, displayName, displayName);
+
+        public PluginRegistration Setup(PluginContext context) => new()
+        {
+            LibrarySources = [this],
+        };
     }
 }
 

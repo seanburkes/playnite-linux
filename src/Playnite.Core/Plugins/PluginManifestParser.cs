@@ -197,7 +197,7 @@ public static class PluginManifestParser
 
         var capabilities = manifest.Type switch
         {
-            ExtensionType.GameLibrary => PluginCapabilityKind.LibrarySource | PluginCapabilityKind.Launch,
+            ExtensionType.GameLibrary => PluginCapabilityKind.LibrarySource | PluginCapabilityKind.Launch | PluginCapabilityKind.LibrarySync,
             ExtensionType.MetadataProvider => PluginCapabilityKind.Metadata,
             _ => PluginCapabilityKind.Commands | PluginCapabilityKind.EventHooks,
         };
@@ -402,6 +402,10 @@ public static class PluginManifestParser
                     break;
                 case "theme":
                     result |= PluginCapabilityKind.Theme;
+                    break;
+                case "sync":
+                case "librarysync":
+                    result |= PluginCapabilityKind.LibrarySync;
                     break;
                 default:
                     diagnostics.Add(new PluginDiagnostic(pluginId, InvalidManifestCode,
