@@ -28,6 +28,19 @@ public sealed partial class ShellView : UserControl
     public ShellView()
     {
         AvaloniaXamlLoader.Load(this);
+        var library = this.FindControl<ContentHostView>("LibraryContent")!.LibraryGridControl;
+        var all = this.FindControl<Button>("AllButton")!;
+        var installed = this.FindControl<Button>("InstalledButton")!;
+        var favorites = this.FindControl<Button>("FavoritesButton")!;
+        all.Click += (_, _) => library.ApplyQuickFilter(LibraryFilterMode.All);
+        installed.Click += (_, _) => library.ApplyQuickFilter(LibraryFilterMode.Installed);
+        favorites.Click += (_, _) => library.ApplyQuickFilter(LibraryFilterMode.Favorite);
+        library.FilterChanged += (_, mode) =>
+        {
+            all.Classes.Set("active", mode == LibraryFilterMode.All);
+            installed.Classes.Set("active", mode == LibraryFilterMode.Installed);
+            favorites.Classes.Set("active", mode == LibraryFilterMode.Favorite);
+        };
         var config = XdgDirectories.Resolve(new LinuxEnvironment()).Config;
         catalogs = new(config);
         store = new(Path.Combine(config, "settings.json"), Path.Combine(config, "welcome-acknowledged"));
