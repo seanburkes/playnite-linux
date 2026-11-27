@@ -1,0 +1,2 @@
+timestamp	unit	from	to	actor	evidence
+2026-11-27T04:04:55Z	p7-004	done	done	seanburkes	PR https://github.com/seanburkes/playnite-linux/pull/264 validates head 5c990f9c4480bdc79f89ccca0aba053af5f61b9f in successful linux-ci https://github.com/seanburkes/playnite-linux/actions/runs/45937470446. Adds the in-process, manifest-driven, lazy-activated Playnite.Core.Plugins kernel and extracts Amazon Luna and SNES ROMs into built-in plugins. 3150 core, 270 architecture, 81 smoke, and 15 plugin tests passed with zero skips. Two adversarial reviews completed and findings addressed.

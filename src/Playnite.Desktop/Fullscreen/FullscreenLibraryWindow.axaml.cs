@@ -5,6 +5,7 @@ using Avalonia.Threading;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml;
+using Playnite.Core.Plugins;
 using Playnite.Desktop.Integration;
 using Playnite.Desktop.Shell;
 using Playnite.Platform.Linux;
@@ -219,6 +220,11 @@ public sealed partial class FullscreenLibraryWindow : Window
                 {
                     { HasTrackedPlayAction: true } when sessions is not null => await TrackAsync(game),
                     { LunaPlayUrl: { } url } => await RequestLunaPlayAsync(url, game.Name),
+                    { PluginPlayUri: { } pluginUri } => await steamPlay.OpenExternalUriAsync(
+                        pluginUri,
+                        game.LaunchKind == PluginLaunchKind.BrowserHandoff,
+                        game.Name,
+                        lifetime.Token),
                     { SteamPlayAppId: uint appId } => await steamPlay.SendAsync(appId, game.Name, lifetime.Token),
                     { HeroicPlayUri: not null } => await heroicPlay.SendAsync(game.PluginId, game.GameId, game.Name, lifetime.Token),
                     _ => $"No launch handler is available for {game.Name}.",
@@ -255,7 +261,7 @@ public sealed partial class FullscreenLibraryWindow : Window
             return $"Could not load {game.Name}.";
         }
 
-        var plan = GameLaunchPlanner.TryBuildLaunchRequest(stored.Value);
+        var plan = GameLaunchPlanner.TryBuildLaunchRequest(stored.Value, null, model.Plugins);
         if (plan.Request is null)
         {
             return plan.Error ?? $"Could not launch {game.Name}.";
@@ -264,7 +270,26 @@ public sealed partial class FullscreenLibraryWindow : Window
         trackedLaunch = true;
         try
         {
-            var completed = await sessions!.RunSessionAsync(model.DatabasePath, game.Id, game.Name, plan.Request, lifetime.Token);
+            await model.TryPublishSessionEventAsync(
+                PluginEvents.GameStarting,
+                game.Id,
+                game.PluginId,
+                lifetime.Token);
+
+            GameSessionCompleted completed;
+            try
+            {
+                completed = await sessions!.RunSessionAsync(model.DatabasePath, game.Id, game.Name, plan.Request, lifetime.Token);
+            }
+            finally
+            {
+                await model.TryPublishSessionEventAsync(
+                    PluginEvents.GameStopped,
+                    game.Id,
+                    game.PluginId,
+                    CancellationToken.None);
+            }
+
             await model.ReloadCurrentPageAsync(lifetime.Token);
             games.ItemsSource = model.Rows;
             return completed.StatusMessage;

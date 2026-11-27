@@ -3,7 +3,9 @@ using System.Globalization;
 using Playnite.Core.Database;
 using Playnite.Core.Library;
 using Playnite.Core.Models;
+using Playnite.Core.Plugins;
 using Playnite.Core.Queries;
+using Playnite.Desktop.Plugins;
 using Playnite.Steam;
 using Playnite.Steam.Sync;
 
@@ -19,6 +21,8 @@ public sealed record LibraryRow(Guid Id, string Name, string GameId)
     internal string? HeroicPlayUri { get; init; }
 
     internal string? LunaPlayUrl { get; init; }
+
+    internal string? PluginPlayUri { get; init; }
 
     public bool IsInstalled { get; init; }
 
@@ -40,11 +44,22 @@ public sealed record LibraryRow(Guid Id, string Name, string GameId)
 
     internal bool HasEmulatorPlayAction { get; init; }
 
+    internal PluginLaunchKind LaunchKind { get; init; }
+
+    internal string? PluginSourceDisplay { get; init; }
+
+    internal string? PluginStatusLabel { get; init; }
+
     internal bool HasTrackedPlayAction => HasFilePlayAction || HasEmulatorPlayAction;
 
     public string LaunchTargetDisplay { get; init; } = "Not configured";
 
-    public bool CanPlay => SteamPlayAppId is not null || HasTrackedPlayAction || HeroicPlayUri is not null || LunaPlayUrl is not null;
+    public bool CanPlay =>
+        SteamPlayAppId is not null
+        || HasTrackedPlayAction
+        || HeroicPlayUri is not null
+        || LunaPlayUrl is not null
+        || !string.IsNullOrEmpty(PluginPlayUri);
 
     public string PlayCountDisplay => PlayCount switch
     {
@@ -75,13 +90,11 @@ public sealed record LibraryRow(Guid Id, string Name, string GameId)
 
     public string Initials => ComputeInitials(Name);
 
-    public string StatusLabel => PluginId == StoreCatalog.LunaPluginId
-        ? "Cloud streaming"
-        : IsInstalled ? "Installed" : "Not installed";
+    public string StatusLabel => PluginStatusLabel ?? (IsInstalled ? "Installed" : "Not installed");
 
-    public string SourceDisplay => PluginId != Guid.Empty
+    public string SourceDisplay => PluginSourceDisplay ?? (PluginId != Guid.Empty
         ? StoreCatalog.GetDisplayName(PluginId)
-        : IsSteam ? "Steam" : "Library";
+        : IsSteam ? "Steam" : "Library");
 
     public string ReleaseYearDisplay => ReleaseYear is int year
         ? year.ToString(CultureInfo.InvariantCulture)
@@ -176,6 +189,8 @@ public sealed class LibraryViewModel
     private static readonly Guid SteamPluginId = new(SteamLibrarySyncService.SteamPluginId);
 
     private readonly string databasePath;
+    private readonly PluginHost plugins;
+    private readonly bool ownsPlugins;
     private LibraryDatabase? database;
     private LibraryService? service;
     private int pageOffset;
@@ -198,12 +213,47 @@ public sealed class LibraryViewModel
 
     internal string DatabasePath => databasePath;
 
-    internal LibraryViewModel CreateIndependentView() => new(databasePath);
+    internal PluginHost Plugins => plugins;
+
+    internal async Task TryPublishSessionEventAsync(
+        string eventName,
+        Guid gameId,
+        Guid pluginId,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            await plugins.PublishEventAsync(
+                new PluginEvent(eventName, TimeProvider.System.GetUtcNow(), gameId, pluginId),
+                cancellationToken).ConfigureAwait(false);
+        }
+        catch (ObjectDisposedException exception)
+        {
+            Console.Error.WriteLine($"Skipping plugin event '{eventName}' after shutdown ({exception.GetType().Name}).");
+        }
+    }
+
+    internal LibraryViewModel CreateIndependentView() => new(databasePath, plugins, ownsPlugins: false);
 
     public LibraryViewModel(string databasePath)
+        : this(databasePath, pluginHost: null, ownsPlugins: true)
+    {
+    }
+
+    internal LibraryViewModel(string databasePath, PluginHost? pluginHost, bool ownsPlugins = false)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(databasePath);
         this.databasePath = databasePath;
+        if (pluginHost is null)
+        {
+            plugins = DesktopPluginHostFactory.CreateDefault();
+            this.ownsPlugins = true;
+        }
+        else
+        {
+            plugins = pluginHost;
+            this.ownsPlugins = ownsPlugins;
+        }
     }
 
     public IReadOnlyList<LibraryRow> Rows { get; private set; } = [];
@@ -544,6 +594,8 @@ public sealed class LibraryViewModel
                     SteamPlayAppId = null,
                     HeroicPlayUri = null,
                     LunaPlayUrl = null,
+                    PluginPlayUri = null,
+                    LaunchKind = PluginLaunchKind.None,
                     HasFilePlayAction = false,
                     HasEmulatorPlayAction = false,
                     LaunchTargetDisplay = "Not configured",
@@ -552,7 +604,7 @@ public sealed class LibraryViewModel
 
             var game = stored.Value;
             var origin = await session.StoreMetadata.GetAsync(row.Id).ConfigureAwait(false);
-            var source = StoreCatalog.GetDisplayName(game.PluginId);
+            var source = StoreCatalog.GetDisplayName(game.PluginId, plugins);
             var fields = new List<string>(2);
             if (!string.IsNullOrWhiteSpace(game.Description))
             {
@@ -878,7 +930,7 @@ public sealed class LibraryViewModel
         return counts;
     }
 
-    private static LibraryRow CreateRow(Game game, string? groupLabel = null)
+    private LibraryRow CreateRow(Game game, string? groupLabel = null)
     {
         var isSteam = game.PluginId == SteamPluginId;
         uint? steamAppId = isSteam && game.IsInstalled
@@ -887,21 +939,54 @@ public sealed class LibraryViewModel
             && StoreCatalog.TryBuildHeroicLaunchUri(game.PluginId, game.GameId, out var builtHeroicUri)
             ? builtHeroicUri
             : null;
-        var isLuna = game.PluginId == StoreCatalog.LunaPluginId;
-        var lunaUrl = LunaPlayRequest.ParseGameUrl(LunaPlayRequest.FindPlayAction(game)?.Path)?.AbsoluteUri;
-        var emulator = SnesRomProfile.FindAction(game);
-        var hasFilePlay = !isLuna && GameLaunchPlanner.FindFilePlayAction(game) is not null;
+        var hasSourceInfo = plugins.TryGetSource(game.PluginId, out var sourceInfo);
+        var hasLaunchProvider = plugins.TryGetLaunchProvider(game.PluginId, out var launchProvider);
+        PluginLaunchSpec? pluginLaunch = null;
+        if (hasLaunchProvider)
+        {
+            try
+            {
+                pluginLaunch = launchProvider.DescribeLaunch(game);
+            }
+            catch (Exception)
+            {
+                pluginLaunch = new PluginLaunchSpec(PluginLaunchKind.None, "Plugin error", Error: "Plugin failed to describe launch.");
+            }
+        }
+
+        var isCloudStreaming = hasSourceInfo && sourceInfo.IsCloudStreaming;
+        var lunaUrl = game.PluginId == StoreCatalog.LunaPluginId && pluginLaunch is { Kind: PluginLaunchKind.BrowserHandoff }
+            ? pluginLaunch.Uri
+            : null;
+        var pluginPlayUri = lunaUrl is null
+            && pluginLaunch is { Kind: PluginLaunchKind.BrowserHandoff or PluginLaunchKind.UriHandoff, CanLaunch: true, Uri: { Length: > 0 } uri }
+            ? uri
+            : null;
+        var hasPluginTracked = pluginLaunch is { Kind: PluginLaunchKind.TrackedProcess, CanLaunch: true };
+        var hasFilePlay = !isCloudStreaming && GameLaunchPlanner.FindFilePlayAction(game) is not null;
+        var launchTarget = pluginLaunch is not null && (pluginLaunch.CanLaunch || pluginLaunch.Error is not null)
+            ? pluginLaunch.TargetDisplay
+            : GameLaunchPlanner.DescribeLaunchTarget(game, game.PluginId, steamAppId, plugins);
+        var sourceDisplay = hasSourceInfo
+            ? sourceInfo.DisplayName
+            : game.PluginId != Guid.Empty ? StoreCatalog.GetDisplayName(game.PluginId, plugins) : isSteam ? "Steam" : "Library";
+        var statusLabel = hasSourceInfo && !string.IsNullOrWhiteSpace(sourceInfo.DefaultStatusLabel)
+            ? sourceInfo.DefaultStatusLabel
+            : game.IsInstalled ? "Installed" : "Not installed";
+
         return new LibraryRow(game.Id, game.Name ?? "(unnamed)", game.GameId ?? string.Empty)
         {
             PluginId = game.PluginId,
             SteamPlayAppId = steamAppId,
             HeroicPlayUri = heroicUri,
             LunaPlayUrl = lunaUrl,
+            PluginPlayUri = pluginPlayUri,
             HasFilePlayAction = hasFilePlay,
-            HasEmulatorPlayAction = emulator is not null,
-            LaunchTargetDisplay = isLuna
-                ? lunaUrl is not null ? "Amazon Luna (Google Chrome)" : "Invalid Amazon Luna game link"
-                : emulator?.Name ?? GameLaunchPlanner.DescribeLaunchTarget(game, game.PluginId, steamAppId),
+            HasEmulatorPlayAction = hasPluginTracked,
+            LaunchKind = pluginLaunch is { CanLaunch: true } ? pluginLaunch.Kind : PluginLaunchKind.None,
+            PluginSourceDisplay = sourceDisplay,
+            PluginStatusLabel = statusLabel,
+            LaunchTargetDisplay = launchTarget,
             IsInstalled = game.IsInstalled,
             Favorite = game.Favorite,
             OverrideInstallState = game.OverrideInstallState,
@@ -991,6 +1076,10 @@ public sealed class LibraryViewModel
         Selected = null;
         service = null;
         database = null;
+        if (ownsPlugins)
+        {
+            plugins.Dispose();
+        }
         Status = "disposed";
     }
 }
