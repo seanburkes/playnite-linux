@@ -139,6 +139,12 @@ public sealed class PluginRegistration
     /// <summary>Gets the event hook handlers contributed by the plugin.</summary>
     public IReadOnlyList<IEventHookCapability> EventHooks { get; init; } = [];
 
+    /// <summary>Gets the declarative UI slot providers contributed by the plugin.</summary>
+    public IReadOnlyList<IUiSlotCapability> UiSlotProviders { get; init; } = [];
+
+    /// <summary>Gets the metadata providers contributed by the plugin.</summary>
+    public IReadOnlyList<IMetadataCapability> MetadataProviders { get; init; } = [];
+
     /// <summary>Gets the declarative settings schema for the plugin, if any.</summary>
     public IPluginSettingsCapability? Settings { get; init; }
 

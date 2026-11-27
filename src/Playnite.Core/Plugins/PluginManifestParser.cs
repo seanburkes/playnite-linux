@@ -398,6 +398,7 @@ public static class PluginManifestParser
                     result |= PluginCapabilityKind.Settings;
                     break;
                 case "uislots":
+                case "ui-slots":
                     result |= PluginCapabilityKind.UiSlots;
                     break;
                 case "theme":

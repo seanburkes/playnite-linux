@@ -1,3 +1,6 @@
+using System.Net;
+using System.Net.Http;
+using System.Text;
 using Avalonia.Controls;
 using Avalonia.Headless;
 using Avalonia.Interactivity;
@@ -49,6 +52,12 @@ public sealed class PluginArchitectureIntegrationTests
         Assert.NotEmpty(host.GetSettingsSchema(HeroicPlugin.PluginId));
         Assert.NotEmpty(host.GetSettingsSchema(AmazonLunaPlugin.PluginId));
         Assert.NotEmpty(host.GetSettingsSchema(SnesRomPlugin.PluginId));
+
+        Assert.True(host.HasUiSlotProviders(PluginUiSlots.CardBadge));
+        Assert.True(host.HasUiSlotProviders(PluginUiSlots.DetailsBadges));
+        Assert.True(host.HasUiSlotProviders(PluginUiSlots.DetailsSection));
+        Assert.True(host.TryGetMetadataProvider(ProtonDbPlugin.ProviderIdentifier, out _));
+        Assert.NotEmpty(host.GetSettingsSchema(ProtonDbPlugin.PluginId));
     }
 
     [Fact]
@@ -322,6 +331,7 @@ public sealed class PluginArchitectureIntegrationTests
                     model.Dispose();
                 }
             }, token);
+
         }
         finally
         {
@@ -438,6 +448,7 @@ public sealed class PluginArchitectureIntegrationTests
                     model.Dispose();
                 }
             }, token);
+
         }
         finally
         {
@@ -536,6 +547,385 @@ public sealed class PluginArchitectureIntegrationTests
                 }
                 finally
                 {
+                    window.Close();
+                    await view.UnloadTask;
+                    model.Dispose();
+                }
+            }, token);
+
+        }
+        finally
+        {
+            tempDir.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task ProtonDbPlugin_renders_badges_sections_persists_settings_and_handles_http_errors()
+    {
+        var token = TestContext.Current.CancellationToken;
+        var tempDir = Directory.CreateTempSubdirectory("playnite-protondb-");
+        try
+        {
+            var dbPath = Path.Combine(tempDir.FullName, "library.sqlite");
+            var database = await LibraryDatabase.OpenAsync(dbPath, token);
+            await database.WriteAsync(async session =>
+            {
+                await session.Games.AddAsync(new StoredGame(new Game(Guid.NewGuid(), "220", "Half-Life 2")
+                {
+                    PluginId = StoreCatalog.SteamPluginId,
+                    IsInstalled = true,
+                }));
+                await session.Games.AddAsync(new StoredGame(new Game(Guid.NewGuid(), "500", "Portal Offline")
+                {
+                    PluginId = StoreCatalog.SteamPluginId,
+                    IsInstalled = true,
+                }));
+                await session.Games.AddAsync(new StoredGame(new Game(Guid.NewGuid(), "snes-1", "Super Mario World")
+                {
+                    PluginId = SnesRomProfile.SourceId,
+                    IsInstalled = true,
+                }));
+                return true;
+            }, token);
+
+            var requests = new List<string>();
+            var returnServerErrorFor500 = true;
+            var clock = new TestMutableTimeProvider(new DateTimeOffset(2026, 11, 27, 15, 0, 0, TimeSpan.Zero));
+            using var httpClient = new HttpClient(new StubHttpMessageHandler((req, cancellationToken) =>
+            {
+                var uri = req.RequestUri!.ToString();
+                requests.Add(uri);
+                if (uri.Contains("/220.json", StringComparison.Ordinal))
+                {
+                    return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+                    {
+                        Content = new StringContent(
+                            """{"tier":"platinum","bestReportedTier":"native","confidence":"strong","total":412}""",
+                            Encoding.UTF8,
+                            "application/json"),
+                    });
+                }
+
+                if (uri.Contains("/500.json", StringComparison.Ordinal))
+                {
+                    if (returnServerErrorFor500)
+                    {
+                        return Task.FromResult(new HttpResponseMessage(HttpStatusCode.InternalServerError));
+                    }
+
+                    // BOM-prefixed response proves BOM handling & post-backoff recovery.
+                    var bomJson = Encoding.UTF8.GetPreamble()
+                        .Concat(Encoding.UTF8.GetBytes("""{"tier":"gold","confidence":"good","total":88}"""))
+                        .ToArray();
+                    return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+                    {
+                        Content = new ByteArrayContent(bomJson),
+                    });
+                }
+
+                if (uri.Contains("/999999.json", StringComparison.Ordinal))
+                {
+                    throw new OperationCanceledException("Simulated HTTP timeout", cancellationToken);
+                }
+
+                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent("""{"tier":"native"}""", Encoding.UTF8, "application/json"),
+                });
+            }));
+
+            // Offline by default: opt-in HTTP is not contacted until onlineLookup=true, and Setup writes no disk settings eagerly.
+            using (var hostOffline = DesktopPluginHostFactory.CreateForLibrary(dbPath, timeProvider: clock, protonDbClient: httpClient))
+            {
+                Assert.False(File.Exists(Path.Combine(tempDir.FullName, "plugin-settings", $"{ProtonDbPlugin.PluginId}.json")));
+                await WithHeadlessUiAsync(async () =>
+                {
+                    var opener = new FakeOpener();
+                    var model = new LibraryViewModel(dbPath, hostOffline, ownsPlugins: false);
+                    var view = new LibraryGridView(new SteamPlayRequest(opener), fullscreenPreview: false);
+                    var window = new Window { Width = 1200, Height = 720, Content = view };
+                    try
+                    {
+                        await model.LoadAsync(token);
+                        window.Show();
+                        view.Apply(model);
+                        await view.CardSlotsTask;
+                        await view.DetailsSlotsTask;
+
+                        Assert.Empty(requests);
+                        var badgePanel = view.FindControl<WrapPanel>("DetailsPluginBadges")!;
+                        Assert.False(badgePanel.IsVisible);
+                    }
+                    finally
+                    {
+                        window.Close();
+                        await view.UnloadTask;
+                        model.Dispose();
+                    }
+                }, token);
+
+                // Opt in to online lookup and fetch 220 via selection (CardBadge stays cache-only).
+                hostOffline.SettingsStore.Set(ProtonDbPlugin.PluginId, ProtonDbPlugin.OnlineLookupSettingKey, "true");
+                await WithHeadlessUiAsync(async () =>
+                {
+                    var opener = new FakeOpener();
+                    var model = new LibraryViewModel(dbPath, hostOffline, ownsPlugins: false);
+                    var view = new LibraryGridView(new SteamPlayRequest(opener), fullscreenPreview: false);
+                    var window = new Window { Width = 1200, Height = 720, Content = view };
+                    try
+                    {
+                        await model.LoadAsync(token);
+                        window.Show();
+                        view.Apply(model);
+                        await view.CardSlotsTask;
+                        await view.DetailsSlotsTask;
+
+                        Assert.Single(requests);
+                        Assert.Contains(hostOffline.GetRecords(), r => r.Descriptor.Id == ProtonDbPlugin.PluginId && r.State == PluginLifecycleState.Active);
+
+                        // Reload page now renders card.badge for 220 directly from cache without additional HTTP calls.
+                        view.Apply(model);
+                        await view.CardSlotsTask;
+                        await view.DetailsSlotsTask;
+                        Assert.Single(requests);
+
+                        var cardItem = (LibraryCardItem)((ListBoxItem)view.FindControl<ListBox>("GameList")!.Items[0]!).DataContext!;
+                        var cardBadge = Assert.Single(cardItem.PluginBadges);
+                        Assert.Equal("Platinum", cardBadge.Label);
+                        Assert.True(cardItem.HasPluginBadges);
+
+                        var badgePanel = view.FindControl<WrapPanel>("DetailsPluginBadges")!;
+                        var sectionPanel = view.FindControl<StackPanel>("DetailsPluginSections")!;
+                        Assert.True(badgePanel.IsVisible);
+                        Assert.True(sectionPanel.IsVisible);
+                        var badgeButton = Assert.IsType<Button>(Assert.Single(badgePanel.Children));
+                        badgeButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                        await view.OpenLinkTask;
+                        Assert.Equal(["https://www.protondb.com/app/220"], Assert.Single(opener.Requests).Arguments);
+
+                        var metaResults = await hostOffline.FetchMetadataAsync(
+                            new PluginGameSnapshot(model.Rows[0].Id, "Half-Life 2", "220", StoreCatalog.SteamPluginId, true),
+                            token);
+                        var meta = Assert.Single(metaResults);
+                        Assert.Equal("platinum", meta.Attributes!["tier"]);
+                        Assert.Equal("native", meta.Attributes["bestReportedTier"]);
+
+                        // Non-Steam game gets no ProtonDB badge or section.
+                        var snesItem = (LibraryCardItem)((ListBoxItem)view.FindControl<ListBox>("GameList")!.Items[2]!).DataContext!;
+                        Assert.Empty(snesItem.PluginBadges);
+
+                        // HTTP 500 error enters backoff without re-requesting before expiry or faulting plugin.
+                        var list = view.FindControl<ListBox>("GameList")!;
+                        list.SelectedIndex = 1; // Portal Offline (500)
+                        await view.SelectionTask;
+                        await view.DetailsSlotsTask;
+                        Assert.Equal(2, requests.Count);
+                        Assert.False(badgePanel.IsVisible);
+                        Assert.False(sectionPanel.IsVisible);
+
+                        // Advance clock past 5-minute backoff and recover with BOM-prefixed 200 JSON.
+                        clock.Advance(TimeSpan.FromMinutes(6));
+                        returnServerErrorFor500 = false;
+                        list.SelectedIndex = 0;
+                        await view.SelectionTask;
+                        await view.DetailsSlotsTask;
+                        list.SelectedIndex = 1;
+                        await view.SelectionTask;
+                        await view.DetailsSlotsTask;
+                        Assert.Equal(3, requests.Count);
+                        Assert.True(badgePanel.IsVisible);
+                        Assert.Contains("Gold", Assert.IsType<TextBlock>(Assert.IsType<Button>(Assert.Single(badgePanel.Children)).Content!).Text);
+
+                        // Timeout OperationCanceledException does not fault ProtonDbPlugin.
+                        var timeoutResults = await hostOffline.ResolveUiSlotAsync(
+                            PluginUiSlots.DetailsBadges,
+                            new PluginGameSnapshot(Guid.NewGuid(), "Timeout Game", "999999", StoreCatalog.SteamPluginId, true),
+                            token);
+                        Assert.Empty(timeoutResults);
+                        Assert.Contains(hostOffline.GetRecords(), r => r.Descriptor.Id == ProtonDbPlugin.PluginId && r.State == PluginLifecycleState.Active);
+
+                        // Concurrent uncached requests for appId 730 coalesce into a single HTTP request.
+                        requests.Clear();
+                        var snap730 = new PluginGameSnapshot(Guid.NewGuid(), "Counter-Strike", "730", StoreCatalog.SteamPluginId, true);
+                        await Task.WhenAll(
+                            hostOffline.ResolveUiSlotAsync(PluginUiSlots.DetailsBadges, snap730, token),
+                            hostOffline.ResolveUiSlotAsync(PluginUiSlots.DetailsSection, snap730, token),
+                            hostOffline.FetchMetadataAsync(snap730, token));
+                        Assert.Single(requests);
+
+                        // Disabling via EnabledSettingKey hides badges without faulting.
+                        hostOffline.SettingsStore.Set(ProtonDbPlugin.PluginId, ProtonDbPlugin.EnabledSettingKey, "false");
+                        view.Apply(model);
+                        await view.CardSlotsTask;
+                        await view.DetailsSlotsTask;
+                        Assert.False(badgePanel.IsVisible);
+                        hostOffline.SettingsStore.Set(ProtonDbPlugin.PluginId, ProtonDbPlugin.EnabledSettingKey, "true");
+                    }
+                    finally
+                    {
+                        window.Close();
+                        await view.UnloadTask;
+                        model.Dispose();
+                    }
+                }, token);
+            }
+
+            // Second host instance with onlineLookup still false reads persisted protondb-cache.json from disk with zero HTTP calls.
+            requests.Clear();
+            using var hostReloaded = DesktopPluginHostFactory.CreateForLibrary(dbPath, timeProvider: clock, protonDbClient: httpClient);
+            hostReloaded.SettingsStore.Set(ProtonDbPlugin.PluginId, ProtonDbPlugin.OnlineLookupSettingKey, "false");
+            Assert.True(File.Exists(Path.Combine(tempDir.FullName, "plugin-settings", $"{ProtonDbPlugin.PluginId}.json")));
+            Assert.True(File.Exists(Path.Combine(tempDir.FullName, "plugin-settings", ProtonDbPlugin.CacheFileName)));
+
+            await WithHeadlessUiAsync(async () =>
+            {
+                var opener = new FakeOpener();
+                var model = new LibraryViewModel(dbPath, hostReloaded, ownsPlugins: false);
+                var view = new LibraryGridView(new SteamPlayRequest(opener), fullscreenPreview: false);
+                var window = new Window { Width = 1200, Height = 720, Content = view };
+                try
+                {
+                    await model.LoadAsync(token);
+                    window.Show();
+                    view.Apply(model);
+                    await view.CardSlotsTask;
+                    await view.DetailsSlotsTask;
+
+                    Assert.Empty(requests);
+                    var cardItem = (LibraryCardItem)((ListBoxItem)view.FindControl<ListBox>("GameList")!.Items[0]!).DataContext!;
+                    Assert.Equal("Platinum", Assert.Single(cardItem.PluginBadges).Label);
+                    Assert.True(view.FindControl<WrapPanel>("DetailsPluginBadges")!.IsVisible);
+                    Assert.True(view.FindControl<StackPanel>("DetailsPluginSections")!.IsVisible);
+
+                    // Disabling ProtonDbPlugin hides badges and sections cleanly on refresh.
+                    Assert.True(hostReloaded.Disable(ProtonDbPlugin.PluginId));
+                    view.Apply(model);
+                    await view.CardSlotsTask;
+                    await view.DetailsSlotsTask;
+
+                    var clearedCard = (LibraryCardItem)((ListBoxItem)view.FindControl<ListBox>("GameList")!.Items[0]!).DataContext!;
+                    Assert.Empty(clearedCard.PluginBadges);
+                    Assert.False(view.FindControl<WrapPanel>("DetailsPluginBadges")!.IsVisible);
+                    Assert.False(view.FindControl<StackPanel>("DetailsPluginSections")!.IsVisible);
+                }
+                finally
+                {
+                    window.Close();
+                    await view.UnloadTask;
+                    model.Dispose();
+                }
+            }, token);
+
+            // Caching > 260 Steam apps persists to protondb-cache.json without exhausting FilePluginSettingsStore's 256-key cap.
+            Assert.True(hostReloaded.Enable(ProtonDbPlugin.PluginId));
+            hostReloaded.SettingsStore.Set(ProtonDbPlugin.PluginId, ProtonDbPlugin.OnlineLookupSettingKey, "true");
+            for (var i = 0; i < 265; i++)
+            {
+                var app = (10000 + i).ToString(System.Globalization.CultureInfo.InvariantCulture);
+                var bulkMeta = await hostReloaded.FetchMetadataAsync(
+                    new PluginGameSnapshot(Guid.NewGuid(), $"Bulk {i}", app, StoreCatalog.SteamPluginId, true),
+                    token);
+                Assert.Single(bulkMeta);
+            }
+
+            hostReloaded.SettingsStore.Set(ProtonDbPlugin.PluginId, "extraSetting", "still-works");
+            Assert.Equal("still-works", hostReloaded.SettingsStore.Get(ProtonDbPlugin.PluginId, "extraSetting"));
+        }
+        finally
+        {
+            tempDir.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task Custom_ui_slot_plugins_isolate_faults_and_open_sanitized_https_links()
+    {
+        var token = TestContext.Current.CancellationToken;
+        var tempDir = Directory.CreateTempSubdirectory("playnite-custom-slots-");
+        try
+        {
+            var dbPath = Path.Combine(tempDir.FullName, "library.sqlite");
+            var database = await LibraryDatabase.OpenAsync(dbPath, token);
+            var slowGate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            await database.WriteAsync(async session =>
+            {
+                await session.Games.AddAsync(new StoredGame(new Game(Guid.NewGuid(), "custom-1", "AAA Shader Quest")
+                {
+                    IsInstalled = true,
+                }));
+                await session.Games.AddAsync(new StoredGame(new Game(Guid.NewGuid(), "custom-2", "ZZZ Slow Game")
+                {
+                    IsInstalled = true,
+                }));
+                return true;
+            }, token);
+
+            using var host = DesktopPluginHostFactory.CreateDefault();
+            Assert.True(host.RegisterBuiltIn(new HealthyUiSlotPlugin(slowGate)));
+            Assert.True(host.RegisterBuiltIn(new ThrowingUiSlotPlugin()));
+
+            await WithHeadlessUiAsync(async () =>
+            {
+                var opener = new FakeOpener();
+                var model = new LibraryViewModel(dbPath, host, ownsPlugins: false);
+                var view = new LibraryGridView(new SteamPlayRequest(opener), fullscreenPreview: false);
+                var window = new Window { Width = 1200, Height = 720, Content = view };
+                try
+                {
+                    await model.LoadAsync(token);
+                    window.Show();
+                    view.Apply(model);
+                    await view.CardSlotsTask;
+                    await view.DetailsSlotsTask;
+
+                    Assert.Contains(host.GetRecords(), r => r.Descriptor.Id == "test.throwing-ui-slot" && r.State == PluginLifecycleState.Faulted);
+
+                    var list = view.FindControl<ListBox>("GameList")!;
+                    var cardItem = (LibraryCardItem)((ListBoxItem)list.Items[0]!).DataContext!;
+                    Assert.Equal("Deck Verified", Assert.Single(cardItem.PluginBadges).Label);
+
+                    // Toggle to List View and verify list-row renders and preserves PluginBadges cleanly.
+                    view.FindControl<Button>("ListViewButton")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                    Assert.True(((ListBoxItem)list.Items[0]!).Classes.Contains("list-row"));
+                    Assert.True(cardItem.HasPluginBadges);
+                    view.FindControl<Button>("GridViewButton")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+
+                    var badgePanel = view.FindControl<WrapPanel>("DetailsPluginBadges")!;
+                    var sectionPanel = view.FindControl<StackPanel>("DetailsPluginSections")!;
+                    Assert.True(badgePanel.IsVisible);
+                    Assert.True(sectionPanel.IsVisible);
+
+                    // Unsafe javascript: badge renders as Border (non-clickable), while safe https: badge renders as Button.
+                    var linkBadge = Assert.Single(badgePanel.Children.OfType<Button>());
+                    Assert.Single(badgePanel.Children.OfType<Border>());
+                    linkBadge.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                    await view.OpenLinkTask;
+                    Assert.Equal(["https://example.com/deck-notes"], opener.Requests[0].Arguments);
+
+                    // DetailsSection renders fields and clickable HTTPS section link button.
+                    var sectionBorder = Assert.IsType<Border>(Assert.Single(sectionPanel.Children));
+                    var sectionBody = Assert.IsType<StackPanel>(sectionBorder.Child);
+                    var sectionButton = sectionBody.Children.OfType<Button>().Single();
+                    sectionButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                    await view.OpenLinkTask;
+                    Assert.Equal(["https://example.com/deck-report"], opener.Requests[1].Arguments);
+
+                    // Supersession + empty selection: select ZZZ Slow Game, then immediately clear selection before slowGate opens.
+                    list.SelectedIndex = 1;
+                    await view.SelectionTask;
+                    var pendingSlowDetails = view.DetailsSlotsTask;
+                    list.SelectedIndex = -1;
+                    await view.SelectionTask;
+                    slowGate.TrySetResult();
+                    await pendingSlowDetails;
+                    await view.DetailsSlotsTask;
+                    Assert.False(badgePanel.IsVisible);
+                    Assert.False(sectionPanel.IsVisible);
+                }
+                finally
+                {
+                    slowGate.TrySetResult();
                     window.Close();
                     await view.UnloadTask;
                     model.Dispose();
@@ -804,6 +1194,121 @@ public sealed class PluginArchitectureIntegrationTests
             events.Add(pluginEvent.Name);
             return Task.CompletedTask;
         }
+    }
+
+    private sealed class StubHttpMessageHandler(
+        Func<HttpRequestMessage, CancellationToken, Task<HttpResponseMessage>> handler) : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) =>
+            handler(request, cancellationToken);
+    }
+
+    private sealed class HealthyUiSlotPlugin(TaskCompletionSource? slowGate = null) : IPlaynitePlugin, IUiSlotCapability
+    {
+        public PluginDescriptor Descriptor { get; } = new(
+            "test.healthy-ui-slot",
+            Guid.Empty,
+            "Healthy UI Slot",
+            new Version(1, 0, 0),
+            PluginLoadKind.BuiltIn,
+            PluginSurface.Desktop,
+            PluginCapabilityKind.UiSlots,
+            new PluginEntryPoints());
+
+        public IReadOnlyList<string> SubscribedSlots =>
+            [PluginUiSlots.CardBadge, PluginUiSlots.DetailsBadges, PluginUiSlots.DetailsSection];
+
+        public PluginRegistration Setup(PluginContext context) => new()
+        {
+            UiSlotProviders = [this],
+        };
+
+        public async Task<PluginUiSlotContribution?> ResolveSlotAsync(
+            string slotId,
+            PluginGameSnapshot game,
+            CancellationToken cancellationToken)
+        {
+            if (game.GameId == "custom-2" && slowGate is not null && slotId != PluginUiSlots.CardBadge)
+            {
+                await slowGate.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
+            }
+
+            return slotId switch
+            {
+                PluginUiSlots.CardBadge => new PluginUiSlotContribution(
+                    Descriptor.Id,
+                    slotId,
+                    Badges: [new PluginUiBadge("deck.card", "Deck Verified", PluginBadgeTone.Positive)]),
+                PluginUiSlots.DetailsBadges => new PluginUiSlotContribution(
+                    Descriptor.Id,
+                    slotId,
+                    Badges:
+                    [
+                        new PluginUiBadge(
+                            "deck.details",
+                            "Deck Verified",
+                            PluginBadgeTone.Positive,
+                            "View notes",
+                            "https://example.com/deck-notes"),
+                        new PluginUiBadge(
+                            "deck.unsafe",
+                            "Static Only",
+                            PluginBadgeTone.Muted,
+                            "Sanitized link",
+                            "javascript:alert(1)"),
+                    ]),
+                PluginUiSlots.DetailsSection => new PluginUiSlotContribution(
+                    Descriptor.Id,
+                    slotId,
+                    Sections:
+                    [
+                        new PluginUiSection(
+                            "deck.section",
+                            "Handheld Verification",
+                            "Runs cleanly at 60 FPS.",
+                            [new PluginUiSectionField("Controller", "Full support")],
+                            LinkLabel: "Open Report",
+                            LinkUrl: "https://example.com/deck-report"),
+                    ]),
+                _ => null,
+            };
+        }
+    }
+
+    private sealed class TestMutableTimeProvider(DateTimeOffset initial) : TimeProvider
+    {
+        private DateTimeOffset current = initial;
+
+        public override DateTimeOffset GetUtcNow() => current;
+
+        public void Advance(TimeSpan delta) => current += delta;
+    }
+
+    private sealed class ThrowingUiSlotPlugin : IPlaynitePlugin, IUiSlotCapability
+    {
+        public PluginDescriptor Descriptor { get; } = new(
+            "test.throwing-ui-slot",
+            Guid.Empty,
+            "Throwing UI Slot",
+            new Version(1, 0, 0),
+            PluginLoadKind.BuiltIn,
+            PluginSurface.Desktop,
+            PluginCapabilityKind.UiSlots,
+            new PluginEntryPoints());
+
+        public IReadOnlyList<string> SubscribedSlots =>
+            [PluginUiSlots.CardBadge, PluginUiSlots.DetailsBadges, PluginUiSlots.DetailsSection];
+
+        public PluginRegistration Setup(PluginContext context) => new()
+        {
+            UiSlotProviders = [this],
+        };
+
+        public Task<PluginUiSlotContribution?> ResolveSlotAsync(
+            string slotId,
+            PluginGameSnapshot game,
+            CancellationToken cancellationToken) =>
+            throw new InvalidOperationException("Simulated slot crash");
     }
 }
 

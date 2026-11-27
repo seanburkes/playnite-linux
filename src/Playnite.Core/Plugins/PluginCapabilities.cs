@@ -172,3 +172,94 @@ public interface ILibrarySyncCapability
     /// <summary>Synchronizes discovered library records into <paramref name="databasePath"/>.</summary>
     Task<PluginSyncResult> SyncAsync(string databasePath, CancellationToken cancellationToken);
 }
+
+/// <summary>Canonical declarative UI extension slot identifiers hosted by Playnite shells.</summary>
+public static class PluginUiSlots
+{
+    public const string CardBadge = "card.badge";
+    public const string DetailsBadges = "details.badges";
+    public const string DetailsSection = "details.section";
+}
+
+/// <summary>Semantic visual tone for host-rendered plugin badges.</summary>
+public enum PluginBadgeTone
+{
+    Neutral = 0,
+    Accent = 1,
+    Positive = 2,
+    Warning = 3,
+    Danger = 4,
+    Muted = 5,
+}
+
+/// <summary>Read-only DTO snapshot of a library game passed to plugin capabilities.</summary>
+public sealed record PluginGameSnapshot(
+    Guid Id,
+    string Name,
+    string? GameId,
+    Guid PluginId,
+    bool IsInstalled,
+    ulong PlaytimeSeconds = 0,
+    int? ReleaseYear = null);
+
+/// <summary>Declarative host-rendered badge contributed to a card or details slot.</summary>
+public sealed record PluginUiBadge(
+    string Id,
+    string Label,
+    PluginBadgeTone Tone = PluginBadgeTone.Neutral,
+    string? Tooltip = null,
+    string? LinkUrl = null);
+
+/// <summary>Single key/value metadata row inside a declarative <see cref="PluginUiSection"/>.</summary>
+public sealed record PluginUiSectionField(string Label, string Value);
+
+/// <summary>Declarative host-rendered details section contributed by a plugin.</summary>
+public sealed record PluginUiSection(
+    string Id,
+    string Title,
+    string? Summary = null,
+    IReadOnlyList<PluginUiSectionField>? Fields = null,
+    string? LinkLabel = null,
+    string? LinkUrl = null);
+
+/// <summary>Sanitized UI slot contribution produced by an <see cref="IUiSlotCapability"/>.</summary>
+public sealed record PluginUiSlotContribution(
+    string PluginId,
+    string SlotId,
+    IReadOnlyList<PluginUiBadge>? Badges = null,
+    IReadOnlyList<PluginUiSection>? Sections = null);
+
+/// <summary>DTO-only metadata enrichment returned by an <see cref="IMetadataCapability"/>.</summary>
+public sealed record PluginGameMetadata(
+    string PluginId,
+    string? Summary = null,
+    int? CommunityScore = null,
+    IReadOnlyDictionary<string, string>? Attributes = null);
+
+/// <summary>Contributes declarative badges or sections into named host UI slots.</summary>
+public interface IUiSlotCapability
+{
+    /// <summary>Gets the slot identifiers from <see cref="PluginUiSlots"/> subscribed to by this capability.</summary>
+    IReadOnlyList<string> SubscribedSlots { get; }
+
+    /// <summary>Resolves declarative badges and sections for one game and slot.</summary>
+    Task<PluginUiSlotContribution?> ResolveSlotAsync(
+        string slotId,
+        PluginGameSnapshot game,
+        CancellationToken cancellationToken);
+}
+
+/// <summary>Provides bounded metadata enrichment for library games.</summary>
+public interface IMetadataCapability
+{
+    /// <summary>Gets the stable metadata provider identifier.</summary>
+    string ProviderId { get; }
+
+    /// <summary>Gets the human-readable metadata provider name.</summary>
+    string DisplayName { get; }
+
+    /// <summary>Fetches optional metadata attributes for <paramref name="game"/>.</summary>
+    Task<PluginGameMetadata?> FetchMetadataAsync(
+        PluginGameSnapshot game,
+        CancellationToken cancellationToken);
+}

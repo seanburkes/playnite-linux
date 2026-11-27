@@ -57,7 +57,13 @@
             <Border Background="{DynamicResource PlayniteChromeBrush}"
                     Opacity="0.82"
                     VerticalAlignment="Bottom"
-                    Height="54" />
+                    Height="54"
+                    IsVisible="{Binding !HasPluginBadges}" />
+            <Border Background="{DynamicResource PlayniteChromeBrush}"
+                    Opacity="0.82"
+                    VerticalAlignment="Bottom"
+                    Height="74"
+                    IsVisible="{Binding HasPluginBadges}" />
             <Grid ColumnDefinitions="*,Auto" Margin="8" VerticalAlignment="Top" ColumnSpacing="6">
               <Border Grid.Column="0"
                       Background="{DynamicResource PlayniteChromeBrush}"
@@ -97,7 +103,33 @@
                          IsVisible="{Binding !IsInstalled}" />
               </StackPanel>
             </Grid>
-            <StackPanel VerticalAlignment="Bottom" Margin="12,0,12,10" Spacing="2">
+            <StackPanel VerticalAlignment="Bottom" Margin="12,0,12,10" Spacing="4">
+              <ItemsControl ItemsSource="{Binding PluginBadges}"
+                            IsVisible="{Binding HasPluginBadges}"
+                            HorizontalAlignment="Left">
+                <ItemsControl.ItemsPanel>
+                  <ItemsPanelTemplate>
+                    <StackPanel Orientation="Horizontal" Spacing="4" />
+                  </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="shell:LibraryPluginBadgeItem">
+                    <Border Background="{Binding Background}"
+                            BorderBrush="{Binding BorderBrush}"
+                            BorderThickness="1"
+                            CornerRadius="3"
+                            Padding="5,1"
+                            MaxWidth="96"
+                            ToolTip.Tip="{Binding Tooltip}">
+                      <TextBlock Text="{Binding Label}"
+                                 FontSize="10"
+                                 FontWeight="SemiBold"
+                                 TextTrimming="CharacterEllipsis"
+                                 Foreground="{Binding Foreground}" />
+                    </Border>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
               <ContentPresenter Content="{TemplateBinding Content}" HorizontalAlignment="Left" />
               <TextBlock Text="{Binding CardSubtitle}"
                          FontSize="11"
@@ -151,14 +183,42 @@
               <TextBlock Text="{Binding CardSubtitle}" FontSize="11"
                          Foreground="{DynamicResource PlayniteTextSecondaryBrush}" />
             </StackPanel>
-            <Border Grid.Column="2" VerticalAlignment="Center"
-                    Background="{DynamicResource PlayniteSurfaceBrush}"
-                    BorderBrush="{DynamicResource PlayniteBorderBrush}"
-                    BorderThickness="1" CornerRadius="3" Padding="6,2"
-                    IsVisible="{Binding HasGroupLabel}">
-              <TextBlock Text="{Binding GroupLabel}" FontSize="11"
-                         Foreground="{DynamicResource PlayniteTextSecondaryBrush}" />
-            </Border>
+            <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+              <ItemsControl VerticalAlignment="Center"
+                            ItemsSource="{Binding PluginBadges}"
+                            IsVisible="{Binding HasPluginBadges}">
+                <ItemsControl.ItemsPanel>
+                  <ItemsPanelTemplate>
+                    <StackPanel Orientation="Horizontal" Spacing="4" />
+                  </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="shell:LibraryPluginBadgeItem">
+                    <Border Background="{Binding Background}"
+                            BorderBrush="{Binding BorderBrush}"
+                            BorderThickness="1"
+                            CornerRadius="3"
+                            Padding="6,2"
+                            MaxWidth="110"
+                            ToolTip.Tip="{Binding Tooltip}">
+                      <TextBlock Text="{Binding Label}"
+                                 FontSize="11"
+                                 FontWeight="SemiBold"
+                                 TextTrimming="CharacterEllipsis"
+                                 Foreground="{Binding Foreground}" />
+                    </Border>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+              <Border VerticalAlignment="Center"
+                      Background="{DynamicResource PlayniteSurfaceBrush}"
+                      BorderBrush="{DynamicResource PlayniteBorderBrush}"
+                      BorderThickness="1" CornerRadius="3" Padding="6,2"
+                      IsVisible="{Binding HasGroupLabel}">
+                <TextBlock Text="{Binding GroupLabel}" FontSize="11"
+                           Foreground="{DynamicResource PlayniteTextSecondaryBrush}" />
+              </Border>
+            </StackPanel>
             <Border Grid.Column="3" VerticalAlignment="Center"
                     Background="{DynamicResource PlayniteSurfaceBrush}"
                     BorderBrush="{DynamicResource PlayniteBorderBrush}"

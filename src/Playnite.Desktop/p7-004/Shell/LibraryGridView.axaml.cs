@@ -1,6 +1,8 @@
 using System.Globalization;
+using Avalonia;
 using Avalonia.Automation;
 using Avalonia.Controls;
+using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml;
 using Avalonia.Media;
@@ -90,6 +92,8 @@ public sealed partial class LibraryGridView : UserControl
     private readonly ComboBox collectionCombo;
     private readonly Image detailsHeroImage;
     private readonly TextBlock detailsInitials;
+    private readonly WrapPanel detailsPluginBadges;
+    private readonly StackPanel detailsPluginSections;
     private readonly TextBlock syncStatus;
     private readonly List<LibraryCardItem> activeCards = [];
     private readonly List<Bitmap> activeCardBitmaps = [];
@@ -98,12 +102,16 @@ public sealed partial class LibraryGridView : UserControl
     private Bitmap? activeHeroBitmap;
     private CancellationTokenSource? artworkCts;
     private CancellationTokenSource? heroCts;
+    private CancellationTokenSource? cardSlotsCts;
+    private CancellationTokenSource? detailsSlotsCts;
     private CancellationTokenSource? selectionCts;
     private CancellationTokenSource? navigationCts;
     private CancellationTokenSource? syncCts;
     private CancellationTokenSource? sessionCts;
     private int artworkGeneration;
     private int heroGeneration;
+    private int cardSlotsGeneration;
+    private int detailsSlotsGeneration;
     private int selectionGeneration;
     private int navigationGeneration;
     private int syncGeneration;
@@ -197,6 +205,8 @@ public sealed partial class LibraryGridView : UserControl
         collectionCombo = this.FindControl<ComboBox>("CollectionCombo")!;
         detailsHeroImage = this.FindControl<Image>("DetailsHeroImage")!;
         detailsInitials = this.FindControl<TextBlock>("DetailsInitials")!;
+        detailsPluginBadges = this.FindControl<WrapPanel>("DetailsPluginBadges")!;
+        detailsPluginSections = this.FindControl<StackPanel>("DetailsPluginSections")!;
         syncStatus = this.FindControl<TextBlock>("SyncStatus")!;
 
         playButton.Click += OnPlayClicked;
@@ -273,6 +283,12 @@ public sealed partial class LibraryGridView : UserControl
 
     internal Task HeroArtworkTask { get; private set; } = Task.CompletedTask;
 
+    internal Task CardSlotsTask { get; private set; } = Task.CompletedTask;
+
+    internal Task DetailsSlotsTask { get; private set; } = Task.CompletedTask;
+
+    internal Task OpenLinkTask { get; private set; } = Task.CompletedTask;
+
     internal bool IsListViewMode => listView;
 
     public void Apply(LibraryViewModel viewModel)
@@ -318,6 +334,16 @@ public sealed partial class LibraryGridView : UserControl
         syncGeneration++;
         playGeneration++;
         editorGeneration++;
+        cardSlotsGeneration++;
+        detailsSlotsGeneration++;
+
+        cardSlotsCts?.Cancel();
+        cardSlotsCts?.Dispose();
+        cardSlotsCts = null;
+
+        detailsSlotsCts?.Cancel();
+        detailsSlotsCts?.Dispose();
+        detailsSlotsCts = null;
 
         selectionCts?.Cancel();
         selectionCts?.Dispose();
@@ -395,6 +421,7 @@ public sealed partial class LibraryGridView : UserControl
 
         SelectionTask = Task.CompletedTask;
         StartCardArtworkLoading();
+        StartCardPluginSlotsLoading();
     }
 
     private void Refresh()
@@ -498,22 +525,35 @@ public sealed partial class LibraryGridView : UserControl
         sources.Text = selected?.MetadataSources;
         sources.IsVisible = !string.IsNullOrEmpty(sources.Text);
         StartHeroArtworkLoading(selected);
+        StartDetailsPluginSlotsLoading(selected);
     }
 
     private void SetViewMode(bool useList)
     {
         listView = useList;
         var list = this.FindControl<ListBox>("GameList")!;
-        var panelKey = useList ? "LibraryListPanel" : "LibraryGridPanel";
-        if (this.TryFindResource(panelKey, out var resource) && resource is ITemplate<Panel?> template)
+        var selectedIndex = list.SelectedIndex;
+        rebuildingRows = true;
+        try
         {
-            list.ItemsPanel = template;
-        }
+            foreach (var item in list.Items.OfType<ListBoxItem>())
+            {
+                item.IsSelected = false;
+                item.Classes.Set("grid-card", !useList);
+                item.Classes.Set("list-row", useList);
+            }
 
-        foreach (var item in list.Items.OfType<ListBoxItem>())
+            var panelKey = useList ? "LibraryListPanel" : "LibraryGridPanel";
+            if (this.TryFindResource(panelKey, out var resource) && resource is ITemplate<Panel?> template)
+            {
+                list.ItemsPanel = template;
+            }
+
+            list.SelectedIndex = selectedIndex;
+        }
+        finally
         {
-            item.Classes.Set("grid-card", !useList);
-            item.Classes.Set("list-row", useList);
+            rebuildingRows = false;
         }
 
         gridViewButton.Classes.Set("active", !useList);
@@ -746,12 +786,377 @@ public sealed partial class LibraryGridView : UserControl
         activeHeroBitmap = null;
     }
 
+    private void StartCardPluginSlotsLoading()
+    {
+        var cards = activeCards.ToArray();
+        var generation = ++cardSlotsGeneration;
+        cardSlotsCts?.Cancel();
+        cardSlotsCts?.Dispose();
+        cardSlotsCts = null;
+
+        if (cards.Length == 0
+            || model is not { } library
+            || disposed
+            || library.Plugins.IsDisposed
+            || library.LifetimeToken.IsCancellationRequested
+            || !library.Plugins.HasUiSlotProviders(PluginUiSlots.CardBadge))
+        {
+            CardSlotsTask = Task.CompletedTask;
+            return;
+        }
+
+        cardSlotsCts = CancellationTokenSource.CreateLinkedTokenSource(library.LifetimeToken);
+        var task = LoadCardPluginSlotsAsync(library, cards, generation, cardSlotsCts.Token);
+        CardSlotsTask = task;
+        _ = ObserveUiTaskAsync(task, "card plugin slots");
+    }
+
+    private async Task LoadCardPluginSlotsAsync(
+        LibraryViewModel library,
+        LibraryCardItem[] cards,
+        int generation,
+        CancellationToken cancellationToken)
+    {
+        const int maxCardBadges = 3;
+        const int maxParallel = 4;
+        using var throttler = new SemaphoreSlim(maxParallel);
+
+        var tasks = cards.Select(async card =>
+        {
+            await throttler.WaitAsync(cancellationToken).ConfigureAwait(true);
+            try
+            {
+                if (cancellationToken.IsCancellationRequested
+                    || disposed
+                    || generation != cardSlotsGeneration
+                    || !ReferenceEquals(model, library)
+                    || library.Plugins.IsDisposed)
+                {
+                    return;
+                }
+
+                IReadOnlyList<PluginUiSlotContribution> contributions;
+                try
+                {
+                    contributions = await library.Plugins
+                        .ResolveUiSlotAsync(PluginUiSlots.CardBadge, CreatePluginGameSnapshot(card.Row), cancellationToken)
+                        .ConfigureAwait(true);
+                }
+                catch (OperationCanceledException)
+                {
+                    return;
+                }
+                catch (ObjectDisposedException)
+                {
+                    return;
+                }
+
+                if (cancellationToken.IsCancellationRequested
+                    || disposed
+                    || generation != cardSlotsGeneration
+                    || !ReferenceEquals(model, library))
+                {
+                    return;
+                }
+
+                var badges = contributions
+                    .SelectMany(contribution => contribution.Badges ?? [])
+                    .Take(maxCardBadges)
+                    .Select(badge => new LibraryPluginBadgeItem(badge.Id, badge.Label, badge.Tone, badge.Tooltip, badge.LinkUrl))
+                    .ToArray();
+                card.SetPluginBadges(badges);
+            }
+            finally
+            {
+                throttler.Release();
+            }
+        });
+
+        try
+        {
+            await Task.WhenAll(tasks).ConfigureAwait(true);
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
+    }
+
+    private void StartDetailsPluginSlotsLoading(LibraryRow? selected)
+    {
+        var generation = ++detailsSlotsGeneration;
+        detailsSlotsCts?.Cancel();
+        detailsSlotsCts?.Dispose();
+        detailsSlotsCts = null;
+        ClearDetailsPluginSlots();
+
+        if (selected is null
+            || model is not { } library
+            || disposed
+            || library.Plugins.IsDisposed
+            || library.LifetimeToken.IsCancellationRequested)
+        {
+            DetailsSlotsTask = Task.CompletedTask;
+            return;
+        }
+
+        var hasBadges = library.Plugins.HasUiSlotProviders(PluginUiSlots.DetailsBadges);
+        var hasSections = library.Plugins.HasUiSlotProviders(PluginUiSlots.DetailsSection);
+        if (!hasBadges && !hasSections)
+        {
+            DetailsSlotsTask = Task.CompletedTask;
+            return;
+        }
+
+        detailsSlotsCts = CancellationTokenSource.CreateLinkedTokenSource(library.LifetimeToken);
+        var task = LoadDetailsPluginSlotsAsync(library, selected, generation, hasBadges, hasSections, detailsSlotsCts.Token);
+        DetailsSlotsTask = task;
+        _ = ObserveUiTaskAsync(task, "details plugin slots");
+    }
+
+    private async Task LoadDetailsPluginSlotsAsync(
+        LibraryViewModel library,
+        LibraryRow selected,
+        int generation,
+        bool hasBadges,
+        bool hasSections,
+        CancellationToken cancellationToken)
+    {
+        var snapshot = CreatePluginGameSnapshot(selected);
+        Task<IReadOnlyList<PluginUiSlotContribution>> badgeTask = hasBadges
+            ? library.Plugins.ResolveUiSlotAsync(PluginUiSlots.DetailsBadges, snapshot, cancellationToken)
+            : Task.FromResult<IReadOnlyList<PluginUiSlotContribution>>([]);
+        Task<IReadOnlyList<PluginUiSlotContribution>> sectionTask = hasSections
+            ? library.Plugins.ResolveUiSlotAsync(PluginUiSlots.DetailsSection, snapshot, cancellationToken)
+            : Task.FromResult<IReadOnlyList<PluginUiSlotContribution>>([]);
+
+        IReadOnlyList<PluginUiSlotContribution>[] resolved;
+        try
+        {
+            resolved = await Task.WhenAll(badgeTask, sectionTask).ConfigureAwait(true);
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
+        catch (ObjectDisposedException)
+        {
+            return;
+        }
+
+        if (cancellationToken.IsCancellationRequested || disposed || generation != detailsSlotsGeneration || !ReferenceEquals(model, library))
+        {
+            return;
+        }
+
+        RenderDetailsPluginSlots(library, selected, resolved[0], resolved[1]);
+    }
+
+    private void ClearDetailsPluginSlots()
+    {
+        detailsPluginBadges.Children.Clear();
+        detailsPluginBadges.IsVisible = false;
+        detailsPluginSections.Children.Clear();
+        detailsPluginSections.IsVisible = false;
+    }
+
+    private void RenderDetailsPluginSlots(
+        LibraryViewModel library,
+        LibraryRow selected,
+        IReadOnlyList<PluginUiSlotContribution> badgeContributions,
+        IReadOnlyList<PluginUiSlotContribution> sectionContributions)
+    {
+        ClearDetailsPluginSlots();
+
+        foreach (var rawBadge in badgeContributions.SelectMany(c => c.Badges ?? []).Take(8))
+        {
+            var styled = new LibraryPluginBadgeItem(rawBadge.Id, rawBadge.Label, rawBadge.Tone, rawBadge.Tooltip, rawBadge.LinkUrl);
+            var text = new TextBlock
+            {
+                Text = styled.Label,
+                FontSize = 11,
+                FontWeight = FontWeight.SemiBold,
+                Foreground = styled.Foreground,
+            };
+
+            Control control;
+            if (styled.LinkUrl is { } url)
+            {
+                var button = new Button
+                {
+                    Padding = new Thickness(7, 3),
+                    Margin = new Thickness(0, 0, 6, 6),
+                    Background = styled.Background,
+                    BorderBrush = styled.BorderBrush,
+                    BorderThickness = new Thickness(1),
+                    CornerRadius = new CornerRadius(4),
+                    Cursor = new Cursor(StandardCursorType.Hand),
+                    Content = text,
+                };
+                AutomationProperties.SetName(button, styled.Label);
+                button.Click += (_, _) => DispatchExternalPluginLink(library, selected.Name, url);
+                control = button;
+            }
+            else
+            {
+                control = new Border
+                {
+                    Padding = new Thickness(7, 3),
+                    Margin = new Thickness(0, 0, 6, 6),
+                    Background = styled.Background,
+                    BorderBrush = styled.BorderBrush,
+                    BorderThickness = new Thickness(1),
+                    CornerRadius = new CornerRadius(4),
+                    Child = text,
+                };
+            }
+
+            if (!string.IsNullOrWhiteSpace(styled.Tooltip))
+            {
+                ToolTip.SetTip(control, styled.Tooltip);
+            }
+
+            detailsPluginBadges.Children.Add(control);
+        }
+
+        detailsPluginBadges.IsVisible = detailsPluginBadges.Children.Count > 0;
+
+        foreach (var section in sectionContributions.SelectMany(c => c.Sections ?? []).Take(4))
+        {
+            var body = new StackPanel { Spacing = 6 };
+            body.Children.Add(new TextBlock
+            {
+                Text = section.Title,
+                FontSize = 13,
+                FontWeight = FontWeight.SemiBold,
+                TextWrapping = TextWrapping.Wrap,
+            });
+
+            if (!string.IsNullOrWhiteSpace(section.Summary))
+            {
+                body.Children.Add(new TextBlock
+                {
+                    Text = section.Summary,
+                    FontSize = 12,
+                    TextWrapping = TextWrapping.Wrap,
+                });
+            }
+
+            if (section.Fields is { Count: > 0 })
+            {
+                var fieldGrid = new Grid
+                {
+                    ColumnDefinitions = new ColumnDefinitions("Auto,*"),
+                    ColumnSpacing = 12,
+                    RowSpacing = 4,
+                };
+                for (var rowIndex = 0; rowIndex < section.Fields.Count; rowIndex++)
+                {
+                    fieldGrid.RowDefinitions.Add(new RowDefinition(GridLength.Auto));
+                    var label = new TextBlock
+                    {
+                        Text = section.Fields[rowIndex].Label,
+                        MaxWidth = 120,
+                        TextWrapping = TextWrapping.Wrap,
+                    };
+                    label.Classes.Add("meta-label");
+                    Grid.SetRow(label, rowIndex);
+                    Grid.SetColumn(label, 0);
+
+                    var value = new TextBlock { Text = section.Fields[rowIndex].Value };
+                    value.Classes.Add("meta-value");
+                    Grid.SetRow(value, rowIndex);
+                    Grid.SetColumn(value, 1);
+
+                    fieldGrid.Children.Add(label);
+                    fieldGrid.Children.Add(value);
+                }
+
+                body.Children.Add(fieldGrid);
+            }
+
+            if (section.LinkUrl is { } linkUrl && !string.IsNullOrWhiteSpace(section.LinkLabel))
+            {
+                var linkButton = new Button
+                {
+                    Content = section.LinkLabel,
+                    HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Left,
+                    Cursor = new Cursor(StandardCursorType.Hand),
+                };
+                linkButton.Classes.Add("secondary-cta");
+                AutomationProperties.SetName(linkButton, section.LinkLabel);
+                linkButton.Click += (_, _) => DispatchExternalPluginLink(library, selected.Name, linkUrl);
+                body.Children.Add(linkButton);
+            }
+
+            var border = new Border
+            {
+                BorderThickness = new Thickness(1),
+                CornerRadius = new CornerRadius(4),
+                Padding = new Thickness(10, 8),
+                Child = body,
+            };
+            if (this.TryFindResource("PlayniteSurfaceBrush", out var surfaceBrush) && surfaceBrush is IBrush sb)
+            {
+                border.Background = sb;
+            }
+            if (this.TryFindResource("PlayniteBorderBrush", out var borderBrush) && borderBrush is IBrush bb)
+            {
+                border.BorderBrush = bb;
+            }
+
+            detailsPluginSections.Children.Add(border);
+        }
+
+        detailsPluginSections.IsVisible = detailsPluginSections.Children.Count > 0;
+    }
+
+    private void DispatchExternalPluginLink(LibraryViewModel library, string gameName, string linkUrl)
+    {
+        var task = OpenExternalPluginLinkAsync(library, gameName, linkUrl);
+        OpenLinkTask = task;
+        _ = ObserveUiTaskAsync(task, "open plugin link");
+    }
+
+    private async Task OpenExternalPluginLinkAsync(LibraryViewModel library, string gameName, string linkUrl)
+    {
+        if (disposed || !ReferenceEquals(model, library) || library.LifetimeToken.IsCancellationRequested)
+        {
+            return;
+        }
+
+        string status;
+        try
+        {
+            await steamPlay.OpenExternalUriAsync(linkUrl, httpsOnly: true, gameName, library.LifetimeToken)
+                .ConfigureAwait(true);
+            status = $"Opened external link for {gameName}.";
+        }
+        catch (OperationCanceledException) when (library.LifetimeToken.IsCancellationRequested)
+        {
+            return;
+        }
+        catch (Exception exception) when (exception is IOException or InvalidOperationException)
+        {
+            status = $"Could not open external link for {gameName}: {exception.Message}";
+        }
+
+        if (!disposed && ReferenceEquals(model, library))
+        {
+            playStatus.Text = status;
+        }
+    }
+
+    private static PluginGameSnapshot CreatePluginGameSnapshot(LibraryRow row) =>
+        new(row.Id, row.Name, row.GameId, row.PluginId, row.IsInstalled, row.PlaytimeSeconds, row.ReleaseYear);
+
     private void OnUnloaded(object? sender, RoutedEventArgs eventArgs)
     {
         disposed = true;
         heroGeneration++;
         sessionManager.SessionUpdated -= OnSessionUpdated;
         CancelLocalOperations();
+        ClearDetailsPluginSlots();
         heroCts?.Cancel();
         heroCts?.Dispose();
         heroCts = null;
@@ -781,8 +1186,13 @@ public sealed partial class LibraryGridView : UserControl
         if (rebuildingRows
             || disposed
             || model is not { } library
-            || library.LifetimeToken.IsCancellationRequested
-            || eventArgs.AddedItems.OfType<ListBoxItem>().FirstOrDefault()?.Tag is not LibraryRow row)
+            || library.LifetimeToken.IsCancellationRequested)
+        {
+            return;
+        }
+
+        var row = eventArgs.AddedItems.OfType<ListBoxItem>().FirstOrDefault()?.Tag as LibraryRow;
+        if (row is null && (eventArgs.AddedItems.Count != 0 || eventArgs.RemovedItems.Count == 0))
         {
             return;
         }
@@ -798,7 +1208,7 @@ public sealed partial class LibraryGridView : UserControl
 
     private async Task ApplySelectionAsync(
         LibraryViewModel library,
-        LibraryRow row,
+        LibraryRow? row,
         int generation,
         CancellationToken token)
     {
@@ -1837,6 +2247,11 @@ public sealed partial class LibraryGridView : UserControl
             await query.ConfigureAwait(true);
         }
         catch (OperationCanceledException) when (token.IsCancellationRequested)
+        {
+            return;
+        }
+
+        if (disposed || model is not { } library || library.Plugins.IsDisposed || library.LifetimeToken.IsCancellationRequested)
         {
             return;
         }
