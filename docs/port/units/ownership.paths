@@ -111,6 +111,7 @@ src/Playnite.Core/Models/Tag.cs	p3-004	f4855e114c4eeb1dc375e2c695e7f042aef0fbcd	
 src/Playnite.Core/Paths.cs	*	d6401f1f07c69474d0ce395797ab694bedf019e7	pull/68
 src/Playnite.Core/PlayTimeFormatter.cs	*	29f665a47aa385cafbf87538c4465a8ee70badef	pull/67
 src/Playnite.Core/PlaynitePaths.cs	p5-002	a37890f33110c70b8411bac4457d16e0aa41822f	pull/116
+src/Playnite.Core/Plugins/FilePluginSettingsStore.cs	p7-004	5124b6dc6c6a8c19eecdc09470f0e8691dac3987	pull/266
 src/Playnite.Core/Plugins/IPlaynitePlugin.cs	p7-004	f8046e32955493a1fc366766dd5cc88edc057510	pull/265
 src/Playnite.Core/Plugins/PluginCapabilities.cs	p7-004	f8046e32955493a1fc366766dd5cc88edc057510	pull/265
 src/Playnite.Core/Plugins/PluginHost.cs	p7-004	f8046e32955493a1fc366766dd5cc88edc057510	pull/265
@@ -209,6 +210,7 @@ src/Playnite.Desktop/p7-004/LibraryTheme.axaml.cs	p7-004	adfc74619c7f5b5805a0c23
 src/Playnite.Desktop/p7-004/Plugins/AmazonLunaPlugin.cs	p7-004	3472c07b5d822cfb1ad8c949bfd2defff62dcba3	pull/264
 src/Playnite.Desktop/p7-004/Plugins/DesktopPluginHostFactory.cs	p7-004	f8046e32955493a1fc366766dd5cc88edc057510	pull/265
 src/Playnite.Desktop/p7-004/Plugins/HeroicPlugin.cs	p7-004	f8046e32955493a1fc366766dd5cc88edc057510	pull/265
+src/Playnite.Desktop/p7-004/Plugins/ProtonDbPlugin.cs	p7-004	5124b6dc6c6a8c19eecdc09470f0e8691dac3987	pull/266
 src/Playnite.Desktop/p7-004/Plugins/SnesRomPlugin.cs	p7-004	3472c07b5d822cfb1ad8c949bfd2defff62dcba3	pull/264
 src/Playnite.Desktop/p7-004/Plugins/SteamPlugin.cs	p7-004	f8046e32955493a1fc366766dd5cc88edc057510	pull/265
 src/Playnite.Desktop/p7-004/Shell/DesktopGameSessionManager.cs	p7-004	325f12215044170989dd7b4bfad003277a7ec52b	pull/246
