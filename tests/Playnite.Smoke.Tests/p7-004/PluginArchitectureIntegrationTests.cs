@@ -1,12 +1,14 @@
 using Avalonia.Controls;
 using Avalonia.Headless;
 using Avalonia.Interactivity;
+using Avalonia.Threading;
 using Playnite.Core.Database;
 using Playnite.Core.Models;
 using Playnite.Core.Plugins;
 using Playnite.Desktop.Integration;
 using Playnite.Desktop.Plugins;
 using Playnite.Desktop.Shell;
+using Playnite.Platform.DesktopIntegration;
 using Playnite.Platform.Sessions;
 using Playnite.Steam;
 using Xunit;
@@ -248,8 +250,18 @@ public sealed class PluginArchitectureIntegrationTests
                 return true;
             }, token);
 
-            await using var uiSession = HeadlessUnitTestSession.StartNew(typeof(HeadlessScreenApplication));
-            await uiSession.Dispatch(async () =>
+            var identity = new ProcessIdentity(88124, 99999, 88124);
+            await using var sleepInhibition = new SessionSleepInhibition(new NoopSleepInhibitionService());
+            await using var fakeLauncher = new FakeTestProcessLauncher(identity);
+            await using var sessionManager = new DesktopGameSessionManager(
+                fakeLauncher,
+                new FakeExitedProcessObserver(identity),
+                sessionDelay: null,
+                TimeProvider.System,
+                sleepInhibition,
+                new SessionOptions { PollInterval = TimeSpan.FromMilliseconds(10), ExitConfirmationSamples = 1 });
+
+            await WithHeadlessUiAsync(async () =>
             {
                 using var host = DesktopPluginHostFactory.CreateDefault();
                 var hookPlugin = new UriAndEventPlugin(uriSourceId);
@@ -258,7 +270,12 @@ public sealed class PluginArchitectureIntegrationTests
 
                 var opener = new FakeOpener();
                 var model = new LibraryViewModel(dbPath, host, ownsPlugins: false);
-                var view = new LibraryGridView(new SteamPlayRequest(opener), fullscreenPreview: false);
+                var view = new LibraryGridView(
+                    new SteamPlayRequest(opener),
+                    fullscreenPreview: false,
+                    steamSync: null,
+                    artworkLoaderFactory: null,
+                    sessionManager: sessionManager);
                 var window = new Window { Width = 1200, Height = 720, Content = view };
                 try
                 {
@@ -295,11 +312,13 @@ public sealed class PluginArchitectureIntegrationTests
                     play.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
                     await view.PlayTask;
                     Assert.Single(opener.Requests);
+                    Assert.Contains(fakeLauncher.LaunchedRequests, req => req.Executable == "/usr/bin/true");
                     Assert.Equal([PluginEvents.GameStarting, PluginEvents.GameStopped], hookPlugin.SessionEvents);
                 }
                 finally
                 {
                     window.Close();
+                    await view.UnloadTask;
                     model.Dispose();
                 }
             }, token);
@@ -340,8 +359,7 @@ public sealed class PluginArchitectureIntegrationTests
                 return true;
             }, token);
 
-            await using var uiSession = HeadlessUnitTestSession.StartNew(typeof(HeadlessScreenApplication));
-            await uiSession.Dispatch(async () =>
+            await WithHeadlessUiAsync(async () =>
             {
                 var syncEvents = new List<string>();
                 using var host = DesktopPluginHostFactory.CreateDefault(
@@ -397,6 +415,7 @@ public sealed class PluginArchitectureIntegrationTests
                     // Disabling an actively selected custom source plugin resets SourceFilter/SourceCombo back to All.
                     Assert.True(host.Disable("test.custom-arcade"));
                     await model.ReloadCurrentPageAsync(token);
+                    view.Apply(model);
                     Assert.False(model.HasActiveFilters);
                     Assert.Null(model.SourcePluginFilterId);
                     Assert.Equal(0, sourceCombo.SelectedIndex);
@@ -415,6 +434,7 @@ public sealed class PluginArchitectureIntegrationTests
                 finally
                 {
                     window.Close();
+                    await view.UnloadTask;
                     model.Dispose();
                 }
             }, token);
@@ -484,8 +504,7 @@ public sealed class PluginArchitectureIntegrationTests
             // LibraryViewModel(dbPath) + SourceCombo population must NOT materialize external librarySource plugins on startup.
             var database = await LibraryDatabase.OpenAsync(dbPath, token);
             Assert.NotNull(database);
-            await using var uiSession = HeadlessUnitTestSession.StartNew(typeof(HeadlessScreenApplication));
-            await uiSession.Dispatch(async () =>
+            await WithHeadlessUiAsync(async () =>
             {
                 var model = new LibraryViewModel(dbPath);
                 var view = new LibraryGridView(new SteamPlayRequest(new FakeOpener()), fullscreenPreview: false);
@@ -518,6 +537,7 @@ public sealed class PluginArchitectureIntegrationTests
                 finally
                 {
                     window.Close();
+                    await view.UnloadTask;
                     model.Dispose();
                 }
             }, token);
@@ -525,6 +545,74 @@ public sealed class PluginArchitectureIntegrationTests
         finally
         {
             tempDir.Delete(recursive: true);
+        }
+    }
+
+    private static async Task WithHeadlessUiAsync(Func<Task> action, CancellationToken token)
+    {
+        await using var session = HeadlessUnitTestSession.StartNew(typeof(HeadlessScreenApplication));
+        await session.Dispatch(() =>
+        {
+            var frame = new DispatcherFrame();
+            var task = action();
+            if (!task.IsCompleted)
+            {
+                using var registration = token.Register(() => Dispatcher.UIThread.Post(() => frame.Continue = false));
+                _ = task.ContinueWith(_ => Dispatcher.UIThread.Post(() => frame.Continue = false), TaskScheduler.Default);
+                Dispatcher.UIThread.PushFrame(frame);
+            }
+
+            task.GetAwaiter().GetResult();
+            Dispatcher.UIThread.RunJobs();
+        }, token);
+    }
+
+    private sealed class NoopSleepInhibitionService : ISleepInhibitionService
+    {
+        public Task<SleepInhibitionLease> InhibitAsync(
+            SleepInhibitionRequest request,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(SleepInhibitionLease.NotHeld(
+                DesktopCapability.Unavailable(DesktopFacility.SleepInhibition, "Not needed in smoke test.")));
+    }
+
+    private sealed class FakeTestProcessLauncher(ProcessIdentity identity) : IProcessLauncher
+    {
+        public List<LaunchRequest> LaunchedRequests { get; } = [];
+
+        public Task<IGameProcess> StartAsync(LaunchRequest request, CancellationToken cancellationToken)
+        {
+            LaunchedRequests.Add(request);
+            if (!File.Exists(request.Executable))
+            {
+                throw new FileNotFoundException($"Missing executable: {request.Executable}", request.Executable);
+            }
+
+            return Task.FromResult<IGameProcess>(new FakeGameProcess(identity, DateTimeOffset.UtcNow));
+        }
+
+        public Task<bool> IsRunningAsync(IGameProcess process, CancellationToken cancellationToken) => Task.FromResult(false);
+        public Task StopAsync(IGameProcess process, CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task StopAsync(IGameProcess process, IReadOnlyCollection<ProcessIdentity> trackedProcesses, CancellationToken cancellationToken) => Task.CompletedTask;
+        public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+
+        private sealed class FakeGameProcess(ProcessIdentity identity, DateTimeOffset startedAt) : IGameProcess
+        {
+            public ProcessIdentity Identity { get; } = identity;
+            public DateTimeOffset StartedAt { get; } = startedAt;
+        }
+    }
+
+    private sealed class FakeExitedProcessObserver(ProcessIdentity identity) : IProcessObserver
+    {
+        private int calls;
+
+        public Task<ProcessSnapshot> SnapshotAsync(CancellationToken cancellationToken)
+        {
+            var count = Interlocked.Increment(ref calls);
+            return count == 1
+                ? Task.FromResult(new ProcessSnapshot([new ProcessEntry(identity, 1, true)], IsComplete: true))
+                : Task.FromResult(new ProcessSnapshot([], IsComplete: true));
         }
     }
 

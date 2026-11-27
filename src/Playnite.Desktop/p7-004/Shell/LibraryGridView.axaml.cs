@@ -121,7 +121,7 @@ public sealed partial class LibraryGridView : UserControl
     private bool listView;
     private bool updatingQueryControls;
     private bool rebuildingRows;
-    private bool disposed;
+    private volatile bool disposed;
 
     private LibraryViewModel? model;
 
@@ -1237,10 +1237,16 @@ public sealed partial class LibraryGridView : UserControl
 
     private void OnSessionUpdated(ActiveGameSession active)
     {
+        if (disposed)
+        {
+            return;
+        }
+
         var expectedGeneration = Volatile.Read(ref sessionGeneration);
         Dispatcher.UIThread.Post(() =>
         {
             if (disposed
+                || !sessionBadgeText.CheckAccess()
                 || !sessionActive
                 || !sessionAcceptingUpdates
                 || expectedGeneration != Volatile.Read(ref sessionGeneration)
