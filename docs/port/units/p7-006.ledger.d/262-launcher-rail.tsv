@@ -1,0 +1,2 @@
+timestamp	unit	from	to	actor	evidence
+2026-11-27T00:22:29Z	p7-006	done	done	seanburkes	PR https://github.com/seanburkes/playnite-linux/pull/262 validates head 5c42da07ef5365d9be0b41c0489e278d3c5c1d93 in successful linux-ci https://github.com/seanburkes/playnite-linux/actions/runs/45915916148. Verifies the connected desktop quick-filter rail and preserves the settings and welcome flows.

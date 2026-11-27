@@ -2,24 +2,64 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:shell="using:Playnite.Desktop.Shell"
              x:Class="Playnite.Desktop.Shell.ShellView">
+  <UserControl.Styles>
+    <Style Selector="Button.secondary-cta.active">
+      <Setter Property="Background" Value="{DynamicResource PlayniteAccentMutedBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource PlayniteAccentBrush}" />
+    </Style>
+    <Style Selector="Button.header-action">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderBrush" Value="Transparent" />
+      <Setter Property="Foreground" Value="{DynamicResource PlayniteTextSecondaryBrush}" />
+      <Setter Property="Padding" Value="10,5" />
+    </Style>
+  </UserControl.Styles>
   <Grid>
     <DockPanel x:Name="Workspace" LastChildFill="True">
-      <Border x:Name="TopPanel" DockPanel.Dock="Top" AutomationProperties.Name="Top panel">
+      <Border x:Name="TopPanel" DockPanel.Dock="Top" Height="48" Padding="14,0"
+              Background="{DynamicResource PlayniteChromeBrush}"
+              BorderBrush="{DynamicResource PlayniteBorderBrush}" BorderThickness="0,0,0,1"
+              AutomationProperties.Name="Top panel">
         <DockPanel>
-          <Button x:Name="SettingsButton" DockPanel.Dock="Right" Click="OnSettings" IsEnabled="False" />
+          <Button x:Name="SettingsButton" DockPanel.Dock="Right" Classes="header-action" VerticalAlignment="Center" Click="OnSettings" IsEnabled="False" />
           <shell:TopPanelView />
         </DockPanel>
       </Border>
       <TextBlock x:Name="StartupError" DockPanel.Dock="Top" IsVisible="False" TextWrapping="Wrap"
                  AutomationProperties.LiveSetting="Assertive" />
-      <Border x:Name="Notifications" DockPanel.Dock="Right" AutomationProperties.Name="Notifications">
+      <Border x:Name="Notifications" DockPanel.Dock="Bottom" Padding="14,4" AutomationProperties.Name="Notifications">
         <shell:NotificationsView />
       </Border>
-      <Border x:Name="Sidebar" DockPanel.Dock="Left" AutomationProperties.Name="Sidebar">
-        <shell:SidebarView />
+      <Border x:Name="Sidebar" DockPanel.Dock="Left" Width="72"
+              Background="{DynamicResource PlayniteRailBrush}"
+              BorderBrush="{DynamicResource PlayniteBorderBrush}" BorderThickness="0,0,1,0"
+              AutomationProperties.Name="Sidebar">
+        <StackPanel Margin="0,8" Spacing="4">
+          <Button x:Name="AllButton" Classes="secondary-cta active" HorizontalAlignment="Stretch"
+                  Padding="4,6" AutomationProperties.Name="Sidebar all games">
+            <StackPanel Spacing="3">
+              <PathIcon Width="14" Height="14" Data="M3 3h8v8H3V3zm10 0h8v8h-8V3zM3 13h8v8H3v-8zm10 0h8v8h-8v-8z" />
+              <TextBlock Text="All" FontSize="10" HorizontalAlignment="Center" />
+            </StackPanel>
+          </Button>
+          <Button x:Name="InstalledButton" Classes="secondary-cta" HorizontalAlignment="Stretch"
+                  Padding="4,6" AutomationProperties.Name="Sidebar installed games">
+            <StackPanel Spacing="3">
+              <PathIcon Width="14" Height="14" Data="M6 4l13 8-13 8V4z" />
+              <TextBlock Text="Installed" FontSize="10" HorizontalAlignment="Center" />
+            </StackPanel>
+          </Button>
+          <Button x:Name="FavoritesButton" Classes="secondary-cta" HorizontalAlignment="Stretch"
+                  Padding="4,6" AutomationProperties.Name="Sidebar favorite games">
+            <StackPanel Spacing="3">
+              <PathIcon Width="14" Height="14" Data="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+              <TextBlock Text="Favorites" FontSize="10" HorizontalAlignment="Center" />
+            </StackPanel>
+          </Button>
+        </StackPanel>
       </Border>
       <Border x:Name="ContentHost" AutomationProperties.Name="Content host">
-        <shell:ContentHostView />
+        <shell:ContentHostView x:Name="LibraryContent" />
       </Border>
     </DockPanel>
     <Border x:Name="Welcome" IsVisible="False">
