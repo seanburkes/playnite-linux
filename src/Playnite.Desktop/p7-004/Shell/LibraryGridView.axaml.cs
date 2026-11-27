@@ -15,6 +15,7 @@ using Playnite.Core.Queries;
 using Playnite.Desktop.Bootstrap;
 using Playnite.Desktop.Fullscreen;
 using Playnite.Desktop.Integration;
+using Playnite.Desktop.Plugins;
 using Playnite.Platform.Sessions;
 
 namespace Playnite.Desktop.Shell;
@@ -50,17 +51,8 @@ public sealed partial class LibraryGridView : UserControl
         LibraryGroupBy.Name,
     ];
 
-    private static readonly LibrarySourceFilter[] SourceOrders =
-    [
-        LibrarySourceFilter.All,
-        LibrarySourceFilter.Steam,
-        LibrarySourceFilter.Epic,
-        LibrarySourceFilter.Gog,
-        LibrarySourceFilter.Amazon,
-        LibrarySourceFilter.Custom,
-        LibrarySourceFilter.Luna,
-        LibrarySourceFilter.Snes,
-    ];
+    private static readonly IReadOnlyList<LibrarySourceFilterOption> DefaultSourceOptions =
+        LibraryViewModel.BuildSourceFilterOptions(DesktopPluginHostFactory.DefaultBuiltInHost);
 
     private readonly BootstrapLocalization localization = new();
     private readonly bool searchSmoke;
@@ -70,6 +62,8 @@ public sealed partial class LibraryGridView : UserControl
     private readonly Button addLunaGameButton;
     private readonly ILibrarySteamSync steamSync;
     private readonly ILibraryHeroicSync heroicSync;
+    private readonly bool usesCustomSteamSync;
+    private readonly bool usesCustomHeroicSync;
     private readonly Func<string, LibraryArtworkLoader> artworkLoaderFactory;
     private DesktopGameSessionManager sessionManager;
     private readonly bool ownsSessionManager;
@@ -134,7 +128,7 @@ public sealed partial class LibraryGridView : UserControl
     public LibraryGridView() : this(
         new SteamPlayRequest(new SteamPlayRequest.DesktopOpener()),
         true,
-        new LibrarySteamSyncRunner(),
+        null,
         null,
         null,
         null)
@@ -142,14 +136,14 @@ public sealed partial class LibraryGridView : UserControl
     }
 
     internal LibraryGridView(SteamPlayRequest steamPlay, bool fullscreenPreview = false)
-        : this(steamPlay, fullscreenPreview, new LibrarySteamSyncRunner(), null, null, null)
+        : this(steamPlay, fullscreenPreview, null, null, null, null)
     {
     }
 
     internal LibraryGridView(
         SteamPlayRequest steamPlay,
         bool fullscreenPreview,
-        ILibrarySteamSync steamSync,
+        ILibrarySteamSync? steamSync,
         Func<string, LibraryArtworkLoader>? artworkLoaderFactory = null)
         : this(steamPlay, fullscreenPreview, steamSync, artworkLoaderFactory, null, null)
     {
@@ -158,7 +152,7 @@ public sealed partial class LibraryGridView : UserControl
     internal LibraryGridView(
         SteamPlayRequest steamPlay,
         bool fullscreenPreview,
-        ILibrarySteamSync steamSync,
+        ILibrarySteamSync? steamSync,
         Func<string, LibraryArtworkLoader>? artworkLoaderFactory,
         DesktopGameSessionManager? sessionManager,
         Func<string, string?>? toolResolver = null,
@@ -169,7 +163,9 @@ public sealed partial class LibraryGridView : UserControl
         this.steamPlay = steamPlay;
         this.lunaPlay = lunaPlay ?? LunaPlayRequest.CreateDefault();
         this.heroicPlay = heroicPlay ?? new HeroicPlayRequest(new SteamPlayRequest.DesktopOpener());
-        this.steamSync = steamSync;
+        usesCustomSteamSync = steamSync is not null;
+        usesCustomHeroicSync = heroicSync is not null;
+        this.steamSync = steamSync ?? new LibrarySteamSyncRunner();
         this.heroicSync = heroicSync ?? new HeroicLibrarySyncRunner();
         this.artworkLoaderFactory = artworkLoaderFactory ?? (path => new LibraryArtworkLoader(path));
         ownsSessionManager = sessionManager is null;
@@ -234,7 +230,7 @@ public sealed partial class LibraryGridView : UserControl
         groupCombo.SelectedIndex = 0;
         groupCombo.SelectionChanged += OnGroupChanged;
 
-        sourceCombo.ItemsSource = SourceOrders.Select(StoreCatalog.GetFilterLabel).ToArray();
+        sourceCombo.ItemsSource = DefaultSourceOptions;
         sourceCombo.SelectedIndex = 0;
         sourceCombo.SelectionChanged += OnSourceChanged;
         collectionCombo.SelectionChanged += (_, _) =>
@@ -455,10 +451,19 @@ public sealed partial class LibraryGridView : UserControl
             }
 
             collectionCombo.SelectedItem = model.Collections.FirstOrDefault(collection => collection.Id == model.CollectionId);
-            var sourceIndex = Array.IndexOf(SourceOrders, model.SourceFilter);
-            if (sourceIndex >= 0 && sourceCombo.SelectedIndex != sourceIndex)
+            if (!ReferenceEquals(sourceCombo.ItemsSource, model.SourceFilterOptions))
             {
-                sourceCombo.SelectedIndex = sourceIndex;
+                sourceCombo.ItemsSource = model.SourceFilterOptions;
+            }
+
+            var selectedSource = model.SourceFilterOptions.FirstOrDefault(option =>
+                model.SourcePluginFilterId is Guid explicitId
+                    ? option.PluginId == explicitId
+                    : option.LegacyFilter == model.SourceFilter)
+                ?? model.SourceFilterOptions.FirstOrDefault();
+            if (!Equals(sourceCombo.SelectedItem, selectedSource))
+            {
+                sourceCombo.SelectedItem = selectedSource;
             }
         }
         finally
@@ -858,7 +863,7 @@ public sealed partial class LibraryGridView : UserControl
     private bool TryBeginSync(out LibraryViewModel library)
     {
         if (disposed || syncPending || playPending || editorPending || fullscreenOpen || sessionActive
-            || model is not { } current || current.LifetimeToken.IsCancellationRequested)
+            || model is not { } current || current.LifetimeToken.IsCancellationRequested || current.Plugins.IsDisposed)
         {
             library = null!;
             return false;
@@ -875,7 +880,29 @@ public sealed partial class LibraryGridView : UserControl
             return;
         }
 
-        var task = RunSyncAsync(library, "Syncing Steam library…", "Steam sync", steamSync.SyncAsync, LibrarySteamSyncRunner.FormatSummary);
+        if (!library.Plugins.TryGetSyncProvider(SteamPlugin.PluginId, out _))
+        {
+            syncStatus.Text = "Steam sync is unavailable (plugin disabled or faulted).";
+            SyncTask = Task.CompletedTask;
+            return;
+        }
+
+        var task = usesCustomSteamSync
+            ? RunSyncAsync(
+                library,
+                "Syncing Steam library…",
+                "Steam sync",
+                steamSync.SyncAsync,
+                LibrarySteamSyncRunner.FormatSummary,
+                result => result.Reconciled
+                    ? library.TryPublishSessionEventAsync(PluginEvents.LibrarySynced, Guid.Empty, StoreCatalog.SteamPluginId, CancellationToken.None)
+                    : Task.CompletedTask)
+            : RunSyncAsync(
+                library,
+                "Syncing Steam library…",
+                "Steam sync",
+                (dbPath, ct) => library.Plugins.RunSyncAsync(SteamPlugin.PluginId, dbPath, ct),
+                result => result.Summary);
         SyncTask = task;
         await ObserveUiTaskAsync(task, "steam sync").ConfigureAwait(true);
     }
@@ -887,7 +914,29 @@ public sealed partial class LibraryGridView : UserControl
             return;
         }
 
-        var task = RunSyncAsync(library, "Syncing Heroic libraries…", "Heroic sync", heroicSync.SyncAsync, HeroicLibrarySyncRunner.FormatSummary);
+        if (!library.Plugins.TryGetSyncProvider(HeroicPlugin.PluginId, out _))
+        {
+            syncStatus.Text = "Heroic sync is unavailable (plugin disabled or faulted).";
+            SyncTask = Task.CompletedTask;
+            return;
+        }
+
+        var task = usesCustomHeroicSync
+            ? RunSyncAsync(
+                library,
+                "Syncing Heroic libraries…",
+                "Heroic sync",
+                heroicSync.SyncAsync,
+                HeroicLibrarySyncRunner.FormatSummary,
+                result => result.Reconciled
+                    ? library.TryPublishSessionEventAsync(PluginEvents.LibrarySynced, Guid.Empty, Guid.Empty, CancellationToken.None)
+                    : Task.CompletedTask)
+            : RunSyncAsync(
+                library,
+                "Syncing Heroic libraries…",
+                "Heroic sync",
+                (dbPath, ct) => library.Plugins.RunSyncAsync(HeroicPlugin.PluginId, dbPath, ct),
+                result => result.Summary);
         SyncTask = task;
         await ObserveUiTaskAsync(task, "heroic sync").ConfigureAwait(true);
     }
@@ -897,7 +946,8 @@ public sealed partial class LibraryGridView : UserControl
         string pendingMessage,
         string operationLabel,
         Func<string, CancellationToken, Task<TResult>> syncFunc,
-        Func<TResult, string> formatSummary)
+        Func<TResult, string> formatSummary,
+        Func<TResult, Task>? onReloadedAsync = null)
     {
         var generation = ++syncGeneration;
         syncPending = true;
@@ -927,6 +977,10 @@ public sealed partial class LibraryGridView : UserControl
             RebuildRows();
             Refresh();
             syncStatus.Text = formatSummary(result);
+            if (onReloadedAsync is not null)
+            {
+                await onReloadedAsync(result).ConfigureAwait(true);
+            }
         }
         catch (OperationCanceledException) when (token.IsCancellationRequested || library.LifetimeToken.IsCancellationRequested)
         {
@@ -1027,6 +1081,15 @@ public sealed partial class LibraryGridView : UserControl
             return;
         }
 
+        if (game.HasTrackedPlayAction)
+        {
+            var sessionTask = RunTrackedSessionAsync(library, game);
+            SessionTask = sessionTask;
+            PlayTask = sessionTask;
+            await ObserveUiTaskAsync(sessionTask, "game session").ConfigureAwait(true);
+            return;
+        }
+
         if (game.PluginPlayUri is { } pluginUri)
         {
             var httpsOnly = game.LaunchKind == PluginLaunchKind.BrowserHandoff;
@@ -1035,15 +1098,6 @@ public sealed partial class LibraryGridView : UserControl
                 library.LifetimeToken);
             PlayTask = task;
             await ObserveUiTaskAsync(task, "plugin URI play").ConfigureAwait(true);
-            return;
-        }
-
-        if (game.HasTrackedPlayAction)
-        {
-            var sessionTask = RunTrackedSessionAsync(library, game);
-            SessionTask = sessionTask;
-            PlayTask = sessionTask;
-            await ObserveUiTaskAsync(sessionTask, "game session").ConfigureAwait(true);
             return;
         }
 
@@ -1750,12 +1804,12 @@ public sealed partial class LibraryGridView : UserControl
 
     private void OnSourceChanged(object? sender, SelectionChangedEventArgs eventArgs)
     {
-        if (!CanDispatchQuery() || sourceCombo.SelectedIndex < 0 || sourceCombo.SelectedIndex >= SourceOrders.Length)
+        if (!CanDispatchQuery() || sourceCombo.SelectedItem is not LibrarySourceFilterOption option)
         {
             return;
         }
 
-        StartQuery(model!.SetSourceFilterAsync(SourceOrders[sourceCombo.SelectedIndex]), model.QueryToken);
+        StartQuery(model!.SetSourceFilterOptionAsync(option), model.QueryToken);
     }
 
     /// <summary>

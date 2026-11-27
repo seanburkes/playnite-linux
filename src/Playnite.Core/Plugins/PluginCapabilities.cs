@@ -145,3 +145,30 @@ public interface IPluginSettingsCapability
     /// <summary>Gets the ordered setting fields declared by the plugin.</summary>
     IReadOnlyList<PluginSettingField> Fields { get; }
 }
+
+/// <summary>Structured summary returned by <see cref="ILibrarySyncCapability.SyncAsync"/>.</summary>
+public sealed record PluginSyncResult(
+    string PluginId,
+    bool Succeeded,
+    bool Reconciled,
+    int Added,
+    int Updated,
+    int Removed,
+    int Unchanged,
+    int Skipped,
+    string Summary,
+    IReadOnlyList<string> Issues,
+    int LinkedTitlesUpdated = 0);
+
+/// <summary>Discovers and reconciles one or more store sources into the library database.</summary>
+public interface ILibrarySyncCapability
+{
+    /// <summary>Gets the stable sync provider identifier (typically the owning plugin ID).</summary>
+    string PluginId { get; }
+
+    /// <summary>Gets the human-readable name of this sync integration.</summary>
+    string DisplayName { get; }
+
+    /// <summary>Synchronizes discovered library records into <paramref name="databasePath"/>.</summary>
+    Task<PluginSyncResult> SyncAsync(string databasePath, CancellationToken cancellationToken);
+}
