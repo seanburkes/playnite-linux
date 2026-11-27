@@ -1,0 +1,2 @@
+timestamp	unit	from	to	actor	evidence
+2026-11-27T00:17:58Z	p7-004	done	done	seanburkes	PR https://github.com/seanburkes/playnite-linux/pull/258 validates head dd3f7f1160435f5e162fc0b9ae0054503baeb6c9 in successful linux-ci https://github.com/seanburkes/playnite-linux/actions/runs/45915430885. Aligns library toolbar controls and verifies grouping through its visible selector and rendered cards.
