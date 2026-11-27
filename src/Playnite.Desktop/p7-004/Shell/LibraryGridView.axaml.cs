@@ -414,18 +414,6 @@ public sealed partial class LibraryGridView : UserControl
         this.FindControl<TextBlock>("PageText")!.Text = model.PageIndicator;
         this.FindControl<Border>("EmptyState")!.IsVisible = model.Rows.Count == 0;
         clearFiltersButton.IsVisible = model.HasActiveFilters;
-        this.FindControl<TextBlock>("QueryStatus")!.Text =
-            $"{localization.Resolve(LOC.SearchLabel)}: {model.SearchTerm} | " +
-            $"{localization.Resolve(LOC.Filter)}: {FilterLabel(model.FilterMode)} | " +
-            $"{localization.Resolve(LOC.MenuSortByTitle)}: {SortLabel(model.SortBy)} " +
-            $"{localization.Resolve(model.Descending ? LOC.MenuSortDescending : LOC.MenuSortAscending)}" +
-            (model.GroupBy != LibraryGroupBy.None
-                ? $" | {localization.Resolve(LOC.MenuGroupByTitle)}: {GroupLabel(model.GroupBy)}"
-                : string.Empty) +
-            (model.SourceFilter != LibrarySourceFilter.All
-                ? $" | Source: {StoreCatalog.GetFilterLabel(model.SourceFilter)}"
-                : string.Empty) +
-            (model.ActiveCollectionName is { } collection ? $" | Collection: {collection}" : string.Empty);
         this.FindControl<Button>("SortDirectionButton")!.Content =
             localization.Resolve(model.Descending ? LOC.MenuSortDescending : LOC.MenuSortAscending);
         SyncQueryControlsFromModel();
@@ -543,8 +531,8 @@ public sealed partial class LibraryGridView : UserControl
     private void ApplyLabels()
     {
         playButton.Content = localization.Resolve(LOC.PlayGame);
-        gridViewButton.Content = localization.Resolve(LOC.GridViewLabel);
-        listViewButton.Content = localization.Resolve(LOC.ListViewLabel);
+        ToolTip.SetTip(gridViewButton, localization.Resolve(LOC.GridViewLabel));
+        ToolTip.SetTip(listViewButton, localization.Resolve(LOC.ListViewLabel));
         this.FindControl<TextBox>("SearchBox")!.PlaceholderText = localization.Resolve(LOC.SearchLabel);
         this.FindControl<Button>("AllFilterButton")!.Content = localization.Resolve(LOC.QuickFilterAllGames);
         this.FindControl<Button>("InstalledFilterButton")!.Content = localization.Resolve(LOC.GameIsInstalledTitle);
@@ -552,16 +540,6 @@ public sealed partial class LibraryGridView : UserControl
         this.FindControl<Button>("HiddenFilterButton")!.Content = localization.Resolve(LOC.GameHiddenTitle);
         this.FindControl<Button>("FavoriteFilterButton")!.Content = localization.Resolve(LOC.GameFavoriteTitle);
     }
-
-    private string FilterLabel(LibraryFilterMode mode) => localization.Resolve(mode switch
-    {
-        LibraryFilterMode.All => LOC.QuickFilterAllGames,
-        LibraryFilterMode.Installed => LOC.GameIsInstalledTitle,
-        LibraryFilterMode.Uninstalled => LOC.GameIsUnInstalledTitle,
-        LibraryFilterMode.Hidden => LOC.GameHiddenTitle,
-        LibraryFilterMode.Favorite => LOC.GameFavoriteTitle,
-        _ => LOC.QuickFilterAllGames,
-    });
 
     private string SortLabel(SortOrder order) => localization.Resolve(order switch
     {
@@ -1918,7 +1896,6 @@ public sealed partial class LibraryGridView : UserControl
         var names = string.Join(",", list.Items.OfType<ListBoxItem>()
             .Select(item => (item.Content as TextBlock)?.Text ?? "<missing>"));
         var page = this.FindControl<TextBlock>("PageText")!.Text;
-        var status = this.FindControl<TextBlock>("QueryStatus")!.Text;
         var filterButtons = new[]
         {
             ("AllFilterButton", "All games filter"),
@@ -1935,7 +1912,12 @@ public sealed partial class LibraryGridView : UserControl
         var valid =
             string.Equals(names, expectedNames, StringComparison.Ordinal)
             && string.Equals(page, expectedPage, StringComparison.Ordinal)
-            && !string.IsNullOrWhiteSpace(status)
+            && string.Equals(searchBox.Text ?? string.Empty, current.SearchTerm, StringComparison.Ordinal)
+            && sortCombo.SelectedIndex == Array.IndexOf(SortOrders, current.SortBy)
+            && filterButtons.Where(pair => this.FindControl<Button>(pair.Item1)!.Classes.Contains("active"))
+                .Select(pair => pair.Item1).SequenceEqual(new[] { $"{current.FilterMode}FilterButton" })
+            && Equals(this.FindControl<Button>("SortDirectionButton")!.Content,
+                localization.Resolve(current.Descending ? LOC.MenuSortDescending : LOC.MenuSortAscending))
             && string.Equals(current.QueryStatus, expectedState, StringComparison.Ordinal)
             && list.SelectedIndex == (current.Rows.Count > 0 ? 0 : -1)
             && string.Equals(this.FindControl<TextBlock>("DetailsName")!.Text, current.Selected?.Name ?? "(none)", StringComparison.Ordinal)

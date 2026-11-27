@@ -13,19 +13,14 @@
   </UserControl.Resources>
   <UserControl.Styles>
     <shell:LibraryTheme />
+    <Style Selector=":is(Panel).query-controls > :is(Control)">
+      <Setter Property="Height" Value="38" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+      <Setter Property="Margin" Value="0,0,4,4" />
+    </Style>
   </UserControl.Styles>
   <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto,*,Auto" RowSpacing="8" ColumnSpacing="12">
     <WrapPanel Grid.Row="0" Grid.ColumnSpan="2" Orientation="Horizontal" ItemSpacing="8" LineSpacing="4">
-      <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-        <TextBlock x:Name="HeaderText" Text="Library" Classes="h1" VerticalAlignment="Center"
-                   AutomationProperties.Name="Library header" />
-        <TextBlock x:Name="LibraryCountText" Text="(0)" Classes="muted" VerticalAlignment="Center"
-                   AutomationProperties.Name="Library count" />
-        <Button x:Name="GridViewButton" Classes="secondary-cta active" Content="Grid View"
-                AutomationProperties.Name="Grid view" />
-        <Button x:Name="ListViewButton" Classes="secondary-cta" Content="List View"
-                AutomationProperties.Name="List view" />
-      </StackPanel>
       <Button x:Name="AddGameButton" Classes="secondary-cta"
               Content="Add Game" AutomationProperties.Name="Add custom game" />
       <Button x:Name="AddLunaGameButton" Classes="secondary-cta" Content="Add Luna Game"
@@ -47,32 +42,52 @@
               Content="Fullscreen" IsEnabled="False" Click="OnOpenFullscreen" />
     </WrapPanel>
 
-    <WrapPanel x:Name="QueryBar" Grid.Row="1" Grid.ColumnSpan="2" Orientation="Horizontal"
-               AutomationProperties.Name="Library search filter and sort">
-      <TextBox x:Name="SearchBox" Width="210" Margin="0,4,8,4" PlaceholderText="Search"
-               AutomationProperties.Name="Search games" />
-      <Button x:Name="AllFilterButton" Classes="secondary-cta active" Content="All" Margin="0,4,4,4"
-              AutomationProperties.Name="All games filter" />
-      <Button x:Name="InstalledFilterButton" Classes="secondary-cta" Content="Installed" Margin="0,4,4,4"
-              AutomationProperties.Name="Installed games filter" />
-      <Button x:Name="UninstalledFilterButton" Classes="secondary-cta" Content="Uninstalled" Margin="0,4,4,4"
-              AutomationProperties.Name="Uninstalled games filter" />
-      <Button x:Name="HiddenFilterButton" Classes="secondary-cta" Content="Hidden" Margin="0,4,4,4"
-              AutomationProperties.Name="Hidden games filter" />
-      <Button x:Name="FavoriteFilterButton" Classes="secondary-cta" Content="Favorite" Margin="0,4,8,4"
-              AutomationProperties.Name="Favorite games filter" />
-      <ComboBox x:Name="SortCombo" Width="150" Margin="0,4,4,4"
-                AutomationProperties.Name="Sort by" />
-      <Button x:Name="SortDirectionButton" Classes="secondary-cta" Content="Ascending" Margin="0,4,8,4"
-              AutomationProperties.Name="Sort direction" />
-      <ComboBox x:Name="GroupCombo" Width="150" Margin="0,4,8,4"
-                AutomationProperties.Name="Group by" />
-      <ComboBox x:Name="SourceCombo" Width="130" Margin="0,4,8,4"
-                AutomationProperties.Name="Filter by store" />
-      <ComboBox x:Name="CollectionCombo" Width="150" Margin="0,4,8,4" AutomationProperties.Name="Filter by collection" />
-      <TextBlock x:Name="QueryStatus" Text="" VerticalAlignment="Center" Margin="0,4,0,4"
-                 AutomationProperties.Name="Library query status" />
-    </WrapPanel>
+    <StackPanel Grid.Row="1" Grid.ColumnSpan="2">
+      <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6">
+        <WrapPanel x:Name="QueryBar" Classes="query-controls" Orientation="Horizontal" VerticalAlignment="Top"
+                       AutomationProperties.Name="Library search filter and sort">
+          <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+            <TextBlock x:Name="HeaderText" Text="Library" Classes="h1" VerticalAlignment="Center"
+                       AutomationProperties.Name="Library header" />
+            <TextBlock x:Name="LibraryCountText" Text="(0)" Classes="muted" VerticalAlignment="Center"
+                       AutomationProperties.Name="Library count" />
+          </StackPanel>
+          <TextBox x:Name="SearchBox" Width="150" PlaceholderText="Search"
+                   AutomationProperties.Name="Search games" />
+          <Button x:Name="AllFilterButton" Padding="8,5" Classes="secondary-cta active" Content="All"
+                  AutomationProperties.Name="All games filter" />
+          <Button x:Name="InstalledFilterButton" Padding="8,5" Classes="secondary-cta" Content="Installed"
+                  AutomationProperties.Name="Installed games filter" />
+          <Button x:Name="UninstalledFilterButton" Padding="8,5" Classes="secondary-cta" Content="Uninstalled"
+                  AutomationProperties.Name="Uninstalled games filter" />
+          <Button x:Name="HiddenFilterButton" Padding="8,5" Classes="secondary-cta" Content="Hidden"
+                  AutomationProperties.Name="Hidden games filter" />
+          <Button x:Name="FavoriteFilterButton" Padding="8,5" Classes="secondary-cta" Content="Favorite"
+                  AutomationProperties.Name="Favorite games filter" />
+        </WrapPanel>
+        <StackPanel Grid.Column="1" Classes="query-controls" Orientation="Horizontal" VerticalAlignment="Top">
+          <ComboBox x:Name="SortCombo" Width="115"
+                  AutomationProperties.Name="Sort by" />
+          <Button x:Name="SortDirectionButton" Classes="secondary-cta" Content="Ascending"
+                AutomationProperties.Name="Sort direction" />
+          <Button x:Name="GridViewButton" Classes="secondary-cta active" Width="38" Padding="0"
+                  AutomationProperties.Name="Grid view">
+            <PathIcon Width="14" Height="14" Data="M3 3h8v8H3V3zm10 0h8v8h-8V3zM3 13h8v8H3v-8zm10 0h8v8h-8v-8z" />
+          </Button>
+          <Button x:Name="ListViewButton" Classes="secondary-cta" Width="38" Padding="0"
+                  AutomationProperties.Name="List view">
+            <PathIcon Width="14" Height="14" Data="M3 5h18v2H3V5zm0 6h18v2H3v-2zm0 6h18v2H3v-2z" />
+          </Button>
+        </StackPanel>
+      </Grid>
+      <WrapPanel Orientation="Horizontal">
+        <ComboBox x:Name="GroupCombo" Width="150" Margin="0,4,8,4"
+                  AutomationProperties.Name="Group by" />
+        <ComboBox x:Name="SourceCombo" Width="130" Margin="0,4,8,4"
+                  AutomationProperties.Name="Filter by store" />
+        <ComboBox x:Name="CollectionCombo" Width="150" Margin="0,4,8,4" AutomationProperties.Name="Filter by collection" />
+      </WrapPanel>
+    </StackPanel>
 
     <Grid Grid.Row="2" Grid.Column="0">
       <ListBox x:Name="GameList" SelectionMode="Single" AutomationProperties.Name="Game list"
