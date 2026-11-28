@@ -170,6 +170,38 @@
             </ScrollViewer>
           </Grid>
         </TabItem>
+        <TabItem x:Name="PackagesTab" Header="Packages" IsVisible="False">
+          <Grid RowDefinitions="Auto,*,Auto,Auto" RowSpacing="8" Margin="0,8,0,0">
+            <TextBlock Text="Install local ZIP or .pext packages and unpacked folders. Package changes take effect after restarting Playnite. Use the Plugins tab to enable or disable a loaded package."
+                       Classes="muted" TextWrapping="Wrap" />
+            <ListBox Grid.Row="1" x:Name="PackageList" SelectionMode="Single"
+                     AutomationProperties.Name="Managed add-on packages" />
+            <WrapPanel Grid.Row="2" x:Name="PackageActions" ItemSpacing="8" LineSpacing="6">
+              <Button x:Name="InstallPackageButton" Classes="primary-cta" Content="Install package…"
+                      AutomationProperties.Name="Install add-on archive" />
+              <Button x:Name="InstallFolderButton" Classes="secondary-cta" Content="Install folder…"
+                      AutomationProperties.Name="Install unpacked add-on folder" />
+              <Button x:Name="UpdatePackageButton" Classes="secondary-cta" Content="Update from package…"
+                      AutomationProperties.Name="Update selected add-on from archive" />
+              <Button x:Name="UpdateFolderButton" Classes="secondary-cta" Content="Update from folder…"
+                      AutomationProperties.Name="Update selected add-on from unpacked folder" />
+              <Button x:Name="RollbackPackageButton" Classes="secondary-cta" Content="Roll back"
+                      AutomationProperties.Name="Roll back selected add-on" />
+              <Button x:Name="UninstallPackageButton" Classes="secondary-cta" Content="Uninstall…"
+                      AutomationProperties.Name="Uninstall selected add-on" />
+              <Button x:Name="ConfirmUninstallPackageButton" Classes="secondary-cta" Content="Confirm uninstall"
+                      IsVisible="False" AutomationProperties.Name="Confirm selected add-on uninstall" />
+              <Button x:Name="CancelUninstallPackageButton" Classes="secondary-cta" Content="Cancel uninstall"
+                      IsVisible="False" AutomationProperties.Name="Cancel add-on uninstall" />
+            </WrapPanel>
+            <StackPanel Grid.Row="3" Spacing="4">
+              <TextBlock x:Name="PackageStatus" TextWrapping="Wrap"
+                         AutomationProperties.LiveSetting="Assertive" AutomationProperties.Name="Add-on package status" />
+              <TextBlock x:Name="PackageDiagnostics" TextWrapping="Wrap" Classes="muted"
+                         AutomationProperties.LiveSetting="Polite" AutomationProperties.Name="Add-on package diagnostics" />
+            </StackPanel>
+          </Grid>
+        </TabItem>
       </TabControl>
 
       <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
