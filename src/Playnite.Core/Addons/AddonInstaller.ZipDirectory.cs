@@ -14,8 +14,7 @@ public sealed partial class AddonInstaller
         await stream.ReadExactlyAsync(tail, cancellationToken).ConfigureAwait(false);
         for (var offset = tail.Length - endHeaderLength; offset >= 0; offset--)
         {
-            if (BinaryPrimitives.ReadUInt32LittleEndian(tail.AsSpan(offset)) != 0x06054b50
-                || ReadZipWord(tail, offset + 20) != tail.Length - offset - endHeaderLength)
+            if (BinaryPrimitives.ReadUInt32LittleEndian(tail.AsSpan(offset)) != 0x06054b50)
             {
                 continue;
             }
@@ -24,7 +23,8 @@ public sealed partial class AddonInstaller
             var directorySize = BinaryPrimitives.ReadUInt32LittleEndian(tail.AsSpan(offset + 12));
             var directoryStart = BinaryPrimitives.ReadUInt32LittleEndian(tail.AsSpan(offset + 16));
             var entryCount = ReadZipWord(tail, offset + 10);
-            if (ReadZipWord(tail, offset + 4) != 0 || ReadZipWord(tail, offset + 6) != 0
+            if (ReadZipWord(tail, offset + 20) != tail.Length - offset - endHeaderLength
+                || ReadZipWord(tail, offset + 4) != 0 || ReadZipWord(tail, offset + 6) != 0
                 || ReadZipWord(tail, offset + 8) != entryCount
                 || (long)directoryStart + directorySize != directoryEnd || entryCount > MaxPackageEntries)
             {

@@ -213,6 +213,7 @@ adds local folder and ZIP install, version updates, rollback and uninstall throu
 Managed versions are staged under `.playnite-packages` in the configured plugin root. A version
 record publishes immutable payload paths for the active and rollback versions together; discovery
 ignores other payloads. Uninstall retires the version record; the next Desktop session cleans up
-the files, so running hosts can still resolve their registered paths. Local source reads hold
+the files once no host holds a package-root usage lease, so running hosts can still resolve their
+registered paths. Local source reads hold
 verified regular files, and archive directory bounds are checked before extraction.
 Online add-on catalogues and v10 Windows theme packages remain outside this workflow.
