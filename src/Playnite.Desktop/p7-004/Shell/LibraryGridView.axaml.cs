@@ -1951,8 +1951,7 @@ public sealed partial class LibraryGridView : UserControl
         PluginManagerWindow? dialog = null;
         try
         {
-            dialog = new PluginManagerWindow(
-                library.Plugins, themeManager, initialTabIndex, DesktopPluginHostFactory.CreateAddonInstaller(library.DatabasePath));
+            dialog = new PluginManagerWindow(library.Plugins, themeManager, initialTabIndex);
             activePluginsDialog = dialog;
             await dialog.ShowDialog(owner).ConfigureAwait(true);
             if (dialog.HasChanges

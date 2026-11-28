@@ -1,4 +1,4 @@
-# Plugin Architecture — Iterations 1–7
+# Plugin Architecture — Iterations 1–6
 
 This document records the OpenCode v2–inspired plugin kernel, built-in store extractions,
 declarative UI extension slots, community-style compatibility plugin, host-rendered
@@ -105,20 +105,7 @@ and `Playnite.Desktop`).
   - `LibraryGridView` & `PluginManagerWindow` (`Themes` tab): toolbar `Themes` action, palette
     swatch preview, live Apply / Reset to Charcoal / Reload Themes actions, and theme diagnostics.
 
-## Iteration 7 — Local Add-on Packages and Game Metadata
+## Planned Next Iteration
 
-- **Plugins & Add-ons → Packages** installs an unpacked folder or ZIP-based `.zip`/`.pext`
-  package with a root `plugin.json` or `extension.yaml`. It checks the declared entry points
-  and host surfaces without loading assemblies. Linux declarative theme plugins use
-  `plugin.json` with the `theme` surface. As with loose plugins, a legacy manifest alone
-  does not make a Windows-only plugin binary compatible with the Linux host.
-- Select a managed package to update it from a newer package with the same ID, restore
-  its previous version, or schedule removal. A new Desktop session picks up package changes
-  and removes retired files, as with the v10 `ExtensionInstaller.InstallExtensionQueue`.
-  The Plugins tab still applies and
-  persists enablement immediately. Loose plugins discovered before this workflow are not
-  treated as managed packages.
-- **Edit → Search metadata** queries enabled `IMetadataCapability` providers for the current
-  game. Select a result to preview its summary, community score and provider attributes.
-  The summary and community score can be imported independently; attributes are preview-only.
-  Import changes the edit draft and the existing Save action commits it.
+- **Iteration 7:** Add-on package install/uninstall wiring (`AddonInstaller`) and
+  `IMetadataCapability` integration in the game metadata editor.
