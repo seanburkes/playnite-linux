@@ -8,9 +8,9 @@ namespace Playnite.Core.Addons;
 /// and validated first, then every entry is checked before any target directory is created.
 /// Entry checks use the injected <see cref="IRegularFileProbe"/> because Unix reports a FIFO,
 /// socket or device as a <see cref="FileInfo"/>, and copying such an entry can block forever.
-/// There is no download, catalogue or update path in v1.
+/// The package workflow also supports staged updates and rollback for host-discovered plugins.
 /// </summary>
-public sealed class AddonInstaller
+public sealed partial class AddonInstaller
 {
     private readonly IRegularFileProbe fileTypeProbe;
 
@@ -236,9 +236,11 @@ public sealed class AddonInstaller
             Array.Empty<AddonDiagnostic>());
     }
 
-    private (List<SourceEntry>? Entries, AddonDiagnostic? Diagnostic) ListEntries(string source)
+    private (List<SourceEntry>? Entries, AddonDiagnostic? Diagnostic) ListEntries(
+        string source, CancellationToken cancellationToken = default, int maxEntries = int.MaxValue)
     {
         var entries = new List<SourceEntry>();
+        var entryCount = 0;
         var pending = new Stack<DirectoryInfo>();
         pending.Push(new DirectoryInfo(source));
         while (pending.Count > 0)
@@ -246,6 +248,12 @@ public sealed class AddonInstaller
             var directory = pending.Pop();
             foreach (var entry in directory.EnumerateFileSystemInfos())
             {
+                cancellationToken.ThrowIfCancellationRequested();
+                if (++entryCount > maxEntries)
+                {
+                    return (null, new AddonDiagnostic("package-limit", "$", "The package contains too many entries."));
+                }
+
                 var relativePath = Path.GetRelativePath(source, entry.FullName)
                     .Replace(Path.DirectorySeparatorChar, '/');
                 if (!AddonPathSafety.IsSafeRelativePath(relativePath))

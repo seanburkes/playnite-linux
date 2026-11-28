@@ -40,7 +40,7 @@ public sealed class AddonInstallLayout
         out string? directory,
         out AddonDiagnostic? diagnostic)
     {
-        if (!AddonPathSafety.IsSafeSegment(addonId))
+        if (!AddonPathSafety.IsSafeSegment(addonId) || addonId == AddonInstaller.PackageStoreName)
         {
             directory = null;
             diagnostic = new AddonDiagnostic(
@@ -147,7 +147,7 @@ public sealed class AddonInstallLayout
 
             foreach (var child in children)
             {
-                if (child.LinkTarget is null)
+                if (child.LinkTarget is null && (depth != 0 || child.Name != AddonInstaller.PackageStoreName))
                 {
                     pending.Push((child, depth + 1));
                 }
