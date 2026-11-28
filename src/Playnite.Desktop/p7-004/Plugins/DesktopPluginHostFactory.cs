@@ -16,7 +16,7 @@ internal static class DesktopPluginHostFactory
     internal static PluginHost DefaultBuiltInHost => SharedDefaultHost.Value;
 
     internal static PluginHost CreateDefault(
-        PluginSurface surface = PluginSurface.Core | PluginSurface.Desktop | PluginSurface.Fullscreen,
+        PluginSurface surface = PluginSurface.Core | PluginSurface.Desktop | PluginSurface.Fullscreen | PluginSurface.Theme,
         TimeProvider? timeProvider = null,
         IPluginSettingsStore? settingsStore = null,
         ILibrarySteamSync? steamSync = null,
@@ -37,7 +37,7 @@ internal static class DesktopPluginHostFactory
 
     internal static PluginHost CreateForLibrary(
         string databasePath,
-        PluginSurface surface = PluginSurface.Core | PluginSurface.Desktop | PluginSurface.Fullscreen,
+        PluginSurface surface = PluginSurface.Core | PluginSurface.Desktop | PluginSurface.Fullscreen | PluginSurface.Theme,
         TimeProvider? timeProvider = null,
         IPluginSettingsStore? settingsStore = null,
         IRegularFileProbe? regularFileProbe = null,

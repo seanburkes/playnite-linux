@@ -5,6 +5,7 @@
   <Styles.Resources>
     <x:Double x:Key="LibraryCardWidth">220</x:Double>
     <x:Double x:Key="LibraryCardHeight">132</x:Double>
+    <CornerRadius x:Key="CardCornerRadius">6</CornerRadius>
   </Styles.Resources>
 
   <Style Selector="TextBlock.meta-label">
@@ -26,8 +27,8 @@
   </Style>
 
   <Style Selector="ListBoxItem.grid-card">
-    <Setter Property="Width" Value="{StaticResource LibraryCardWidth}" />
-    <Setter Property="Height" Value="{StaticResource LibraryCardHeight}" />
+    <Setter Property="Width" Value="{DynamicResource LibraryCardWidth}" />
+    <Setter Property="Height" Value="{DynamicResource LibraryCardHeight}" />
     <Setter Property="Margin" Value="0,0,12,12" />
     <Setter Property="Padding" Value="0" />
     <Setter Property="HorizontalContentAlignment" Value="Stretch" />
@@ -40,7 +41,7 @@
                 Background="{DynamicResource PlayniteCardBackgroundBrush}"
                 BorderBrush="{DynamicResource PlayniteBorderBrush}"
                 BorderThickness="1"
-                CornerRadius="6"
+                CornerRadius="{DynamicResource CardCornerRadius}"
                 ClipToBounds="True">
           <Grid>
             <TextBlock Text="{Binding Initials}"

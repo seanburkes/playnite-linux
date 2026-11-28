@@ -3,6 +3,7 @@ using System.Reflection;
 using System.Runtime.Loader;
 using System.Text;
 using Playnite.Core.Addons;
+using Playnite.Core.Themes;
 
 namespace Playnite.Core.Plugins;
 
@@ -15,6 +16,7 @@ public sealed class PluginHost : IDisposable
     public const string HostStatePluginId = "playnite.host.state";
 
     private const string EnabledKeyPrefix = "enabled:";
+    private const string ActiveThemeKey = "theme.active";
     private const int MaxDiscoveryDepth = AddonInstallLayout.MaxDiscoveryDepth;
     private const int MaxSettingsFieldsPerPlugin = 64;
     private const int MaxSettingKeyLength = 128;
@@ -156,6 +158,107 @@ public sealed class PluginHost : IDisposable
             return records;
         }
     }
+
+    /// <summary>Gets enabled <see cref="PluginSurface.Theme"/> descriptors without materializing plugins.</summary>
+    public IReadOnlyList<PluginDescriptor> GetThemeDescriptors()
+    {
+        lock (gate)
+        {
+            ThrowIfDisposed();
+            var list = new List<PluginDescriptor>();
+            foreach (var id in registrationOrder)
+            {
+                var entry = entriesById[id];
+                if (entry.State is PluginLifecycleState.Registered or PluginLifecycleState.Active
+                    && entry.Descriptor.Surfaces.HasFlag(PluginSurface.Theme))
+                {
+                    list.Add(entry.Descriptor);
+                }
+            }
+
+            return list;
+        }
+    }
+
+    /// <summary>Reads the persisted active desktop theme identifier from host state, if valid.</summary>
+    public string? GetActiveThemeId()
+    {
+        lock (gate)
+        {
+            ThrowIfDisposed();
+        }
+
+        try
+        {
+            var raw = settingsStore.Get(HostStatePluginId, ActiveThemeKey);
+            if (string.IsNullOrWhiteSpace(raw))
+            {
+                return null;
+            }
+
+            var trimmed = raw.Trim();
+            if (!AddonPathSafety.IsSafeSegment(trimmed) || IsReservedThemeStateId(trimmed))
+            {
+                return null;
+            }
+
+            return trimmed;
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidOperationException or ArgumentException)
+        {
+            RecordDiagnostic(HostStatePluginId, "theme-state-read-failed",
+                $"Could not read persisted active theme: {exception.Message}");
+            return null;
+        }
+    }
+
+    /// <summary>Persists or clears the active desktop theme identifier in host state.</summary>
+    public bool SetActiveThemeId(string? themeId)
+    {
+        lock (lifecycleGate)
+        {
+            lock (gate)
+            {
+                ThrowIfDisposed();
+            }
+
+            string? normalized = null;
+            if (!string.IsNullOrWhiteSpace(themeId))
+            {
+                var candidate = themeId.Trim();
+                if (!string.Equals(candidate, ThemePackDefaults.DefaultDesktopThemeId, StringComparison.OrdinalIgnoreCase))
+                {
+                    if (!AddonPathSafety.IsSafeSegment(candidate)
+                        || IsReservedHostId(candidate)
+                        || string.Equals(candidate, ThemePackDefaults.DefaultFullscreenThemeId, StringComparison.OrdinalIgnoreCase))
+                    {
+                        RecordDiagnostic(HostStatePluginId, "theme-state-invalid",
+                            $"Refusing to persist unsafe or reserved theme id '{themeId}'.");
+                        return false;
+                    }
+
+                    normalized = candidate;
+                }
+            }
+
+            try
+            {
+                settingsStore.Set(HostStatePluginId, ActiveThemeKey, normalized);
+                return true;
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidOperationException or ArgumentException)
+            {
+                RecordDiagnostic(HostStatePluginId, "theme-state-persist-failed",
+                    $"Could not persist active theme '{normalized ?? ThemePackDefaults.DefaultDesktopThemeId}': {exception.Message}");
+                return false;
+            }
+        }
+    }
+
+    private static bool IsReservedThemeStateId(string candidate) =>
+        IsReservedHostId(candidate)
+        || string.Equals(candidate, ThemePackDefaults.DefaultDesktopThemeId, StringComparison.OrdinalIgnoreCase)
+        || string.Equals(candidate, ThemePackDefaults.DefaultFullscreenThemeId, StringComparison.OrdinalIgnoreCase);
 
     /// <summary>Registers a built-in plugin instance directly in-process.</summary>
     public bool RegisterBuiltIn(IPlaynitePlugin plugin, bool activateImmediately = true)

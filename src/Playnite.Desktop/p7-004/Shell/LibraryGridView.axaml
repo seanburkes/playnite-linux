@@ -4,6 +4,7 @@
              x:Class="Playnite.Desktop.Shell.LibraryGridView">
   <UserControl.Resources>
     <x:Double x:Key="LibraryDetailsWidth">320</x:Double>
+    <CornerRadius x:Key="CardCornerRadius">6</CornerRadius>
     <ItemsPanelTemplate x:Key="LibraryGridPanel">
       <WrapPanel Orientation="Horizontal" />
     </ItemsPanelTemplate>
@@ -40,6 +41,8 @@
       <Button x:Name="TitlePreferencesButton" Classes="secondary-cta" Content="Title Preferences" Click="OnTitlePreferencesClicked" />
       <Button x:Name="PluginsButton" Classes="secondary-cta" Content="Plugins"
               AutomationProperties.Name="Manage plugins and settings" Click="OnPluginsClicked" />
+      <Button x:Name="ThemesButton" Classes="secondary-cta" Content="Themes"
+              AutomationProperties.Name="Manage desktop themes" Click="OnThemesClicked" />
       <Button x:Name="PluginActionsButton" Classes="secondary-cta" Content="Plugin Actions"
               IsVisible="False" AutomationProperties.Name="Run library plugin commands">
         <Button.Flyout>
@@ -122,10 +125,10 @@
       </Border>
     </Grid>
 
-    <Border x:Name="DetailsPane" Grid.Row="2" Grid.Column="1" Width="{StaticResource LibraryDetailsWidth}"
+    <Border x:Name="DetailsPane" Grid.Row="2" Grid.Column="1" Width="{DynamicResource LibraryDetailsWidth}"
             Background="{DynamicResource PlayniteSurfaceBrush}"
             BorderBrush="{DynamicResource PlayniteBorderBrush}"
-            BorderThickness="1" CornerRadius="6" Padding="14"
+            BorderThickness="1" CornerRadius="{DynamicResource CardCornerRadius}" Padding="14"
             AutomationProperties.Name="Game details">
       <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
         <StackPanel Spacing="10">
