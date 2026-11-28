@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Reflection;
 using System.Runtime.Loader;
 using System.Text;
@@ -11,9 +12,19 @@ namespace Playnite.Core.Plugins;
 /// </summary>
 public sealed class PluginHost : IDisposable
 {
+    public const string HostStatePluginId = "playnite.host.state";
+
+    private const string EnabledKeyPrefix = "enabled:";
     private const int MaxDiscoveryDepth = AddonInstallLayout.MaxDiscoveryDepth;
+    private const int MaxSettingsFieldsPerPlugin = 64;
+    private const int MaxSettingKeyLength = 128;
+    private const int MaxSettingLabelLength = 80;
+    private const int MaxSettingDescriptionLength = 240;
+    private const int MaxSettingChoices = 64;
+    private const int MaxSettingPathLength = 4096;
 
     private readonly Lock gate = new();
+    private readonly Lock lifecycleGate = new();
     private readonly PluginSurface activeSurface;
     private readonly TimeProvider timeProvider;
     private readonly IPluginSettingsStore settingsStore;
@@ -106,6 +117,22 @@ public sealed class PluginHost : IDisposable
         }
     }
 
+    /// <summary>Gets a snapshot of diagnostics recorded by this host, optionally filtered to one plugin.</summary>
+    public IReadOnlyList<PluginDiagnostic> GetDiagnostics(string? pluginId = null)
+    {
+        lock (gate)
+        {
+            if (string.IsNullOrWhiteSpace(pluginId))
+            {
+                return diagnostics.ToArray();
+            }
+
+            return diagnostics
+                .Where(d => string.Equals(d.PluginId, pluginId, StringComparison.Ordinal))
+                .ToArray();
+        }
+    }
+
     /// <summary>Gets snapshots of all registered plugins in deterministic registration order.</summary>
     public IReadOnlyList<PluginRecord> GetRecords()
     {
@@ -132,6 +159,7 @@ public sealed class PluginHost : IDisposable
         ArgumentNullException.ThrowIfNull(plugin);
         var descriptor = plugin.Descriptor;
         ValidateSurfaceAndId(descriptor);
+        var initialEnabled = TryReadPersistedEnabledOverride(descriptor.Id) ?? descriptor.EnabledByDefault;
 
         PluginEntry entry;
         lock (gate)
@@ -142,12 +170,12 @@ public sealed class PluginHost : IDisposable
             entry = new PluginEntry(descriptor, () => plugin)
             {
                 Instance = plugin,
-                State = descriptor.EnabledByDefault ? PluginLifecycleState.Registered : PluginLifecycleState.Disabled,
+                State = initialEnabled ? PluginLifecycleState.Registered : PluginLifecycleState.Disabled,
             };
             entriesById.Add(descriptor.Id, entry);
             registrationOrder.Add(descriptor.Id);
 
-            if (!descriptor.EnabledByDefault || !activateImmediately)
+            if (!initialEnabled || !activateImmediately)
             {
                 RegisterLazyOwnersLocked(entry);
                 return true;
@@ -163,6 +191,7 @@ public sealed class PluginHost : IDisposable
         ArgumentNullException.ThrowIfNull(descriptor);
         ArgumentNullException.ThrowIfNull(factory);
         ValidateSurfaceAndId(descriptor);
+        var initialEnabled = TryReadPersistedEnabledOverride(descriptor.Id) ?? descriptor.EnabledByDefault;
 
         lock (gate)
         {
@@ -171,7 +200,7 @@ public sealed class PluginHost : IDisposable
 
             var entry = new PluginEntry(descriptor, factory)
             {
-                State = descriptor.EnabledByDefault ? PluginLifecycleState.Registered : PluginLifecycleState.Disabled,
+                State = initialEnabled ? PluginLifecycleState.Registered : PluginLifecycleState.Disabled,
             };
             entriesById.Add(descriptor.Id, entry);
             registrationOrder.Add(descriptor.Id);
@@ -318,46 +347,91 @@ public sealed class PluginHost : IDisposable
     public bool Enable(string pluginId)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(pluginId);
-        PluginEntry entry;
-        lock (gate)
+        if (IsReservedHostId(pluginId))
         {
-            ThrowIfDisposed();
-            if (!entriesById.TryGetValue(pluginId, out var found))
+            return false;
+        }
+
+        lock (lifecycleGate)
+        {
+            var persistedOverride = TryReadPersistedEnabledOverride(pluginId);
+            PluginEntry entry;
+            bool wasDisabled;
+            bool wasFaulted;
+            lock (gate)
+            {
+                ThrowIfDisposed();
+                if (!entriesById.TryGetValue(pluginId, out var found) || found.State == PluginLifecycleState.Disposed)
+                {
+                    return false;
+                }
+
+                if (found.State == PluginLifecycleState.Active
+                    && persistedOverride != false
+                    && (found.Descriptor.EnabledByDefault || persistedOverride == true))
+                {
+                    return true;
+                }
+
+                wasDisabled = found.State == PluginLifecycleState.Disabled;
+                wasFaulted = found.State == PluginLifecycleState.Faulted;
+                if (wasDisabled)
+                {
+                    found.State = PluginLifecycleState.Registered;
+                }
+
+                entry = found;
+            }
+
+            if (!ActivateEntry(entry))
             {
                 return false;
             }
 
-            if (found.State == PluginLifecycleState.Active)
+            if (wasDisabled
+                || wasFaulted
+                || persistedOverride == false
+                || (!entry.Descriptor.EnabledByDefault && persistedOverride != true))
             {
-                return true;
+                TryPersistEnabledState(pluginId, enabled: true);
             }
 
-            if (found.State == PluginLifecycleState.Disabled)
-            {
-                found.State = PluginLifecycleState.Registered;
-            }
-
-            entry = found;
+            return true;
         }
-
-        return ActivateEntry(entry);
     }
 
     /// <summary>Disables a plugin and removes its capabilities from all host lookup indexes.</summary>
     public bool Disable(string pluginId)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(pluginId);
-        lock (gate)
+        if (IsReservedHostId(pluginId))
         {
-            ThrowIfDisposed();
-            if (!entriesById.TryGetValue(pluginId, out var entry))
+            return false;
+        }
+
+        lock (lifecycleGate)
+        {
+            var persistedOverride = TryReadPersistedEnabledOverride(pluginId);
+            bool changed;
+            lock (gate)
             {
-                return false;
+                ThrowIfDisposed();
+                if (!entriesById.TryGetValue(pluginId, out var entry) || entry.State == PluginLifecycleState.Disposed)
+                {
+                    return false;
+                }
+
+                changed = entry.State != PluginLifecycleState.Disabled;
+                RemoveLazyOwnersLocked(entry);
+                RemoveIndexedCapabilitiesLocked(entry);
+                entry.State = PluginLifecycleState.Disabled;
             }
 
-            RemoveLazyOwnersLocked(entry);
-            RemoveIndexedCapabilitiesLocked(entry);
-            entry.State = PluginLifecycleState.Disabled;
+            if (changed || persistedOverride == true)
+            {
+                TryPersistEnabledState(pluginId, enabled: false);
+            }
+
             return true;
         }
     }
@@ -760,21 +834,33 @@ public sealed class PluginHost : IDisposable
         }
     }
 
-    /// <summary>Returns the declarative settings schema declared by one active plugin.</summary>
-    public IReadOnlyList<PluginSettingField> GetSettingsSchema(string pluginId)
+    /// <summary>Returns the sanitized declarative settings schema declared by one plugin, activating lazily if requested.</summary>
+    public IReadOnlyList<PluginSettingField> GetSettingsSchema(string pluginId) =>
+        GetSettingsSchema(pluginId, activateIfLazy: true);
+
+    /// <summary>
+    /// Returns the sanitized declarative settings schema declared by one plugin, optionally activating
+    /// a lazy plugin when <paramref name="activateIfLazy"/> is <see langword="true"/>.
+    /// </summary>
+    public IReadOnlyList<PluginSettingField> GetSettingsSchema(string pluginId, bool activateIfLazy)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(pluginId);
+        if (IsReservedHostId(pluginId))
+        {
+            return [];
+        }
 
+        IPluginSettingsCapability? settings = null;
         PluginEntry? lazyTarget = null;
         lock (gate)
         {
             ThrowIfDisposed();
-            if (settingsIndex.TryGetValue(pluginId, out var settings))
+            if (settingsIndex.TryGetValue(pluginId, out var found))
             {
-                return settings.Fields;
+                settings = found;
             }
-
-            if (entriesById.TryGetValue(pluginId, out var entry)
+            else if (activateIfLazy
+                && entriesById.TryGetValue(pluginId, out var entry)
                 && entry.State == PluginLifecycleState.Registered
                 && entry.Descriptor.Capabilities.HasFlag(PluginCapabilityKind.Settings))
             {
@@ -784,17 +870,188 @@ public sealed class PluginHost : IDisposable
 
         if (lazyTarget is not null)
         {
-            ActivateEntry(lazyTarget);
-            lock (gate)
+            if (ActivateEntry(lazyTarget))
             {
-                ThrowIfDisposed();
-                return settingsIndex.TryGetValue(pluginId, out var settings)
-                    ? settings.Fields
-                    : [];
+                lock (gate)
+                {
+                    ThrowIfDisposed();
+                    settingsIndex.TryGetValue(pluginId, out settings);
+                }
             }
         }
 
-        return [];
+        if (settings is null)
+        {
+            return [];
+        }
+
+        try
+        {
+            return SanitizeSettingsSchema(settings.Fields);
+        }
+        catch (Exception exception)
+        {
+            RecordRuntimeFault(pluginId, "settings-schema-failed", $"Settings schema failed: {exception.Message}");
+            return [];
+        }
+    }
+
+    /// <summary>
+    /// Returns effective validated settings values for one plugin, combining persisted values
+    /// with declared sanitized defaults without forcing lazy activation unless requested.
+    /// </summary>
+    public IReadOnlyDictionary<string, string> GetSettingsValues(string pluginId, bool activateIfLazy = false)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(pluginId);
+        var schema = GetSettingsSchema(pluginId, activateIfLazy);
+        if (schema.Count == 0)
+        {
+            return new Dictionary<string, string>(StringComparer.Ordinal);
+        }
+
+        IReadOnlyDictionary<string, string> stored;
+        try
+        {
+            stored = settingsStore.GetAll(pluginId);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidOperationException or ArgumentException)
+        {
+            RecordDiagnostic(pluginId, "settings-read-failed",
+                $"Could not read settings for '{pluginId}': {exception.Message}");
+            stored = new Dictionary<string, string>(StringComparer.Ordinal);
+        }
+
+        var effective = new Dictionary<string, string>(schema.Count, StringComparer.Ordinal);
+        foreach (var field in schema)
+        {
+            var fallback = field.DefaultValue ?? GetTypeFallbackValue(field);
+            if (stored.TryGetValue(field.Key, out var rawStored)
+                && TryValidateAndNormalizeSettingValue(field, rawStored, out var normalized, out _))
+            {
+                effective[field.Key] = normalized;
+            }
+            else
+            {
+                effective[field.Key] = fallback;
+            }
+        }
+
+        return effective;
+    }
+
+    /// <summary>
+    /// Validates every supplied setting against the plugin's declared schema before persisting any change.
+    /// </summary>
+    public PluginSettingsSaveResult SaveSettings(string pluginId, IReadOnlyDictionary<string, string?> values)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(pluginId);
+        ArgumentNullException.ThrowIfNull(values);
+        if (IsReservedHostId(pluginId))
+        {
+            return new PluginSettingsSaveResult(false, $"Plugin identifier '{pluginId}' is reserved by the plugin host.");
+        }
+
+        lock (lifecycleGate)
+        {
+            PluginLifecycleState initialState;
+            lock (gate)
+            {
+                ThrowIfDisposed();
+                if (!entriesById.TryGetValue(pluginId, out var entry))
+                {
+                    return new PluginSettingsSaveResult(false, $"Plugin '{pluginId}' is not registered.");
+                }
+
+                initialState = entry.State;
+            }
+
+            if (initialState == PluginLifecycleState.Disabled)
+            {
+                return new PluginSettingsSaveResult(false, $"Plugin '{pluginId}' is disabled. Enable it before saving settings.");
+            }
+
+            if (initialState == PluginLifecycleState.Disposed)
+            {
+                return new PluginSettingsSaveResult(false, $"Plugin '{pluginId}' has been disposed.");
+            }
+
+            var schema = GetSettingsSchema(pluginId, activateIfLazy: true);
+            PluginLifecycleState currentState;
+            string? faultError;
+            lock (gate)
+            {
+                ThrowIfDisposed();
+                currentState = entriesById.TryGetValue(pluginId, out var refreshed)
+                    ? refreshed.State
+                    : PluginLifecycleState.Disposed;
+                faultError = refreshed?.LastError;
+            }
+
+            if (currentState == PluginLifecycleState.Disabled)
+            {
+                return new PluginSettingsSaveResult(false, $"Plugin '{pluginId}' is disabled. Enable it before saving settings.");
+            }
+
+            if (currentState == PluginLifecycleState.Disposed)
+            {
+                return new PluginSettingsSaveResult(false, $"Plugin '{pluginId}' has been disposed.");
+            }
+
+            if (currentState == PluginLifecycleState.Faulted)
+            {
+                return new PluginSettingsSaveResult(false, faultError ?? $"Plugin '{pluginId}' faulted while loading settings.");
+            }
+
+            if (schema.Count == 0)
+            {
+                return new PluginSettingsSaveResult(false, $"Plugin '{pluginId}' does not declare editable settings.");
+            }
+
+            var schemaByKey = new Dictionary<string, PluginSettingField>(schema.Count, StringComparer.Ordinal);
+            foreach (var field in schema)
+            {
+                schemaByKey[field.Key] = field;
+            }
+
+            var normalizedWrites = new Dictionary<string, string?>(values.Count, StringComparer.Ordinal);
+            var fieldErrors = new Dictionary<string, string>(StringComparer.Ordinal);
+            foreach (var (rawKey, rawValue) in values)
+            {
+                if (string.IsNullOrWhiteSpace(rawKey) || !schemaByKey.TryGetValue(rawKey, out var field))
+                {
+                    var errorKey = string.IsNullOrWhiteSpace(rawKey) ? "<empty>" : rawKey;
+                    fieldErrors[errorKey] = $"Unknown setting key '{errorKey}'.";
+                    continue;
+                }
+
+                if (TryValidateAndNormalizeSettingValue(field, rawValue, out var normalized, out var error))
+                {
+                    normalizedWrites[field.Key] = normalized;
+                }
+                else
+                {
+                    fieldErrors[field.Key] = error!;
+                }
+            }
+
+            if (fieldErrors.Count > 0)
+            {
+                return new PluginSettingsSaveResult(false, "One or more settings are invalid.", fieldErrors);
+            }
+
+            try
+            {
+                settingsStore.SetMany(pluginId, normalizedWrites);
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidOperationException or ArgumentException)
+            {
+                RecordDiagnostic(pluginId, "settings-save-failed",
+                    $"Could not save settings for '{pluginId}': {exception.Message}");
+                return new PluginSettingsSaveResult(false, exception.Message);
+            }
+
+            return new PluginSettingsSaveResult(true);
+        }
     }
 
     /// <summary>
@@ -1282,6 +1539,17 @@ public sealed class PluginHost : IDisposable
         List<PluginDescriptor> discovered,
         List<PluginDiagnostic> discoveryDiagnostics)
     {
+        if (IsReservedHostId(descriptor.Id))
+        {
+            discoveryDiagnostics.Add(new PluginDiagnostic(
+                descriptor.Id,
+                "reserved-plugin-id",
+                $"Plugin '{descriptor.Id}' uses a reserved host identifier."));
+            return;
+        }
+
+        var initialEnabled = TryReadPersistedEnabledOverride(descriptor.Id) ?? descriptor.EnabledByDefault;
+
         lock (gate)
         {
             ThrowIfDisposed();
@@ -1305,7 +1573,7 @@ public sealed class PluginHost : IDisposable
 
             var entry = new PluginEntry(descriptor, factory)
             {
-                State = descriptor.EnabledByDefault ? PluginLifecycleState.Registered : PluginLifecycleState.Disabled,
+                State = initialEnabled ? PluginLifecycleState.Registered : PluginLifecycleState.Disabled,
             };
             entriesById.Add(descriptor.Id, entry);
             registrationOrder.Add(descriptor.Id);
@@ -1622,7 +1890,7 @@ public sealed class PluginHost : IDisposable
 
     private void RegisterLazyOwnersLocked(PluginEntry entry)
     {
-        if (!entry.Descriptor.EnabledByDefault || entry.Descriptor.SourceId == Guid.Empty)
+        if (entry.State != PluginLifecycleState.Registered || entry.Descriptor.SourceId == Guid.Empty)
         {
             return;
         }
@@ -2278,9 +2546,263 @@ public sealed class PluginHost : IDisposable
         }
     }
 
+    private static bool IsReservedHostId(string? pluginId) =>
+        string.Equals(pluginId?.Trim(), HostStatePluginId, StringComparison.OrdinalIgnoreCase);
+
+    private bool? TryReadPersistedEnabledOverride(string pluginId)
+    {
+        try
+        {
+            var raw = settingsStore.Get(HostStatePluginId, EnabledKeyPrefix + pluginId);
+            return bool.TryParse(raw, out var parsed) ? parsed : null;
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidOperationException or ArgumentException)
+        {
+            RecordDiagnostic(HostStatePluginId, "state-read-failed",
+                $"Could not read persisted state for '{pluginId}': {exception.Message}");
+            return null;
+        }
+    }
+
+    private void TryPersistEnabledState(string pluginId, bool enabled)
+    {
+        try
+        {
+            settingsStore.Set(HostStatePluginId, EnabledKeyPrefix + pluginId, enabled ? "true" : "false");
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidOperationException or ArgumentException)
+        {
+            RecordDiagnostic(HostStatePluginId, "state-persist-failed",
+                $"Could not persist state for '{pluginId}': {exception.Message}");
+        }
+    }
+
+    private static IReadOnlyList<PluginSettingField> SanitizeSettingsSchema(IReadOnlyList<PluginSettingField>? rawFields)
+    {
+        if (rawFields is null || rawFields.Count == 0)
+        {
+            return [];
+        }
+
+        var seenKeys = new HashSet<string>(StringComparer.Ordinal);
+        var sanitized = new List<PluginSettingField>(Math.Min(rawFields.Count, MaxSettingsFieldsPerPlugin));
+        foreach (var field in rawFields)
+        {
+            if (field is null || !Enum.IsDefined(field.Type) || string.IsNullOrWhiteSpace(field.Key))
+            {
+                continue;
+            }
+
+            var key = field.Key.Trim();
+            if (key.Length > MaxSettingKeyLength || key.Any(char.IsControl) || !seenKeys.Add(key))
+            {
+                continue;
+            }
+
+            var label = NormalizeDisplayText(field.Label, MaxSettingLabelLength);
+            if (label is null)
+            {
+                continue;
+            }
+
+            var description = NormalizeDisplayText(field.Description, MaxSettingDescriptionLength);
+            IReadOnlyList<string>? choices = null;
+            string? defaultValue;
+
+            switch (field.Type)
+            {
+                case PluginSettingType.Boolean:
+                    defaultValue = string.Equals(field.DefaultValue?.Trim(), "true", StringComparison.OrdinalIgnoreCase)
+                        ? "true"
+                        : "false";
+                    break;
+                case PluginSettingType.Integer:
+                    defaultValue = int.TryParse(field.DefaultValue?.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var intDefault)
+                        ? intDefault.ToString(CultureInfo.InvariantCulture)
+                        : "0";
+                    break;
+                case PluginSettingType.Choice:
+                    if (field.Choices is null || field.Choices.Count == 0)
+                    {
+                        continue;
+                    }
+
+                    var seenChoices = new HashSet<string>(StringComparer.Ordinal);
+                    var cleanChoices = new List<string>(Math.Min(field.Choices.Count, MaxSettingChoices));
+                    foreach (var rawChoice in field.Choices)
+                    {
+                        var choice = NormalizeDisplayText(rawChoice, MaxSettingLabelLength);
+                        if (choice is not null && seenChoices.Add(choice))
+                        {
+                            cleanChoices.Add(choice);
+                            if (cleanChoices.Count >= MaxSettingChoices)
+                            {
+                                break;
+                            }
+                        }
+                    }
+
+                    if (cleanChoices.Count == 0)
+                    {
+                        continue;
+                    }
+
+                    choices = cleanChoices;
+                    var normalizedDefault = NormalizeDisplayText(field.DefaultValue, MaxSettingLabelLength);
+                    defaultValue = normalizedDefault is not null && seenChoices.Contains(normalizedDefault)
+                        ? normalizedDefault
+                        : cleanChoices[0];
+                    break;
+                case PluginSettingType.Path:
+                    defaultValue = SanitizePathDefault(field.DefaultValue);
+                    break;
+                default:
+                    defaultValue = SanitizeStringDefault(field.DefaultValue);
+                    break;
+            }
+
+            sanitized.Add(new PluginSettingField(key, label, field.Type, defaultValue, choices, description));
+            if (sanitized.Count >= MaxSettingsFieldsPerPlugin)
+            {
+                break;
+            }
+        }
+
+        return sanitized;
+    }
+
+    private static string GetTypeFallbackValue(PluginSettingField field) => field.Type switch
+    {
+        PluginSettingType.Boolean => "false",
+        PluginSettingType.Integer => "0",
+        PluginSettingType.Choice => field.Choices is { Count: > 0 } ? field.Choices[0] : string.Empty,
+        _ => string.Empty,
+    };
+
+    private static bool TryValidateAndNormalizeSettingValue(
+        PluginSettingField field,
+        string? rawValue,
+        out string normalized,
+        out string? error)
+    {
+        switch (field.Type)
+        {
+            case PluginSettingType.Boolean:
+                if (bool.TryParse(rawValue?.Trim(), out var boolVal))
+                {
+                    normalized = boolVal ? "true" : "false";
+                    error = null;
+                    return true;
+                }
+
+                normalized = string.Empty;
+                error = $"{field.Label} must be true or false.";
+                return false;
+
+            case PluginSettingType.Integer:
+                if (int.TryParse(rawValue?.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var intVal))
+                {
+                    normalized = intVal.ToString(CultureInfo.InvariantCulture);
+                    error = null;
+                    return true;
+                }
+
+                normalized = string.Empty;
+                error = $"{field.Label} must be a whole number.";
+                return false;
+
+            case PluginSettingType.Choice:
+                var choice = rawValue?.Trim() ?? string.Empty;
+                if (field.Choices is { Count: > 0 } && field.Choices.Contains(choice, StringComparer.Ordinal))
+                {
+                    normalized = choice;
+                    error = null;
+                    return true;
+                }
+
+                normalized = string.Empty;
+                error = $"{field.Label} must match one of the allowed choices.";
+                return false;
+
+            case PluginSettingType.Path:
+                var path = (rawValue ?? string.Empty).Trim();
+                if (path.Any(char.IsControl))
+                {
+                    normalized = string.Empty;
+                    error = $"{field.Label} cannot contain control characters.";
+                    return false;
+                }
+
+                if (path.Length > MaxSettingPathLength)
+                {
+                    normalized = string.Empty;
+                    error = $"{field.Label} exceeds {MaxSettingPathLength} characters.";
+                    return false;
+                }
+
+                normalized = path;
+                error = null;
+                return true;
+
+            default:
+                var str = rawValue ?? string.Empty;
+                if (str.Contains('\0'))
+                {
+                    normalized = string.Empty;
+                    error = $"{field.Label} cannot contain NUL characters.";
+                    return false;
+                }
+
+                if (str.Length > FilePluginSettingsStore.MaxValueLength)
+                {
+                    normalized = string.Empty;
+                    error = $"{field.Label} exceeds {FilePluginSettingsStore.MaxValueLength} characters.";
+                    return false;
+                }
+
+                normalized = str;
+                error = null;
+                return true;
+        }
+    }
+
+    private static string? SanitizePathDefault(string? rawPath)
+    {
+        if (rawPath is null)
+        {
+            return null;
+        }
+
+        var trimmed = rawPath.Trim();
+        if (trimmed.Length == 0 || trimmed.Any(char.IsControl) || trimmed.Length > MaxSettingPathLength)
+        {
+            return string.Empty;
+        }
+
+        return trimmed;
+    }
+
+    private static string? SanitizeStringDefault(string? rawValue)
+    {
+        if (rawValue is null)
+        {
+            return null;
+        }
+
+        var cleaned = rawValue.Replace("\0", string.Empty, StringComparison.Ordinal);
+        return cleaned.Length > FilePluginSettingsStore.MaxValueLength
+            ? cleaned[..FilePluginSettingsStore.MaxValueLength]
+            : cleaned;
+    }
+
     private void ValidateSurfaceAndId(PluginDescriptor descriptor)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(descriptor.Id);
+        if (IsReservedHostId(descriptor.Id))
+        {
+            throw new InvalidOperationException($"Plugin identifier '{descriptor.Id}' is reserved by the plugin host.");
+        }
+
         if ((descriptor.Surfaces & activeSurface) == 0)
         {
             throw new InvalidOperationException(
