@@ -7,6 +7,7 @@ using Avalonia.Layout;
 using Avalonia.Markup.Xaml;
 using Avalonia.Media;
 using Avalonia.Media.Immutable;
+using Playnite.Core.Addons;
 using Playnite.Core.Plugins;
 using Playnite.Core.Themes;
 using Playnite.Desktop.Themes;
@@ -87,7 +88,8 @@ public sealed partial class PluginManagerWindow : Window
     {
     }
 
-    internal PluginManagerWindow(PluginHost? host, LiveThemeManager? themeManager, int initialTabIndex = 0)
+    internal PluginManagerWindow(
+        PluginHost? host, LiveThemeManager? themeManager, int initialTabIndex = 0, AddonInstaller? installer = null)
     {
         this.host = host;
         this.themeManager = themeManager;
@@ -139,6 +141,7 @@ public sealed partial class PluginManagerWindow : Window
         var initialThemeEntry = themeManager?.Catalog.Entries.FirstOrDefault(e =>
             e.IsValid && string.Equals(e.Id, themeManager.ActiveDocument.Descriptor.Id, StringComparison.Ordinal));
         RefreshThemesListAndSelection(initialThemeEntry);
+        InitializePackages(installer);
     }
 
     /// <summary>Gets whether any plugin enablement state, activation, or setting was modified during this session.</summary>

@@ -400,11 +400,37 @@ public sealed class PluginHost : IDisposable
 
             foreach (var child in children.OrderBy(item => item.Name, StringComparer.Ordinal).Reverse())
             {
-                if (!IsSymlinkOrReparsePoint(child))
+                if ((depth != 0 || child.Name != AddonInstaller.PackageStoreName) && !IsSymlinkOrReparsePoint(child))
                 {
                     pending.Push((child, depth + 1));
                 }
             }
+        }
+
+        var packages = new AddonInstaller(new AddonInstallLayout(fullRoot), regularFileProbe);
+        try
+        {
+            foreach (var (package, directory) in packages.GetActivePackageDirectories(
+                         (id, message) => discoveryDiagnostics.Add(new PluginDiagnostic(id, "invalid-package-state", message))))
+            {
+                try
+                {
+                    var descriptor = packages.ReadPackageDescriptor(directory);
+                    if (descriptor.Id != package.Id || descriptor.Version != package.Version)
+                    {
+                        throw new InvalidDataException("The installed package manifest does not match its recorded id and version.");
+                    }
+                    RegisterExternalDescriptor(descriptor, directory, regularFileProbe, discovered, discoveryDiagnostics);
+                }
+                catch (Exception exception) when (exception is IOException or InvalidDataException or UnauthorizedAccessException)
+                {
+                    discoveryDiagnostics.Add(new PluginDiagnostic(package.Id, "invalid-package", exception.Message));
+                }
+            }
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            discoveryDiagnostics.Add(new PluginDiagnostic(string.Empty, "package-read-failed", exception.Message));
         }
 
         if (discoveryDiagnostics.Count > 0)
@@ -1662,6 +1688,16 @@ public sealed class PluginHost : IDisposable
             return;
         }
 
+        RegisterExternalDescriptor(descriptor, directoryPath, regularFileProbe, discovered, discoveryDiagnostics);
+    }
+
+    private void RegisterExternalDescriptor(
+        PluginDescriptor descriptor,
+        string directoryPath,
+        IRegularFileProbe regularFileProbe,
+        List<PluginDescriptor> discovered,
+        List<PluginDiagnostic> discoveryDiagnostics)
+    {
         var matchingSurfaces = descriptor.Surfaces & activeSurface;
         if (matchingSurfaces == 0)
         {
@@ -3137,7 +3173,20 @@ public sealed class PluginHost : IDisposable
         }
     }
 
-    private string? FindSourceConflictLocked(PluginDescriptor descriptor)
+    /// <summary>Checks the live capability indexes without activating any plugin.</summary>
+    public void ValidatePackageSourceOwnership(PluginDescriptor descriptor, string? replacingId)
+    {
+        lock (gate)
+        {
+            ThrowIfDisposed();
+            if (FindSourceConflictLocked(descriptor, replacingId) is { } owner)
+            {
+                throw new InvalidDataException($"The package source id is already used by '{owner}'.");
+            }
+        }
+    }
+
+    private string? FindSourceConflictLocked(PluginDescriptor descriptor, string? ignoredOwner = null)
     {
         if (descriptor.SourceId == Guid.Empty)
         {
@@ -3146,12 +3195,12 @@ public sealed class PluginHost : IDisposable
 
         if (descriptor.Capabilities.HasFlag(PluginCapabilityKind.LibrarySource))
         {
-            if (sourceIndex.TryGetValue(descriptor.SourceId, out var existing))
+            if (sourceIndex.TryGetValue(descriptor.SourceId, out var existing) && existing.PluginId != ignoredOwner)
             {
                 return existing.PluginId;
             }
 
-            if (lazySourceOwners.TryGetValue(descriptor.SourceId, out var lazyOwner))
+            if (lazySourceOwners.TryGetValue(descriptor.SourceId, out var lazyOwner) && lazyOwner != ignoredOwner)
             {
                 return lazyOwner;
             }
@@ -3159,12 +3208,12 @@ public sealed class PluginHost : IDisposable
 
         if (descriptor.Capabilities.HasFlag(PluginCapabilityKind.Launch))
         {
-            if (launchIndex.TryGetValue(descriptor.SourceId, out var existing))
+            if (launchIndex.TryGetValue(descriptor.SourceId, out var existing) && existing.PluginId != ignoredOwner)
             {
                 return existing.PluginId;
             }
 
-            if (lazyLaunchOwners.TryGetValue(descriptor.SourceId, out var lazyOwner))
+            if (lazyLaunchOwners.TryGetValue(descriptor.SourceId, out var lazyOwner) && lazyOwner != ignoredOwner)
             {
                 return lazyOwner;
             }
