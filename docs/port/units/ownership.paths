@@ -210,7 +210,7 @@ src/Playnite.Desktop/p7-004/LibraryTheme.axaml.cs	p7-004	adfc74619c7f5b5805a0c23
 src/Playnite.Desktop/p7-004/Plugins/AmazonLunaPlugin.cs	p7-004	3472c07b5d822cfb1ad8c949bfd2defff62dcba3	pull/264
 src/Playnite.Desktop/p7-004/Plugins/DesktopPluginHostFactory.cs	p7-004	f8046e32955493a1fc366766dd5cc88edc057510	pull/265
 src/Playnite.Desktop/p7-004/Plugins/HeroicPlugin.cs	p7-004	f8046e32955493a1fc366766dd5cc88edc057510	pull/265
-src/Playnite.Desktop/p7-004/Plugins/ProtonDbPlugin.cs	p7-004	5124b6dc6c6a8c19eecdc09470f0e8691dac3987	pull/266
+src/Playnite.Desktop/p7-004/Plugins/ProtonDbPlugin.cs	p7-004	564734b85be946da16d129bf307b15cd2afb7d3d	pull/268
 src/Playnite.Desktop/p7-004/Plugins/SnesRomPlugin.cs	p7-004	3472c07b5d822cfb1ad8c949bfd2defff62dcba3	pull/264
 src/Playnite.Desktop/p7-004/Plugins/SteamPlugin.cs	p7-004	f8046e32955493a1fc366766dd5cc88edc057510	pull/265
 src/Playnite.Desktop/p7-004/Shell/DesktopGameSessionManager.cs	p7-004	325f12215044170989dd7b4bfad003277a7ec52b	pull/246
