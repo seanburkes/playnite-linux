@@ -241,9 +241,9 @@ src/Playnite.Desktop/p7-004/Themes/LiveThemeManager.cs	p7-004	924b0dfa67b371fe4b
 src/Playnite.Desktop/p7-005/Shell/ContentHostView.axaml	p7-005	0c9f5d22929818d59b9d0902fa50aa63219e3fc1	pull/227
 src/Playnite.Desktop/p7-005/Shell/ContentHostView.axaml.cs	p7-005	a4e9bcf3c618b54369144a6427fd3238331c41f1	pull/261
 src/Playnite.Desktop/p7-005/Shell/GameEditStore.cs	p7-005	0c9f5d22929818d59b9d0902fa50aa63219e3fc1	pull/227
-src/Playnite.Desktop/p7-005/Shell/GameEditView.axaml	p7-005	0c9f5d22929818d59b9d0902fa50aa63219e3fc1	pull/227
-src/Playnite.Desktop/p7-005/Shell/GameEditView.axaml.cs	p7-005	0c9f5d22929818d59b9d0902fa50aa63219e3fc1	pull/227
-src/Playnite.Desktop/p7-005/Shell/GameEditViewModel.cs	p7-005	0c9f5d22929818d59b9d0902fa50aa63219e3fc1	pull/227
+src/Playnite.Desktop/p7-005/Shell/GameEditView.axaml	p7-005	44a1c6785005294633bc0ac6a16b1da835c9fd6a	pull/270
+src/Playnite.Desktop/p7-005/Shell/GameEditView.axaml.cs	p7-005	44a1c6785005294633bc0ac6a16b1da835c9fd6a	pull/270
+src/Playnite.Desktop/p7-005/Shell/GameEditViewModel.cs	p7-005	44a1c6785005294633bc0ac6a16b1da835c9fd6a	pull/270
 src/Playnite.Desktop/p7-006/Shell/SettingsCatalogs.cs	p7-006	503d6689f887a026f0753573c30f1b92fcb4ffc1	pull/228
 src/Playnite.Desktop/p7-006/Shell/SettingsSmoke.cs	p7-006	503d6689f887a026f0753573c30f1b92fcb4ffc1	pull/228
 src/Playnite.Desktop/p7-006/Shell/SettingsWindow.axaml	p7-006	503d6689f887a026f0753573c30f1b92fcb4ffc1	pull/228
@@ -564,6 +564,7 @@ tests/Playnite.Plugin.Tests/SamplePluginBuildTests.cs	p6-009	316a4a9da68d6379651
 tests/Playnite.Plugin.Tests/SamplePluginLoadTests.cs	p6-009	316a4a9da68d6379651333f8b1d4c4b1501b5db4	pull/212
 tests/Playnite.Smoke.Tests/BootstrapSmokeTests.cs	p7-001	0820d568417f585ed83ba635d13998dcab010668	pull/223
 tests/Playnite.Smoke.Tests/GameEditMetadataSmokeTests.cs	p7-005	0c9f5d22929818d59b9d0902fa50aa63219e3fc1	pull/227
+tests/Playnite.Smoke.Tests/GameEditPluginMetadataTests.cs	p7-005	44a1c6785005294633bc0ac6a16b1da835c9fd6a	pull/270
 tests/Playnite.Smoke.Tests/HostSmokeTests.cs	p2-004	a4d07cbb2316a507fcac0e702c73691498f905b7	pull/254
 tests/Playnite.Smoke.Tests/LibrarySmokeTests.cs	p7-003	9ce99d4a901b0dbe7594197ac164d2e5b34a8091	pull/225
 tests/Playnite.Smoke.Tests/README.md	p2-004	34af4f0fb6430fbc585d3b76ce85094390a26467	pull/34

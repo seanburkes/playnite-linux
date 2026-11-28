@@ -1,6 +1,7 @@
 using System.Globalization;
 using Playnite.Core.Database;
 using Playnite.Core.Models;
+using Playnite.Core.Plugins;
 
 namespace Playnite.Desktop.Shell;
 
@@ -14,19 +15,44 @@ namespace Playnite.Desktop.Shell;
 public sealed class GameEditViewModel
 {
     private readonly GameEditStore store;
+    private readonly PluginHost? plugins;
     private StoredGame? original;
     private Game? draft;
     private string userScoreInput = string.Empty;
 
     public GameEditViewModel(GameEditStore store)
+        : this(store, plugins: null)
+    {
+    }
+
+    internal GameEditViewModel(GameEditStore store, PluginHost? plugins)
     {
         ArgumentNullException.ThrowIfNull(store);
         this.store = store;
+        this.plugins = plugins;
     }
 
     private Game Draft => draft ?? throw new InvalidOperationException("No game has been loaded for editing.");
 
     public bool IsLoaded => draft is not null;
+
+    internal bool CanSearchMetadata => IsLoaded && plugins is { IsDisposed: false };
+
+    internal Task<IReadOnlyList<PluginGameMetadata>> SearchMetadataAsync(string name, CancellationToken cancellationToken)
+    {
+        var game = Draft;
+        var snapshot = new PluginGameSnapshot(
+            game.Id, name.Trim(), game.GameId, game.PluginId, game.IsInstalled, game.Playtime, game.ReleaseDate?.Year);
+        return plugins!.FetchMetadataAsync(snapshot, cancellationToken);
+    }
+
+    internal void ImportCommunityScore(PluginGameMetadata metadata)
+    {
+        if (metadata.CommunityScore is int score)
+        {
+            Draft.CommunityScore = score;
+        }
+    }
 
     public string Status { get; private set; } = "empty";
 
@@ -158,7 +184,10 @@ public sealed class GameEditViewModel
             var platforms = Draft.PlatformIds?.Count ?? 0;
             var tags = Draft.TagIds?.Count ?? 0;
             var developers = Draft.DeveloperIds?.Count ?? 0;
-            return $"Release={release}; Platforms={platforms}; Tags={tags}; Developers={developers}";
+            var score = Draft.CommunityScore is int value
+                ? $"; Community score={value.ToString(CultureInfo.InvariantCulture)}"
+                : string.Empty;
+            return $"Release={release}; Platforms={platforms}; Tags={tags}; Developers={developers}{score}";
         }
     }
 
