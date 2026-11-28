@@ -1,5 +1,6 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:plugins="using:Playnite.Core.Plugins"
              x:Class="Playnite.Desktop.Shell.GameEditView">
   <ScrollViewer Width="360" AutomationProperties.Name="Game edit panel">
     <StackPanel Margin="8" Orientation="Vertical">
@@ -37,6 +38,27 @@
 
       <TextBlock x:Name="MetadataText" Text="(none)" TextWrapping="Wrap"
                  AutomationProperties.Name="Read-only game metadata" />
+      <StackPanel x:Name="MetadataActions" IsVisible="False" Spacing="4">
+        <Button x:Name="SearchMetadataButton" Content="Search metadata"
+                AutomationProperties.Name="Search metadata for this game" />
+        <ComboBox x:Name="MetadataResults" IsVisible="False" HorizontalAlignment="Stretch"
+                  AutomationProperties.Name="Metadata search results">
+          <ComboBox.ItemTemplate>
+            <DataTemplate x:DataType="plugins:PluginGameMetadata">
+              <TextBlock Text="{CompiledBinding PluginId}" />
+            </DataTemplate>
+          </ComboBox.ItemTemplate>
+        </ComboBox>
+        <TextBlock x:Name="MetadataPreview" TextWrapping="Wrap" />
+        <CheckBox x:Name="ImportSummary" Content="Use summary for description" IsVisible="False"
+                  AutomationProperties.Name="Use the result summary for the game description" />
+        <CheckBox x:Name="ImportScore" Content="Use community score" IsVisible="False"
+                  AutomationProperties.Name="Use the result community score" />
+        <Button x:Name="ImportMetadataButton" Content="Import selected fields" IsVisible="False"
+                AutomationProperties.Name="Import selected metadata into the game draft" />
+        <TextBlock x:Name="MetadataStatus" TextWrapping="Wrap"
+                   AutomationProperties.LiveSetting="Polite" />
+      </StackPanel>
       <TextBlock x:Name="StatusText" Text="empty" AutomationProperties.Name="Game edit status" />
 
       <StackPanel Orientation="Horizontal" AutomationProperties.Name="Game edit actions">

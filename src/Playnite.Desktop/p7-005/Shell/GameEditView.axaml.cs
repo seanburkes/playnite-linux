@@ -2,6 +2,7 @@ using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml;
+using Playnite.Core.Plugins;
 
 namespace Playnite.Desktop.Shell;
 
@@ -15,6 +16,7 @@ public sealed partial class GameEditView : UserControl
 {
     private GameEditViewModel? model;
     private bool refreshing;
+    private CancellationTokenSource? metadataSearch;
 
     public event EventHandler? SaveRequested;
     public event EventHandler? CancelRequested;
@@ -25,11 +27,30 @@ public sealed partial class GameEditView : UserControl
         this.FindControl<Button>("SaveButton")!.Click += OnSaveClick;
         this.FindControl<Button>("CancelButton")!.Click += OnCancelClick;
         this.FindControl<TextBox>("UserScoreBox")!.TextChanged += OnUserScoreTextChanged;
+        this.FindControl<TextBox>("NameBox")!.PropertyChanged += (_, args) =>
+        {
+            if (args.Property == TextBox.TextProperty && !refreshing)
+            {
+                ResetMetadataSearch();
+            }
+        };
+        this.FindControl<Button>("SearchMetadataButton")!.Click += OnSearchMetadata;
+        this.FindControl<ComboBox>("MetadataResults")!.SelectionChanged += (_, _) => ShowMetadataResult();
+        this.FindControl<Button>("ImportMetadataButton")!.Click += OnImportMetadata;
+        PropertyChanged += (_, args) =>
+        {
+            if (args.Property == IsVisibleProperty && !IsVisible)
+            {
+                ResetMetadataSearch();
+            }
+        };
+        Unloaded += (_, _) => ResetMetadataSearch();
     }
 
     public void Apply(GameEditViewModel viewModel)
     {
         ArgumentNullException.ThrowIfNull(viewModel);
+        ResetMetadataSearch();
         model = viewModel;
         Refresh();
     }
@@ -69,6 +90,7 @@ public sealed partial class GameEditView : UserControl
         var loaded = model.IsLoaded;
         this.FindControl<Button>("SaveButton")!.IsEnabled = loaded;
         this.FindControl<Button>("CancelButton")!.IsEnabled = loaded;
+        this.FindControl<StackPanel>("MetadataActions")!.IsVisible = model.CanSearchMetadata;
     }
 
     private void OnSaveClick(object? sender, RoutedEventArgs eventArgs)
@@ -83,6 +105,7 @@ public sealed partial class GameEditView : UserControl
             return;
         }
 
+        ResetMetadataSearch();
         SaveRequested?.Invoke(this, EventArgs.Empty);
     }
 
@@ -93,7 +116,134 @@ public sealed partial class GameEditView : UserControl
             return;
         }
 
+        ResetMetadataSearch();
         CancelRequested?.Invoke(this, EventArgs.Empty);
+    }
+
+    private async void OnSearchMetadata(object? sender, RoutedEventArgs args)
+    {
+        if (model is not { CanSearchMetadata: true } current || metadataSearch is not null)
+        {
+            return;
+        }
+
+        var name = this.FindControl<TextBox>("NameBox")!.Text ?? string.Empty;
+        var status = this.FindControl<TextBlock>("MetadataStatus")!;
+        ResetMetadataSearch();
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            status.Text = "Enter a game name before searching.";
+            return;
+        }
+
+        using var search = new CancellationTokenSource();
+        metadataSearch = search;
+        var searchButton = this.FindControl<Button>("SearchMetadataButton")!;
+        searchButton.IsEnabled = false;
+        status.Text = "Searching metadata providers…";
+        try
+        {
+            var results = await current.SearchMetadataAsync(name, search.Token);
+            if (search.IsCancellationRequested)
+            {
+                return;
+            }
+
+            var resultsBox = this.FindControl<ComboBox>("MetadataResults")!;
+            resultsBox.ItemsSource = results;
+            resultsBox.IsVisible = results.Count > 0;
+            resultsBox.SelectedIndex = results.Count > 0 ? 0 : -1;
+            status.Text = results.Count == 0 ? "No metadata found." : "Select a result and choose fields to import.";
+        }
+        catch (OperationCanceledException) when (search.IsCancellationRequested)
+        {
+            return;
+        }
+        catch (Exception exception)
+        {
+            Console.Error.WriteLine($"game-edit: metadata-search-failed={exception.Message}");
+            if (!search.IsCancellationRequested)
+            {
+                status.Text = "Metadata search failed.";
+            }
+        }
+        finally
+        {
+            if (ReferenceEquals(metadataSearch, search))
+            {
+                metadataSearch = null;
+                searchButton.IsEnabled = true;
+            }
+        }
+    }
+
+    private void ResetMetadataSearch()
+    {
+        var search = metadataSearch;
+        metadataSearch = null;
+        search?.Cancel();
+        this.FindControl<Button>("SearchMetadataButton")!.IsEnabled = true;
+        var results = this.FindControl<ComboBox>("MetadataResults")!;
+        results.ItemsSource = null;
+        results.IsVisible = false;
+        this.FindControl<TextBlock>("MetadataStatus")!.Text = string.Empty;
+        ShowMetadataResult();
+    }
+
+    private void ShowMetadataResult()
+    {
+        var result = this.FindControl<ComboBox>("MetadataResults")!.SelectedItem as PluginGameMetadata;
+        var summary = this.FindControl<CheckBox>("ImportSummary")!;
+        var score = this.FindControl<CheckBox>("ImportScore")!;
+        summary.IsChecked = false;
+        score.IsChecked = false;
+        summary.IsVisible = result?.Summary is not null;
+        score.IsVisible = result?.CommunityScore is not null;
+        this.FindControl<Button>("ImportMetadataButton")!.IsVisible = summary.IsVisible || score.IsVisible;
+
+        var lines = new List<string>();
+        if (result?.Summary is { } text)
+        {
+            lines.Add(text);
+        }
+        if (result?.CommunityScore is int value)
+        {
+            lines.Add($"Community score: {value}");
+        }
+        if (result?.Attributes is { } attributes)
+        {
+            lines.AddRange(attributes.Select(pair => $"{pair.Key}: {pair.Value}"));
+        }
+        this.FindControl<TextBlock>("MetadataPreview")!.Text = string.Join(Environment.NewLine, lines);
+    }
+
+    private void OnImportMetadata(object? sender, RoutedEventArgs args)
+    {
+        if (model is not { IsLoaded: true } current
+            || this.FindControl<ComboBox>("MetadataResults")!.SelectedItem is not PluginGameMetadata result)
+        {
+            return;
+        }
+
+        var importSummary = this.FindControl<CheckBox>("ImportSummary")!.IsChecked == true;
+        var importScore = this.FindControl<CheckBox>("ImportScore")!.IsChecked == true;
+        var status = this.FindControl<TextBlock>("MetadataStatus")!;
+        if (!importSummary && !importScore)
+        {
+            status.Text = "Choose at least one field to import.";
+            return;
+        }
+
+        if (importSummary && result.Summary is { } summary)
+        {
+            this.FindControl<TextBox>("DescriptionBox")!.Text = summary;
+        }
+        if (importScore)
+        {
+            current.ImportCommunityScore(result);
+            this.FindControl<TextBlock>("MetadataText")!.Text = current.MetadataSummary;
+        }
+        status.Text = "Imported into this draft. Save to keep the changes.";
     }
 
     private bool CollectFields()

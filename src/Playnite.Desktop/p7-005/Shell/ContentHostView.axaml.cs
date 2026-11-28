@@ -79,7 +79,7 @@ public sealed partial class ContentHostView : UserControl
             return;
         }
 
-        var draft = new GameEditViewModel(editStore);
+        var draft = new GameEditViewModel(editStore, model.Plugins);
         try
         {
             await draft.LoadAsync(row.Id, lifetime.Token);
@@ -108,7 +108,7 @@ public sealed partial class ContentHostView : UserControl
             // store's per-operation connections also need, preserving the p7-003 empty-library path.
             await model.LoadAsync(lifetime.Token);
             editStore = await GameEditStore.OpenAsync(databasePath, lifetime.Token);
-            editModel = new GameEditViewModel(editStore);
+            editModel = new GameEditViewModel(editStore, model.Plugins);
             editView.Apply(editModel);
             grid.Apply(model);
             await EditLoadTask;
