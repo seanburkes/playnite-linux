@@ -233,6 +233,7 @@ src/Playnite.Desktop/p7-004/Shell/LibraryViewModel.cs	p7-004	f8046e32955493a1fc3
 src/Playnite.Desktop/p7-004/Shell/LunaGameEditorWindow.axaml	p7-004	da44229a9e3e6ff9aa656017e2529a19adc1fdd7	pull/256
 src/Playnite.Desktop/p7-004/Shell/LunaGameEditorWindow.axaml.cs	p7-004	da44229a9e3e6ff9aa656017e2529a19adc1fdd7	pull/256
 src/Playnite.Desktop/p7-004/Shell/LunaPlayRequest.cs	p7-004	da44229a9e3e6ff9aa656017e2529a19adc1fdd7	pull/256
+src/Playnite.Desktop/p7-004/Shell/PluginManagerWindow.Packages.cs	p7-004	62a3e4f708cf9a1dd1c7f980b318af4e576eff65	pull/273
 src/Playnite.Desktop/p7-004/Shell/PluginManagerWindow.axaml	p7-004	924b0dfa67b371fe4bdc0eba2b05e26862532bcf	pull/269
 src/Playnite.Desktop/p7-004/Shell/PluginManagerWindow.axaml.cs	p7-004	924b0dfa67b371fe4bdc0eba2b05e26862532bcf	pull/269
 src/Playnite.Desktop/p7-004/Shell/SnesRomProfile.cs	p7-004	b99124c00b9d6d7d3d94a3ec3037639ba96e5b4d	pull/257
@@ -576,6 +577,7 @@ tests/Playnite.Smoke.Tests/SearchFilterSortSmokeTests.cs	p7-004	8af3cc00a2ac796b
 tests/Playnite.Smoke.Tests/SettingsWelcomeSmokeTests.cs	p7-006	503d6689f887a026f0753573c30f1b92fcb4ffc1	pull/228
 tests/Playnite.Smoke.Tests/ShellSmokeTests.cs	p7-002	e0ad0f948d3ca4441f967536c50050142431a7ee	pull/224
 tests/Playnite.Smoke.Tests/p7-002/DialogChromeTests.cs	p7-002	1ad4a9c55f890ae956b13286918e8bb7f2dba800	pull/241
+tests/Playnite.Smoke.Tests/p7-004/AddonPackageManagerSmokeTests.cs	p7-004	62a3e4f708cf9a1dd1c7f980b318af4e576eff65	pull/273
 tests/Playnite.Smoke.Tests/p7-004/FullscreenLibrarySmokeTests.cs	p7-004	da44229a9e3e6ff9aa656017e2529a19adc1fdd7	pull/256
 tests/Playnite.Smoke.Tests/p7-004/GameSessionExperienceSmokeTests.cs	p7-004	325f12215044170989dd7b4bfad003277a7ec52b	pull/246
 tests/Playnite.Smoke.Tests/p7-004/LibraryExperienceSmokeTests.cs	p7-004	adfc74619c7f5b5805a0c230011187c120cf6b59	pull/245
