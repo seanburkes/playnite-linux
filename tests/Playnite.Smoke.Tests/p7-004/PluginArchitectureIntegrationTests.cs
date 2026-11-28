@@ -1211,6 +1211,386 @@ public sealed class PluginArchitectureIntegrationTests
         }
     }
 
+    [Fact]
+    public async Task LibraryGridView_plugin_actions_flyouts_execute_commands_lazily_and_refresh_ui()
+    {
+        var token = TestContext.Current.CancellationToken;
+        var tempDir = Directory.CreateTempSubdirectory("playnite-plugin-commands-");
+        try
+        {
+            var dbPath = Path.Combine(tempDir.FullName, "library.sqlite");
+            var database = await LibraryDatabase.OpenAsync(dbPath, token);
+            await database.WriteAsync(async session =>
+            {
+                await session.Games.AddAsync(new StoredGame(new Game(Guid.NewGuid(), "220", "AAA Half-Life 2")
+                {
+                    PluginId = StoreCatalog.SteamPluginId,
+                    IsInstalled = true,
+                }));
+                await session.Games.AddAsync(new StoredGame(new Game(Guid.NewGuid(), "snes-1", "ZZZ Super Metroid")
+                {
+                    PluginId = SnesRomProfile.SourceId,
+                    IsInstalled = true,
+                }));
+                return true;
+            }, token);
+
+            var clock = new TestMutableTimeProvider(new DateTimeOffset(2026, 11, 27, 20, 0, 0, TimeSpan.Zero));
+            var fail220 = true;
+            var requests = new List<string>();
+            using var httpClient = new HttpClient(new StubHttpMessageHandler((request, _) =>
+            {
+                requests.Add(request.RequestUri!.ToString());
+                if (fail220)
+                {
+                    return Task.FromResult(new HttpResponseMessage(HttpStatusCode.InternalServerError));
+                }
+
+                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent(
+                        """{"tier":"native","confidence":"strong","total":900}""",
+                        Encoding.UTF8,
+                        "application/json"),
+                });
+            }));
+
+            var lazyCommandActivations = 0;
+            using var host = DesktopPluginHostFactory.CreateForLibrary(
+                dbPath,
+                timeProvider: clock,
+                steamSync: new StubSteamSync(),
+                heroicSync: new StubHeroicSync(),
+                protonDbClient: httpClient);
+            host.RegisterLazy(
+                new PluginDescriptor(
+                    "smoke.lazy-command",
+                    Guid.Empty,
+                    "Smoke Lazy Command",
+                    new Version(1, 0, 0),
+                    PluginLoadKind.ExternalAssembly,
+                    PluginSurface.Desktop,
+                    PluginCapabilityKind.Commands,
+                    new PluginEntryPoints(Desktop: "smoke-lazy-cmd.dll")),
+                () =>
+                {
+                    lazyCommandActivations++;
+                    return new SmokeCommandPlugin("smoke.lazy-command", "smoke.lazy.ping", "Lazy Ping", shouldThrow: false);
+                });
+            Assert.True(host.RegisterBuiltIn(
+                new SmokeCommandPlugin("smoke.throwing-command", "smoke.boom", "Throwing Command", shouldThrow: true)));
+
+            await WithHeadlessUiAsync(async () =>
+            {
+                var opener = new FakeOpener();
+                var model = new LibraryViewModel(dbPath, host, ownsPlugins: false);
+                var view = new LibraryGridView(new SteamPlayRequest(opener), fullscreenPreview: false);
+                var window = new Window { Width = 1200, Height = 720, Content = view };
+                try
+                {
+                    await model.LoadAsync(token);
+                    window.Show();
+                    view.Apply(model);
+                    await view.CardSlotsTask;
+                    await view.DetailsSlotsTask;
+
+                    // Non-materializing visibility check kept lazy command plugin unmaterialized.
+                    var toolbarBtn = view.FindControl<Button>("PluginActionsButton")!;
+                    var gameBtn = view.FindControl<Button>("GamePluginActionsButton")!;
+                    var toolbarFlyout = (MenuFlyout)toolbarBtn.Flyout!;
+                    var gameFlyout = (MenuFlyout)gameBtn.Flyout!;
+                    Assert.True(toolbarBtn.IsVisible);
+                    Assert.True(gameBtn.IsVisible);
+                    Assert.Equal(0, lazyCommandActivations);
+
+                    // Steam game selected (index 0): offline ProtonDB refresh gives guidance without HTTP calls.
+                    gameFlyout.ShowAt(gameBtn);
+                    var refreshItem = gameFlyout.Items.OfType<MenuItem>().Single(m => Equals(m.Tag, ProtonDbPlugin.RefreshRatingCommandId));
+                    refreshItem.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+                    gameFlyout.Hide();
+                    await view.CommandTask;
+                    Assert.Empty(requests);
+                    Assert.Contains("Enable online ProtonDB", view.FindControl<TextBlock>("PlayStatus")!.Text, StringComparison.Ordinal);
+
+                    // Opt in online, fail once on selection (5m backoff), then recover and click Refresh ProtonDB Rating within backoff window.
+                    host.SettingsStore.Set(ProtonDbPlugin.PluginId, ProtonDbPlugin.OnlineLookupSettingKey, "true");
+                    view.Apply(model);
+                    await view.DetailsSlotsTask;
+                    Assert.Single(requests); // Failed 500
+                    Assert.False(view.FindControl<WrapPanel>("DetailsPluginBadges")!.IsVisible);
+
+                    fail220 = false;
+                    clock.Advance(TimeSpan.FromSeconds(10)); // Still well inside 5-minute backoff.
+                    gameFlyout.ShowAt(gameBtn);
+                    refreshItem = gameFlyout.Items.OfType<MenuItem>().Single(m => Equals(m.Tag, ProtonDbPlugin.RefreshRatingCommandId));
+                    refreshItem.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+                    gameFlyout.Hide();
+                    await view.CommandTask;
+                    await view.DetailsSlotsTask;
+
+                    Assert.Equal(2, requests.Count);
+                    Assert.Contains("Native", view.FindControl<TextBlock>("PlayStatus")!.Text, StringComparison.Ordinal);
+                    Assert.True(view.FindControl<WrapPanel>("DetailsPluginBadges")!.IsVisible);
+                    Assert.True(view.FindControl<StackPanel>("DetailsPluginSections")!.IsVisible);
+                    Assert.True(File.Exists(Path.Combine(tempDir.FullName, "plugin-settings", ProtonDbPlugin.CacheFileName)));
+
+                    // Selecting SNES game (index 1) filters out Steam-only ProtonDB Refresh command in GamePluginActionsFlyout.
+                    var list = view.FindControl<ListBox>("GameList")!;
+                    list.SelectedIndex = 1;
+                    await view.SelectionTask;
+                    await view.DetailsSlotsTask;
+                    gameFlyout.ShowAt(gameBtn);
+                    Assert.DoesNotContain(gameFlyout.Items.OfType<MenuItem>(), m => Equals(m.Tag, ProtonDbPlugin.RefreshRatingCommandId));
+                    gameFlyout.Hide();
+                    Assert.False(gameBtn.IsVisible); // After lazy plugin had no GameContext commands, button hides for non-Steam game.
+
+                    // Switch back to Steam game, reload to see card badge, then Clear ProtonDB Cache via toolbar flyout.
+                    list.SelectedIndex = 0;
+                    await view.SelectionTask;
+                    view.Apply(model);
+                    await view.CardSlotsTask;
+                    await view.DetailsSlotsTask;
+                    Assert.Equal(1, lazyCommandActivations); // Opening game flyout checked lazy Commands capability once.
+
+                    var firstCard = (LibraryCardItem)((ListBoxItem)list.Items[0]!).DataContext!;
+                    Assert.Equal("Native", Assert.Single(firstCard.PluginBadges).Label);
+
+                    // Turn offline before clearing cache so RefreshSlots verifies disk removal & cleared badges without re-fetching.
+                    host.SettingsStore.Set(ProtonDbPlugin.PluginId, ProtonDbPlugin.OnlineLookupSettingKey, "false");
+                    toolbarFlyout.ShowAt(toolbarBtn);
+                    var clearCacheItem = toolbarFlyout.Items.OfType<MenuItem>().Single(m => Equals(m.Tag, ProtonDbPlugin.ClearCacheCommandId));
+                    clearCacheItem.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+                    toolbarFlyout.Hide();
+                    await view.CommandTask;
+                    await view.CardSlotsTask;
+                    await view.DetailsSlotsTask;
+
+                    Assert.False(File.Exists(Path.Combine(tempDir.FullName, "plugin-settings", ProtonDbPlugin.CacheFileName)));
+                    Assert.Empty(firstCard.PluginBadges);
+                    Assert.Contains("Cleared", view.FindControl<TextBlock>("SyncStatus")!.Text, StringComparison.Ordinal);
+
+                    // Execute lazy command and throwing command cleanly via toolbar flyout.
+                    toolbarFlyout.ShowAt(toolbarBtn);
+                    var pingItem = toolbarFlyout.Items.OfType<MenuItem>().Single(m => Equals(m.Tag, "smoke.lazy.ping"));
+                    pingItem.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+                    toolbarFlyout.Hide();
+                    await view.CommandTask;
+                    Assert.Contains("Lazy pong for library", view.FindControl<TextBlock>("SyncStatus")!.Text, StringComparison.Ordinal);
+
+                    toolbarFlyout.ShowAt(toolbarBtn);
+                    var boomItem = toolbarFlyout.Items.OfType<MenuItem>().Single(m => Equals(m.Tag, "smoke.boom"));
+                    boomItem.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+                    toolbarFlyout.Hide();
+                    await view.CommandTask;
+                    Assert.Contains(host.GetRecords(), r => r.Descriptor.Id == "smoke.throwing-command" && r.State == PluginLifecycleState.Faulted);
+
+                    // Faulted command disappears from flyout; Steam sync command refreshes library cleanly.
+                    toolbarFlyout.ShowAt(toolbarBtn);
+                    Assert.DoesNotContain(toolbarFlyout.Items.OfType<MenuItem>(), m => Equals(m.Tag, "smoke.boom"));
+                    var steamSyncItem = toolbarFlyout.Items.OfType<MenuItem>().Single(m => Equals(m.Tag, SteamPlugin.SyncCommandId));
+                    steamSyncItem.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+                    toolbarFlyout.Hide();
+                    await view.CommandTask;
+                    Assert.Contains("Steam sync", view.FindControl<TextBlock>("SyncStatus")!.Text, StringComparison.OrdinalIgnoreCase);
+                }
+                finally
+                {
+                    window.Close();
+                    await view.UnloadTask;
+                    model.Dispose();
+                }
+            }, token);
+        }
+        finally
+        {
+            tempDir.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task LibraryGridView_game_flyout_lazy_check_hides_non_matching_and_toggling_providers_updates_visibility()
+    {
+        var token = TestContext.Current.CancellationToken;
+        var tempDir = Directory.CreateTempSubdirectory("playnite-cmd-visibility-");
+        try
+        {
+            var dbPath = Path.Combine(tempDir.FullName, "library.sqlite");
+            var database = await LibraryDatabase.OpenAsync(dbPath, token);
+            await database.WriteAsync(async session =>
+            {
+                await session.Games.AddAsync(new StoredGame(new Game(Guid.NewGuid(), "snes-only", "Super Metroid")
+                {
+                    PluginId = SnesRomProfile.SourceId,
+                    IsInstalled = true,
+                }));
+                return true;
+            }, token);
+
+            var lazyCmdLoads = 0;
+            const string lazyPluginId = "smoke.lazy-mixed-commands";
+            using var host = new PluginHost(PluginSurface.Core | PluginSurface.Desktop);
+            host.RegisterBuiltIn(new SnesRomPlugin());
+            host.RegisterLazy(
+                new PluginDescriptor(
+                    lazyPluginId,
+                    Guid.Empty,
+                    "Lazy Mixed Commands",
+                    new Version(1, 0, 0),
+                    PluginLoadKind.ExternalAssembly,
+                    PluginSurface.Desktop,
+                    PluginCapabilityKind.Commands,
+                    new PluginEntryPoints(Desktop: "lazy-mixed.dll")),
+                () =>
+                {
+                    lazyCmdLoads++;
+                    return new MixedCommandsPlugin(lazyPluginId, StoreCatalog.SteamPluginId);
+                });
+
+            await WithHeadlessUiAsync(async () =>
+            {
+                var opener = new FakeOpener();
+                var model = new LibraryViewModel(dbPath, host, ownsPlugins: false);
+                var view = new LibraryGridView(new SteamPlayRequest(opener), fullscreenPreview: false);
+                var window = new Window { Width = 1200, Height = 720, Content = view };
+                try
+                {
+                    await model.LoadAsync(token);
+                    window.Show();
+                    view.Apply(model);
+                    await view.CardSlotsTask;
+                    await view.DetailsSlotsTask;
+
+                    var toolbarBtn = view.FindControl<Button>("PluginActionsButton")!;
+                    var gameBtn = view.FindControl<Button>("GamePluginActionsButton")!;
+                    var gameFlyout = (MenuFlyout)gameBtn.Flyout!;
+
+                    // Before opening any flyout, lazy Commands-only plugin stays Registered and buttons stay optimistically visible.
+                    Assert.True(toolbarBtn.IsVisible);
+                    Assert.True(gameBtn.IsVisible);
+                    Assert.Equal(0, lazyCmdLoads);
+
+                    // Opening game flyout on a non-Steam game activates lazy Commands plugin, finds zero matching commands, and hides on close.
+                    gameFlyout.ShowAt(gameBtn);
+                    Assert.Equal(1, lazyCmdLoads);
+                    Assert.All(gameFlyout.Items.OfType<MenuItem>(), m => Assert.False(m.IsEnabled));
+                    gameFlyout.Hide();
+                    Assert.False(gameBtn.IsVisible);
+
+                    // Disabling the sole command provider via PluginManagerWindow hides PluginActionsButton; re-enabling restores it.
+                    view.FindControl<Button>("PluginsButton")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                    PumpUntil(() => window.OwnedWindows.OfType<PluginManagerWindow>().Any(), token);
+                    var manager = window.OwnedWindows.OfType<PluginManagerWindow>().Single();
+                    var list = manager.FindControl<ListBox>("PluginList")!;
+                    list.SelectedItem = list.Items.OfType<ListBoxItem>().Single(i => Equals(i.Tag, lazyPluginId));
+                    Dispatcher.UIThread.RunJobs();
+                    manager.FindControl<CheckBox>("EnabledToggle")!.IsChecked = false;
+                    manager.FindControl<Button>("CloseButton")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                    await view.PluginsDialogTask;
+                    Assert.False(toolbarBtn.IsVisible);
+
+                    view.FindControl<Button>("PluginsButton")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                    PumpUntil(() => window.OwnedWindows.OfType<PluginManagerWindow>().Any(), token);
+                    var manager2 = window.OwnedWindows.OfType<PluginManagerWindow>().Single();
+                    var list2 = manager2.FindControl<ListBox>("PluginList")!;
+                    list2.SelectedItem = list2.Items.OfType<ListBoxItem>().Single(i => Equals(i.Tag, lazyPluginId));
+                    Dispatcher.UIThread.RunJobs();
+                    manager2.FindControl<CheckBox>("EnabledToggle")!.IsChecked = true;
+                    manager2.FindControl<Button>("CloseButton")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                    await view.PluginsDialogTask;
+                    Assert.True(toolbarBtn.IsVisible);
+                }
+                finally
+                {
+                    window.Close();
+                    await view.UnloadTask;
+                    model.Dispose();
+                }
+            }, token);
+        }
+        finally
+        {
+            tempDir.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task LibraryGridView_heroic_sync_command_publishes_event_rebuilds_rows_and_guards_concurrent_clicks()
+    {
+        var token = TestContext.Current.CancellationToken;
+        var tempDir = Directory.CreateTempSubdirectory("playnite-heroic-cmd-");
+        try
+        {
+            var dbPath = Path.Combine(tempDir.FullName, "library.sqlite");
+            _ = await LibraryDatabase.OpenAsync(dbPath, token);
+
+            var syncEvents = new List<string>();
+            var slowGate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            var slowPlugin = new SlowToolbarCommandPlugin("smoke.slow-cmd", "slow.run", "Slow Run", slowGate);
+
+            using var host = DesktopPluginHostFactory.CreateForLibrary(
+                dbPath,
+                heroicSync: new AddingHeroicSync(dbPath));
+            Assert.True(host.RegisterBuiltIn(new SyncEventRecorderPlugin(syncEvents)));
+            Assert.True(host.RegisterBuiltIn(slowPlugin));
+
+            await WithHeadlessUiAsync(async () =>
+            {
+                var opener = new FakeOpener();
+                var model = new LibraryViewModel(dbPath, host, ownsPlugins: false);
+                var view = new LibraryGridView(new SteamPlayRequest(opener), fullscreenPreview: false);
+                var window = new Window { Width = 1200, Height = 720, Content = view };
+                try
+                {
+                    await model.LoadAsync(token);
+                    window.Show();
+                    view.Apply(model);
+                    await view.CardSlotsTask;
+                    await view.DetailsSlotsTask;
+                    Assert.Empty(model.Rows);
+
+                    var toolbarBtn = view.FindControl<Button>("PluginActionsButton")!;
+                    var toolbarFlyout = (MenuFlyout)toolbarBtn.Flyout!;
+
+                    // Execute heroic.sync command from PluginActionsButton -> adds Heroic row, rebuilds UI, publishes LibrarySynced.
+                    toolbarFlyout.ShowAt(toolbarBtn);
+                    var heroicItem = toolbarFlyout.Items.OfType<MenuItem>().Single(m => Equals(m.Tag, HeroicPlugin.SyncCommandId));
+                    heroicItem.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+                    toolbarFlyout.Hide();
+                    await view.CommandTask;
+                    Assert.Contains(PluginEvents.LibrarySynced, syncEvents);
+                    var addedRow = Assert.Single(model.Rows);
+                    Assert.Equal("Heroic Added Game", addedRow.Name);
+                    Assert.Single(view.FindControl<ListBox>("GameList")!.Items);
+
+                    // While a slow command is in flight (commandPending), a second click does not clobber CommandTask or double-run.
+                    toolbarFlyout.ShowAt(toolbarBtn);
+                    var slowItem = toolbarFlyout.Items.OfType<MenuItem>().Single(m => Equals(m.Tag, "slow.run"));
+                    slowItem.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+                    var inFlightTask = view.CommandTask;
+                    Assert.False(inFlightTask.IsCompleted);
+                    slowItem.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+                    Assert.Same(inFlightTask, view.CommandTask);
+                    toolbarFlyout.Hide();
+
+                    slowGate.SetResult();
+                    await inFlightTask;
+                    Assert.Equal(1, slowPlugin.ExecutionCount);
+                }
+                finally
+                {
+                    slowGate.TrySetResult();
+                    window.Close();
+                    await view.UnloadTask;
+                    model.Dispose();
+                }
+            }, token);
+        }
+        finally
+        {
+            tempDir.Delete(recursive: true);
+        }
+    }
+
     private static void PumpUntil(Func<bool> condition, CancellationToken token, int timeoutMs = 5000)
     {
         var deadline = Environment.TickCount64 + timeoutMs;
@@ -1478,6 +1858,90 @@ public sealed class PluginArchitectureIntegrationTests
             Task.FromResult(new HeroicSyncResult(1, 0, 0, 0, 0, [], Reconciled: true, RootFound: true));
     }
 
+    private sealed class AddingHeroicSync(string dbPath) : ILibraryHeroicSync
+    {
+        public async Task<HeroicSyncResult> SyncAsync(string databasePath, CancellationToken cancellationToken)
+        {
+            var database = await LibraryDatabase.OpenAsync(dbPath, cancellationToken);
+            await database.WriteAsync(async session =>
+            {
+                await session.Games.AddAsync(new StoredGame(new Game(Guid.NewGuid(), "epic-added-1", "Heroic Added Game")
+                {
+                    PluginId = StoreCatalog.EpicPluginId,
+                    IsInstalled = true,
+                }));
+                return true;
+            }, cancellationToken);
+            return new HeroicSyncResult(1, 0, 0, 0, 0, [], Reconciled: true, RootFound: true);
+        }
+    }
+
+    private sealed class SlowToolbarCommandPlugin(
+        string pluginId,
+        string commandId,
+        string label,
+        TaskCompletionSource gate) : IPlaynitePlugin, ICommandCapability
+    {
+        private int executionCount;
+
+        public int ExecutionCount => Volatile.Read(ref executionCount);
+
+        public PluginDescriptor Descriptor { get; } = new(
+            pluginId,
+            Guid.Empty,
+            label,
+            new Version(1, 0, 0),
+            PluginLoadKind.BuiltIn,
+            PluginSurface.Desktop,
+            PluginCapabilityKind.Commands,
+            new PluginEntryPoints());
+
+        public IReadOnlyList<PluginCommandDescriptor> Commands =>
+            [new(commandId, pluginId, label, PluginCommandPlacement.LibraryToolbar)];
+
+        public PluginRegistration Setup(PluginContext context) => new()
+        {
+            CommandProviders = [this],
+        };
+
+        public async Task<PluginCommandResult> ExecuteAsync(
+            string id,
+            PluginCommandContext context,
+            CancellationToken cancellationToken)
+        {
+            Interlocked.Increment(ref executionCount);
+            await gate.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
+            return new PluginCommandResult(true, "Slow done");
+        }
+    }
+
+    private sealed class MixedCommandsPlugin(string pluginId, Guid targetSourceId) : IPlaynitePlugin, ICommandCapability
+    {
+        public PluginDescriptor Descriptor { get; } = new(
+            pluginId,
+            Guid.Empty,
+            "Mixed Commands",
+            new Version(1, 0, 0),
+            PluginLoadKind.ExternalAssembly,
+            PluginSurface.Desktop,
+            PluginCapabilityKind.Commands,
+            new PluginEntryPoints(Desktop: "lazy-mixed.dll"));
+
+        public IReadOnlyList<PluginCommandDescriptor> Commands { get; } =
+        [
+            new("mixed.game", pluginId, "Steam Only Game Action", PluginCommandPlacement.GameContext, targetSourceId),
+            new("mixed.toolbar", pluginId, "Mixed Toolbar Action", PluginCommandPlacement.LibraryToolbar),
+        ];
+
+        public PluginRegistration Setup(PluginContext context) => new()
+        {
+            CommandProviders = [this],
+        };
+
+        public Task<PluginCommandResult> ExecuteAsync(string commandId, PluginCommandContext context, CancellationToken cancellationToken) =>
+            Task.FromResult(new PluginCommandResult(true, "ok"));
+    }
+
     private sealed class SyncEventRecorderPlugin(List<string> events) : IPlaynitePlugin, IEventHookCapability
     {
         public PluginDescriptor Descriptor { get; } = new(
@@ -1675,6 +2139,44 @@ public sealed class PluginArchitectureIntegrationTests
         {
             Settings = this,
         };
+    }
+
+    private sealed class SmokeCommandPlugin(
+        string pluginId,
+        string commandId,
+        string label,
+        bool shouldThrow) : IPlaynitePlugin, ICommandCapability
+    {
+        public PluginDescriptor Descriptor { get; } = new(
+            pluginId,
+            Guid.Empty,
+            label,
+            new Version(1, 0, 0),
+            PluginLoadKind.BuiltIn,
+            PluginSurface.Desktop,
+            PluginCapabilityKind.Commands,
+            new PluginEntryPoints());
+
+        public IReadOnlyList<PluginCommandDescriptor> Commands =>
+            [new(commandId, pluginId, label, PluginCommandPlacement.LibraryToolbar)];
+
+        public PluginRegistration Setup(PluginContext context) => new()
+        {
+            CommandProviders = [this],
+        };
+
+        public Task<PluginCommandResult> ExecuteAsync(
+            string id,
+            PluginCommandContext context,
+            CancellationToken cancellationToken)
+        {
+            if (shouldThrow)
+            {
+                throw new InvalidOperationException("Simulated command crash");
+            }
+
+            return Task.FromResult(new PluginCommandResult(true, $"Lazy pong for library ({Path.GetFileName(context.DatabasePath)})"));
+        }
     }
 }
 
