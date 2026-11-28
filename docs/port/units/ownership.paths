@@ -140,6 +140,9 @@ src/Playnite.Core/Settings/SettingsMigration.cs	p4-004	a6f8bfc7e3cf94a37c5c043da
 src/Playnite.Core/Settings/SettingsService.cs	p6-004	c5ac0c7707f33702aa490b442a9aba983c9280bd	pull/181
 src/Playnite.Core/Settings/SettingsStorage.cs	p6-004	c5ac0c7707f33702aa490b442a9aba983c9280bd	pull/181
 src/Playnite.Core/Settings/V10SettingsProperties.cs	p4-004	704b7b83e69aee31ebfd5f32c83eccee8e0ae657	pull/89
+src/Playnite.Core/Themes/ThemePackCatalog.cs	p7-004	924b0dfa67b371fe4bdc0eba2b05e26862532bcf	pull/269
+src/Playnite.Core/Themes/ThemePackModels.cs	p7-004	924b0dfa67b371fe4bdc0eba2b05e26862532bcf	pull/269
+src/Playnite.Core/Themes/ThemePackParser.cs	p7-004	924b0dfa67b371fe4bdc0eba2b05e26862532bcf	pull/269
 src/Playnite.Core/UriHandling/PlayniteUriRoute.cs	p6-007	b80847be88f268b4b72bb34a92b8fba08a7623cb	pull/201
 src/Playnite.Core/UriHandling/UriHandlerApi.cs	p6-007	b80847be88f268b4b72bb34a92b8fba08a7623cb	pull/201
 src/Playnite.Desktop/App.cs	p2-004	34af4f0fb6430fbc585d3b76ce85094390a26467	pull/34
@@ -227,12 +230,14 @@ src/Playnite.Desktop/p7-004/Shell/LibraryViewModel.cs	p7-004	f8046e32955493a1fc3
 src/Playnite.Desktop/p7-004/Shell/LunaGameEditorWindow.axaml	p7-004	da44229a9e3e6ff9aa656017e2529a19adc1fdd7	pull/256
 src/Playnite.Desktop/p7-004/Shell/LunaGameEditorWindow.axaml.cs	p7-004	da44229a9e3e6ff9aa656017e2529a19adc1fdd7	pull/256
 src/Playnite.Desktop/p7-004/Shell/LunaPlayRequest.cs	p7-004	da44229a9e3e6ff9aa656017e2529a19adc1fdd7	pull/256
-src/Playnite.Desktop/p7-004/Shell/PluginManagerWindow.axaml	p7-004	09061ffc2ca42cdefc80057b8fd2ffcf7da25dd5	pull/267
-src/Playnite.Desktop/p7-004/Shell/PluginManagerWindow.axaml.cs	p7-004	09061ffc2ca42cdefc80057b8fd2ffcf7da25dd5	pull/267
+src/Playnite.Desktop/p7-004/Shell/PluginManagerWindow.axaml	p7-004	924b0dfa67b371fe4bdc0eba2b05e26862532bcf	pull/269
+src/Playnite.Desktop/p7-004/Shell/PluginManagerWindow.axaml.cs	p7-004	924b0dfa67b371fe4bdc0eba2b05e26862532bcf	pull/269
 src/Playnite.Desktop/p7-004/Shell/SnesRomProfile.cs	p7-004	b99124c00b9d6d7d3d94a3ec3037639ba96e5b4d	pull/257
 src/Playnite.Desktop/p7-004/Shell/StoreCatalog.cs	p7-004	da44229a9e3e6ff9aa656017e2529a19adc1fdd7	pull/256
 src/Playnite.Desktop/p7-004/Shell/TitlePreferenceWindow.axaml	p7-004	db6a8fa8c2b0f062278ee2e94d2b6a23b4e284e2	pull/252
 src/Playnite.Desktop/p7-004/Shell/TitlePreferenceWindow.axaml.cs	p7-004	db6a8fa8c2b0f062278ee2e94d2b6a23b4e284e2	pull/252
+src/Playnite.Desktop/p7-004/Themes/DesktopThemeCatalogFactory.cs	p7-004	924b0dfa67b371fe4bdc0eba2b05e26862532bcf	pull/269
+src/Playnite.Desktop/p7-004/Themes/LiveThemeManager.cs	p7-004	924b0dfa67b371fe4bdc0eba2b05e26862532bcf	pull/269
 src/Playnite.Desktop/p7-005/Shell/ContentHostView.axaml	p7-005	0c9f5d22929818d59b9d0902fa50aa63219e3fc1	pull/227
 src/Playnite.Desktop/p7-005/Shell/ContentHostView.axaml.cs	p7-005	a4e9bcf3c618b54369144a6427fd3238331c41f1	pull/261
 src/Playnite.Desktop/p7-005/Shell/GameEditStore.cs	p7-005	0c9f5d22929818d59b9d0902fa50aa63219e3fc1	pull/227
@@ -537,6 +542,7 @@ tests/Playnite.Core.Tests/Steam/SteamPortalTests.cs	p5-008	c72614dda10fc9fa89995
 tests/Playnite.Core.Tests/Steam/SteamRealCorpusDiscoveryTests.cs	p5-002	f82c3d46ae122098228dc34349fbd955cafa8177	pull/146
 tests/Playnite.Core.Tests/TestDoubles/MemoryEnvironment.cs	*	d6401f1f07c69474d0ce395797ab694bedf019e7	pull/68
 tests/Playnite.Core.Tests/TestDoubles/MemoryFileSystem.cs	*	d6401f1f07c69474d0ce395797ab694bedf019e7	pull/68
+tests/Playnite.Core.Tests/Themes/ThemePackParserTests.cs	p7-004	924b0dfa67b371fe4bdc0eba2b05e26862532bcf	pull/269
 tests/Playnite.Core.Tests/UriHandling/Fakes.cs	p6-007	b80847be88f268b4b72bb34a92b8fba08a7623cb	pull/201
 tests/Playnite.Core.Tests/UriHandling/PlayniteUriRouteTests.cs	p6-007	b80847be88f268b4b72bb34a92b8fba08a7623cb	pull/201
 tests/Playnite.Core.Tests/UriHandling/UriHandlerApiTests.cs	p6-007	b80847be88f268b4b72bb34a92b8fba08a7623cb	pull/201
@@ -571,6 +577,7 @@ tests/Playnite.Smoke.Tests/p7-004/LibraryExperienceSmokeTests.cs	p7-004	adfc7461
 tests/Playnite.Smoke.Tests/p7-004/MultiStoreExperienceSmokeTests.cs	p7-004	db6a8fa8c2b0f062278ee2e94d2b6a23b4e284e2	pull/252
 tests/Playnite.Smoke.Tests/p7-004/PluginArchitectureIntegrationTests.cs	p7-004	f8046e32955493a1fc366766dd5cc88edc057510	pull/265
 tests/Playnite.Smoke.Tests/p7-004/SteamPlaySmokeTests.cs	p7-004	6c8e1374ca543ca3cb9d4134071a5842328ac1b3	pull/242
+tests/Playnite.Smoke.Tests/p7-004/ThemePackIntegrationTests.cs	p7-004	924b0dfa67b371fe4bdc0eba2b05e26862532bcf	pull/269
 tests/Playnite.Smoke.Tests/p7-007/TrayProtocolKeyboardTests.cs	p7-007	1b31e11d19bbd402d54cca05d5cb3f3de9f4463e	pull/233
 tests/Playnite.Smoke.Tests/p7-008/ScreenBaselineTests.cs	p7-008	b59f838d9158260091370ef9d7b6afa8274f726d	pull/238
 tests/Playnite.Smoke.Tests/p7-009/FirstTimeSetupSmokeTests.cs	p7-009	724ba6c7f22cba17fcbc4e08b575e316086d84b8	pull/240
