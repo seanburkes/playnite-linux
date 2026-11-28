@@ -157,10 +157,13 @@ public sealed partial class PluginManagerWindow
 
     private void RefreshPackages(string? preferredId)
     {
+        var diagnostics = this.FindControl<TextBlock>("PackageDiagnostics")!;
         try
         {
+            var warnings = new List<string>();
             var packages = installer!.GetPackages(
-                (id, error) => packageStatus.Text = $"Could not read package '{id}': {error}");
+                (id, error) => warnings.Add($"Could not read package '{id}': {error}"));
+            diagnostics.Text = string.Join(Environment.NewLine, warnings);
             packageList.ItemsSource = packages;
             packageList.SelectedItem = packages.FirstOrDefault(package => package.Id == preferredId)
                 ?? packages.FirstOrDefault();
@@ -168,7 +171,7 @@ public sealed partial class PluginManagerWindow
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
             Console.Error.WriteLine($"addon-package: {exception.Message}");
-            packageStatus.Text = $"Could not list packages: {exception.Message}";
+            diagnostics.Text = $"Could not list packages: {exception.Message}";
             packageList.ItemsSource = null;
         }
         RefreshPackageButtons();

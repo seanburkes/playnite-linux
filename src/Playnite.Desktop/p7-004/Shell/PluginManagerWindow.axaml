@@ -194,8 +194,12 @@
               <Button x:Name="CancelUninstallPackageButton" Classes="secondary-cta" Content="Cancel uninstall"
                       IsVisible="False" AutomationProperties.Name="Cancel add-on uninstall" />
             </WrapPanel>
-            <TextBlock Grid.Row="3" x:Name="PackageStatus" TextWrapping="Wrap"
-                       AutomationProperties.LiveSetting="Assertive" AutomationProperties.Name="Add-on package status" />
+            <StackPanel Grid.Row="3" Spacing="4">
+              <TextBlock x:Name="PackageStatus" TextWrapping="Wrap"
+                         AutomationProperties.LiveSetting="Assertive" AutomationProperties.Name="Add-on package status" />
+              <TextBlock x:Name="PackageDiagnostics" TextWrapping="Wrap" Classes="muted"
+                         AutomationProperties.LiveSetting="Polite" AutomationProperties.Name="Add-on package diagnostics" />
+            </StackPanel>
           </Grid>
         </TabItem>
       </TabControl>

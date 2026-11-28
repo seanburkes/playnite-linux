@@ -39,6 +39,7 @@ public sealed class PluginHost : IDisposable
     private readonly Dictionary<string, PluginEntry> entriesById = new(StringComparer.Ordinal);
     private readonly List<string> registrationOrder = [];
     private readonly List<PluginDiagnostic> diagnostics = [];
+    private readonly Dictionary<string, IDisposable> packageUsage = new(StringComparer.Ordinal);
 
     private readonly Dictionary<Guid, (string PluginId, LibrarySourceInfo Source)> sourceIndex = [];
     private readonly Dictionary<Guid, string> lazySourceOwners = [];
@@ -410,25 +411,28 @@ public sealed class PluginHost : IDisposable
         var packages = new AddonInstaller(new AddonInstallLayout(fullRoot), regularFileProbe);
         try
         {
-            foreach (var (package, directory) in packages.GetActivePackageDirectories(
-                         (id, message) => discoveryDiagnostics.Add(new PluginDiagnostic(id, "invalid-package-state", message))))
+            if (HoldPackageUsage(packages))
             {
-                try
+                foreach (var (package, directory) in packages.GetActivePackageDirectories(
+                             (id, message) => discoveryDiagnostics.Add(new PluginDiagnostic(id, "invalid-package-state", message))))
                 {
-                    var descriptor = packages.ReadPackageDescriptor(directory);
-                    if (descriptor.Id != package.Id || descriptor.Version != package.Version)
+                    try
                     {
-                        throw new InvalidDataException("The installed package manifest does not match its recorded id and version.");
+                        var descriptor = packages.ReadPackageDescriptor(directory);
+                        if (descriptor.Id != package.Id || descriptor.Version != package.Version)
+                        {
+                            throw new InvalidDataException("The installed package manifest does not match its recorded id and version.");
+                        }
+                        RegisterExternalDescriptor(descriptor, directory, regularFileProbe, discovered, discoveryDiagnostics);
                     }
-                    RegisterExternalDescriptor(descriptor, directory, regularFileProbe, discovered, discoveryDiagnostics);
-                }
-                catch (Exception exception) when (exception is IOException or InvalidDataException or UnauthorizedAccessException)
-                {
-                    discoveryDiagnostics.Add(new PluginDiagnostic(package.Id, "invalid-package", exception.Message));
+                    catch (Exception exception) when (exception is IOException or InvalidDataException or UnauthorizedAccessException)
+                    {
+                        discoveryDiagnostics.Add(new PluginDiagnostic(package.Id, "invalid-package", exception.Message));
+                    }
                 }
             }
         }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidDataException)
         {
             discoveryDiagnostics.Add(new PluginDiagnostic(string.Empty, "package-read-failed", exception.Message));
         }
@@ -445,6 +449,25 @@ public sealed class PluginHost : IDisposable
         }
 
         return new PluginDiscoveryResult(discovered, discoveryDiagnostics);
+    }
+
+    private bool HoldPackageUsage(AddonInstaller installer)
+    {
+        lock (gate)
+        {
+            ThrowIfDisposed();
+            var root = installer.Layout.RootPath;
+            if (packageUsage.ContainsKey(root))
+            {
+                return true;
+            }
+            if (installer.AcquirePackageUsage() is not { } lease)
+            {
+                return false;
+            }
+            packageUsage.Add(root, lease);
+            return true;
+        }
     }
 
     /// <summary>Materializes and activates a registered or faulted plugin by identifier.</summary>
@@ -1584,6 +1607,7 @@ public sealed class PluginHost : IDisposable
     public void Dispose()
     {
         List<PluginEntry> toDispose;
+        IDisposable[] leases;
         lock (gate)
         {
             if (disposed)
@@ -1605,13 +1629,25 @@ public sealed class PluginHost : IDisposable
             uiSlotIndex.Clear();
             metadataIndex.Clear();
             settingsIndex.Clear();
+            leases = packageUsage.Values.ToArray();
+            packageUsage.Clear();
         }
 
-        foreach (var entry in toDispose)
+        try
         {
-            lock (entry.ActivationGate)
+            foreach (var entry in toDispose)
             {
-                DisposeEntryArtifacts(entry, markDisposed: true);
+                lock (entry.ActivationGate)
+                {
+                    DisposeEntryArtifacts(entry, markDisposed: true);
+                }
+            }
+        }
+        finally
+        {
+            foreach (var lease in leases)
+            {
+                lease.Dispose();
             }
         }
     }
