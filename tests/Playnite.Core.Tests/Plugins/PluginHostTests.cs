@@ -1114,6 +1114,119 @@ public sealed class PluginHostTests
         }
     }
 
+    [Fact]
+    public async Task PluginHost_validates_sanitizes_and_isolates_lazy_commands()
+    {
+        var token = TestContext.Current.CancellationToken;
+        var lazyCalls = 0;
+        using var host = new PluginHost(PluginSurface.Core | PluginSurface.Desktop);
+
+        var lazyDesc = new PluginDescriptor(
+            "test.lazy-cmd",
+            Guid.Empty,
+            "Lazy Commands",
+            new Version(1, 0, 0),
+            PluginLoadKind.ExternalAssembly,
+            PluginSurface.Desktop,
+            PluginCapabilityKind.Commands,
+            new PluginEntryPoints(Desktop: "lazy-cmd.dll"));
+        host.RegisterLazy(lazyDesc, () =>
+        {
+            lazyCalls++;
+            return new SanitizedCommandPlugin("test.lazy-cmd");
+        });
+
+        // Non-materializing check sees pending lazy command provider without waking it.
+        Assert.True(host.HasCommandProviders(PluginCommandPlacement.LibraryToolbar));
+        Assert.True(host.HasCommandProviders(PluginCommandPlacement.GameContext));
+        Assert.Empty(host.GetCommands(PluginCommandPlacement.LibraryToolbar, activateLazy: false));
+        Assert.Equal(0, lazyCalls);
+
+        // Activating lazily indexes sanitized descriptor (trimmed id/label, normalized source, enforced PluginId).
+        var commands = host.GetCommands(PluginCommandPlacement.LibraryToolbar, activateLazy: true);
+        Assert.Equal(1, lazyCalls);
+        var cmd = Assert.Single(commands);
+        Assert.Equal("lazy.refresh", cmd.Id);
+        Assert.Equal("Lazy Refresh", cmd.Label);
+        Assert.Equal("test.lazy-cmd", cmd.PluginId);
+        Assert.Null(cmd.SourceId);
+
+        // Control chars stripped from result Message and RefreshLibrary/RefreshSlots preserved.
+        var dbGameId = Guid.NewGuid();
+        var result = await host.ExecuteCommandAsync(
+            "  lazy.refresh  ",
+            new PluginCommandContext(dbGameId, DatabasePath: "/tmp/lib.sqlite"),
+            token);
+        Assert.True(result.Succeeded);
+        Assert.Equal("Refreshed ok", result.Message);
+        Assert.True(result.RefreshSlots);
+        Assert.False(result.RefreshLibrary);
+
+        // Invalid commands rejected: blank Id, control char Id, >32 commands, duplicate within plugin.
+        Assert.False(host.RegisterBuiltIn(new InvalidCommandPlugin("test.bad-cmd-blank", new PluginCommandDescriptor("  ", "test.bad-cmd-blank", "Label", PluginCommandPlacement.LibraryToolbar))));
+        Assert.False(host.RegisterBuiltIn(new InvalidCommandPlugin("test.bad-cmd-ctrl", new PluginCommandDescriptor("bad\nid", "test.bad-cmd-ctrl", "Label", PluginCommandPlacement.LibraryToolbar))));
+        Assert.False(host.RegisterBuiltIn(new OverflowCommandPlugin("test.cmd-overflow")));
+        Assert.Contains(host.GetRecords(), r => r.Descriptor.Id == "test.cmd-overflow" && r.State == PluginLifecycleState.Faulted);
+
+        // Null return from ExecuteAsync faults cleanly without crashing.
+        Assert.True(host.RegisterBuiltIn(new NullResultCommandPlugin("test.null-cmd")));
+        var nullResult = await host.ExecuteCommandAsync("null.cmd", new PluginCommandContext(null), token);
+        Assert.False(nullResult.Succeeded);
+        Assert.Contains(host.GetRecords(), r => r.Descriptor.Id == "test.null-cmd" && r.State == PluginLifecycleState.Faulted);
+        Assert.Contains(host.GetDiagnostics("test.null-cmd"), d => d.Code == "command-failed");
+
+        // Disable removes commands cleanly without re-querying Commands property.
+        var disableSafe = new DisableSafeCommandPlugin("test.disable-cmd");
+        Assert.True(host.RegisterBuiltIn(disableSafe));
+        Assert.Contains(host.GetCommands(), c => c.Id == "disable.safe");
+        disableSafe.ThrowOnCommands = true;
+        Assert.True(host.Disable("test.disable-cmd"));
+        Assert.DoesNotContain(host.GetCommands(), c => c.Id == "disable.safe");
+    }
+
+    [Fact]
+    public async Task PluginHost_command_execution_hits_active_index_without_waking_lazy_and_isolates_conflicts()
+    {
+        var token = TestContext.Current.CancellationToken;
+        var unrelatedLazyCalls = 0;
+        using var host = new PluginHost(PluginSurface.Core | PluginSurface.Desktop);
+
+        Assert.True(host.RegisterBuiltIn(new DuplicateCommandPlugin("test.first-owner", "shared.cmd")));
+        host.RegisterLazy(
+            new PluginDescriptor(
+                "test.unrelated-lazy-cmd",
+                Guid.Empty,
+                "Unrelated Lazy Command",
+                new Version(1, 0, 0),
+                PluginLoadKind.ExternalAssembly,
+                PluginSurface.Desktop,
+                PluginCapabilityKind.Commands,
+                new PluginEntryPoints(Desktop: "unrelated-lazy-cmd.dll")),
+            () =>
+            {
+                unrelatedLazyCalls++;
+                return new DuplicateCommandPlugin("test.unrelated-lazy-cmd", "unrelated.cmd");
+            });
+
+        // Hit-first dispatch executes active command without activating unrelated pending lazy plugins.
+        var result = await host.ExecuteCommandAsync("shared.cmd", new PluginCommandContext(null), token);
+        Assert.True(result.Succeeded);
+        Assert.Equal("ok:test.first-owner", result.Message);
+        Assert.Equal(0, unrelatedLazyCalls);
+
+        // Duplicate command ID from a second plugin conflicts cleanly without disturbing the first owner.
+        Assert.False(host.RegisterBuiltIn(new DuplicateCommandPlugin("test.second-owner", "shared.cmd")));
+        Assert.Contains(host.GetRecords(), r => r.Descriptor.Id == "test.second-owner" && r.State == PluginLifecycleState.Faulted);
+        Assert.Contains(host.GetDiagnostics("test.second-owner"), d => d.Code == "capability-conflict");
+        var stillFirst = await host.ExecuteCommandAsync("shared.cmd", new PluginCommandContext(null), token);
+        Assert.Equal("ok:test.first-owner", stillFirst.Message);
+
+        // Throwing ICommandCapability.Commands getter faults cleanly as activation-failed outside lock.
+        Assert.False(host.RegisterBuiltIn(new ThrowingCommandsGetterPlugin("test.throwing-getter")));
+        Assert.Contains(host.GetRecords(), r => r.Descriptor.Id == "test.throwing-getter" && r.State == PluginLifecycleState.Faulted);
+        Assert.Contains(host.GetDiagnostics("test.throwing-getter"), d => d.Code == "activation-failed");
+    }
+
     private sealed class AlwaysRegularFileProbe : IRegularFileProbe
     {
         public bool IsRegularFile(string path) => true;
@@ -1605,6 +1718,184 @@ public sealed class PluginHostTests
         {
             Settings = this,
         };
+    }
+
+    private sealed class SanitizedCommandPlugin(string pluginId) : IPlaynitePlugin, ICommandCapability
+    {
+        public PluginDescriptor Descriptor { get; } = new(
+            pluginId,
+            Guid.Empty,
+            "Sanitized Commands",
+            new Version(1, 0, 0),
+            PluginLoadKind.BuiltIn,
+            PluginSurface.Core | PluginSurface.Desktop,
+            PluginCapabilityKind.Commands,
+            new PluginEntryPoints());
+
+        public IReadOnlyList<PluginCommandDescriptor> Commands =>
+        [
+            new("  lazy.refresh  ", "spoofed.other.id", "  Lazy\u0007 Refresh  ", PluginCommandPlacement.LibraryToolbar, Guid.Empty),
+        ];
+
+        public PluginRegistration Setup(PluginContext context) => new()
+        {
+            CommandProviders = [this],
+        };
+
+        public Task<PluginCommandResult> ExecuteAsync(
+            string commandId,
+            PluginCommandContext context,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(new PluginCommandResult(true, "Refreshed\u0007 ok\n", RefreshSlots: true));
+    }
+
+    private sealed class InvalidCommandPlugin(string pluginId, PluginCommandDescriptor badDescriptor)
+        : IPlaynitePlugin, ICommandCapability
+    {
+        public PluginDescriptor Descriptor { get; } = new(
+            pluginId,
+            Guid.Empty,
+            pluginId,
+            new Version(1, 0, 0),
+            PluginLoadKind.BuiltIn,
+            PluginSurface.Desktop,
+            PluginCapabilityKind.Commands,
+            new PluginEntryPoints());
+
+        public IReadOnlyList<PluginCommandDescriptor> Commands => [badDescriptor];
+
+        public PluginRegistration Setup(PluginContext context) => new()
+        {
+            CommandProviders = [this],
+        };
+
+        public Task<PluginCommandResult> ExecuteAsync(string commandId, PluginCommandContext context, CancellationToken cancellationToken) =>
+            Task.FromResult(new PluginCommandResult(true, "ok"));
+    }
+
+    private sealed class OverflowCommandPlugin(string pluginId) : IPlaynitePlugin, ICommandCapability
+    {
+        public PluginDescriptor Descriptor { get; } = new(
+            pluginId,
+            Guid.Empty,
+            pluginId,
+            new Version(1, 0, 0),
+            PluginLoadKind.BuiltIn,
+            PluginSurface.Desktop,
+            PluginCapabilityKind.Commands,
+            new PluginEntryPoints());
+
+        public IReadOnlyList<PluginCommandDescriptor> Commands =>
+            Enumerable.Range(0, 40)
+                .Select(i => new PluginCommandDescriptor($"cmd.{i}", pluginId, $"Cmd {i}", PluginCommandPlacement.LibraryToolbar))
+                .ToArray();
+
+        public PluginRegistration Setup(PluginContext context) => new()
+        {
+            CommandProviders = [this],
+        };
+
+        public Task<PluginCommandResult> ExecuteAsync(string commandId, PluginCommandContext context, CancellationToken cancellationToken) =>
+            Task.FromResult(new PluginCommandResult(true, "ok"));
+    }
+
+    private sealed class NullResultCommandPlugin(string pluginId) : IPlaynitePlugin, ICommandCapability
+    {
+        public PluginDescriptor Descriptor { get; } = new(
+            pluginId,
+            Guid.Empty,
+            pluginId,
+            new Version(1, 0, 0),
+            PluginLoadKind.BuiltIn,
+            PluginSurface.Desktop,
+            PluginCapabilityKind.Commands,
+            new PluginEntryPoints());
+
+        public IReadOnlyList<PluginCommandDescriptor> Commands =>
+            [new("null.cmd", pluginId, "Null Return", PluginCommandPlacement.LibraryToolbar)];
+
+        public PluginRegistration Setup(PluginContext context) => new()
+        {
+            CommandProviders = [this],
+        };
+
+        public Task<PluginCommandResult> ExecuteAsync(string commandId, PluginCommandContext context, CancellationToken cancellationToken) =>
+            Task.FromResult<PluginCommandResult>(null!);
+    }
+
+    private sealed class DisableSafeCommandPlugin(string pluginId) : IPlaynitePlugin, ICommandCapability
+    {
+        public bool ThrowOnCommands { get; set; }
+
+        public PluginDescriptor Descriptor { get; } = new(
+            pluginId,
+            Guid.Empty,
+            pluginId,
+            new Version(1, 0, 0),
+            PluginLoadKind.BuiltIn,
+            PluginSurface.Desktop,
+            PluginCapabilityKind.Commands,
+            new PluginEntryPoints());
+
+        public IReadOnlyList<PluginCommandDescriptor> Commands => ThrowOnCommands
+            ? throw new InvalidOperationException("Commands property must not be re-read on Disable")
+            : [new("disable.safe", pluginId, "Safe Disable", PluginCommandPlacement.LibraryToolbar)];
+
+        public PluginRegistration Setup(PluginContext context) => new()
+        {
+            CommandProviders = [this],
+        };
+
+        public Task<PluginCommandResult> ExecuteAsync(string commandId, PluginCommandContext context, CancellationToken cancellationToken) =>
+            Task.FromResult(new PluginCommandResult(true, "ok"));
+    }
+
+    private sealed class DuplicateCommandPlugin(string pluginId, string commandId) : IPlaynitePlugin, ICommandCapability
+    {
+        public PluginDescriptor Descriptor { get; } = new(
+            pluginId,
+            Guid.Empty,
+            pluginId,
+            new Version(1, 0, 0),
+            PluginLoadKind.BuiltIn,
+            PluginSurface.Desktop,
+            PluginCapabilityKind.Commands,
+            new PluginEntryPoints());
+
+        public IReadOnlyList<PluginCommandDescriptor> Commands =>
+            [new(commandId, pluginId, "Duplicate Test", PluginCommandPlacement.LibraryToolbar)];
+
+        public PluginRegistration Setup(PluginContext context) => new()
+        {
+            CommandProviders = [this],
+        };
+
+        public Task<PluginCommandResult> ExecuteAsync(string commandId, PluginCommandContext context, CancellationToken cancellationToken) =>
+            Task.FromResult(new PluginCommandResult(true, $"ok:{pluginId}"));
+    }
+
+    private sealed class ThrowingCommandsGetterPlugin(string pluginId) : IPlaynitePlugin, ICommandCapability
+    {
+        public PluginDescriptor Descriptor { get; } = new(
+            pluginId,
+            Guid.Empty,
+            pluginId,
+            new Version(1, 0, 0),
+            PluginLoadKind.BuiltIn,
+            PluginSurface.Desktop,
+            PluginCapabilityKind.Commands,
+            new PluginEntryPoints());
+
+        public IReadOnlyList<PluginCommandDescriptor> Commands =>
+            throw new InvalidOperationException("Simulated Commands getter crash");
+
+        public PluginRegistration Setup(PluginContext context) => new()
+        {
+            CommandProviders = [this],
+        };
+
+        public Task<PluginCommandResult> ExecuteAsync(string commandId, PluginCommandContext context, CancellationToken cancellationToken) =>
+            Task.FromResult(new PluginCommandResult(true, "unreachable"));
     }
 }
 

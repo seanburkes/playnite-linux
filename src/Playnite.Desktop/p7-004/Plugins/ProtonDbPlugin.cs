@@ -17,10 +17,12 @@ internal sealed class ProtonDbPlugin(
     HttpClient? httpClient = null,
     string? cacheDirectory = null,
     IRegularFileProbe? regularFileProbe = null)
-    : IPlaynitePlugin, IUiSlotCapability, IMetadataCapability, IPluginSettingsCapability
+    : IPlaynitePlugin, IUiSlotCapability, IMetadataCapability, IPluginSettingsCapability, ICommandCapability
 {
     public const string PluginId = "playnite.builtin.protondb";
     public const string ProviderIdentifier = PluginId;
+    public const string RefreshRatingCommandId = "protondb.refresh-rating";
+    public const string ClearCacheCommandId = "protondb.clear-cache";
     public const string EnabledSettingKey = "enabled";
     public const string OnlineLookupSettingKey = "onlineLookup";
     public const string CacheFileName = "protondb-cache.json";
@@ -68,12 +70,15 @@ internal sealed class ProtonDbPlugin(
     private readonly string? normalizedCacheDirectory = NormalizeCacheDirectory(cacheDirectory);
     private readonly IRegularFileProbe? fileProbe = regularFileProbe;
     private readonly Lock cacheGate = new();
+    private readonly Lock cacheDiskGate = new();
     private readonly Dictionary<uint, LinkedListNode<(uint AppId, ProtonDbSummary Summary)>> lruIndex = new();
     private readonly LinkedList<(uint AppId, ProtonDbSummary Summary)> lruList = new();
     private readonly ConcurrentDictionary<uint, DateTimeOffset> retryAfter = new();
     private readonly ConcurrentDictionary<uint, Lazy<Task<ProtonDbSummary?>>> inflightFetches = new();
+    private readonly ConcurrentDictionary<uint, long> appSuccessGen = new();
 
     private bool diskCacheLoaded;
+    private long cacheEpoch;
     private PluginContext? hostContext;
 
     public PluginDescriptor Descriptor { get; } = new(
@@ -83,7 +88,7 @@ internal sealed class ProtonDbPlugin(
         new Version(1, 0, 0),
         PluginLoadKind.BuiltIn,
         PluginSurface.Core | PluginSurface.Desktop | PluginSurface.Fullscreen,
-        PluginCapabilityKind.UiSlots | PluginCapabilityKind.Metadata | PluginCapabilityKind.Settings,
+        PluginCapabilityKind.UiSlots | PluginCapabilityKind.Metadata | PluginCapabilityKind.Settings | PluginCapabilityKind.Commands,
         new PluginEntryPoints());
 
     public IReadOnlyList<string> SubscribedSlots => Slots;
@@ -94,6 +99,21 @@ internal sealed class ProtonDbPlugin(
 
     public IReadOnlyList<PluginSettingField> Fields => SettingsSchema;
 
+    public IReadOnlyList<PluginCommandDescriptor> Commands { get; } =
+    [
+        new PluginCommandDescriptor(
+            RefreshRatingCommandId,
+            PluginId,
+            "Refresh ProtonDB Rating",
+            PluginCommandPlacement.GameContext,
+            StoreCatalog.SteamPluginId),
+        new PluginCommandDescriptor(
+            ClearCacheCommandId,
+            PluginId,
+            "Clear ProtonDB Cache",
+            PluginCommandPlacement.LibraryToolbar),
+    ];
+
     public PluginRegistration Setup(PluginContext context)
     {
         hostContext = context ?? throw new ArgumentNullException(nameof(context));
@@ -101,8 +121,61 @@ internal sealed class ProtonDbPlugin(
         {
             UiSlotProviders = [this],
             MetadataProviders = [this],
+            CommandProviders = [this],
             Settings = this,
         };
+    }
+
+    public async Task<PluginCommandResult> ExecuteAsync(
+        string commandId,
+        PluginCommandContext context,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        if (string.Equals(commandId, ClearCacheCommandId, StringComparison.Ordinal))
+        {
+            return ClearCache();
+        }
+
+        if (string.Equals(commandId, RefreshRatingCommandId, StringComparison.Ordinal))
+        {
+            if (!IsFeatureEnabled())
+            {
+                return new PluginCommandResult(false, "ProtonDB ratings are disabled in plugin settings.");
+            }
+
+            if (context.Game is null || !TryGetSteamAppId(context.Game, out var appId))
+            {
+                return new PluginCommandResult(false, "Select a Steam game to refresh its ProtonDB rating.");
+            }
+
+            if (!IsOnlineLookupEnabled())
+            {
+                return new PluginCommandResult(false, "Enable online ProtonDB lookups in Plugins to refresh ratings.");
+            }
+
+            RemoveCachedEntry(appId, persistToDisk: true);
+            retryAfter.TryRemove(appId, out _);
+
+            var refreshed = await FetchAndCacheAsync(appId, cancellationToken).ConfigureAwait(false);
+            if (refreshed is null)
+            {
+                return new PluginCommandResult(
+                    false,
+                    $"Could not refresh ProtonDB rating for app {appId}.",
+                    RefreshSlots: true);
+            }
+
+            var tierLabel = FormatTierLabel(refreshed.Tier);
+            return new PluginCommandResult(
+                true,
+                $"ProtonDB rating refreshed: {tierLabel}.",
+                RefreshSlots: true);
+        }
+
+        return new PluginCommandResult(false, $"Unknown ProtonDB command '{commandId}'.");
     }
 
     public async Task<PluginUiSlotContribution?> ResolveSlotAsync(
@@ -270,51 +343,64 @@ internal sealed class ProtonDbPlugin(
         }
     }
 
-    private async Task<ProtonDbSummary?> FetchAndCacheAsync(uint appId)
+    private async Task<ProtonDbSummary?> FetchAndCacheAsync(uint appId, CancellationToken cancellationToken = default)
     {
+        var startEpoch = Volatile.Read(ref cacheEpoch);
+        var startSuccessGen = appSuccessGen.GetOrAdd(appId, 0);
         try
         {
             var timeProvider = hostContext?.TimeProvider ?? TimeProvider.System;
             using var timeoutCts = new CancellationTokenSource(TimeSpan.FromSeconds(6), timeProvider);
+            using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(timeoutCts.Token, cancellationToken);
             var requestUri = $"https://www.protondb.com/api/v1/reports/summaries/{appId}.json";
             using var request = new HttpRequestMessage(HttpMethod.Get, requestUri);
-            using var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, timeoutCts.Token)
+            using var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, linkedCts.Token)
                 .ConfigureAwait(false);
             if (!response.IsSuccessStatusCode)
             {
-                RecordBackoff(appId);
+                RecordBackoff(appId, startEpoch, startSuccessGen);
                 return null;
             }
 
             if (response.Content.Headers.ContentLength is long contentLength
                 && (contentLength < 0 || contentLength > MaxResponseBytes))
             {
-                RecordBackoff(appId);
+                RecordBackoff(appId, startEpoch, startSuccessGen);
                 return null;
             }
 
-            await using var stream = await response.Content.ReadAsStreamAsync(timeoutCts.Token).ConfigureAwait(false);
-            var jsonBytes = await ReadBoundedBytesAsync(stream, MaxResponseBytes, timeoutCts.Token).ConfigureAwait(false);
+            await using var stream = await response.Content.ReadAsStreamAsync(linkedCts.Token).ConfigureAwait(false);
+            var jsonBytes = await ReadBoundedBytesAsync(stream, MaxResponseBytes, linkedCts.Token).ConfigureAwait(false);
             if (jsonBytes is null || !TryParseSummaryUtf8(jsonBytes, out var parsed))
             {
-                RecordBackoff(appId);
+                RecordBackoff(appId, startEpoch, startSuccessGen);
                 return null;
             }
 
+            appSuccessGen.AddOrUpdate(appId, 1, static (_, previous) => previous + 1);
             retryAfter.TryRemove(appId, out _);
-            StoreCachedSummary(appId, parsed, persistToDisk: true);
+            StoreCachedSummary(appId, parsed, persistToDisk: true, expectedCacheEpoch: startEpoch);
             return parsed;
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
         }
         catch (Exception exception) when (exception is HttpRequestException or IOException or JsonException or OperationCanceledException)
         {
-            RecordBackoff(appId);
+            RecordBackoff(appId, startEpoch, startSuccessGen);
             hostContext?.Log($"ProtonDB lookup failed for app {appId}: {exception.Message}");
             return null;
         }
     }
 
-    private void RecordBackoff(uint appId)
+    private void RecordBackoff(uint appId, long startEpoch, long startSuccessGen)
     {
+        if (Volatile.Read(ref cacheEpoch) != startEpoch || appSuccessGen.GetOrAdd(appId, 0) != startSuccessGen)
+        {
+            return;
+        }
+
         var now = (hostContext?.TimeProvider ?? TimeProvider.System).GetUtcNow();
         retryAfter[appId] = now + ErrorBackoffDuration;
         if (retryAfter.Count > 256)
@@ -331,9 +417,9 @@ internal sealed class ProtonDbPlugin(
 
     private bool TryGetCachedSummary(uint appId, out ProtonDbSummary summary)
     {
+        EnsureDiskCacheLoaded();
         lock (cacheGate)
         {
-            EnsureDiskCacheLoadedLocked();
             if (lruIndex.TryGetValue(appId, out var node))
             {
                 lruList.Remove(node);
@@ -347,23 +433,143 @@ internal sealed class ProtonDbPlugin(
         return false;
     }
 
-    private void StoreCachedSummary(uint appId, ProtonDbSummary summary, bool persistToDisk)
+    private void StoreCachedSummary(
+        uint appId,
+        ProtonDbSummary summary,
+        bool persistToDisk,
+        long? expectedCacheEpoch = null)
     {
-        KeyValuePair<uint, ProtonDbSummary>[]? snapshotToWrite = null;
+        EnsureDiskCacheLoaded();
+        if (persistToDisk && normalizedCacheDirectory is not null)
+        {
+            KeyValuePair<uint, ProtonDbSummary>[]? snapshotToWrite = null;
+            lock (cacheDiskGate)
+            {
+                lock (cacheGate)
+                {
+                    if (expectedCacheEpoch is long expected && expected != cacheEpoch)
+                    {
+                        return;
+                    }
+
+                    UpsertLruLocked(appId, summary);
+                    snapshotToWrite = lruList.Select(entry => KeyValuePair.Create(entry.AppId, entry.Summary)).ToArray();
+                }
+
+                if (snapshotToWrite is not null)
+                {
+                    PersistDiskCache(snapshotToWrite);
+                }
+            }
+
+            return;
+        }
+
         lock (cacheGate)
         {
-            EnsureDiskCacheLoadedLocked();
-            UpsertLruLocked(appId, summary);
-            if (persistToDisk && normalizedCacheDirectory is not null)
+            if (expectedCacheEpoch is long expected && expected != cacheEpoch)
             {
-                snapshotToWrite = lruList.Select(entry => KeyValuePair.Create(entry.AppId, entry.Summary)).ToArray();
+                return;
+            }
+
+            UpsertLruLocked(appId, summary);
+        }
+    }
+
+    private void RemoveCachedEntry(uint appId, bool persistToDisk = false)
+    {
+        EnsureDiskCacheLoaded();
+        if (persistToDisk && normalizedCacheDirectory is not null)
+        {
+            lock (cacheDiskGate)
+            {
+                KeyValuePair<uint, ProtonDbSummary>[]? snapshotToWrite = null;
+                lock (cacheGate)
+                {
+                    if (lruIndex.TryGetValue(appId, out var node))
+                    {
+                        lruList.Remove(node);
+                        lruIndex.Remove(appId);
+                        snapshotToWrite = lruList.Select(entry => KeyValuePair.Create(entry.AppId, entry.Summary)).ToArray();
+                    }
+                }
+
+                if (snapshotToWrite is not null)
+                {
+                    PersistDiskCache(snapshotToWrite);
+                }
+            }
+
+            return;
+        }
+
+        lock (cacheGate)
+        {
+            if (lruIndex.TryGetValue(appId, out var node))
+            {
+                lruList.Remove(node);
+                lruIndex.Remove(appId);
+            }
+        }
+    }
+
+    private PluginCommandResult ClearCache()
+    {
+        int removedCount;
+        lock (cacheDiskGate)
+        {
+            EnsureDiskCacheLoadedUnderDiskGate();
+            lock (cacheGate)
+            {
+                cacheEpoch++;
+                removedCount = lruList.Count;
+                lruIndex.Clear();
+                lruList.Clear();
+                diskCacheLoaded = true;
+            }
+
+            retryAfter.Clear();
+
+            if (normalizedCacheDirectory is not null)
+            {
+                try
+                {
+                    if (IsCacheRootOrLeafUnsafe(out var offending, checkTargetExists: true))
+                    {
+                        return new PluginCommandResult(
+                            false,
+                            $"Cleared memory cache but refused symlinked ProtonDB cache path '{offending}'.",
+                            RefreshSlots: true);
+                    }
+
+                    var targetPath = Path.Combine(normalizedCacheDirectory, CacheFileName);
+                    if (File.Exists(targetPath))
+                    {
+                        if (fileProbe is not null && !fileProbe.IsRegularFile(targetPath))
+                        {
+                            return new PluginCommandResult(
+                                false,
+                                $"Cleared memory cache but refused non-regular ProtonDB cache file '{targetPath}'.",
+                                RefreshSlots: true);
+                        }
+
+                        File.Delete(targetPath);
+                    }
+                }
+                catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+                {
+                    return new PluginCommandResult(
+                        false,
+                        $"Could not delete ProtonDB cache file: {exception.Message}",
+                        RefreshSlots: true);
+                }
             }
         }
 
-        if (snapshotToWrite is not null)
-        {
-            PersistDiskCache(snapshotToWrite);
-        }
+        return new PluginCommandResult(
+            true,
+            $"Cleared {removedCount} cached ProtonDB ratings.",
+            RefreshSlots: true);
     }
 
     private void UpsertLruLocked(uint appId, ProtonDbSummary summary)
@@ -387,28 +593,66 @@ internal sealed class ProtonDbPlugin(
         lruIndex[appId] = node;
     }
 
-    private void EnsureDiskCacheLoadedLocked()
+    private void EnsureDiskCacheLoaded()
     {
-        if (diskCacheLoaded)
+        lock (cacheGate)
         {
-            return;
+            if (diskCacheLoaded)
+            {
+                return;
+            }
         }
 
-        diskCacheLoaded = true;
+        lock (cacheDiskGate)
+        {
+            EnsureDiskCacheLoadedUnderDiskGate();
+        }
+    }
+
+    private void EnsureDiskCacheLoadedUnderDiskGate()
+    {
+        lock (cacheGate)
+        {
+            if (diskCacheLoaded)
+            {
+                return;
+            }
+        }
+
+        var loadedEntries = ReadDiskCacheEntries();
+        lock (cacheGate)
+        {
+            if (diskCacheLoaded)
+            {
+                return;
+            }
+
+            foreach (var (appId, summary) in loadedEntries)
+            {
+                UpsertLruLocked(appId, summary);
+            }
+
+            diskCacheLoaded = true;
+        }
+    }
+
+    private List<(uint AppId, ProtonDbSummary Summary)> ReadDiskCacheEntries()
+    {
+        var entries = new List<(uint AppId, ProtonDbSummary Summary)>();
         if (normalizedCacheDirectory is null || IsCacheRootOrLeafUnsafe(out _, checkTargetExists: false))
         {
-            return;
+            return entries;
         }
 
         var targetPath = Path.Combine(normalizedCacheDirectory, CacheFileName);
         if (!File.Exists(targetPath))
         {
-            return;
+            return entries;
         }
 
         if (fileProbe is not null && !fileProbe.IsRegularFile(targetPath))
         {
-            return;
+            return entries;
         }
 
         try
@@ -416,7 +660,7 @@ internal sealed class ProtonDbPlugin(
             var bytes = ReadFileBoundedBytes(targetPath, MaxCacheFileBytes);
             if (bytes is null)
             {
-                return;
+                return entries;
             }
 
             using var doc = JsonDocument.Parse(bytes, new JsonDocumentOptions
@@ -427,7 +671,7 @@ internal sealed class ProtonDbPlugin(
             });
             if (doc.RootElement.ValueKind != JsonValueKind.Object)
             {
-                return;
+                return entries;
             }
 
             foreach (var property in doc.RootElement.EnumerateObject().Reverse())
@@ -441,7 +685,7 @@ internal sealed class ProtonDbPlugin(
 
                 if (TryParseSummaryElement(property.Value, out var summary))
                 {
-                    UpsertLruLocked(appId, summary);
+                    entries.Add((appId, summary));
                 }
             }
         }
@@ -449,6 +693,8 @@ internal sealed class ProtonDbPlugin(
         {
             hostContext?.Log($"Could not read ProtonDB cache '{targetPath}': {exception.Message}");
         }
+
+        return entries;
     }
 
     private void PersistDiskCache(KeyValuePair<uint, ProtonDbSummary>[] snapshot)

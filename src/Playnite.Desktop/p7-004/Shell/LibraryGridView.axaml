@@ -40,6 +40,12 @@
       <Button x:Name="TitlePreferencesButton" Classes="secondary-cta" Content="Title Preferences" Click="OnTitlePreferencesClicked" />
       <Button x:Name="PluginsButton" Classes="secondary-cta" Content="Plugins"
               AutomationProperties.Name="Manage plugins and settings" Click="OnPluginsClicked" />
+      <Button x:Name="PluginActionsButton" Classes="secondary-cta" Content="Plugin Actions"
+              IsVisible="False" AutomationProperties.Name="Run library plugin commands">
+        <Button.Flyout>
+          <MenuFlyout />
+        </Button.Flyout>
+      </Button>
       <Button x:Name="FullscreenButton" Classes="secondary-cta"
               Content="Fullscreen" IsEnabled="False" Click="OnOpenFullscreen" />
     </WrapPanel>
@@ -170,6 +176,13 @@
                   IsEnabled="False" HorizontalAlignment="Stretch"
                   AutomationProperties.Name="Configure game launch" />
           <Button Classes="secondary-cta" Content="Choose Title Source" x:Name="GameTitleButton" Click="OnGameTitleClicked" />
+          <Button x:Name="GamePluginActionsButton" Classes="secondary-cta" Content="Plugin Actions"
+                  HorizontalAlignment="Stretch" IsVisible="False"
+                  AutomationProperties.Name="Run plugin actions for selected game">
+            <Button.Flyout>
+              <MenuFlyout />
+            </Button.Flyout>
+          </Button>
           <TextBlock x:Name="MetadataSources" TextWrapping="Wrap" Classes="muted" />
           <TextBlock x:Name="PlayStatus" TextWrapping="Wrap" Classes="muted"
                      AutomationProperties.LiveSetting="Polite" />

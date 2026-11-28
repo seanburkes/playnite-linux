@@ -22,6 +22,10 @@ public sealed class PluginHost : IDisposable
     private const int MaxSettingDescriptionLength = 240;
     private const int MaxSettingChoices = 64;
     private const int MaxSettingPathLength = 4096;
+    private const int MaxCommandsPerPlugin = 32;
+    private const int MaxCommandIdLength = 128;
+    private const int MaxCommandLabelLength = 80;
+    private const int MaxCommandMessageLength = 240;
 
     private readonly Lock gate = new();
     private readonly Lock lifecycleGate = new();
@@ -743,37 +747,101 @@ public sealed class PluginHost : IDisposable
 
         if (result.Succeeded)
         {
-            var payload = new Dictionary<string, string>(StringComparer.Ordinal)
-            {
-                ["pluginId"] = string.IsNullOrWhiteSpace(result.PluginId) ? pluginId : result.PluginId,
-                ["succeeded"] = "true",
-                ["added"] = result.Added.ToString(System.Globalization.CultureInfo.InvariantCulture),
-                ["updated"] = result.Updated.ToString(System.Globalization.CultureInfo.InvariantCulture),
-                ["removed"] = result.Removed.ToString(System.Globalization.CultureInfo.InvariantCulture),
-                ["reconciled"] = result.Reconciled ? "true" : "false",
-            };
-            try
-            {
-                await PublishEventAsync(
-                    new PluginEvent(PluginEvents.LibrarySynced, timeProvider.GetUtcNow(), Payload: payload),
-                    CancellationToken.None).ConfigureAwait(false);
-            }
-            catch (ObjectDisposedException exception)
-            {
-                log?.Invoke(ownerPluginId, $"Skipping library.synced event after host disposal ({exception.GetType().Name}).");
-            }
+            var effectiveResult = string.IsNullOrWhiteSpace(result.PluginId)
+                ? result with { PluginId = pluginId }
+                : result;
+            await PublishSyncResultAsync(effectiveResult, CancellationToken.None).ConfigureAwait(false);
         }
 
         return result;
     }
 
-    /// <summary>Returns active plugin commands, activating any pending lazy command plugins.</summary>
-    public IReadOnlyList<PluginCommandDescriptor> GetCommands(PluginCommandPlacement? placement = null)
+    /// <summary>
+    /// Publishes a <see cref="PluginEvents.LibrarySynced"/> event when <paramref name="result"/> succeeded.
+    /// </summary>
+    public async Task PublishSyncResultAsync(PluginSyncResult result, CancellationToken cancellationToken = default)
     {
-        var pending = SnapshotLazyEntries(PluginCapabilityKind.Commands);
-        foreach (var entry in pending)
+        ArgumentNullException.ThrowIfNull(result);
+        cancellationToken.ThrowIfCancellationRequested();
+        if (!result.Succeeded)
         {
-            ActivateEntry(entry);
+            return;
+        }
+
+        var normalizedPluginId = string.IsNullOrWhiteSpace(result.PluginId) ? "unknown" : result.PluginId.Trim();
+        var payload = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["pluginId"] = normalizedPluginId,
+            ["succeeded"] = "true",
+            ["added"] = result.Added.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            ["updated"] = result.Updated.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            ["removed"] = result.Removed.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            ["reconciled"] = result.Reconciled ? "true" : "false",
+        };
+        try
+        {
+            await PublishEventAsync(
+                new PluginEvent(PluginEvents.LibrarySynced, timeProvider.GetUtcNow(), Payload: payload),
+                cancellationToken).ConfigureAwait(false);
+        }
+        catch (ObjectDisposedException exception)
+        {
+            log?.Invoke(normalizedPluginId, $"Skipping library.synced event after host disposal ({exception.GetType().Name}).");
+        }
+    }
+
+    /// <summary>
+    /// Returns whether any active or pending lazy plugin provides commands matching <paramref name="placement"/>
+    /// without materializing external plugins.
+    /// </summary>
+    public bool HasCommandProviders(PluginCommandPlacement? placement = null)
+    {
+        lock (gate)
+        {
+            ThrowIfDisposed();
+            if (placement is { } filter)
+            {
+                if (commandIndex.Values.Any(item => item.Descriptor.Placement == filter))
+                {
+                    return true;
+                }
+            }
+            else if (commandIndex.Count > 0)
+            {
+                return true;
+            }
+
+            foreach (var id in registrationOrder)
+            {
+                var entry = entriesById[id];
+                if (entry.State == PluginLifecycleState.Registered
+                    && entry.Descriptor.Capabilities.HasFlag(PluginCapabilityKind.Commands))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+    }
+
+    /// <summary>Returns active plugin commands, activating any pending lazy command plugins.</summary>
+    public IReadOnlyList<PluginCommandDescriptor> GetCommands(PluginCommandPlacement? placement = null) =>
+        GetCommands(placement, activateLazy: true);
+
+    /// <summary>
+    /// Returns plugin commands, optionally activating any pending lazy command plugins when
+    /// <paramref name="activateLazy"/> is <see langword="true"/>.
+    /// </summary>
+    public IReadOnlyList<PluginCommandDescriptor> GetCommands(PluginCommandPlacement? placement, bool activateLazy)
+    {
+        if (activateLazy)
+        {
+            var pending = SnapshotLazyEntries(PluginCapabilityKind.Commands);
+            foreach (var entry in pending)
+            {
+                ActivateEntry(entry);
+            }
         }
 
         lock (gate)
@@ -798,30 +866,53 @@ public sealed class PluginHost : IDisposable
         ArgumentException.ThrowIfNullOrWhiteSpace(commandId);
         ArgumentNullException.ThrowIfNull(context);
         cancellationToken.ThrowIfCancellationRequested();
-
-        var pending = SnapshotLazyEntries(PluginCapabilityKind.Commands);
-        foreach (var lazyEntry in pending)
-        {
-            ActivateEntry(lazyEntry);
-        }
+        var normalizedId = commandId.Trim();
 
         string pluginId;
         ICommandCapability capability;
+        bool found;
         lock (gate)
         {
             ThrowIfDisposed();
-            if (!commandIndex.TryGetValue(commandId, out var registered))
+            found = TryGetActiveCommandLocked(normalizedId, out pluginId, out capability);
+        }
+
+        if (!found)
+        {
+            var pending = SnapshotLazyEntries(PluginCapabilityKind.Commands);
+            foreach (var lazyEntry in pending)
             {
-                return new PluginCommandResult(false, $"Plugin command '{commandId}' is not available.");
+                ActivateEntry(lazyEntry);
             }
 
-            pluginId = registered.PluginId;
-            capability = registered.Capability;
+            lock (gate)
+            {
+                ThrowIfDisposed();
+                found = TryGetActiveCommandLocked(normalizedId, out pluginId, out capability);
+            }
+        }
+
+        if (!found)
+        {
+            return new PluginCommandResult(false, $"Plugin command '{normalizedId}' is not available.");
         }
 
         try
         {
-            return await capability.ExecuteAsync(commandId, context, cancellationToken).ConfigureAwait(false);
+            var rawResult = await capability.ExecuteAsync(normalizedId, context, cancellationToken).ConfigureAwait(false);
+            if (rawResult is null)
+            {
+                RecordRuntimeFault(pluginId, "command-failed", $"Command '{normalizedId}' returned null.");
+                return new PluginCommandResult(false, $"Command '{normalizedId}' failed.");
+            }
+
+            var message = NormalizeDisplayText(rawResult.Message, MaxCommandMessageLength)
+                ?? (rawResult.Succeeded ? "Command completed." : "Command failed.");
+            return new PluginCommandResult(
+                rawResult.Succeeded,
+                message,
+                rawResult.RefreshLibrary,
+                rawResult.RefreshSlots);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -829,8 +920,9 @@ public sealed class PluginHost : IDisposable
         }
         catch (Exception exception)
         {
-            RecordRuntimeFault(pluginId, "command-failed", $"Command '{commandId}' failed: {exception.Message}");
-            return new PluginCommandResult(false, exception.Message);
+            RecordRuntimeFault(pluginId, "command-failed", $"Command '{normalizedId}' failed: {exception.Message}");
+            var errorMessage = NormalizeDisplayText(exception.Message, MaxCommandMessageLength) ?? "Command failed.";
+            return new PluginCommandResult(false, errorMessage);
         }
     }
 
@@ -1737,6 +1829,7 @@ public sealed class PluginHost : IDisposable
         IPlaynitePlugin? candidateInstance = null;
         PluginAssemblyLoadContext? candidateLoadContext = null;
         PluginRegistration? candidateRegistration = null;
+        IReadOnlyList<(ICommandCapability? Provider, PluginCommandDescriptor[]? Commands)> commandSnapshots = [];
         PluginEntry? staleArtifactsToDispose = null;
 
         lock (entry.ActivationGate)
@@ -1804,6 +1897,7 @@ public sealed class PluginHost : IDisposable
                 }
 
                 candidateRegistration ??= candidateInstance.Setup(context);
+                commandSnapshots = SnapshotCommandProviders(candidateRegistration);
             }
             catch (Exception exception)
             {
@@ -1846,7 +1940,7 @@ public sealed class PluginHost : IDisposable
                 }
                 else
                 {
-                    conflictError = ValidateRegistrationConflictsLocked(entry.Descriptor.Id, candidateRegistration);
+                    conflictError = ValidateRegistrationConflictsLocked(entry.Descriptor.Id, candidateRegistration, commandSnapshots);
                     if (conflictError is not null)
                     {
                         committed = false;
@@ -1864,7 +1958,7 @@ public sealed class PluginHost : IDisposable
                             entry.LoadContext = candidateLoadContext;
                         }
                         entry.Registration = candidateRegistration;
-                        IndexCapabilitiesLocked(entry);
+                        IndexCapabilitiesLocked(entry, commandSnapshots);
                         entry.State = PluginLifecycleState.Active;
                         entry.LastError = null;
                         committed = true;
@@ -1926,7 +2020,46 @@ public sealed class PluginHost : IDisposable
         }
     }
 
-    private string? ValidateRegistrationConflictsLocked(string pluginId, PluginRegistration registration)
+    private bool TryGetActiveCommandLocked(string commandId, out string pluginId, out ICommandCapability capability)
+    {
+        if (commandIndex.TryGetValue(commandId, out var registered)
+            && entriesById.TryGetValue(registered.PluginId, out var ownerEntry)
+            && ownerEntry.State == PluginLifecycleState.Active)
+        {
+            pluginId = registered.PluginId;
+            capability = registered.Capability;
+            return true;
+        }
+
+        pluginId = string.Empty;
+        capability = null!;
+        return false;
+    }
+
+    private static IReadOnlyList<(ICommandCapability? Provider, PluginCommandDescriptor[]? Commands)> SnapshotCommandProviders(
+        PluginRegistration registration)
+    {
+        if (registration.CommandProviders.Count == 0)
+        {
+            return [];
+        }
+
+        var snapshots = new (ICommandCapability? Provider, PluginCommandDescriptor[]? Commands)[registration.CommandProviders.Count];
+        for (var i = 0; i < registration.CommandProviders.Count; i++)
+        {
+            var provider = registration.CommandProviders[i];
+            snapshots[i] = provider is null
+                ? (null, null)
+                : (provider, provider.Commands?.ToArray());
+        }
+
+        return snapshots;
+    }
+
+    private string? ValidateRegistrationConflictsLocked(
+        string pluginId,
+        PluginRegistration registration,
+        IReadOnlyList<(ICommandCapability? Provider, PluginCommandDescriptor[]? Commands)> commandSnapshots)
     {
         var seenSources = new HashSet<Guid>();
         foreach (var library in registration.LibrarySources)
@@ -1998,14 +2131,35 @@ public sealed class PluginHost : IDisposable
             }
         }
 
-        foreach (var provider in registration.CommandProviders)
+        var seenCommands = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var (_, commands) in commandSnapshots)
         {
-            foreach (var command in provider.Commands)
+            if (commands is null)
             {
-                if (commandIndex.TryGetValue(command.Id, out var existing)
+                return $"Plugin '{pluginId}' declared a null command provider or command list.";
+            }
+
+            foreach (var command in commands)
+            {
+                if (!TryNormalizeCommandDescriptor(pluginId, command, out var normalized, out var commandError))
+                {
+                    return commandError;
+                }
+
+                if (!seenCommands.Add(normalized.Id))
+                {
+                    return $"Plugin '{pluginId}' declared duplicate command '{normalized.Id}'.";
+                }
+
+                if (seenCommands.Count > MaxCommandsPerPlugin)
+                {
+                    return $"Plugin '{pluginId}' exceeded the {MaxCommandsPerPlugin}-command limit.";
+                }
+
+                if (commandIndex.TryGetValue(normalized.Id, out var existing)
                     && !string.Equals(existing.PluginId, pluginId, StringComparison.Ordinal))
                 {
-                    return $"Command '{command.Id}' is already registered by plugin '{existing.PluginId}'.";
+                    return $"Command '{normalized.Id}' is already registered by plugin '{existing.PluginId}'.";
                 }
             }
         }
@@ -2048,7 +2202,9 @@ public sealed class PluginHost : IDisposable
         return null;
     }
 
-    private void IndexCapabilitiesLocked(PluginEntry entry)
+    private void IndexCapabilitiesLocked(
+        PluginEntry entry,
+        IReadOnlyList<(ICommandCapability? Provider, PluginCommandDescriptor[]? Commands)> commandSnapshots)
     {
         RemoveIndexedCapabilitiesLocked(entry);
         var registration = entry.Registration;
@@ -2091,11 +2247,19 @@ public sealed class PluginHost : IDisposable
             }
         }
 
-        foreach (var provider in registration.CommandProviders)
+        foreach (var (provider, commands) in commandSnapshots)
         {
-            foreach (var command in provider.Commands)
+            if (provider is null || commands is null)
             {
-                commandIndex[command.Id] = (entry.Descriptor.Id, command, provider);
+                continue;
+            }
+
+            foreach (var command in commands)
+            {
+                if (TryNormalizeCommandDescriptor(entry.Descriptor.Id, command, out var normalized, out _))
+                {
+                    commandIndex[normalized.Id] = (entry.Descriptor.Id, normalized, provider);
+                }
             }
         }
 
@@ -2186,16 +2350,18 @@ public sealed class PluginHost : IDisposable
             }
         }
 
-        foreach (var provider in registration.CommandProviders)
+        var commandKeysToRemove = new List<string>();
+        foreach (var pair in commandIndex)
         {
-            foreach (var command in provider.Commands)
+            if (string.Equals(pair.Value.PluginId, entry.Descriptor.Id, StringComparison.Ordinal))
             {
-                if (commandIndex.TryGetValue(command.Id, out var existing)
-                    && string.Equals(existing.PluginId, entry.Descriptor.Id, StringComparison.Ordinal))
-                {
-                    commandIndex.Remove(command.Id);
-                }
+                commandKeysToRemove.Add(pair.Key);
             }
+        }
+
+        foreach (var commandKey in commandKeysToRemove)
+        {
+            commandIndex.Remove(commandKey);
         }
 
         foreach (var hook in registration.EventHooks)
@@ -2377,6 +2543,50 @@ public sealed class PluginHost : IDisposable
             slotId,
             sanitizedBadges ?? (IReadOnlyList<PluginUiBadge>)[],
             sanitizedSections ?? (IReadOnlyList<PluginUiSection>)[]);
+    }
+
+    private static bool TryNormalizeCommandDescriptor(
+        string pluginId,
+        PluginCommandDescriptor? command,
+        out PluginCommandDescriptor normalized,
+        out string? error)
+    {
+        if (command is null || string.IsNullOrWhiteSpace(command.Id))
+        {
+            normalized = null!;
+            error = $"Plugin '{pluginId}' declared a command with a blank Id.";
+            return false;
+        }
+
+        var normalizedId = command.Id.Trim();
+        if (normalizedId.Length > MaxCommandIdLength || normalizedId.Any(char.IsControl))
+        {
+            normalized = null!;
+            error = $"Plugin '{pluginId}' declared an invalid command Id.";
+            return false;
+        }
+
+        if (!Enum.IsDefined(command.Placement))
+        {
+            normalized = null!;
+            error = $"Command '{normalizedId}' declared an invalid placement.";
+            return false;
+        }
+
+        var normalizedLabel = NormalizeDisplayText(command.Label, MaxCommandLabelLength);
+        if (normalizedLabel is null)
+        {
+            normalized = null!;
+            error = $"Command '{normalizedId}' declared a blank Label.";
+            return false;
+        }
+
+        var normalizedSourceId = command.SourceId is Guid source && source != Guid.Empty
+            ? source
+            : (Guid?)null;
+        normalized = new PluginCommandDescriptor(normalizedId, pluginId, normalizedLabel, command.Placement, normalizedSourceId);
+        error = null;
+        return true;
     }
 
     private static string? NormalizeDisplayText(string? rawText, int maxLength)

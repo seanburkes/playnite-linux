@@ -83,6 +83,10 @@ public sealed partial class LibraryGridView : UserControl
     private readonly Button emptySyncButton;
     private readonly Button emptySyncHeroicButton;
     private readonly Button pluginsButton;
+    private readonly Button pluginActionsButton;
+    private readonly MenuFlyout pluginActionsFlyout;
+    private readonly Button gamePluginActionsButton;
+    private readonly MenuFlyout gamePluginActionsFlyout;
     private readonly Button clearFiltersButton;
     private readonly Button gridViewButton;
     private readonly Button listViewButton;
@@ -109,6 +113,7 @@ public sealed partial class LibraryGridView : UserControl
     private CancellationTokenSource? selectionCts;
     private CancellationTokenSource? navigationCts;
     private CancellationTokenSource? syncCts;
+    private CancellationTokenSource? commandCts;
     private CancellationTokenSource? sessionCts;
     private int artworkGeneration;
     private int heroGeneration;
@@ -117,12 +122,14 @@ public sealed partial class LibraryGridView : UserControl
     private int selectionGeneration;
     private int navigationGeneration;
     private int syncGeneration;
+    private int commandGeneration;
     private int playGeneration;
     private int sessionGeneration;
     private int editorGeneration;
     private Guid? activeSessionGameId;
     private bool playPending;
     private bool syncPending;
+    private bool commandPending;
     private bool fullscreenOpen;
     private bool sessionActive;
     private volatile bool sessionAcceptingUpdates;
@@ -198,6 +205,10 @@ public sealed partial class LibraryGridView : UserControl
         emptySyncButton = this.FindControl<Button>("EmptySyncButton")!;
         emptySyncHeroicButton = this.FindControl<Button>("EmptySyncHeroicButton")!;
         pluginsButton = this.FindControl<Button>("PluginsButton")!;
+        pluginActionsButton = this.FindControl<Button>("PluginActionsButton")!;
+        pluginActionsFlyout = (MenuFlyout)pluginActionsButton.Flyout!;
+        gamePluginActionsButton = this.FindControl<Button>("GamePluginActionsButton")!;
+        gamePluginActionsFlyout = (MenuFlyout)gamePluginActionsButton.Flyout!;
         clearFiltersButton = this.FindControl<Button>("ClearFiltersButton")!;
         gridViewButton = this.FindControl<Button>("GridViewButton")!;
         listViewButton = this.FindControl<Button>("ListViewButton")!;
@@ -221,6 +232,10 @@ public sealed partial class LibraryGridView : UserControl
         emptySyncButton.Click += OnSyncSteamClicked;
         emptySyncHeroicButton.Click += OnSyncHeroicClicked;
         clearFiltersButton.Click += OnClearFiltersClicked;
+        pluginActionsFlyout.Opening += OnPluginActionsFlyoutOpening;
+        pluginActionsFlyout.Closed += (_, _) => RefreshLibraryActions();
+        gamePluginActionsFlyout.Opening += OnGamePluginActionsFlyoutOpening;
+        gamePluginActionsFlyout.Closed += (_, _) => RefreshLibraryActions();
         gridViewButton.Click += (_, _) => SetViewMode(false);
         listViewButton.Click += (_, _) => SetViewMode(true);
         this.FindControl<ListBox>("GameList")!.SelectionChanged += OnSelectionChanged;
@@ -280,6 +295,8 @@ public sealed partial class LibraryGridView : UserControl
 
     internal Task PluginsDialogTask { get; private set; } = Task.CompletedTask;
 
+    internal Task CommandTask { get; private set; } = Task.CompletedTask;
+
     internal Task UnloadTask { get; private set; } = Task.CompletedTask;
 
     internal Task SyncTask { get; private set; } = Task.CompletedTask;
@@ -312,6 +329,7 @@ public sealed partial class LibraryGridView : UserControl
         CancelLocalOperations(preserveActiveSession: keepSession);
         disposed = false;
         syncPending = false;
+        commandPending = false;
         playPending = false;
         fullscreenOpen = false;
         editorPending = false;
@@ -337,6 +355,7 @@ public sealed partial class LibraryGridView : UserControl
         selectionGeneration++;
         navigationGeneration++;
         syncGeneration++;
+        commandGeneration++;
         playGeneration++;
         editorGeneration++;
         cardSlotsGeneration++;
@@ -362,6 +381,13 @@ public sealed partial class LibraryGridView : UserControl
         syncCts?.Dispose();
         syncCts = null;
 
+        commandCts?.Cancel();
+        commandCts?.Dispose();
+        commandCts = null;
+
+        pluginActionsFlyout.Hide();
+        gamePluginActionsFlyout.Hide();
+
         activePluginsDialog?.Close();
         activePluginsDialog = null;
 
@@ -382,6 +408,7 @@ public sealed partial class LibraryGridView : UserControl
             return;
         }
 
+        gamePluginActionsFlyout.Hide();
         DisposeCardBitmaps();
 
         var list = this.FindControl<ListBox>("GameList")!;
@@ -1190,6 +1217,7 @@ public sealed partial class LibraryGridView : UserControl
 
     private async void OnSelectionChanged(object? sender, SelectionChangedEventArgs eventArgs)
     {
+        gamePluginActionsFlyout.Hide();
         RefreshLibraryActions();
         if (rebuildingRows
             || disposed
@@ -1249,16 +1277,25 @@ public sealed partial class LibraryGridView : UserControl
             ? selected : null;
     }
 
+    private bool IsLibraryActionAvailable() =>
+        model is not null
+        && !disposed
+        && !model.LifetimeToken.IsCancellationRequested
+        && !playPending
+        && !syncPending
+        && !commandPending
+        && !fullscreenOpen
+        && !sessionActive
+        && !editorPending;
+
+    private bool CanRunCommand() =>
+        IsLibraryActionAvailable()
+        && model is not null
+        && !model.Plugins.IsDisposed;
+
     private void RefreshLibraryActions()
     {
-        var available = model is not null
-            && !disposed
-            && !model.LifetimeToken.IsCancellationRequested
-            && !playPending
-            && !syncPending
-            && !fullscreenOpen
-            && !sessionActive
-            && !editorPending;
+        var available = IsLibraryActionAvailable();
         this.FindControl<Button>("PreviousButton")!.IsEnabled = available && model!.CanGoPrevious;
         this.FindControl<Button>("NextButton")!.IsEnabled = available && model!.CanGoNext;
         playButton.IsEnabled = available && SelectedPlayRow() is not null;
@@ -1276,12 +1313,46 @@ public sealed partial class LibraryGridView : UserControl
         emptySyncButton.IsEnabled = available;
         emptySyncHeroicButton.IsEnabled = available;
         pluginsButton.IsEnabled = available && model?.Plugins is { IsDisposed: false };
+        UpdatePluginCommandActionsVisibility(available);
         fullscreenButton.IsEnabled = available && fullscreenButton.IsVisible;
     }
 
+    private void UpdatePluginCommandActionsVisibility(bool available)
+    {
+        if (disposed || model is not { } library || library.Plugins.IsDisposed)
+        {
+            pluginActionsButton.IsVisible = false;
+            pluginActionsButton.IsEnabled = false;
+            gamePluginActionsButton.IsVisible = false;
+            gamePluginActionsButton.IsEnabled = false;
+            return;
+        }
+
+        var toolbarVisible = library.Plugins.HasCommandProviders(PluginCommandPlacement.LibraryToolbar);
+        pluginActionsButton.IsVisible = toolbarVisible;
+        pluginActionsButton.IsEnabled = available && toolbarVisible;
+
+        var selected = library.Selected;
+        var gameVisible = false;
+        if (selected is not null)
+        {
+            var activeGameCommands = library.Plugins.GetCommands(PluginCommandPlacement.GameContext, activateLazy: false);
+            gameVisible = activeGameCommands.Any(cmd => CommandMatchesGame(cmd, selected))
+                || library.Plugins.GetRecords().Any(r =>
+                    r.State == PluginLifecycleState.Registered
+                    && r.Descriptor.Capabilities.HasFlag(PluginCapabilityKind.Commands));
+        }
+
+        gamePluginActionsButton.IsVisible = gameVisible;
+        gamePluginActionsButton.IsEnabled = available && gameVisible;
+    }
+
+    private static bool CommandMatchesGame(PluginCommandDescriptor command, LibraryRow game) =>
+        command.SourceId is null || command.SourceId == Guid.Empty || command.SourceId == game.PluginId;
+
     private bool TryBeginSync(out LibraryViewModel library)
     {
-        if (disposed || syncPending || playPending || editorPending || fullscreenOpen || sessionActive
+        if (disposed || syncPending || commandPending || playPending || editorPending || fullscreenOpen || sessionActive
             || model is not { } current || current.LifetimeToken.IsCancellationRequested || current.Plugins.IsDisposed)
         {
             library = null!;
@@ -1804,6 +1875,7 @@ public sealed partial class LibraryGridView : UserControl
             || editorPending
             || playPending
             || syncPending
+            || commandPending
             || fullscreenOpen
             || sessionActive
             || model is not { } library
@@ -1825,6 +1897,7 @@ public sealed partial class LibraryGridView : UserControl
             || editorPending
             || playPending
             || syncPending
+            || commandPending
             || fullscreenOpen
             || sessionActive
             || model is not { } library
@@ -1887,6 +1960,275 @@ public sealed partial class LibraryGridView : UserControl
                 RefreshLibraryActions();
             }
         }
+    }
+
+    private void OnPluginActionsFlyoutOpening(object? sender, EventArgs args) =>
+        PopulateCommandsFlyout(pluginActionsFlyout, PluginCommandPlacement.LibraryToolbar, selectedGame: null, "(No library plugin commands available)");
+
+    private void OnGamePluginActionsFlyoutOpening(object? sender, EventArgs args)
+    {
+        var selected = model?.Selected;
+        var listSelected = (this.FindControl<ListBox>("GameList")?.SelectedItem as ListBoxItem)?.Tag as LibraryRow;
+        var matchedGame = selected is not null && listSelected is not null && listSelected.Id == selected.Id
+            ? selected
+            : null;
+        PopulateCommandsFlyout(gamePluginActionsFlyout, PluginCommandPlacement.GameContext, matchedGame, "(No plugin actions for this game)");
+    }
+
+    private void PopulateCommandsFlyout(
+        MenuFlyout flyout,
+        PluginCommandPlacement placement,
+        LibraryRow? selectedGame,
+        string emptyMessage)
+    {
+        flyout.Items.Clear();
+        if (disposed || model is not { } library || library.Plugins.IsDisposed)
+        {
+            return;
+        }
+
+        if (placement == PluginCommandPlacement.GameContext && selectedGame is null)
+        {
+            flyout.Items.Add(new MenuItem { Header = emptyMessage, IsEnabled = false });
+            return;
+        }
+
+        IEnumerable<PluginCommandDescriptor> commands;
+        try
+        {
+            commands = library.Plugins.GetCommands(placement, activateLazy: true);
+        }
+        catch (ObjectDisposedException)
+        {
+            return;
+        }
+
+        if (placement == PluginCommandPlacement.GameContext && selectedGame is not null)
+        {
+            commands = commands.Where(cmd => CommandMatchesGame(cmd, selectedGame));
+        }
+
+        var ordered = commands
+            .OrderBy(cmd => cmd.Label, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(cmd => cmd.Id, StringComparer.Ordinal)
+            .Take(32)
+            .ToArray();
+
+        if (ordered.Length == 0)
+        {
+            flyout.Items.Add(new MenuItem { Header = emptyMessage, IsEnabled = false });
+            return;
+        }
+
+        var expectedLibrary = library;
+        foreach (var descriptor in ordered)
+        {
+            var captured = descriptor;
+            var item = new MenuItem
+            {
+                Header = captured.Label,
+                Tag = captured.Id,
+            };
+            AutomationProperties.SetName(item, captured.Label);
+            item.Click += async (_, _) =>
+            {
+                if (!CanRunCommand()
+                    || !ReferenceEquals(model, expectedLibrary)
+                    || expectedLibrary.Plugins.IsDisposed
+                    || expectedLibrary.LifetimeToken.IsCancellationRequested)
+                {
+                    return;
+                }
+
+                var task = RunPluginCommandAsync(expectedLibrary, captured, selectedGame);
+                CommandTask = task;
+                await ObserveUiTaskAsync(task, "plugin command").ConfigureAwait(true);
+            };
+            flyout.Items.Add(item);
+        }
+    }
+
+    private async Task RunPluginCommandAsync(
+        LibraryViewModel library,
+        PluginCommandDescriptor descriptor,
+        LibraryRow? selectedGame)
+    {
+        if (!ReferenceEquals(model, library) || !CanRunCommand() || library.LifetimeToken.IsCancellationRequested)
+        {
+            return;
+        }
+
+        var generation = ++commandGeneration;
+        commandCts?.Cancel();
+        commandCts?.Dispose();
+        var currentCts = CancellationTokenSource.CreateLinkedTokenSource(library.LifetimeToken);
+        commandCts = currentCts;
+        var token = currentCts.Token;
+
+        commandPending = true;
+        RefreshLibraryActions();
+        var statusTarget = descriptor.Placement == PluginCommandPlacement.GameContext ? playStatus : syncStatus;
+        if (descriptor.Placement != PluginCommandPlacement.GameContext
+            || selectedGame is null
+            || library.Selected?.Id == selectedGame.Id)
+        {
+            statusTarget.Text = $"Running {descriptor.Label}…";
+        }
+
+        try
+        {
+            var gameSnapshot = selectedGame is null ? null : CreatePluginGameSnapshot(selectedGame);
+            var context = new PluginCommandContext(selectedGame?.Id, Game: gameSnapshot, DatabasePath: library.DatabasePath);
+            PluginCommandResult result;
+            try
+            {
+                result = await ExecuteLibraryCommandAsync(library, descriptor, context, token).ConfigureAwait(true);
+            }
+            catch (OperationCanceledException) when (token.IsCancellationRequested || library.LifetimeToken.IsCancellationRequested)
+            {
+                return;
+            }
+            catch (ObjectDisposedException)
+            {
+                return;
+            }
+
+            if (disposed
+                || generation != commandGeneration
+                || !ReferenceEquals(model, library)
+                || token.IsCancellationRequested
+                || library.LifetimeToken.IsCancellationRequested
+                || library.Plugins.IsDisposed)
+            {
+                return;
+            }
+
+            var canUpdatePlayStatus = descriptor.Placement != PluginCommandPlacement.GameContext
+                || selectedGame is null
+                || library.Selected?.Id == selectedGame.Id;
+            if (canUpdatePlayStatus)
+            {
+                statusTarget.Text = result.Message;
+            }
+
+            if (result.RefreshLibrary)
+            {
+                try
+                {
+                    await library.ReloadCurrentPageAsync(token).ConfigureAwait(true);
+                }
+                catch (OperationCanceledException) when (token.IsCancellationRequested || library.LifetimeToken.IsCancellationRequested)
+                {
+                    return;
+                }
+                catch (ObjectDisposedException)
+                {
+                    return;
+                }
+                catch (Exception exception)
+                {
+                    if (!disposed
+                        && generation == commandGeneration
+                        && ReferenceEquals(model, library)
+                        && !token.IsCancellationRequested
+                        && !library.LifetimeToken.IsCancellationRequested)
+                    {
+                        Console.Error.WriteLine($"Plugin command reload failed ({exception.GetType().Name}).");
+                        if (canUpdatePlayStatus)
+                        {
+                            statusTarget.Text = $"Command completed, but reloading the library failed: {exception.Message}";
+                        }
+                    }
+
+                    return;
+                }
+
+                if (!disposed
+                    && generation == commandGeneration
+                    && ReferenceEquals(model, library)
+                    && !token.IsCancellationRequested
+                    && !library.Plugins.IsDisposed)
+                {
+                    RebuildRows();
+                    Refresh();
+                }
+            }
+            else if (result.RefreshSlots)
+            {
+                StartCardPluginSlotsLoading();
+                StartDetailsPluginSlotsLoading(library.Selected);
+            }
+        }
+        finally
+        {
+            if (ReferenceEquals(commandCts, currentCts))
+            {
+                commandCts = null;
+            }
+
+            currentCts.Dispose();
+
+            if (!disposed && ReferenceEquals(model, library) && generation == commandGeneration)
+            {
+                commandPending = false;
+                RefreshLibraryActions();
+            }
+        }
+    }
+
+    private async Task<PluginCommandResult> ExecuteLibraryCommandAsync(
+        LibraryViewModel library,
+        PluginCommandDescriptor descriptor,
+        PluginCommandContext context,
+        CancellationToken token)
+    {
+        if (usesCustomSteamSync && string.Equals(descriptor.Id, SteamPlugin.SyncCommandId, StringComparison.Ordinal))
+        {
+            try
+            {
+                var steamResult = await steamSync.SyncAsync(library.DatabasePath, token).ConfigureAwait(true);
+                var summary = LibrarySteamSyncRunner.FormatSummary(steamResult);
+                if (steamResult.Reconciled)
+                {
+                    await library.TryPublishSessionEventAsync(
+                        PluginEvents.LibrarySynced,
+                        Guid.Empty,
+                        StoreCatalog.SteamPluginId,
+                        CancellationToken.None).ConfigureAwait(true);
+                }
+
+                return new PluginCommandResult(steamResult.Reconciled, summary, RefreshLibrary: steamResult.Reconciled);
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+            {
+                return new PluginCommandResult(false, $"Steam sync failed: {exception.Message}");
+            }
+        }
+
+        if (usesCustomHeroicSync && string.Equals(descriptor.Id, HeroicPlugin.SyncCommandId, StringComparison.Ordinal))
+        {
+            try
+            {
+                var heroicResult = await heroicSync.SyncAsync(library.DatabasePath, token).ConfigureAwait(true);
+                var summary = HeroicLibrarySyncRunner.FormatSummary(heroicResult);
+                if (heroicResult.Reconciled)
+                {
+                    await library.TryPublishSessionEventAsync(
+                        PluginEvents.LibrarySynced,
+                        Guid.Empty,
+                        Guid.Empty,
+                        CancellationToken.None).ConfigureAwait(true);
+                }
+
+                return new PluginCommandResult(heroicResult.Reconciled, summary, RefreshLibrary: heroicResult.Reconciled);
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or HttpRequestException)
+            {
+                return new PluginCommandResult(false, $"Heroic sync failed: {exception.Message}");
+            }
+        }
+
+        return await library.Plugins.ExecuteCommandAsync(descriptor.Id, context, token).ConfigureAwait(true);
     }
 
     private async void OnConfigureLaunchClicked(object? sender, RoutedEventArgs eventArgs)
@@ -2195,7 +2537,7 @@ public sealed partial class LibraryGridView : UserControl
 
     private async void OnPreviousClick(object? sender, RoutedEventArgs eventArgs)
     {
-        if (disposed || syncPending || fullscreenOpen || sessionActive || model is not { } library || library.LifetimeToken.IsCancellationRequested)
+        if (disposed || syncPending || commandPending || fullscreenOpen || sessionActive || model is not { } library || library.LifetimeToken.IsCancellationRequested)
         {
             return;
         }
@@ -2212,7 +2554,7 @@ public sealed partial class LibraryGridView : UserControl
 
     private async void OnNextClick(object? sender, RoutedEventArgs eventArgs)
     {
-        if (disposed || syncPending || fullscreenOpen || sessionActive || model is not { } library || library.LifetimeToken.IsCancellationRequested)
+        if (disposed || syncPending || commandPending || fullscreenOpen || sessionActive || model is not { } library || library.LifetimeToken.IsCancellationRequested)
         {
             return;
         }

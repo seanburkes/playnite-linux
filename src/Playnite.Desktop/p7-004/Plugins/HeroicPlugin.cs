@@ -12,9 +12,11 @@ namespace Playnite.Desktop.Plugins;
 internal sealed class HeroicPlugin :
     IPlaynitePlugin,
     ILibrarySyncCapability,
+    ICommandCapability,
     IPluginSettingsCapability
 {
     internal const string PluginId = "playnite.builtin.heroic";
+    internal const string SyncCommandId = "heroic.sync";
 
     private static readonly PluginDescriptor DescriptorValue = new(
         PluginId,
@@ -23,7 +25,7 @@ internal sealed class HeroicPlugin :
         new Version(1, 0, 0),
         PluginLoadKind.BuiltIn,
         PluginSurface.Core | PluginSurface.Desktop | PluginSurface.Fullscreen,
-        PluginCapabilityKind.LibrarySource | PluginCapabilityKind.Launch | PluginCapabilityKind.LibrarySync | PluginCapabilityKind.Settings,
+        PluginCapabilityKind.LibrarySource | PluginCapabilityKind.Launch | PluginCapabilityKind.LibrarySync | PluginCapabilityKind.Commands | PluginCapabilityKind.Settings,
         new PluginEntryPoints(),
         Description: "Heroic Games Launcher integration for Epic, GOG, and Amazon libraries.");
 
@@ -37,13 +39,17 @@ internal sealed class HeroicPlugin :
     ];
 
     private readonly ILibraryHeroicSync? syncRunner;
+    private readonly Func<PluginSyncResult, CancellationToken, Task>? onSyncCompleted;
     private readonly HeroicStoreCapability[] stores;
     private ILibraryHeroicSync? cachedDefaultRunner;
     private PluginContext? pluginContext;
 
-    internal HeroicPlugin(ILibraryHeroicSync? syncRunner = null)
+    internal HeroicPlugin(
+        ILibraryHeroicSync? syncRunner = null,
+        Func<PluginSyncResult, CancellationToken, Task>? onSyncCompleted = null)
     {
         this.syncRunner = syncRunner;
+        this.onSyncCompleted = onSyncCompleted;
         stores =
         [
             new HeroicStoreCapability(StoreCatalog.EpicPluginId, "Epic"),
@@ -60,6 +66,15 @@ internal sealed class HeroicPlugin :
 
     public IReadOnlyList<PluginSettingField> Fields => SettingsFields;
 
+    public IReadOnlyList<PluginCommandDescriptor> Commands { get; } =
+    [
+        new PluginCommandDescriptor(
+            SyncCommandId,
+            PluginId,
+            "Sync Heroic Libraries",
+            PluginCommandPlacement.LibraryToolbar),
+    ];
+
     internal string? ConfiguredConfigDirectory => pluginContext?.GetSetting("heroicConfigDirectory");
 
     public PluginRegistration Setup(PluginContext context)
@@ -70,8 +85,34 @@ internal sealed class HeroicPlugin :
             LibrarySources = stores,
             LaunchProviders = stores,
             SyncProviders = [this],
+            CommandProviders = [this],
             Settings = this,
         };
+    }
+
+    public async Task<PluginCommandResult> ExecuteAsync(
+        string commandId,
+        PluginCommandContext context,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        if (!string.Equals(commandId, SyncCommandId, StringComparison.Ordinal))
+        {
+            return new PluginCommandResult(false, $"Unknown Heroic command '{commandId}'.");
+        }
+
+        if (string.IsNullOrWhiteSpace(context.DatabasePath))
+        {
+            return new PluginCommandResult(false, "Library database path is required to sync Heroic.");
+        }
+
+        var result = await SyncAsync(context.DatabasePath, cancellationToken).ConfigureAwait(false);
+        if (result.Succeeded && onSyncCompleted is not null)
+        {
+            await onSyncCompleted(result, CancellationToken.None).ConfigureAwait(false);
+        }
+
+        return new PluginCommandResult(result.Succeeded, result.Summary, RefreshLibrary: result.Succeeded);
     }
 
     public async Task<PluginSyncResult> SyncAsync(string databasePath, CancellationToken cancellationToken)

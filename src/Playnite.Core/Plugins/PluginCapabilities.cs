@@ -75,10 +75,16 @@ public sealed record PluginCommandDescriptor(
 /// <summary>Invocation context passed to <see cref="ICommandCapability.ExecuteAsync"/>.</summary>
 public sealed record PluginCommandContext(
     Guid? GameId,
-    IReadOnlyDictionary<string, string>? Arguments = null);
+    IReadOnlyDictionary<string, string>? Arguments = null,
+    PluginGameSnapshot? Game = null,
+    string? DatabasePath = null);
 
 /// <summary>Outcome of executing a plugin command.</summary>
-public sealed record PluginCommandResult(bool Succeeded, string Message);
+public sealed record PluginCommandResult(
+    bool Succeeded,
+    string Message,
+    bool RefreshLibrary = false,
+    bool RefreshSlots = false);
 
 /// <summary>Provides host-invocable commands.</summary>
 public interface ICommandCapability

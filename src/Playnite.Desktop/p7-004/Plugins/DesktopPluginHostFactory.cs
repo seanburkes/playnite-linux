@@ -24,8 +24,11 @@ internal static class DesktopPluginHostFactory
         HttpClient? protonDbClient = null)
     {
         var host = new PluginHost(surface, timeProvider, settingsStore);
-        host.RegisterBuiltIn(new SteamPlugin(steamSync));
-        host.RegisterBuiltIn(new HeroicPlugin(heroicSync));
+        Task PublishCommandSyncAsync(PluginSyncResult result, CancellationToken ct) =>
+            host.IsDisposed ? Task.CompletedTask : host.PublishSyncResultAsync(result, ct);
+
+        host.RegisterBuiltIn(new SteamPlugin(steamSync, PublishCommandSyncAsync));
+        host.RegisterBuiltIn(new HeroicPlugin(heroicSync, PublishCommandSyncAsync));
         host.RegisterBuiltIn(new AmazonLunaPlugin());
         host.RegisterBuiltIn(new SnesRomPlugin());
         host.RegisterBuiltIn(new ProtonDbPlugin(protonDbClient));
@@ -56,8 +59,11 @@ internal static class DesktopPluginHostFactory
 
         var host = new PluginHost(surface, timeProvider, resolvedSettings);
         createdHost = host;
-        host.RegisterBuiltIn(new SteamPlugin(steamSync));
-        host.RegisterBuiltIn(new HeroicPlugin(heroicSync));
+        Task PublishCommandSyncAsync(PluginSyncResult result, CancellationToken ct) =>
+            host.IsDisposed ? Task.CompletedTask : host.PublishSyncResultAsync(result, ct);
+
+        host.RegisterBuiltIn(new SteamPlugin(steamSync, PublishCommandSyncAsync));
+        host.RegisterBuiltIn(new HeroicPlugin(heroicSync, PublishCommandSyncAsync));
         host.RegisterBuiltIn(new AmazonLunaPlugin());
         host.RegisterBuiltIn(new SnesRomPlugin());
         host.RegisterBuiltIn(new ProtonDbPlugin(protonDbClient, settingsDir, effectiveProbe));
