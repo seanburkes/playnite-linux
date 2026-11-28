@@ -1,9 +1,10 @@
-# Plugin Architecture — Iterations 1–5
+# Plugin Architecture — Iterations 1–6
 
 This document records the OpenCode v2–inspired plugin kernel, built-in store extractions,
 declarative UI extension slots, community-style compatibility plugin, host-rendered
-Plugins & Add-ons manager, and dynamic plugin command actions in Playnite Linux
-(`Playnite.Core.Plugins` and `Playnite.Desktop`).
+Plugins & Add-ons manager, dynamic plugin command actions, and declarative theme packs
+with live theme switching in Playnite Linux (`Playnite.Core.Plugins`, `Playnite.Core.Themes`,
+and `Playnite.Desktop`).
 
 ## Speed & Isolation Design
 
@@ -77,8 +78,34 @@ Plugins & Add-ons manager, and dynamic plugin command actions in Playnite Linux
     open (refreshing button visibility on flyout close) and trigger library/slot refreshes on
     completion.
 
+## Iteration 6 Deliverables — Declarative Theme Packs & Live Switching
+
+- **`src/Playnite.Core/Themes/`**:
+  - `ThemePackModels`: immutable `ThemePackDescriptor`, `ThemePackDocument`, `ThemeRgbaColor`
+    (strict `#RGB`/`#ARGB`/`#RRGGBB`/`#AARRGGBB` hex parser), `ThemeLinearGradient`,
+    `ThemePackDefaults` (canonical Charcoal 25-color baseline matching `PlayniteDarkTheme.axaml`,
+    brush mappings, semantic color aliases, and bounded metric rules).
+  - `ThemePackParser`: pure, bounded validator for `theme.yaml` (strict `ThemeApiVersion` 2.x
+    compatibility up to `2.10.0`, reserved/built-in ID rejection, unknown-property rejection,
+    iterative YAML anchor/alias/tag/depth/duplicate-key rejection), `tokens.yaml`, and
+    allow-listed declarative `.axaml` (`<ResourceDictionary>`/`<Styles>`, `<Color>`,
+    `<SolidColorBrush>`, `<LinearGradientBrush>`, `<x:Double>`, `<FontFamily>`, and
+    `<Style Selector="Window|:is(Window)">` `FontSize`/`FontFamily` setters via `XmlReader` with
+    DTD/entities prohibited and zero runtime XAML instantiation), plus symlink/FIFO/size guards.
+  - `ThemePackCatalog`: multi-root discovery (`PLAYNITE_THEMES_DIR`, `<libraryDir>/themes`,
+    and `PluginSurface.Theme` directories) with built-in Default Charcoal first, duplicate ID
+    diagnostics, and isolated invalid-pack reporting.
+- **`PluginHost` theme state**: `GetActiveThemeId()`, `SetActiveThemeId(string?)` persisted under
+  `HostStatePluginId`, and non-materializing `GetThemeDescriptors()`.
+- **`src/Playnite.Desktop/p7-004/Themes/` & Desktop Shell**:
+  - `LiveThemeManager` and `DesktopThemeCatalogFactory`: off-tree resource/style staging, atomic
+    application swap, fresh on-disk re-validation before live switch, `LibraryCardWidth` /
+    `LibraryCardHeight` / `LibraryDetailsWidth` dynamic resource synchronization, and guaranteed
+    safe Charcoal fallback on any error without persisting broken theme IDs.
+  - `LibraryGridView` & `PluginManagerWindow` (`Themes` tab): toolbar `Themes` action, palette
+    swatch preview, live Apply / Reset to Charcoal / Reload Themes actions, and theme diagnostics.
+
 ## Planned Next Iteration
 
-- **Iteration 6:** Declarative theme packs (`theme.yaml` + `.axaml`) and live theme switching,
-  plus package install/uninstall wiring (`AddonInstaller`) and `IMetadataCapability` integration in
-  the game metadata editor.
+- **Iteration 7:** Add-on package install/uninstall wiring (`AddonInstaller`) and
+  `IMetadataCapability` integration in the game metadata editor.

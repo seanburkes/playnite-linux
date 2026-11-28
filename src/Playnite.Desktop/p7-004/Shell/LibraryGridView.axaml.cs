@@ -14,10 +14,12 @@ using Playnite.Core.Library;
 using Playnite.Core.Models;
 using Playnite.Core.Plugins;
 using Playnite.Core.Queries;
+using Playnite.Core.Themes;
 using Playnite.Desktop.Bootstrap;
 using Playnite.Desktop.Fullscreen;
 using Playnite.Desktop.Integration;
 using Playnite.Desktop.Plugins;
+using Playnite.Desktop.Themes;
 using Playnite.Platform.Sessions;
 
 namespace Playnite.Desktop.Shell;
@@ -83,6 +85,7 @@ public sealed partial class LibraryGridView : UserControl
     private readonly Button emptySyncButton;
     private readonly Button emptySyncHeroicButton;
     private readonly Button pluginsButton;
+    private readonly Button themesButton;
     private readonly Button pluginActionsButton;
     private readonly MenuFlyout pluginActionsFlyout;
     private readonly Button gamePluginActionsButton;
@@ -103,7 +106,9 @@ public sealed partial class LibraryGridView : UserControl
     private readonly List<LibraryCardItem> activeCards = [];
     private readonly List<Bitmap> activeCardBitmaps = [];
 
+    private readonly string? externalThemesRoot;
     private LibraryArtworkLoader? artworkLoader;
+    private LiveThemeManager? themeManager;
     private Bitmap? activeHeroBitmap;
     private Window? activePluginsDialog;
     private CancellationTokenSource? artworkCts;
@@ -175,7 +180,8 @@ public sealed partial class LibraryGridView : UserControl
         Func<string, string?>? toolResolver = null,
         ILibraryHeroicSync? heroicSync = null,
         HeroicPlayRequest? heroicPlay = null,
-        LunaPlayRequest? lunaPlay = null)
+        LunaPlayRequest? lunaPlay = null,
+        string? externalThemesRoot = null)
     {
         this.steamPlay = steamPlay;
         this.lunaPlay = lunaPlay ?? LunaPlayRequest.CreateDefault();
@@ -188,6 +194,7 @@ public sealed partial class LibraryGridView : UserControl
         ownsSessionManager = sessionManager is null;
         this.sessionManager = sessionManager ?? new DesktopGameSessionManager();
         this.toolResolver = toolResolver;
+        this.externalThemesRoot = externalThemesRoot;
         AvaloniaXamlLoader.Load(this);
 
         playButton = this.FindControl<Button>("PlayButton")!;
@@ -205,6 +212,7 @@ public sealed partial class LibraryGridView : UserControl
         emptySyncButton = this.FindControl<Button>("EmptySyncButton")!;
         emptySyncHeroicButton = this.FindControl<Button>("EmptySyncHeroicButton")!;
         pluginsButton = this.FindControl<Button>("PluginsButton")!;
+        themesButton = this.FindControl<Button>("ThemesButton")!;
         pluginActionsButton = this.FindControl<Button>("PluginActionsButton")!;
         pluginActionsFlyout = (MenuFlyout)pluginActionsButton.Flyout!;
         gamePluginActionsButton = this.FindControl<Button>("GamePluginActionsButton")!;
@@ -313,6 +321,8 @@ public sealed partial class LibraryGridView : UserControl
 
     internal bool IsListViewMode => listView;
 
+    internal LiveThemeManager? ThemeManager => themeManager;
+
     public void Apply(LibraryViewModel viewModel)
     {
         ArgumentNullException.ThrowIfNull(viewModel);
@@ -342,6 +352,7 @@ public sealed partial class LibraryGridView : UserControl
 
         syncStatus.Text = string.Empty;
         model = viewModel;
+        AttachThemeManager(viewModel);
         RebuildRows();
         Refresh();
         if (searchSmoke)
@@ -1190,6 +1201,11 @@ public sealed partial class LibraryGridView : UserControl
         disposed = true;
         heroGeneration++;
         sessionManager.SessionUpdated -= OnSessionUpdated;
+        if (themeManager is not null)
+        {
+            themeManager.ThemeChanged -= OnLiveThemeChanged;
+            themeManager = null;
+        }
         CancelLocalOperations();
         ClearDetailsPluginSlots();
         heroCts?.Cancel();
@@ -1313,6 +1329,7 @@ public sealed partial class LibraryGridView : UserControl
         emptySyncButton.IsEnabled = available;
         emptySyncHeroicButton.IsEnabled = available;
         pluginsButton.IsEnabled = available && model?.Plugins is { IsDisposed: false };
+        themesButton.IsEnabled = available && themeManager is not null && model?.Plugins is { IsDisposed: false };
         UpdatePluginCommandActionsVisibility(available);
         fullscreenButton.IsEnabled = available && fullscreenButton.IsVisible;
     }
@@ -1870,8 +1887,27 @@ public sealed partial class LibraryGridView : UserControl
 
     private async void OnPluginsClicked(object? sender, RoutedEventArgs args)
     {
-        if (!pluginsButton.IsEnabled
-            || disposed
+        if (!pluginsButton.IsEnabled)
+        {
+            return;
+        }
+
+        await OpenManagerAsync(0).ConfigureAwait(true);
+    }
+
+    private async void OnThemesClicked(object? sender, RoutedEventArgs args)
+    {
+        if (!themesButton.IsEnabled)
+        {
+            return;
+        }
+
+        await OpenManagerAsync(1).ConfigureAwait(true);
+    }
+
+    private async Task OpenManagerAsync(int initialTabIndex)
+    {
+        if (disposed
             || editorPending
             || playPending
             || syncPending
@@ -1885,14 +1921,15 @@ public sealed partial class LibraryGridView : UserControl
             return;
         }
 
-        var task = OpenPluginsManagerAsync();
+        var task = OpenPluginsManagerAsync(initialTabIndex);
         PluginsDialogTask = task;
-        await ObserveUiTaskAsync(task, "plugins manager").ConfigureAwait(true);
+        await ObserveUiTaskAsync(task, initialTabIndex == 1 ? "themes manager" : "plugins manager").ConfigureAwait(true);
     }
 
-    private async Task OpenPluginsManagerAsync()
+    private async Task OpenPluginsManagerAsync(int initialTabIndex)
     {
-        if (!pluginsButton.IsEnabled
+        var triggerEnabled = initialTabIndex == 1 ? themesButton.IsEnabled : pluginsButton.IsEnabled;
+        if (!triggerEnabled
             || disposed
             || editorPending
             || playPending
@@ -1914,7 +1951,7 @@ public sealed partial class LibraryGridView : UserControl
         PluginManagerWindow? dialog = null;
         try
         {
-            dialog = new PluginManagerWindow(library.Plugins);
+            dialog = new PluginManagerWindow(library.Plugins, themeManager, initialTabIndex);
             activePluginsDialog = dialog;
             await dialog.ShowDialog(owner).ConfigureAwait(true);
             if (dialog.HasChanges
@@ -1959,6 +1996,65 @@ public sealed partial class LibraryGridView : UserControl
                 editorPending = false;
                 RefreshLibraryActions();
             }
+        }
+    }
+
+    private void AttachThemeManager(LibraryViewModel viewModel)
+    {
+        if (themeManager is not null)
+        {
+            themeManager.ThemeChanged -= OnLiveThemeChanged;
+            themeManager = null;
+        }
+
+        themeManager = DesktopThemeCatalogFactory.CreateForLibrary(
+            Application.Current,
+            viewModel.DatabasePath,
+            viewModel.Plugins,
+            externalThemesRoot: externalThemesRoot);
+        themeManager.ThemeChanged += OnLiveThemeChanged;
+        var result = themeManager.ApplyPersistedOrDefault();
+        SyncThemeMetricResources(result.ActiveDocument);
+        if (result.FellBackToCharcoal)
+        {
+            syncStatus.Text = result.StatusMessage;
+        }
+    }
+
+    private void OnLiveThemeChanged(object? sender, ThemeChangedEventArgs args)
+    {
+        if (!disposed)
+        {
+            SyncThemeMetricResources(args.Result.ActiveDocument);
+        }
+    }
+
+    private void SyncThemeMetricResources(ThemePackDocument document)
+    {
+        var cardWidth = document.Metrics.TryGetValue(ThemePackDefaults.LibraryCardWidthKey, out var cw)
+            ? cw
+            : ThemePackDefaults.MetricRules[ThemePackDefaults.LibraryCardWidthKey].DefaultValue;
+        var cardHeight = document.Metrics.TryGetValue(ThemePackDefaults.LibraryCardHeightKey, out var ch)
+            ? ch
+            : ThemePackDefaults.MetricRules[ThemePackDefaults.LibraryCardHeightKey].DefaultValue;
+        var detailsWidth = document.Metrics.TryGetValue(ThemePackDefaults.LibraryDetailsWidthKey, out var dw)
+            ? dw
+            : ThemePackDefaults.MetricRules[ThemePackDefaults.LibraryDetailsWidthKey].DefaultValue;
+        var cardCornerRadius = new CornerRadius(
+            document.Metrics.TryGetValue(ThemePackDefaults.CardCornerRadiusKey, out var cr)
+                ? cr
+                : ThemePackDefaults.MetricRules[ThemePackDefaults.CardCornerRadiusKey].DefaultValue);
+
+        Resources[ThemePackDefaults.LibraryDetailsWidthKey] = detailsWidth;
+        Resources[ThemePackDefaults.LibraryCardWidthKey] = cardWidth;
+        Resources[ThemePackDefaults.LibraryCardHeightKey] = cardHeight;
+        Resources[ThemePackDefaults.CardCornerRadiusKey] = cardCornerRadius;
+
+        foreach (var libraryTheme in Styles.OfType<LibraryTheme>())
+        {
+            libraryTheme.Resources[ThemePackDefaults.LibraryCardWidthKey] = cardWidth;
+            libraryTheme.Resources[ThemePackDefaults.LibraryCardHeightKey] = cardHeight;
+            libraryTheme.Resources[ThemePackDefaults.CardCornerRadiusKey] = cardCornerRadius;
         }
     }
 

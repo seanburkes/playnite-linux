@@ -8,12 +8,15 @@ using Avalonia.Markup.Xaml;
 using Avalonia.Media;
 using Avalonia.Media.Immutable;
 using Playnite.Core.Plugins;
+using Playnite.Core.Themes;
+using Playnite.Desktop.Themes;
 
 namespace Playnite.Desktop.Shell;
 
 /// <summary>
 /// Modal Plugins &amp; Add-ons manager displaying built-in/external plugin states,
-/// lifecycle toggles, diagnostics, and host-rendered settings forms from <see cref="PluginSettingField"/> DTOs.
+/// lifecycle toggles, diagnostics, host-rendered settings forms from <see cref="PluginSettingField"/> DTOs,
+/// and declarative theme pack management with live switching.
 /// </summary>
 public sealed partial class PluginManagerWindow : Window
 {
@@ -33,6 +36,8 @@ public sealed partial class PluginManagerWindow : Window
         TextBlock ErrorText);
 
     private readonly PluginHost? host;
+    private readonly LiveThemeManager? themeManager;
+    private readonly TabControl managerTabs;
     private readonly TextBlock summaryText;
     private readonly ListBox pluginList;
     private readonly TextBlock selectedPluginName;
@@ -50,25 +55,45 @@ public sealed partial class PluginManagerWindow : Window
     private readonly TextBlock settingsStatusText;
     private readonly Border hostDiagnosticsPanel;
     private readonly StackPanel hostDiagnosticsList;
+    private readonly ListBox themeList;
+    private readonly TextBlock selectedThemeName;
+    private readonly TextBlock selectedThemeMeta;
+    private readonly TextBlock selectedThemeDescription;
+    private readonly WrapPanel themeSwatchPreview;
+    private readonly Button applyThemeButton;
+    private readonly Button resetThemeButton;
+    private readonly Button reloadThemesButton;
+    private readonly TextBlock themeStatusText;
+    private readonly Border themeDiagnosticsPanel;
+    private readonly StackPanel themeDiagnosticsList;
     private readonly List<FieldEditor> fieldEditors = [];
     private readonly Dictionary<string, (ListBoxItem Item, Border Pill, TextBlock PillLabel)> listItemRows =
         new(StringComparer.Ordinal);
 
     private Control? firstInputControl;
     private bool updatingSelection;
+    private bool updatingThemeSelection;
     private bool settingsDirty;
     private string? selectedPluginId;
+    private ThemePackCatalogEntry? selectedThemeEntry;
 
     public PluginManagerWindow()
-        : this(null)
+        : this(null, null, 0)
     {
     }
 
     internal PluginManagerWindow(PluginHost? host)
+        : this(host, null, 0)
+    {
+    }
+
+    internal PluginManagerWindow(PluginHost? host, LiveThemeManager? themeManager, int initialTabIndex = 0)
     {
         this.host = host;
+        this.themeManager = themeManager;
         AvaloniaXamlLoader.Load(this);
 
+        managerTabs = this.FindControl<TabControl>("ManagerTabs")!;
         summaryText = this.FindControl<TextBlock>("SummaryText")!;
         pluginList = this.FindControl<ListBox>("PluginList")!;
         selectedPluginName = this.FindControl<TextBlock>("SelectedPluginName")!;
@@ -86,15 +111,34 @@ public sealed partial class PluginManagerWindow : Window
         settingsStatusText = this.FindControl<TextBlock>("SettingsStatusText")!;
         hostDiagnosticsPanel = this.FindControl<Border>("HostDiagnosticsPanel")!;
         hostDiagnosticsList = this.FindControl<StackPanel>("HostDiagnosticsList")!;
+        themeList = this.FindControl<ListBox>("ThemeList")!;
+        selectedThemeName = this.FindControl<TextBlock>("SelectedThemeName")!;
+        selectedThemeMeta = this.FindControl<TextBlock>("SelectedThemeMeta")!;
+        selectedThemeDescription = this.FindControl<TextBlock>("SelectedThemeDescription")!;
+        themeSwatchPreview = this.FindControl<WrapPanel>("ThemeSwatchPreview")!;
+        applyThemeButton = this.FindControl<Button>("ApplyThemeButton")!;
+        resetThemeButton = this.FindControl<Button>("ResetThemeButton")!;
+        reloadThemesButton = this.FindControl<Button>("ReloadThemesButton")!;
+        themeStatusText = this.FindControl<TextBlock>("ThemeStatusText")!;
+        themeDiagnosticsPanel = this.FindControl<Border>("ThemeDiagnosticsPanel")!;
+        themeDiagnosticsList = this.FindControl<StackPanel>("ThemeDiagnosticsList")!;
 
         pluginList.SelectionChanged += OnPluginSelected;
         enabledToggle.IsCheckedChanged += OnEnabledChanged;
         loadSettingsButton.Click += OnLoadSettingsClicked;
         saveSettingsButton.Click += OnSaveSettingsClicked;
         resetDefaultsButton.Click += OnResetDefaultsClicked;
+        themeList.SelectionChanged += OnThemeSelected;
+        applyThemeButton.Click += OnApplyThemeClicked;
+        resetThemeButton.Click += OnResetThemeClicked;
+        reloadThemesButton.Click += OnReloadThemesClicked;
         this.FindControl<Button>("CloseButton")!.Click += (_, _) => Close();
 
+        managerTabs.SelectedIndex = Math.Clamp(initialTabIndex, 0, 1);
         RefreshListAndSelection(preferredPluginId: null);
+        var initialThemeEntry = themeManager?.Catalog.Entries.FirstOrDefault(e =>
+            e.IsValid && string.Equals(e.Id, themeManager.ActiveDocument.Descriptor.Id, StringComparison.Ordinal));
+        RefreshThemesListAndSelection(initialThemeEntry);
     }
 
     /// <summary>Gets whether any plugin enablement state, activation, or setting was modified during this session.</summary>
@@ -676,6 +720,11 @@ public sealed partial class PluginManagerWindow : Window
             }
 
             RefreshListAndSelection(pluginId);
+            if (themeManager is not null)
+            {
+                themeManager.RefreshCatalog();
+                RefreshThemesListAndSelection(selectedThemeEntry);
+            }
         }
         catch (ObjectDisposedException)
         {
@@ -886,4 +935,354 @@ public sealed partial class PluginManagerWindow : Window
         PluginLifecycleState.Faulted => ("Faulted", FaultBadgeBg, FaultBadgeFg),
         _ => ("Disposed", DisabledBadgeBg, DisabledBadgeFg),
     };
+
+    private void RefreshThemesListAndSelection(ThemePackCatalogEntry? preferredEntry)
+    {
+        updatingThemeSelection = true;
+        try
+        {
+            themeList.Items.Clear();
+            if (themeManager is null)
+            {
+                selectedThemeEntry = null;
+                selectedThemeName.Text = "Themes unavailable";
+                selectedThemeMeta.Text = string.Empty;
+                selectedThemeDescription.IsVisible = false;
+                themeSwatchPreview.Children.Clear();
+                applyThemeButton.IsEnabled = false;
+                resetThemeButton.IsEnabled = false;
+                reloadThemesButton.IsEnabled = false;
+                themeDiagnosticsList.Children.Clear();
+                themeDiagnosticsPanel.IsVisible = false;
+                return;
+            }
+
+            var activeId = themeManager.ActiveDocument.Descriptor.Id;
+            var entries = themeManager.Catalog.Entries;
+            var selectIndex = -1;
+            for (var index = 0; index < entries.Count; index++)
+            {
+                var entry = entries[index];
+                var isActive = entry.IsValid && string.Equals(entry.Id, activeId, StringComparison.Ordinal);
+                var (statusText, badgeBg, badgeFg) = isActive
+                    ? ("Active", ActiveBadgeBg, ActiveBadgeFg)
+                    : entry.IsValid
+                        ? ("Available", LazyBadgeBg, LazyBadgeFg)
+                        : ("Invalid", FaultBadgeBg, FaultBadgeFg);
+
+                var rowGrid = new Grid
+                {
+                    ColumnDefinitions = new ColumnDefinitions("*,Auto"),
+                    RowDefinitions = new RowDefinitions("Auto,Auto"),
+                    ColumnSpacing = 6,
+                    RowSpacing = 2,
+                };
+
+                var nameText = new TextBlock
+                {
+                    Text = entry.DisplayName,
+                    FontWeight = FontWeight.SemiBold,
+                    TextTrimming = TextTrimming.CharacterEllipsis,
+                };
+                Grid.SetRow(nameText, 0);
+                Grid.SetColumn(nameText, 0);
+
+                var pillLabel = new TextBlock
+                {
+                    Text = statusText,
+                    FontSize = 10,
+                    FontWeight = FontWeight.SemiBold,
+                    Foreground = badgeFg,
+                };
+                var statusPill = new Border
+                {
+                    Background = badgeBg,
+                    CornerRadius = new CornerRadius(4),
+                    Padding = new Thickness(6, 1),
+                    VerticalAlignment = VerticalAlignment.Center,
+                    Child = pillLabel,
+                };
+                Grid.SetRow(statusPill, 0);
+                Grid.SetColumn(statusPill, 1);
+
+                var subTextText = string.Equals(entry.Id, ThemePackDefaults.DefaultDesktopThemeId, StringComparison.Ordinal)
+                    ? "Built-in · Charcoal baseline"
+                    : entry.Descriptor is { } descriptor
+                        ? $"{descriptor.BaseVariant} · v{descriptor.Version} · API {descriptor.ThemeApiVersion}"
+                        : "Validation error · see diagnostics";
+                var subText = new TextBlock
+                {
+                    Text = subTextText,
+                    FontSize = 11,
+                    Opacity = 0.72,
+                    TextTrimming = TextTrimming.CharacterEllipsis,
+                };
+                Grid.SetRow(subText, 1);
+                Grid.SetColumn(subText, 0);
+                Grid.SetColumnSpan(subText, 2);
+
+                rowGrid.Children.Add(nameText);
+                rowGrid.Children.Add(statusPill);
+                rowGrid.Children.Add(subText);
+
+                var item = new ListBoxItem
+                {
+                    Tag = entry,
+                    Content = rowGrid,
+                    Padding = new Thickness(8, 6),
+                };
+                AutomationProperties.SetName(item, $"{entry.DisplayName} ({statusText})");
+                themeList.Items.Add(item);
+
+                if (selectIndex < 0 && preferredEntry is not null && MatchesThemeEntry(entry, preferredEntry))
+                {
+                    selectIndex = index;
+                }
+            }
+
+            if (selectIndex < 0 && entries.Count > 0)
+            {
+                selectIndex = 0;
+            }
+
+            themeList.SelectedIndex = selectIndex;
+            RenderSelectedTheme();
+        }
+        finally
+        {
+            updatingThemeSelection = false;
+        }
+    }
+
+    private static bool MatchesThemeEntry(ThemePackCatalogEntry candidate, ThemePackCatalogEntry target)
+    {
+        if (ReferenceEquals(candidate, target))
+        {
+            return true;
+        }
+
+        if (candidate.RootDirectory is not null && target.RootDirectory is not null)
+        {
+            return string.Equals(candidate.RootDirectory, target.RootDirectory, StringComparison.Ordinal);
+        }
+
+        return candidate.IsValid == target.IsValid
+            && string.Equals(candidate.Id, target.Id, StringComparison.Ordinal);
+    }
+
+    private void OnThemeSelected(object? sender, SelectionChangedEventArgs args)
+    {
+        if (updatingThemeSelection || themeManager is null)
+        {
+            return;
+        }
+
+        themeStatusText.IsVisible = false;
+        themeStatusText.Text = string.Empty;
+        RenderSelectedTheme();
+    }
+
+    private void RenderSelectedTheme()
+    {
+        themeSwatchPreview.Children.Clear();
+        themeDiagnosticsList.Children.Clear();
+        themeDiagnosticsPanel.IsVisible = false;
+
+        if (themeManager is null)
+        {
+            return;
+        }
+
+        var entry = (themeList.SelectedItem as ListBoxItem)?.Tag as ThemePackCatalogEntry;
+        if (entry is null)
+        {
+            selectedThemeEntry = null;
+            selectedThemeName.Text = "No themes discovered";
+            selectedThemeMeta.Text = string.Empty;
+            selectedThemeDescription.IsVisible = false;
+            applyThemeButton.IsEnabled = false;
+            resetThemeButton.IsEnabled = true;
+            reloadThemesButton.IsEnabled = true;
+            return;
+        }
+
+        selectedThemeEntry = entry;
+        selectedThemeName.Text = entry.DisplayName;
+        var activeId = themeManager.ActiveDocument.Descriptor.Id;
+        var isActive = entry.IsValid && string.Equals(entry.Id, activeId, StringComparison.Ordinal);
+
+        if (entry.Descriptor is { } descriptor)
+        {
+            var statusLabel = isActive ? "Active" : entry.IsValid ? "Available" : "Invalid";
+            var metaParts = new List<string>
+            {
+                $"ID: {descriptor.Id}",
+                $"Version: {descriptor.Version}",
+                $"API: {descriptor.ThemeApiVersion}",
+                $"Variant: {descriptor.BaseVariant}",
+                $"Status: {statusLabel}",
+            };
+            if (!string.IsNullOrWhiteSpace(descriptor.Author))
+            {
+                metaParts.Add($"Author: {descriptor.Author}");
+            }
+
+            if (!string.IsNullOrWhiteSpace(descriptor.RootDirectory))
+            {
+                metaParts.Add($"Root: {descriptor.RootDirectory}");
+            }
+
+            selectedThemeMeta.Text = string.Join(" · ", metaParts);
+            if (!string.IsNullOrWhiteSpace(descriptor.Description))
+            {
+                selectedThemeDescription.Text = descriptor.Description;
+                selectedThemeDescription.IsVisible = true;
+            }
+            else
+            {
+                selectedThemeDescription.Text = string.Empty;
+                selectedThemeDescription.IsVisible = false;
+            }
+        }
+        else
+        {
+            selectedThemeMeta.Text = $"ID: {entry.Id} · Status: Invalid · Root: {entry.RootDirectory ?? "(none)"}";
+            selectedThemeDescription.IsVisible = false;
+        }
+
+        var previewValidation = entry.IsValid ? themeManager.LoadPreviewDocument(entry) : null;
+        if (previewValidation is { IsValid: true, Document: { } previewDoc })
+        {
+            RenderThemeSwatches(previewDoc);
+        }
+        else
+        {
+            RenderThemeSwatches(ThemePackDefaults.BuiltInCharcoal);
+        }
+
+        var diagnostics = previewValidation is { IsValid: false, Diagnostics.Count: > 0 }
+            ? previewValidation.Diagnostics
+            : entry.Diagnostics;
+        foreach (var diag in diagnostics)
+        {
+            AddDiagnosticLine(themeDiagnosticsList, $"[{diag.Code} · {diag.Path}] {diag.Message}");
+        }
+
+        themeDiagnosticsPanel.IsVisible = themeDiagnosticsList.Children.Count > 0;
+        applyThemeButton.IsEnabled = true;
+        resetThemeButton.IsEnabled = true;
+        reloadThemesButton.IsEnabled = true;
+    }
+
+    private void RenderThemeSwatches(ThemePackDocument document)
+    {
+        var effective = ThemePackDefaults.ResolveEffectiveColors(document);
+        var tokens = new (string Label, string BrushKey, string ColorKey)[]
+        {
+            ("Canvas", "PlayniteCanvasBrush", "PlayniteCanvasBottomColor"),
+            ("Surface", "PlayniteSurfaceBrush", "PlayniteSurfaceColor"),
+            ("Card", "PlayniteCardBackgroundBrush", "PlayniteCardBackgroundColor"),
+            ("Accent", "PlayniteAccentBrush", "PlayniteAccentColor"),
+            ("Text", "PlayniteTextPrimaryBrush", "PlayniteTextPrimaryColor"),
+            ("Border", "PlayniteBorderBrush", "PlayniteBorderColor"),
+        };
+
+        foreach (var (label, brushKey, colorKey) in tokens)
+        {
+            var rgba = document.BrushColors.TryGetValue(brushKey, out var brushOverride)
+                ? brushOverride
+                : effective[colorKey];
+            var swatchColor = Color.FromArgb(rgba.A, rgba.R, rgba.G, rgba.B);
+            var chip = new Border
+            {
+                Background = new ImmutableSolidColorBrush(swatchColor),
+                BorderBrush = DisabledBadgeFg,
+                BorderThickness = new Thickness(1),
+                CornerRadius = new CornerRadius(4),
+                Width = 22,
+                Height = 22,
+            };
+            var caption = new TextBlock
+            {
+                Text = label,
+                FontSize = 11,
+                VerticalAlignment = VerticalAlignment.Center,
+            };
+            var pair = new StackPanel
+            {
+                Orientation = Orientation.Horizontal,
+                Spacing = 6,
+                Children = { chip, caption },
+            };
+            themeSwatchPreview.Children.Add(pair);
+        }
+    }
+
+    private void OnApplyThemeClicked(object? sender, RoutedEventArgs args)
+    {
+        if (themeManager is null || selectedThemeEntry is not { } entry)
+        {
+            return;
+        }
+
+        var result = themeManager.ApplyCatalogEntry(entry, persist: true);
+        if (result.FellBackToCharcoal)
+        {
+            themeManager.RefreshCatalog();
+        }
+
+        RefreshThemesListAndSelection(entry);
+        ShowThemeStatus(result);
+    }
+
+    private void OnResetThemeClicked(object? sender, RoutedEventArgs args)
+    {
+        if (themeManager is null)
+        {
+            return;
+        }
+
+        var result = themeManager.ResetToCharcoal(persist: true);
+        var charcoalEntry = themeManager.Catalog.Entries.FirstOrDefault(e =>
+            e.IsValid && string.Equals(e.Id, ThemePackDefaults.DefaultDesktopThemeId, StringComparison.Ordinal));
+        RefreshThemesListAndSelection(charcoalEntry);
+        ShowThemeStatus(result);
+    }
+
+    private void OnReloadThemesClicked(object? sender, RoutedEventArgs args)
+    {
+        if (themeManager is null)
+        {
+            return;
+        }
+
+        var priorEntry = selectedThemeEntry;
+        var discovery = themeManager.RefreshCatalog();
+        RefreshThemesListAndSelection(priorEntry);
+        themeStatusText.Text = string.Create(
+            CultureInfo.InvariantCulture,
+            $"Discovered {discovery.Entries.Count} themes ({discovery.Diagnostics.Count} diagnostics).");
+        themeStatusText.Foreground = LazyBadgeFg;
+        themeStatusText.IsVisible = true;
+    }
+
+    private void ShowThemeStatus(ThemeSwitchResult result)
+    {
+        themeStatusText.Text = result.StatusMessage;
+        themeStatusText.Foreground = result.FellBackToCharcoal || result.Diagnostics.Count > 0
+            ? FaultBadgeFg
+            : ActiveBadgeFg;
+        themeStatusText.IsVisible = true;
+
+        if (result.Diagnostics.Count > 0)
+        {
+            themeDiagnosticsList.Children.Clear();
+            foreach (var diag in result.Diagnostics)
+            {
+                AddDiagnosticLine(themeDiagnosticsList, $"[{diag.Code} · {diag.Path}] {diag.Message}");
+            }
+
+            themeDiagnosticsPanel.IsVisible = true;
+        }
+    }
 }
