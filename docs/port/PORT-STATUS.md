@@ -75,8 +75,8 @@ in [`gates/P5-pending.md`](gates/P5-pending.md).
 
 | Metric | Value |
 | --- | ---: |
-| Ledger rows | 400 |
-| Ledger fragments | 173 |
+| Ledger rows | 401 |
+| Ledger fragments | 174 |
 
 ## Units
 
@@ -180,7 +180,7 @@ in [`gates/P5-pending.md`](gates/P5-pending.md).
 | p7-002 | W7 | ui | Shell/main window | done | `units/p7-002.*`; 5 ledger rows |
 | p7-003 | W7 | ui | Library grid/list/details | done | `units/p7-003.*`; 4 ledger rows |
 | p7-004 | W7 | ui | Search/filter/sort and library Play | done | `units/p7-004.*`; 21 ledger rows |
-| p7-005 | W7 | ui | Game edit/metadata | done | `units/p7-005.*`; 5 ledger rows |
+| p7-005 | W7 | ui | Game edit/metadata | done | `units/p7-005.*`; 6 ledger rows |
 | p7-006 | W7 | ui | Settings/first-run/import | done | `units/p7-006.*`; 3 ledger rows |
 | p7-007 | W7 | ui | Tray/protocol/keyboard | done | `units/p7-007.*`; 2 ledger rows |
 | p7-008 | W7 | ui | Headless UI usability checks (accessibility deferred per D1) | done | `units/p7-008.*`; 3 ledger rows |
