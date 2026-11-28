@@ -1,5 +1,6 @@
 using System.Runtime.InteropServices;
 using Playnite.Core;
+using Playnite.Core.Addons;
 
 namespace Playnite.Platform.Linux;
 
@@ -10,7 +11,7 @@ namespace Playnite.Platform.Linux;
 /// from <c>statx</c>'s <c>stx_mode</c>, not from a managed <see cref="System.IO.FileInfo"/>,
 /// which reports every non-directory Unix entry as a file.
 /// </summary>
-public sealed class LinuxRegularFileProbe : IRegularFileProbe
+public sealed class LinuxRegularFileProbe : IRegularFileProbe, IAddonPackageFileReader
 {
     private const int AtFdCwd = -100;
     private const int AtEmptyPath = 0x1000;
@@ -18,6 +19,8 @@ public sealed class LinuxRegularFileProbe : IRegularFileProbe
     private const int OpenNoFollow = 0x20000;
     private const int OpenNonBlock = 0x800;
     private const int CloseOnExec = 0x80000;
+    private const int DirectoryOnly = 0x10000;
+    private const int NoControllingTerminal = 0x100;
     private const uint StatxType = 0x00000001;
     private const ushort FileTypeMask = 0xF000;
     private const ushort RegularFile = 0x8000;
@@ -49,6 +52,58 @@ public sealed class LinuxRegularFileProbe : IRegularFileProbe
         }
 
         return (stat.Mask & StatxType) != 0 && (stat.Mode & FileTypeMask) == RegularFile;
+    }
+
+    /// <inheritdoc />
+    public Stream OpenPackageFile(string path)
+    {
+        if (!OperatingSystem.IsLinux() || !Path.IsPathFullyQualified(path) || path.Contains('\0'))
+        {
+            throw new ArgumentException("An absolute Linux file path is required.", nameof(path));
+        }
+
+        var parts = Path.GetFullPath(path).Split('/', StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length == 0)
+        {
+            throw new InvalidDataException("The root directory is not a package file.");
+        }
+
+        const int directoryFlags = OpenPath | DirectoryOnly | OpenNoFollow | CloseOnExec;
+        var directory = OpenPackageHandle(AtFdCwd, "/", directoryFlags);
+        try
+        {
+            foreach (var part in parts.AsSpan(0, parts.Length - 1))
+            {
+                var next = OpenPackageHandle(directory.DangerousGetHandle().ToInt32(), part, directoryFlags);
+                directory.Dispose();
+                directory = next;
+            }
+
+            using var file = OpenPackageHandle(directory.DangerousGetHandle().ToInt32(), parts[^1],
+                OpenNoFollow | OpenNonBlock | NoControllingTerminal | CloseOnExec);
+            if (Statx(file, string.Empty, AtEmptyPath, StatxType, out var stat) != 0
+                || (stat.Mask & StatxType) == 0 || (stat.Mode & FileTypeMask) != RegularFile)
+            {
+                throw new InvalidDataException($"'{path}' is not a regular file.");
+            }
+
+            // Reopen the already verified inode while its descriptor is still held.
+            var descriptor = file.DangerousGetHandle().ToInt32();
+            return new FileStream($"/proc/self/fd/{descriptor}", FileMode.Open, FileAccess.Read,
+                FileShare.Read, bufferSize: 81920, useAsync: true);
+        }
+        finally
+        {
+            directory.Dispose();
+        }
+    }
+
+    private static ProbeHandle OpenPackageHandle(int directory, string name, int flags)
+    {
+        var descriptor = OpenAt(directory, name, flags);
+        return descriptor < 0
+            ? throw new IOException($"Could not safely open '{name}' (errno {Marshal.GetLastPInvokeError()}).")
+            : new ProbeHandle(descriptor);
     }
 
     // Linux statx has a fixed, architecture-independent 256-byte ABI (unlike struct stat), the

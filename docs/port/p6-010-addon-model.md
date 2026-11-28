@@ -199,7 +199,7 @@ whose `head_sha` equals that head; it completed successfully. All 8 PR checks pa
 head (`gh-axi pr checks 215`: 8 passed, 0 failed). The local runs quoted above were made on that
 same head after restoring the mutated predicate.
 
-## 6. Out of scope
+## 6. Original scope boundaries
 
 No add-on store, catalogue download, package download, version update/rollback path, licence
 UI, zip extraction, plugin loading, UI extension-point freeze or SDK/Abstractions change. The
@@ -207,3 +207,12 @@ store and its online catalogue remain v1.1. **Theme installation and theme disco
 deferred** (§3): v10 installs `<Themes>/<Mode>/<id>/theme.yaml` and discovers that exact shape
 without recursion, which this extensions-root layout cannot represent; a follow-up unit owns the
 `Themes` root and the mode level.
+
+The [Iteration 7 package workflow](p7-004-plugin-kernel.md#iteration-7--local-add-on-packages-and-game-metadata)
+adds local folder and ZIP install, version updates, rollback and uninstall through `AddonInstaller`.
+Managed versions are staged under `.playnite-packages` in the configured plugin root. A version
+record publishes immutable payload paths for the active and rollback versions together; discovery
+ignores other payloads. Uninstall retires the version record; the next Desktop session cleans up
+the files, so running hosts can still resolve their registered paths. Local source reads hold
+verified regular files, and archive directory bounds are checked before extraction.
+Online add-on catalogues and v10 Windows theme packages remain outside this workflow.
