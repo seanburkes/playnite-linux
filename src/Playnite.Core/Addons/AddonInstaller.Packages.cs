@@ -171,6 +171,11 @@ public sealed partial class AddonInstaller
         }
 
         using var packageLock = OpenPackageLock();
+        using var exclusiveUsage = TryAcquireExclusiveUsage();
+        if (exclusiveUsage is null)
+        {
+            return;
+        }
         foreach (var directory in Directory.EnumerateDirectories(PackageRoot))
         {
             var id = Path.GetFileName(directory);
@@ -216,6 +221,23 @@ public sealed partial class AddonInstaller
             }
         }
     }
+
+    internal IDisposable? AcquirePackageUsage() =>
+        IsPlainDirectory(Layout.RootPath) && IsPlainDirectory(PackageRoot) ? OpenUsageLock(FileShare.ReadWrite) : null;
+
+    private FileStream? TryAcquireExclusiveUsage()
+    {
+        try
+        {
+            return OpenUsageLock(FileShare.None);
+        }
+        catch (IOException)
+        {
+            return null;
+        }
+    }
+
+    private FileStream OpenUsageLock(FileShare share) => OpenLock(".usage", share);
 
     internal IEnumerable<(ManagedAddonPackage Package, string Directory)> GetActivePackageDirectories(
         Action<string, string>? reportError = null) =>
@@ -441,23 +463,30 @@ public sealed partial class AddonInstaller
     }
 
     private static bool IsPackageId(string id) =>
-        AddonPathSafety.IsSafeSegment(id) && id != ".lock"
+        AddonPathSafety.IsSafeSegment(id) && id is not (".lock" or ".usage")
         && !id.StartsWith(".staging-", StringComparison.Ordinal) && !id.StartsWith(".archive-", StringComparison.Ordinal);
 
     private Stream OpenPackageFile(string path) =>
-        ((IAddonPackageFileReader)fileTypeProbe).OpenPackageFile(path);
+        fileTypeProbe is IAddonPackageFileReader reader
+            ? reader.OpenPackageFile(path)
+            : throw new InvalidDataException("No handle-bound file reader is configured for managed packages.");
 
     private FileStream OpenPackageLock()
     {
         EnsureDirectory(Layout.RootPath);
         EnsureDirectory(PackageRoot);
-        var path = Path.Combine(PackageRoot, ".lock");
+        return OpenLock(".lock", FileShare.None);
+    }
+
+    private FileStream OpenLock(string name, FileShare share)
+    {
+        var path = Path.Combine(PackageRoot, name);
         var file = new FileInfo(path);
         if (file.LinkTarget is not null || (file.Exists && !fileTypeProbe.IsRegularFile(path)))
         {
             throw new InvalidDataException("The package lock is not a regular file.");
         }
-        return new FileStream(path, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
+        return new FileStream(path, FileMode.OpenOrCreate, FileAccess.ReadWrite, share);
     }
 
     private static bool IsPlainDirectory(string path)

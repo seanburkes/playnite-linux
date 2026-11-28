@@ -39,6 +39,11 @@ public sealed class AddonPackageLifecycleTests
         Assert.Empty(files.Installer.GetPackages());
         Assert.Null(files.ActiveVersion());
         Assert.True(File.Exists(Path.Combine(newUpdatePath, "Plugin.dll")));
+        using (files.Installer.AcquirePackageUsage())
+        {
+            files.Installer.CleanRetiredPackages((id, error) => Assert.Fail($"{id}: {error}"));
+            Assert.True(File.Exists(Path.Combine(newUpdatePath, "Plugin.dll")));
+        }
         files.Installer.CleanRetiredPackages((id, error) => Assert.Fail($"{id}: {error}"));
         Assert.False(Directory.Exists(Path.Combine(files.Plugins, AddonInstaller.PackageStoreName, "test.addon")));
     }
@@ -73,6 +78,26 @@ public sealed class AddonPackageLifecycleTests
         var error = await Assert.ThrowsAsync<InvalidDataException>(
             () => files.Installer.InstallPackageAsync(archive, host, updateId: null, token));
         Assert.Contains("more entries than declared", error.Message);
+        Assert.Empty(files.Installer.GetPackages());
+    }
+
+    [Fact]
+    public async Task Inconsistent_last_zip_end_record_is_rejected()
+    {
+        var token = TestContext.Current.CancellationToken;
+        using var files = new PackageFiles();
+        using var host = new PluginHost(PluginSurface.Desktop);
+        var archive = Path.Combine(files.Root, "wrong-end.zip");
+        ZipFile.CreateFromDirectory(files.CreateFolder("1.0"), archive);
+        var bytes = await File.ReadAllBytesAsync(archive, token);
+        bytes[^2] = 22; // The real end record describes a comment containing the second signature.
+        var trailer = new byte[22];
+        new byte[] { 0x50, 0x4b, 0x05, 0x06 }.CopyTo(trailer, 0);
+        trailer[^2] = 1; // But the second signature cannot describe a valid end record.
+        await File.WriteAllBytesAsync(archive, [.. bytes, .. trailer], token);
+
+        await Assert.ThrowsAsync<InvalidDataException>(
+            () => files.Installer.InstallPackageAsync(archive, host, updateId: null, token));
         Assert.Empty(files.Installer.GetPackages());
     }
 

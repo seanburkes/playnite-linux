@@ -20,7 +20,6 @@ public sealed class LinuxRegularFileProbe : IRegularFileProbe, IAddonPackageFile
     private const int OpenNonBlock = 0x800;
     private const int CloseOnExec = 0x80000;
     private const int DirectoryOnly = 0x10000;
-    private const int NoControllingTerminal = 0x100;
     private const uint StatxType = 0x00000001;
     private const ushort FileTypeMask = 0xF000;
     private const ushort RegularFile = 0x8000;
@@ -80,7 +79,7 @@ public sealed class LinuxRegularFileProbe : IRegularFileProbe, IAddonPackageFile
             }
 
             using var file = OpenPackageHandle(directory.DangerousGetHandle().ToInt32(), parts[^1],
-                OpenNoFollow | OpenNonBlock | NoControllingTerminal | CloseOnExec);
+                OpenPath | OpenNoFollow | CloseOnExec);
             if (Statx(file, string.Empty, AtEmptyPath, StatxType, out var stat) != 0
                 || (stat.Mask & StatxType) == 0 || (stat.Mode & FileTypeMask) != RegularFile)
             {
