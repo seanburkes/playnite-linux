@@ -16,12 +16,15 @@ src/Playnite.Cli/Program.cs	p2-001	9afd818ae8a695e921bb98f386bfceb83d0059db	pull
 src/Playnite.Cli/Program.cs	p2-004	34af4f0fb6430fbc585d3b76ce85094390a26467	pull/34
 src/Playnite.Cli/Program.cs	p4-002	9f81d30b3cc4a6beb0e15f39610ecd219ebc19f7	pull/94
 src/Playnite.Core/Addons/AddonDiagnostic.cs	p6-010	8f8f89e0d9081e45d72e175296ffa76890f3669d	pull/215
-src/Playnite.Core/Addons/AddonInstallLayout.cs	p6-010	8f8f89e0d9081e45d72e175296ffa76890f3669d	pull/215
-src/Playnite.Core/Addons/AddonInstaller.cs	p6-010	8f8f89e0d9081e45d72e175296ffa76890f3669d	pull/215
+src/Playnite.Core/Addons/AddonInstallLayout.cs	p6-010	b4481e7d00ede1039db339bf2957491af951d3c8	pull/271
+src/Playnite.Core/Addons/AddonInstaller.Packages.cs	p6-010	b4481e7d00ede1039db339bf2957491af951d3c8	pull/271
+src/Playnite.Core/Addons/AddonInstaller.ZipDirectory.cs	p6-010	b4481e7d00ede1039db339bf2957491af951d3c8	pull/271
+src/Playnite.Core/Addons/AddonInstaller.cs	p6-010	b4481e7d00ede1039db339bf2957491af951d3c8	pull/271
 src/Playnite.Core/Addons/AddonManifestValidator.cs	p6-010	8f8f89e0d9081e45d72e175296ffa76890f3669d	pull/215
 src/Playnite.Core/Addons/AddonOperationResults.cs	p6-010	8f8f89e0d9081e45d72e175296ffa76890f3669d	pull/215
 src/Playnite.Core/Addons/AddonPathSafety.cs	p6-010	8f8f89e0d9081e45d72e175296ffa76890f3669d	pull/215
 src/Playnite.Core/Addons/AddonValidationResult.cs	p6-010	8f8f89e0d9081e45d72e175296ffa76890f3669d	pull/215
+src/Playnite.Core/Addons/IAddonPackageFileReader.cs	p6-010	b4481e7d00ede1039db339bf2957491af951d3c8	pull/271
 src/Playnite.Core/Archive.cs	p3-008b	e71ad0db1445f0e382485eaa2a4624d5ec8eb88a	pull/79
 src/Playnite.Core/AssemblyMarker.cs	p2-001	9afd818ae8a695e921bb98f386bfceb83d0059db	pull/29
 src/Playnite.Core/AssemblyMarker.cs	p2-002	abdb82bedd0bcadfe93c1fc6f11937c55b116b7c	pull/37
@@ -290,7 +293,7 @@ src/Playnite.Platform.Linux/LinuxBoundedFileReader.cs	p5-002	c057be0f3e548ac31ac
 src/Playnite.Platform.Linux/LinuxEnvironment.cs	*	d6401f1f07c69474d0ce395797ab694bedf019e7	pull/68
 src/Playnite.Platform.Linux/LinuxFileSystem.cs	*	d6401f1f07c69474d0ce395797ab694bedf019e7	pull/68
 src/Playnite.Platform.Linux/LinuxPaths.cs	p5-002	a37890f33110c70b8411bac4457d16e0aa41822f	pull/116
-src/Playnite.Platform.Linux/LinuxRegularFileProbe.cs	p6-010	8f8f89e0d9081e45d72e175296ffa76890f3669d	pull/215
+src/Playnite.Platform.Linux/LinuxRegularFileProbe.cs	p6-010	b4481e7d00ede1039db339bf2957491af951d3c8	pull/271
 src/Playnite.Platform.Linux/SdlGamepad.cs	p7-004	93daa30982bd4cc5bf5f55f2f09935d8e1f1267d	pull/250
 src/Playnite.Platform.Linux/Sessions/LinuxGameProcess.cs	p5-004	064e261b5bffa6c434515b9851160a21fd0e317d	pull/120
 src/Playnite.Platform.Linux/Sessions/LinuxProcStat.cs	p5-004	064e261b5bffa6c434515b9851160a21fd0e317d	pull/120
@@ -440,6 +443,7 @@ tests/Playnite.Architecture.Tests/SourcePolicyTests.cs	p2-002	df9d089fd82efb1456
 tests/Playnite.Core.Tests/Addons/AddonInstallLayoutTests.cs	p6-010	8f8f89e0d9081e45d72e175296ffa76890f3669d	pull/215
 tests/Playnite.Core.Tests/Addons/AddonInstallationTests.cs	p6-010	8f8f89e0d9081e45d72e175296ffa76890f3669d	pull/215
 tests/Playnite.Core.Tests/Addons/AddonManifestValidationTests.cs	p6-010	8f8f89e0d9081e45d72e175296ffa76890f3669d	pull/215
+tests/Playnite.Core.Tests/Addons/AddonPackageLifecycleTests.cs	p6-010	b4481e7d00ede1039db339bf2957491af951d3c8	pull/271
 tests/Playnite.Core.Tests/ArchiveTestData.cs	p3-008b	e71ad0db1445f0e382485eaa2a4624d5ec8eb88a	pull/79
 tests/Playnite.Core.Tests/ArchiveTests.cs	p3-008b	e71ad0db1445f0e382485eaa2a4624d5ec8eb88a	pull/79
 tests/Playnite.Core.Tests/Artwork/ArtworkTests.cs	p5-003	5a01d39fdf99787f9a265b9f8391b39db2849c78	pull/162

@@ -75,8 +75,8 @@ in [`gates/P5-pending.md`](gates/P5-pending.md).
 
 | Metric | Value |
 | --- | ---: |
-| Ledger rows | 401 |
-| Ledger fragments | 174 |
+| Ledger rows | 402 |
+| Ledger fragments | 175 |
 
 ## Units
 
@@ -170,7 +170,7 @@ in [`gates/P5-pending.md`](gates/P5-pending.md).
 | p6-007 | W6 | sdk | URI handler and HTML description service | done | `units/p6-007.*`; 3 ledger rows |
 | p6-008 | W6 | sdk | SDK Abstractions freeze and ApiCompat report | done | `units/p6-008.*`; 1 ledger rows |
 | p6-009 | W6 | sdk | Sample plugins (Hello World, library provider, metadata provider) | done | `units/p6-009.*`; 1 ledger rows |
-| p6-010 | W6 | sdk | Add-on manifest and installation model | done | `units/p6-010.*`; 2 ledger rows |
+| p6-010 | W6 | sdk | Add-on manifest and installation model | done | `units/p6-010.*`; 3 ledger rows |
 | p6-011 | W6 | core | CLI query surface | done | `units/p6-011.*`; 3 ledger rows |
 | p6-012 | W6 | core | Repository-level ordered paging for list/search | done | `units/p6-012.*`; 3 ledger rows |
 | p6-guard-baseline | W6 | repo | Shared SDK baseline ownership allowance | in-progress | `units/p6-guard-baseline.*`; 1 ledger rows |
